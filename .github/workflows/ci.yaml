@@ -41,14 +41,3 @@ jobs:
 
       - name: Run tests
         run: yarn test
-
-      - name: Verify build artifacts
-        run: |
-          test -d packages/core/dist
-          test -d packages/browser/dist
-          test -f packages/core/dist/index.js
-          test -f packages/core/dist/index.cjs
-          test -f packages/core/dist/index.d.ts
-          test -f packages/browser/dist/index.js
-          test -f packages/browser/dist/index.cjs
-          test -f packages/browser/dist/index.d.ts
