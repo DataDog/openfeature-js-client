@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-client-monorepo",
-  "repository": "git@github.com:DataDog/openfeature-javascript-client.git",
+  "repository": "git@github.com:DataDog/openfeature-js-client.git",
   "license": "MIT",
   "private": true,
   "workspaces": ["packages/*"],

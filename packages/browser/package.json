@@ -1,12 +1,12 @@
 {
   "name": "@datadog/openfeature-browser",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "MIT",
-  "homepage": "https://github.com/DataDog/openfeature-javascript-client#readme",
+  "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DataDog/openfeature-javascript-client.git",
+    "url": "https://github.com/DataDog/openfeature-js-client.git",
     "directory": "packages/browser"
   },
   "main": "./dist/index.cjs",
@@ -14,9 +14,9 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     }
   },
   "files": ["dist"],
@@ -25,7 +25,7 @@
     "build": "tsup src/index.ts --dts --format cjs,esm"
   },
   "dependencies": {
-    "@datadog/openfeature-core": "0.1.0-alpha.1"
+    "@datadog/openfeature-core": "workspace:*"
   },
   "peerDependencies": {}
 }
