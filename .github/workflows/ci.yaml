@@ -26,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@60edb5dd5452c9c546f5f0e864dca308dbe4f774 # v4.2.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: "yarn"
