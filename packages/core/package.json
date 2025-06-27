@@ -1,0 +1,30 @@
+{
+  "name": "@datadog/openfeature-core",
+  "version": "0.1.0-alpha.1",
+  "description": "Runtime-agnostic flag-evaluation logic for OpenFeature JS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DataDog/openfeature-js-client.git",
+    "directory": "packages/core"
+  },
+  "private": true,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format cjs,esm",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@openfeature/js-sdk": "^1.6.0"
+  },
+  "peerDependencies": {}
+}
