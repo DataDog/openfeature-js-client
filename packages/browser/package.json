@@ -29,7 +29,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@datadog/openfeature-core": "workspace:*"
+    "@datadog/openfeature-core": "file:../core"
   },
   "peerDependencies": {}
 }
