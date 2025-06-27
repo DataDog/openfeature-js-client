@@ -7,7 +7,7 @@ on:
   tags:
     - "v*"
   release:
-    types: [published, created]
+    types: [created]
 
 # Use default restricted permissions (contents:read, metadata:read, packages:read)
 # This workflow only needs read access to the repository
