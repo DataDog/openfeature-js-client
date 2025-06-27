@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  tags:
+    - "v*"
+  release:
+    types: [published, created]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint code
+        run: yarn lint
+
+      - name: Build packages
+        run: yarn build
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Verify build artifacts
+        run: |
+          # Check that dist directories were created
+          test -d packages/core/dist
+          test -d packages/browser/dist
+
+          # Check that main files exist
+          test -f packages/core/dist/index.js
+          test -f packages/core/dist/index.cjs
+          test -f packages/core/dist/index.d.ts
+          test -f packages/browser/dist/index.js
+          test -f packages/browser/dist/index.cjs
+          test -f packages/browser/dist/index.d.ts

@@ -1,0 +1,20 @@
+{
+  "name": "@datadog/openfeature-client-monorepo",
+  "repository": "git@github.com:DataDog/openfeature-javascript-client.git",
+  "license": "MIT",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "yarn workspaces run build",
+    "test":  "yarn workspaces run test",
+    "lint":  "biome check .",
+    "clean": "rimraf \"**/dist\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "jest": "^30.0.0",
+    "rimraf": "^6.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
+}
