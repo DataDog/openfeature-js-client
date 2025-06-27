@@ -21,7 +21,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@openfeature/js-sdk": "^1.6.0"

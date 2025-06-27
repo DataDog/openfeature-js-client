@@ -26,10 +26,14 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@datadog/openfeature-core": "file:../core"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0"
   },
   "peerDependencies": {}
 }
