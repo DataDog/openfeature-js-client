@@ -1,7 +1,14 @@
 name: Publish packages on NPM
+
+permissions:
+  contents: read
+  metadata: read
+  packages: read
+
 on:
   release:
     types: [created]
+
 jobs:
   build:
     runs-on: ubuntu-latest
