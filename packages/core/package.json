@@ -1,5 +1,6 @@
 {
   "name": "@datadog/openfeature-core",
+  "version": "0.1.0-alpha.1",
   "description": "Runtime-agnostic flag-evaluation logic for OpenFeature JS",
   "license": "MIT",
   "repository": {
