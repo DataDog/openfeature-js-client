@@ -3,14 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
   pull_request:
-  tags:
-    - "v*"
   release:
     types: [created]
 
-# Use default restricted permissions (contents:read, metadata:read, packages:read)
-# This workflow only needs read access to the repository
 permissions:
   contents: read
   metadata: read
@@ -32,7 +30,9 @@ jobs:
         uses: actions/setup-node@60edb5dd5452c9c546f5f0e864dca308dbe4f774 # v4.2.0
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "yarn"
+          cache: yarn
+          # Uncomment for monorepo Yarn v1
+          # cache-dependency-path: "**/yarn.lock"
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -48,11 +48,8 @@ jobs:
 
       - name: Verify build artifacts
         run: |
-          # Check that dist directories were created
           test -d packages/core/dist
           test -d packages/browser/dist
-
-          # Check that main files exist
           test -f packages/core/dist/index.js
           test -f packages/core/dist/index.cjs
           test -f packages/core/dist/index.d.ts
