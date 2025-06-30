@@ -19,7 +19,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "publishConfig": {
     "access": "public"
@@ -30,10 +32,15 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@datadog/openfeature-core": "file:../core"
+    "@datadog/openfeature-core": "file:../core",
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0"
   },
   "devDependencies": {
+    "@datadog/browser-core": "^6.10.0",
     "@types/jest": "^30.0.0"
   },
-  "peerDependencies": {}
+  "peerDependencies": {
+    "@datadog/browser-core": ">=6.0.0"
+  }
 }
