@@ -13,10 +13,10 @@ describe('DatadogProvider', () => {
       baseUrl: 'http://localhost:8000',
     })
     mockLogger = {
-      debug: jasmine.createSpy('debug'),
-      info: jasmine.createSpy('info'),
-      warn: jasmine.createSpy('warn'),
-      error: jasmine.createSpy('error'),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
     }
     mockContext = {}
   })

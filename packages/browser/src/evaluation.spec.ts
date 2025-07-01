@@ -32,6 +32,11 @@ describe('evaluate', () => {
       value: true,
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-124',
+        doLog: true,
+        variationType: 'BOOLEAN',
+      },
     })
   })
 
@@ -41,6 +46,11 @@ describe('evaluate', () => {
       value: 'red',
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        doLog: true,
+        variationType: 'STRING',
+      },
     })
   })
 
@@ -50,6 +60,11 @@ describe('evaluate', () => {
       value: { key: 'value', prop: 123 },
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-127',
+        doLog: true,
+        variationType: 'OBJECT',
+      },
     })
   })
 })
