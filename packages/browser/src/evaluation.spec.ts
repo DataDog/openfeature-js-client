@@ -1,4 +1,5 @@
 import configurationWire from '../test/data/precomputed-v1-wire.json'
+import { ErrorCode } from '@openfeature/web-sdk'
 
 import { configurationFromString } from './configuration'
 import { evaluate } from './evaluation'
@@ -22,7 +23,7 @@ describe('evaluate', () => {
     expect(result).toEqual({
       value: 'default',
       reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND' as any,
+      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
     })
   })
 
