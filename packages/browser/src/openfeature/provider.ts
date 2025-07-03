@@ -171,7 +171,7 @@ export class DatadogProvider implements Provider {
     // JsonValue). We can't even theoretically implement it in a
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
-    // makesure they pass the appropriate type.
+    // make sure they pass the appropriate type.
     return evaluate(this.configuration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
   }
 }
