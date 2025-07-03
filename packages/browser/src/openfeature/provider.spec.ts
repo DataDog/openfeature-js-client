@@ -8,9 +8,10 @@ describe('DatadogProvider', () => {
 
   beforeEach(() => {
     provider = new DatadogProvider({
-      applicationId: 'xxx',
       clientToken: 'xxx',
-      baseUrl: 'http://localhost:8000',
+      applicationId: 'xxx',
+      env: 'test',
+      site: 'http://localhost:8000',
     })
     mockLogger = {
       debug: jest.fn(),

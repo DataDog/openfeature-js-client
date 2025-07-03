@@ -1,30 +1,72 @@
 import type {
-  Provider,
   EvaluationContext,
   JsonValue,
   Logger,
   Paradigm,
+  Provider,
   ProviderMetadata,
   ResolutionDetails,
+  HookContext,
+  EvaluationDetails,
+  FlagValue,
 } from '@openfeature/web-sdk'
-import { ProviderStatus } from '@openfeature/web-sdk'
+/* eslint-disable-next-line local-rules/disallow-side-effects */
+import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
 
+import { dateNow } from '@datadog/browser-core'
 import type { Configuration } from '../configuration'
 import { evaluate } from '../evaluation'
+import type { DDRum } from './rumIntegration'
 
 export type DatadogProviderOptions = {
   /**
-   * The RUM application ID.
+   * The application key for Datadog. Required for initializing the Datadog Flagging client.
    */
   applicationId: string
+
   /**
-   * The client token for Datadog. Required for authenticating your application with Datadog.
+   * The client token for Datadog. Required for initializing the Datadog Flagging client.
    */
   clientToken: string
 
-  baseUrl?: string
+  /**
+   * The application environment.
+   */
+  env: string
+
+  /**
+   * The site to use for the Datadog API.
+   */
+  site?: string
 
   initialConfiguration?: Configuration
+
+  /**
+   * RUM integration options
+   */
+  rum?: {
+    /**
+     * The RUM SDK instance to use for tracking
+     */
+    sdk: DDRum
+    /**
+     * Whether to track feature flag evaluations in RUM
+     */
+    ddFlaggingTracking?: boolean
+    /**
+     * Whether to log exposures in RUM
+     */
+    ddExposureLogging?: boolean
+  }
+  /**
+   * Custom headers to add to the request to the Datadog API.
+   */
+  customHeaders?: Record<string, string>
+
+  /**
+   * Whether to overwrite the default request headers.
+   */
+  overwriteRequestHeaders?: boolean
 }
 
 // We need to use a class here to properly implement the OpenFeature Provider interface
@@ -43,6 +85,33 @@ export class DatadogProvider implements Provider {
 
   constructor(options: DatadogProviderOptions) {
     this.options = options
+    const trackFlags = options.rum?.ddFlaggingTracking ?? false
+    const logExposures = options.rum?.ddExposureLogging ?? false
+
+    if (options.rum) {
+      const rum = options.rum.sdk
+      // Add OpenFeature hook
+      OpenFeature.addHooks({
+        after(_hookContext: HookContext, details: EvaluationDetails<FlagValue>) {
+          if (trackFlags) {
+            // Track feature flag evaluation
+            rum.addFeatureFlagEvaluation(details.flagKey, details.value)
+          }
+          if (logExposures) {
+            // Log exposure
+            rum.addAction('__dd_exposure', {
+              timestamp: dateNow(),
+              flag_key: details.flagKey,
+              allocation_key: (details.flagMetadata?.allocationKey as string) ?? '',
+              exposure_key: `${details.flagKey}-${details.flagMetadata?.allocationKey}`,
+              subject_key: _hookContext.context.targetingKey,
+              subject_attributes: _hookContext.context,
+              variant_key: details.variant,
+            })
+          }
+        },
+      })
+    }
 
     if (options.initialConfiguration) {
       this.configuration = options.initialConfiguration
@@ -108,20 +177,47 @@ export class DatadogProvider implements Provider {
 }
 
 async function fetchConfiguration(options: DatadogProviderOptions, context: EvaluationContext): Promise<Configuration> {
-  const baseUrl = options.baseUrl || 'https://dd.datad0g.com'
+  const baseUrl = options.site || 'https://dd.datad0g.com'
 
-  const parameters = [`application_id=${options.applicationId}`, `client_token=${options.clientToken}`]
+  // Stringify all context values
+  const stringifiedContext: Record<string, string> = {}
+  for (const [key, value] of Object.entries(context)) {
+    stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+  }
 
-  const response = await fetch(`${baseUrl}/api/unstable/precompute-assignments?${parameters.join('&')}`, {
+  const response = await fetch(`${baseUrl}/api/unstable/precompute-assignments`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/vnd.api+json',
-      'DD-API-KEY': options.clientToken,
+      ...(!options.overwriteRequestHeaders
+        ? {
+            'dd-client-token': options.clientToken,
+            'dd-application-id': options.applicationId,
+          }
+        : {}),
+      ...options.customHeaders,
     },
     body: JSON.stringify({
-      context,
+      data: {
+        type: 'precompute-assignments-request',
+        attributes: {
+          env: {
+            name: options.env,
+          },
+          subject: {
+            targeting_key: context.targetingKey || '',
+            targeting_attributes: stringifiedContext,
+          },
+        },
+      },
     }),
   })
   const precomputed = await response.json()
-  return { precomputed }
+  return {
+    precomputed: {
+      response: precomputed,
+      context,
+      fetchedAt: dateNow(),
+    },
+  }
 }
