@@ -534,7 +534,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-core@workspace:packages/core"
   dependencies:
-    "@openfeature/web-sdk": "npm:^1.5.0"
+    "@types/node": "npm:^20.0.0"
     tsup: "npm:^8.0.0"
     typescript: "npm:^5.5.0"
   languageName: unknown
