@@ -30,8 +30,32 @@ jobs:
           npm config set access public
 
       - name: Publish browser package
+        if: startsWith(github.ref_name, 'openfeature-browser@')
         run: |
           cd packages/browser
           npm publish --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Publish core package
+        if: startsWith(github.ref_name, 'flagging-core@')
+        run: |
+          cd packages/core
+          npm publish --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Display Invalid Package Error
+        if: !startsWith(github.ref_name, 'openfeature-browser@') && !startsWith(github.ref_name, 'flagging-core@')
+        run: |
+          echo "❌ Invalid tag format: '${{ github.ref_name }}'"
+          echo "✅ Expected format: <package name>@<semantic-version>"
+          echo ""
+          echo "Acceptable package names:"
+          echo "   - openfeature-browser"
+          echo "   - flagging-core"
+          echo ""
+          echo "Example tags:"
+          echo "   - openfeature-browser@0.1.0-alpha.2"
+          echo "   - flagging-core@0.1.0-alpha.1"
+          exit 1
