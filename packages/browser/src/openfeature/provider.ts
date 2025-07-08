@@ -221,9 +221,7 @@ async function fetchConfiguration(
 
   // Build URL with environment query parameter
   const url = new URL(`${baseUrl}/api/unstable/precompute-assignments`)
-  if (options.env) {
-    url.searchParams.set('dd_env', options.env)
-  }
+  url.searchParams.set('dd_env', options.env)
 
   const response = await fetch(url.toString(), {
     method: 'POST',
