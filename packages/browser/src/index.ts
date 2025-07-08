@@ -1,7 +1,7 @@
 import { DatadogProvider } from './openfeature/provider'
 
 export { DatadogProvider }
-export { configurationFromString, configurationToString } from './configuration'
+export { configurationFromString, configurationToString } from '@datadog/flagging-core'
 
 interface BrowserWindow extends Window {
   DD_FLAGGING?: {

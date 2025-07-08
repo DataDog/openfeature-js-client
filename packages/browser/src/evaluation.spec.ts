@@ -1,7 +1,7 @@
 import configurationWire from '../test/data/precomputed-v1-wire.json'
 import { ErrorCode } from '@openfeature/web-sdk'
 
-import { configurationFromString } from './configuration'
+import { configurationFromString } from '@datadog/flagging-core'
 import { evaluate } from './evaluation'
 
 const configuration = configurationFromString(
