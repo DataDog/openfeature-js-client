@@ -23,10 +23,10 @@ export type PrecomputedConfiguration = {
 // Fancy way to map FlagValueType to expected FlagValue.
 /** @internal */
 export type FlagTypeToValue<T extends FlagValueType> = {
-  boolean: boolean
-  string: string
-  number: number
-  object: JsonValue
+  ['boolean']: boolean
+  ['string']: string
+  ['number']: number
+  ['object']: JsonValue
 }[T]
 
 /** @internal
