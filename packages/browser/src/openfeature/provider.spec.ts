@@ -3,8 +3,8 @@ import {
   type Logger,
   StandardResolutionReasons,
 } from '@openfeature/core'
-import { DatadogProvider } from './provider'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
+import { DatadogProvider } from './provider'
 
 describe('DatadogProvider', () => {
   let provider: DatadogProvider
@@ -16,10 +16,10 @@ describe('DatadogProvider', () => {
     applicationId: 'xxx',
     env: 'test',
     site: 'http://localhost:8000',
-  };
+  }
 
   beforeEach(() => {
-    provider = new DatadogProvider(options);
+    provider = new DatadogProvider(options)
     mockLogger = {
       debug: jest.fn(),
       info: jest.fn(),
@@ -103,50 +103,55 @@ describe('DatadogProvider', () => {
   })
 
   describe('onContextChange', () => {
-    let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>;
-    let fetchMock: jest.Mock;
-    
+    let originalFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit | undefined,
+    ) => Promise<Response>
+    let fetchMock: jest.Mock
+
     beforeAll(() => {
       // Store the original fetch
       originalFetch = global.fetch
 
       // Mock the fetch function
-      fetchMock = jest.fn().mockImplementation(async (url, options) => ({
-        json: async () => precomputedResponse
-      }));
-      
-      global.fetch = fetchMock;
-    });
+      fetchMock = jest.fn().mockImplementation(async (_url, _options) => ({
+        json: async () => precomputedResponse,
+      }))
+
+      global.fetch = fetchMock
+    })
 
     afterAll(() => {
       // Restore the original fetch
       global.fetch = originalFetch
-    });
+    })
 
     it('should send expected information in the request', async () => {
       // Set a targeting key in the context
       mockContext = {
         targetingKey: 'test-user',
-        customAttribute: 'value'
-      };
-      
-      await provider.onContextChange(options, mockContext);
+        customAttribute: 'value',
+      }
+
+      await provider.onContextChange(options, mockContext)
 
       // Check that fetch was called with the correct URL and method
-      expect(fetchMock).toHaveBeenCalled();
-      const [url, requestOptions] = fetchMock.mock.calls[0];
-      expect(url.toString()).toBe(`${options.site}/api/unstable/precompute-assignments`);
-      expect(requestOptions.method).toBe('POST');
+      expect(fetchMock).toHaveBeenCalled()
+      const [url, requestOptions] = fetchMock.mock.calls[0]
+      expect(url.toString()).toBe(
+        `${options.site}/api/unstable/precompute-assignments`,
+      )
+      expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly
       expect(requestOptions.headers).toEqual({
         'Content-Type': 'application/vnd.api+json',
         'dd-client-token': options.clientToken,
         'dd-application-id': options.applicationId,
-      });
+      })
 
       // Parse the request body to verify contents are correct
-      const requestBody = JSON.parse(requestOptions.body);
+      const requestBody = JSON.parse(requestOptions.body)
       expect(requestBody).toEqual({
         data: {
           type: 'precompute-assignments-request',
@@ -159,20 +164,20 @@ describe('DatadogProvider', () => {
               targeting_key: 'test-user',
               targeting_attributes: {
                 targetingKey: 'test-user',
-                customAttribute: 'value'
+                customAttribute: 'value',
               },
             },
           },
         },
-      });
+      })
 
       // Request an evaluation to verify the context updated
       const result = provider.resolveStringEvaluation(
-          'string-flag',
-          'default',
-          mockContext,
-          mockLogger,
-      );
+        'string-flag',
+        'default',
+        mockContext,
+        mockLogger,
+      )
 
       expect(result).toEqual({
         value: 'red',
@@ -182,8 +187,8 @@ describe('DatadogProvider', () => {
           allocationKey: 'allocation-123',
           doLog: true,
           variationType: 'STRING',
-        }
-      });
-    });
-  });
+        },
+      })
+    })
+  })
 })
