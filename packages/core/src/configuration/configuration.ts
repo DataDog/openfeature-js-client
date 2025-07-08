@@ -1,10 +1,5 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/web-sdk'
 
-/** @internal
- * Timestamp in milliseconds since Unix Epoch.
- */
-export type UnixTimestamp = number
-
 /**
  * Internal configuration for DatadogProvider.
  */
@@ -13,14 +8,12 @@ export type Configuration = {
   precomputed?: PrecomputedConfiguration
 }
 
-
 /** @internal */
 export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
   fetchedAt?: UnixTimestamp
 }
-
 
 // Fancy way to map FlagValueType to expected FlagValue.
 /** @internal */
@@ -31,6 +24,10 @@ export type FlagTypeToValue<T extends FlagValueType> = {
   ['object']: JsonValue
 }[T]
 
+/** @internal
+ * Timestamp in milliseconds since Unix Epoch.
+ */
+export type UnixTimestamp = number
 
 /** @internal */
 export type PrecomputedConfigurationResponse = {
@@ -43,7 +40,6 @@ export type PrecomputedConfigurationResponse = {
   }
 }
 
-
 /** @internal */
 export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   allocationKey: string
@@ -54,4 +50,3 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   doLog: boolean
   extraLogging: Record<string, unknown>
 }
-
