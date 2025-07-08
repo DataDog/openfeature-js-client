@@ -504,7 +504,10 @@ __metadata:
   dependencies:
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
+    "@types/jest": "npm:^29.4.0"
     "@types/node": "npm:^20.0.0"
+    jest: "npm:^30.0.4"
+    ts-jest: "npm:^29.4.0"
     tsup: "npm:^8.0.0"
     typescript: "npm:^5.5.0"
   languageName: unknown
@@ -520,6 +523,8 @@ __metadata:
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/jest": "npm:^29.4.0"
     "@types/node": "npm:^20.0.0"
+    jest: "npm:^30.0.4"
+    jest-util: "npm:^30.0.2"
     ts-jest: "npm:^29.4.0"
     tsup: "npm:^8.0.0"
     typescript: "npm:^5.5.0"
@@ -534,7 +539,7 @@ __metadata:
   dependencies:
     "@biomejs/biome": "npm:^2.0.0"
     "@types/node": "npm:^20.0.0"
-    jest: "npm:^30.0.0"
+    jest: "npm:^30.0.4"
     rimraf: "npm:^6.0.0"
     ts-node: "npm:^10.9.0"
     tsup: "npm:^8.0.0"
@@ -3319,7 +3324,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jest-util@npm:30.0.2":
+"jest-util@npm:30.0.2, jest-util@npm:^30.0.2":
   version: 30.0.2
   resolution: "jest-util@npm:30.0.2"
   dependencies:
@@ -3390,7 +3395,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jest@npm:^30.0.0":
+"jest@npm:^30.0.4":
   version: 30.0.4
   resolution: "jest@npm:30.0.4"
   dependencies:
