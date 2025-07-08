@@ -2,13 +2,13 @@ import type {
   Configuration,
   FlagTypeToValue,
   PrecomputedConfiguration,
-} from "@datadog/flagging-core";
+} from '@datadog/flagging-core';
 import type {
   ErrorCode,
   EvaluationContext,
   FlagValueType,
   ResolutionDetails,
-} from "@openfeature/web-sdk";
+} from '@openfeature/web-sdk';
 
 export function evaluate<T extends FlagValueType>(
   configuration: Configuration,
@@ -29,7 +29,7 @@ export function evaluate<T extends FlagValueType>(
 
   return {
     value: defaultValue,
-    reason: "DEFAULT",
+    reason: 'DEFAULT',
   };
 }
 
@@ -44,8 +44,8 @@ function evaluatePrecomputed<T extends FlagValueType>(
   if (!flag) {
     return {
       value: defaultValue,
-      reason: "ERROR",
-      errorCode: "FLAG_NOT_FOUND" as ErrorCode,
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
     };
   }
 
@@ -55,8 +55,8 @@ function evaluatePrecomputed<T extends FlagValueType>(
   ) {
     return {
       value: defaultValue,
-      reason: "ERROR",
-      errorCode: "TYPE_MISMATCH" as ErrorCode,
+      reason: 'ERROR',
+      errorCode: 'TYPE_MISMATCH' as ErrorCode,
     };
   }
 

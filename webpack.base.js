@@ -1,10 +1,10 @@
-const path = import("node:path");
-const webpack = require("webpack");
-const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
-const TerserPlugin = require("terser-webpack-plugin");
-const { buildEnvKeys, getBuildEnvValue } = require("./scripts/lib/buildEnv");
+const path = import('node:path');
+const webpack = require('webpack');
+const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
+const { buildEnvKeys, getBuildEnvValue } = require('./scripts/lib/buildEnv');
 
-const tsconfigPath = path.join(__dirname, "tsconfig.webpack.json");
+const tsconfigPath = path.join(__dirname, 'tsconfig.webpack.json');
 
 module.exports = ({
   entry,
@@ -19,27 +19,27 @@ module.exports = ({
   output: {
     filename,
     chunkFilename:
-      mode === "development"
+      mode === 'development'
         ? // Use a fixed name for each chunk during development so that the developer extension
           // can redirect requests for them reliably.
           `chunks/[name]-${filename}`
         : // Include a content hash in chunk names in production.
           `chunks/[name]-[contenthash]-${filename}`,
-    path: path.resolve("./bundle"),
+    path: path.resolve('./bundle'),
   },
-  target: ["web", "es2018"],
+  target: ['web', 'es2018'],
   devtool: false,
   module: {
     rules: [
       {
         test: /\.(ts|tsx|js)$/,
-        loader: "ts-loader",
+        loader: 'ts-loader',
         exclude: /node_modules/,
         options: {
           configFile: tsconfigPath,
           onlyCompileBundledFiles: true,
           compilerOptions: {
-            module: "es2020",
+            module: 'es2020',
             allowJs: true,
             types: types || [],
           },
@@ -49,16 +49,16 @@ module.exports = ({
   },
 
   resolve: {
-    extensions: [".ts", ".js", ".tsx"],
+    extensions: ['.ts', '.js', '.tsx'],
     plugins: [new TsconfigPathsPlugin({ configFile: tsconfigPath })],
     alias: {
       // The default "pako.esm.js" build is not transpiled to es5
-      pako: "pako/dist/pako.es5.js",
+      pako: 'pako/dist/pako.es5.js',
     },
   },
 
   optimization: {
-    chunkIds: "named",
+    chunkIds: 'named',
     minimizer: [
       new TerserPlugin({
         extractComments: false,
@@ -77,14 +77,14 @@ module.exports = ({
 
   plugins: [
     new webpack.SourceMapDevToolPlugin(
-      mode === "development"
+      mode === 'development'
         ? // Use an inline source map during development (default options)
           {}
         : // When bundling for release, produce a source map file so it can be used for source code integration,
           // but don't append the source map comment to bundles as we don't upload the source map to
           // the CDN (yet).
           {
-            filename: "[file].map",
+            filename: '[file].map',
             append: false,
           },
     ),

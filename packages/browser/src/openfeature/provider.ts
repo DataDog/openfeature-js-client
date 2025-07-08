@@ -1,5 +1,5 @@
-import { dateNow } from "@datadog/browser-core";
-import type { Configuration } from "@datadog/flagging-core";
+import { dateNow } from '@datadog/browser-core';
+import type { Configuration } from '@datadog/flagging-core';
 import type {
   EvaluationContext,
   EvaluationDetails,
@@ -11,11 +11,11 @@ import type {
   Provider,
   ProviderMetadata,
   ResolutionDetails,
-} from "@openfeature/web-sdk";
+} from '@openfeature/web-sdk';
 /* eslint-disable-next-line local-rules/disallow-side-effects */
-import { OpenFeature, ProviderStatus } from "@openfeature/web-sdk";
-import { evaluate } from "../evaluation";
-import type { DDRum } from "./rumIntegration";
+import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk';
+import { evaluate } from '../evaluation';
+import type { DDRum } from './rumIntegration';
 
 export type DatadogProviderOptions = {
   /**
@@ -73,9 +73,9 @@ export type DatadogProviderOptions = {
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider implements Provider {
   readonly metadata: ProviderMetadata = {
-    name: "datadog",
+    name: 'datadog',
   };
-  readonly runsOn: Paradigm = "client";
+  readonly runsOn: Paradigm = 'client';
 
   status: ProviderStatus;
   private configuration: Configuration = {};
@@ -101,11 +101,11 @@ export class DatadogProvider implements Provider {
           }
           if (logExposures) {
             // Log exposure
-            rum.addAction("__dd_exposure", {
+            rum.addAction('__dd_exposure', {
               timestamp: dateNow(),
               flag_key: details.flagKey,
               allocation_key:
-                (details.flagMetadata?.allocationKey as string) ?? "",
+                (details.flagMetadata?.allocationKey as string) ?? '',
               exposure_key: `${details.flagKey}-${details.flagMetadata?.allocationKey}`,
               subject_key: _hookContext.context.targetingKey,
               subject_attributes: _hookContext.context,
@@ -147,7 +147,7 @@ export class DatadogProvider implements Provider {
   ): ResolutionDetails<boolean> {
     return evaluate(
       this.configuration,
-      "boolean",
+      'boolean',
       flagKey,
       defaultValue,
       context,
@@ -162,7 +162,7 @@ export class DatadogProvider implements Provider {
   ): ResolutionDetails<string> {
     return evaluate(
       this.configuration,
-      "string",
+      'string',
       flagKey,
       defaultValue,
       context,
@@ -177,7 +177,7 @@ export class DatadogProvider implements Provider {
   ): ResolutionDetails<number> {
     return evaluate(
       this.configuration,
-      "number",
+      'number',
       flagKey,
       defaultValue,
       context,
@@ -198,7 +198,7 @@ export class DatadogProvider implements Provider {
     // make sure they pass the appropriate type.
     return evaluate(
       this.configuration,
-      "object",
+      'object',
       flagKey,
       defaultValue,
       context,
@@ -210,38 +210,38 @@ async function fetchConfiguration(
   options: DatadogProviderOptions,
   context: EvaluationContext,
 ): Promise<Configuration> {
-  const baseUrl = options.site || "https://dd.datad0g.com";
+  const baseUrl = options.site || 'https://dd.datad0g.com';
 
   // Stringify all context values
   const stringifiedContext: Record<string, string> = {};
   for (const [key, value] of Object.entries(context)) {
     stringifiedContext[key] =
-      typeof value === "string" ? value : JSON.stringify(value);
+      typeof value === 'string' ? value : JSON.stringify(value);
   }
 
   const response = await fetch(
     `${baseUrl}/api/unstable/precompute-assignments`,
     {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/vnd.api+json",
+        'Content-Type': 'application/vnd.api+json',
         ...(!options.overwriteRequestHeaders
           ? {
-              "dd-client-token": options.clientToken,
-              "dd-application-id": options.applicationId,
+              'dd-client-token': options.clientToken,
+              'dd-application-id': options.applicationId,
             }
           : {}),
         ...options.customHeaders,
       },
       body: JSON.stringify({
         data: {
-          type: "precompute-assignments-request",
+          type: 'precompute-assignments-request',
           attributes: {
             env: {
               name: options.env,
             },
             subject: {
-              targeting_key: context.targetingKey || "",
+              targeting_key: context.targetingKey || '',
               targeting_attributes: stringifiedContext,
             },
           },

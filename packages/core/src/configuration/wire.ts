@@ -1,6 +1,6 @@
-import type { EvaluationContext } from "@openfeature/web-sdk";
+import type { EvaluationContext } from '@openfeature/web-sdk';
 
-import type { Configuration, UnixTimestamp } from "./configuration";
+import type { Configuration, UnixTimestamp } from './configuration';
 
 type ConfigurationWire = {
   version: 1;

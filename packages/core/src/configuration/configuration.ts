@@ -3,7 +3,7 @@ import type {
   FlagValueType,
   JsonValue,
   ResolutionReason,
-} from "@openfeature/web-sdk";
+} from '@openfeature/web-sdk';
 
 /**
  * Internal configuration for DatadogProvider.
