@@ -1,39 +1,39 @@
-import type { EvaluationContext } from '@openfeature/web-sdk';
+import type { EvaluationContext } from '@openfeature/web-sdk'
 
-import type { Configuration, UnixTimestamp } from './configuration';
+import type { Configuration, UnixTimestamp } from './configuration'
 
 type ConfigurationWire = {
-  version: 1;
+  version: 1
   precomputed?: {
-    context?: EvaluationContext;
-    response: string;
-    fetchedAt?: UnixTimestamp;
-  };
-};
+    context?: EvaluationContext
+    response: string
+    fetchedAt?: UnixTimestamp
+  }
+}
 
 /**
  * Create configuration from a string created with `configurationToString`.
  */
 export function configurationFromString(s: string): Configuration {
   try {
-    const wire: ConfigurationWire = JSON.parse(s);
+    const wire: ConfigurationWire = JSON.parse(s)
 
     if (wire.version !== 1) {
       // Unknown version
-      return {};
+      return {}
     }
 
-    const configuration: Configuration = {};
+    const configuration: Configuration = {}
     if (wire.precomputed) {
       configuration.precomputed = {
         ...wire.precomputed,
         response: JSON.parse(wire.precomputed.response),
-      };
+      }
     }
 
-    return configuration;
+    return configuration
   } catch {
-    return {};
+    return {}
   }
 }
 
@@ -45,14 +45,14 @@ export function configurationFromString(s: string): Configuration {
 export function configurationToString(configuration: Configuration): string {
   const wire: ConfigurationWire = {
     version: 1,
-  };
+  }
 
   if (configuration.precomputed) {
     wire.precomputed = {
       ...configuration.precomputed,
       response: JSON.stringify(configuration.precomputed),
-    };
+    }
   }
 
-  return JSON.stringify(wire);
+  return JSON.stringify(wire)
 }

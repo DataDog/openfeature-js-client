@@ -1,10 +1,10 @@
-const path = import('node:path');
-const webpack = require('webpack');
-const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
-const TerserPlugin = require('terser-webpack-plugin');
-const { buildEnvKeys, getBuildEnvValue } = require('./scripts/lib/buildEnv');
+const path = import('node:path')
+const webpack = require('webpack')
+const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin')
+const TerserPlugin = require('terser-webpack-plugin')
+const { buildEnvKeys, getBuildEnvValue } = require('./scripts/lib/buildEnv')
 
-const tsconfigPath = path.join(__dirname, 'tsconfig.webpack.json');
+const tsconfigPath = path.join(__dirname, 'tsconfig.webpack.json')
 
 module.exports = ({
   entry,
@@ -91,7 +91,7 @@ module.exports = ({
     createDefinePlugin({ keepBuildEnvVariables }),
     ...(plugins || []),
   ],
-});
+})
 
 function createDefinePlugin({ keepBuildEnvVariables } = {}) {
   return new webpack.DefinePlugin(
@@ -105,7 +105,7 @@ function createDefinePlugin({ keepBuildEnvVariables } = {}) {
           ),
         ]),
     ),
-  );
+  )
 }
 
-module.exports.createDefinePlugin = createDefinePlugin;
+module.exports.createDefinePlugin = createDefinePlugin

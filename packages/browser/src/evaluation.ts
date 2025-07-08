@@ -2,13 +2,13 @@ import type {
   Configuration,
   FlagTypeToValue,
   PrecomputedConfiguration,
-} from '@datadog/flagging-core';
+} from '@datadog/flagging-core'
 import type {
   ErrorCode,
   EvaluationContext,
   FlagValueType,
   ResolutionDetails,
-} from '@openfeature/web-sdk';
+} from '@openfeature/web-sdk'
 
 export function evaluate<T extends FlagValueType>(
   configuration: Configuration,
@@ -24,13 +24,13 @@ export function evaluate<T extends FlagValueType>(
       flagKey,
       defaultValue,
       context,
-    );
+    )
   }
 
   return {
     value: defaultValue,
     reason: 'DEFAULT',
-  };
+  }
 }
 
 function evaluatePrecomputed<T extends FlagValueType>(
@@ -40,13 +40,13 @@ function evaluatePrecomputed<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   _context: EvaluationContext,
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const flag = precomputed.response.data.attributes.flags[flagKey];
+  const flag = precomputed.response.data.attributes.flags[flagKey]
   if (!flag) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-    };
+    }
   }
 
   if (
@@ -57,7 +57,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
-    };
+    }
   }
 
   return {
@@ -69,5 +69,5 @@ function evaluatePrecomputed<T extends FlagValueType>(
       doLog: flag.doLog,
     },
     reason: flag.reason,
-  } as ResolutionDetails<FlagTypeToValue<T>>;
+  } as ResolutionDetails<FlagTypeToValue<T>>
 }
