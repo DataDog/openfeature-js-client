@@ -21,10 +21,13 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm",
+    "prepack": "npm run build",
+    "clean": "rm -rf dist",
     "test": "jest --passWithNoTests"
   },
-  "dependencies": {
-    "@openfeature/js-sdk": "^1.6.0"
-  },
-  "peerDependencies": {}
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
 }

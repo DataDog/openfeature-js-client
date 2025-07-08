@@ -3,12 +3,14 @@
   "repository": "git@github.com:DataDog/openfeature-js-client.git",
   "license": "MIT",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "yarn workspaces run build",
-    "test":  "yarn workspaces run test",
-    "lint":  "biome check .",
-    "clean": "rimraf \"**/dist\""
+    "build": "yarn workspaces foreach -R run build",
+    "test": "yarn workspaces foreach -R run test",
+    "lint": "biome check .",
+    "clean": "yarn workspaces foreach -R run clean"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
@@ -18,5 +20,6 @@
     "ts-node": "^10.9.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0"
-  }
+  },
+  "packageManager": "yarn@4.9.2"
 }
