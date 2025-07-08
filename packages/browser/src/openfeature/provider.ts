@@ -219,7 +219,6 @@ async function fetchConfiguration(
       typeof value === 'string' ? value : JSON.stringify(value)
   }
 
-  // Build URL with environment query parameter
   const url = new URL(`${baseUrl}/api/unstable/precompute-assignments`)
 
   const response = await fetch(url.toString(), {
@@ -240,7 +239,7 @@ async function fetchConfiguration(
         attributes: {
           env: {
             name: options.env,
-            dd_env: options.env,
+            dd_env: "test"
           },
           subject: {
             targeting_key: context.targetingKey || '',
