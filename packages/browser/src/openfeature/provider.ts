@@ -14,7 +14,7 @@ import type {
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
 
 import { dateNow } from '@datadog/browser-core'
-import type { Configuration } from '../configuration'
+import type { Configuration } from '@datadog/flagging-core'
 import { evaluate } from '../evaluation'
 import type { DDRum } from './rumIntegration'
 

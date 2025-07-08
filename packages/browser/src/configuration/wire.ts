@@ -1,6 +1,6 @@
 import type { EvaluationContext } from '@openfeature/web-sdk'
 
-import type { Configuration, UnixTimestamp } from './configuration'
+import { UnixTimestamp, Configuration } from '@datadog/flagging-core'
 
 type ConfigurationWire = {
   version: 1

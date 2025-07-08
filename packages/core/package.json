@@ -29,5 +29,9 @@
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0"
   }
 }
