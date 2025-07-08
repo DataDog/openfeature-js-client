@@ -1,22 +1,36 @@
-import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/web-sdk'
-
-import type { Configuration, FlagTypeToValue, PrecomputedConfiguration } from '@datadog/flagging-core'
+import type {
+  Configuration,
+  FlagTypeToValue,
+  PrecomputedConfiguration,
+} from "@datadog/flagging-core";
+import type {
+  ErrorCode,
+  EvaluationContext,
+  FlagValueType,
+  ResolutionDetails,
+} from "@openfeature/web-sdk";
 
 export function evaluate<T extends FlagValueType>(
   configuration: Configuration,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (configuration.precomputed) {
-    return evaluatePrecomputed(configuration.precomputed, type, flagKey, defaultValue, context)
+    return evaluatePrecomputed(
+      configuration.precomputed,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+    );
   }
 
   return {
     value: defaultValue,
-    reason: 'DEFAULT',
-  }
+    reason: "DEFAULT",
+  };
 }
 
 function evaluatePrecomputed<T extends FlagValueType>(
@@ -24,23 +38,26 @@ function evaluatePrecomputed<T extends FlagValueType>(
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  _context: EvaluationContext
+  _context: EvaluationContext,
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const flag = precomputed.response.data.attributes.flags[flagKey]
+  const flag = precomputed.response.data.attributes.flags[flagKey];
   if (!flag) {
     return {
       value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-    }
+      reason: "ERROR",
+      errorCode: "FLAG_NOT_FOUND" as ErrorCode,
+    };
   }
 
-  if (flag.variationType && flag.variationType.toLowerCase() !== type.toLowerCase()) {
+  if (
+    flag.variationType &&
+    flag.variationType.toLowerCase() !== type.toLowerCase()
+  ) {
     return {
       value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'TYPE_MISMATCH' as ErrorCode,
-    }
+      reason: "ERROR",
+      errorCode: "TYPE_MISMATCH" as ErrorCode,
+    };
   }
 
   return {
@@ -52,5 +69,5 @@ function evaluatePrecomputed<T extends FlagValueType>(
       doLog: flag.doLog,
     },
     reason: flag.reason,
-  } as ResolutionDetails<FlagTypeToValue<T>>
+  } as ResolutionDetails<FlagTypeToValue<T>>;
 }

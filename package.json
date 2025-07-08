@@ -9,7 +9,7 @@
   "scripts": {
     "build": "yarn workspaces foreach -R run build",
     "test": "yarn workspaces foreach -R run test",
-    "lint": "biome check .",
+    "lint": "biome check . --diagnostic-level=error",
     "clean": "yarn workspaces foreach -R run clean"
   },
   "devDependencies": {

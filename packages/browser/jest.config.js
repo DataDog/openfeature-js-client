@@ -1,15 +1,15 @@
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
+  preset: "ts-jest",
+  testEnvironment: "node",
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      tsconfig: 'tsconfig.test.json'
-    }],
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        tsconfig: "tsconfig.test.json",
+      },
+    ],
   },
-  testMatch: ['**/*.spec.ts', '**/*.test.ts'],
-  moduleFileExtensions: ['ts', 'js', 'json'],
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-  ],
-}; 
+  testMatch: ["**/*.spec.ts", "**/*.test.ts"],
+  moduleFileExtensions: ["ts", "js", "json"],
+  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
+};

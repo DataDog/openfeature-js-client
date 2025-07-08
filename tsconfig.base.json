@@ -13,6 +13,6 @@
     "jsx": "react",
     "skipLibCheck": true,
     "types": ["node"],
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2020", "DOM"]
   }
 }
