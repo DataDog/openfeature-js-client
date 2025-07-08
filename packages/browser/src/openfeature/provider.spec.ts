@@ -1,4 +1,8 @@
-import { StandardResolutionReasons, type EvaluationContext, type Logger } from '@openfeature/core'
+import {
+  type EvaluationContext,
+  type Logger,
+  StandardResolutionReasons,
+} from '@openfeature/core'
 import { DatadogProvider } from './provider'
 
 describe('DatadogProvider', () => {
@@ -36,7 +40,12 @@ describe('DatadogProvider', () => {
 
   describe('resolveBooleanEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
+      const result = provider.resolveBooleanEvaluation(
+        'test-flag',
+        true,
+        mockContext,
+        mockLogger,
+      )
       expect(result).toEqual({
         value: true,
         reason: StandardResolutionReasons.DEFAULT,
@@ -46,7 +55,12 @@ describe('DatadogProvider', () => {
 
   describe('resolveStringEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
+      const result = provider.resolveStringEvaluation(
+        'test-flag',
+        'default',
+        mockContext,
+        mockLogger,
+      )
       expect(result).toEqual({
         value: 'default',
         reason: StandardResolutionReasons.DEFAULT,
@@ -56,7 +70,12 @@ describe('DatadogProvider', () => {
 
   describe('resolveNumberEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
+      const result = provider.resolveNumberEvaluation(
+        'test-flag',
+        42,
+        mockContext,
+        mockLogger,
+      )
       expect(result).toEqual({
         value: 42,
         reason: StandardResolutionReasons.DEFAULT,
@@ -67,7 +86,12 @@ describe('DatadogProvider', () => {
   describe('resolveObjectEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
       const defaultValue = { key: 'value' }
-      const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
+      const result = provider.resolveObjectEvaluation(
+        'test-flag',
+        defaultValue,
+        mockContext,
+        mockLogger,
+      )
       expect(result).toEqual({
         value: defaultValue,
         reason: StandardResolutionReasons.DEFAULT,

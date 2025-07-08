@@ -1,7 +1,7 @@
 {
-  "name": "@datadog/openfeature-core",
+  "name": "@datadog/flagging-core",
   "version": "0.1.0-alpha.1",
-  "description": "Runtime-agnostic flag-evaluation logic for OpenFeature JS",
+  "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -9,25 +9,33 @@
     "directory": "packages/core"
   },
   "private": true,
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm",
     "prepack": "npm run build",
     "clean": "rm -rf dist",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/jest": "^29.4.0",
     "@types/node": "^20.0.0",
+    "jest": "^30.0.4",
+    "ts-jest": "^29.4.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0"
   }
 }

@@ -1,4 +1,4 @@
-const path = require('path')
+const path = import('node:path')
 const webpack = require('webpack')
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin')
 const TerserPlugin = require('terser-webpack-plugin')
@@ -6,7 +6,14 @@ const { buildEnvKeys, getBuildEnvValue } = require('./scripts/lib/buildEnv')
 
 const tsconfigPath = path.join(__dirname, 'tsconfig.webpack.json')
 
-module.exports = ({ entry, mode, filename, types, keepBuildEnvVariables, plugins }) => ({
+module.exports = ({
+  entry,
+  mode,
+  filename,
+  types,
+  keepBuildEnvVariables,
+  plugins,
+}) => ({
   entry,
   mode,
   output: {
@@ -79,7 +86,7 @@ module.exports = ({ entry, mode, filename, types, keepBuildEnvVariables, plugins
           {
             filename: '[file].map',
             append: false,
-          }
+          },
     ),
     createDefinePlugin({ keepBuildEnvVariables }),
     ...(plugins || []),
@@ -93,9 +100,11 @@ function createDefinePlugin({ keepBuildEnvVariables } = {}) {
         .filter((key) => !keepBuildEnvVariables?.includes(key))
         .map((key) => [
           `__BUILD_ENV__${key}__`,
-          webpack.DefinePlugin.runtimeValue(() => JSON.stringify(getBuildEnvValue(key))),
-        ])
-    )
+          webpack.DefinePlugin.runtimeValue(() =>
+            JSON.stringify(getBuildEnvValue(key)),
+          ),
+        ]),
+    ),
   )
 }
 

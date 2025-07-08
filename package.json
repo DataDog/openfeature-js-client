@@ -9,13 +9,13 @@
   "scripts": {
     "build": "yarn workspaces foreach -R run build",
     "test": "yarn workspaces foreach -R run test",
-    "lint": "biome check .",
+    "lint": "biome check . --diagnostic-level=error",
     "clean": "yarn workspaces foreach -R run clean"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@types/node": "^20.0.0",
-    "jest": "^30.0.0",
+    "jest": "^30.0.4",
     "rimraf": "^6.0.0",
     "ts-node": "^10.9.0",
     "tsup": "^8.0.0",

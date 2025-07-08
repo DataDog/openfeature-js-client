@@ -3,11 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "declaration": true,
-    "module": "commonjs",
+    "module": "es6",
     "rootDir": "./src/",
-    "outDir": "./cjs/",
-    "types": ["jest", "node"]
+    "outDir": "./esm/"
   },
   "include": ["./src/**/*.ts"],
-  "exclude": []
+  "exclude": ["./src/**/*.spec.ts", "./src/**/*.specHelper.ts"]
 }
