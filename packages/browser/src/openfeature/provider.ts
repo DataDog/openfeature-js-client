@@ -239,7 +239,7 @@ async function fetchConfiguration(
         attributes: {
           env: {
             name: options.env,
-            dd_env: "test"
+            dd_env: options.env
           },
           subject: {
             targeting_key: context.targetingKey || '',
