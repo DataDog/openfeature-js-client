@@ -219,36 +219,36 @@ async function fetchConfiguration(
       typeof value === 'string' ? value : JSON.stringify(value)
   }
 
-  const response = await fetch(
-    `${baseUrl}/api/unstable/precompute-assignments`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        ...(!options.overwriteRequestHeaders
-          ? {
-              'dd-client-token': options.clientToken,
-              'dd-application-id': options.applicationId,
-            }
-          : {}),
-        ...options.customHeaders,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'precompute-assignments-request',
-          attributes: {
-            env: {
-              name: options.env,
-            },
-            subject: {
-              targeting_key: context.targetingKey || '',
-              targeting_attributes: stringifiedContext,
-            },
+  const url = new URL(`${baseUrl}/api/unstable/precompute-assignments`)
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/vnd.api+json',
+      ...(!options.overwriteRequestHeaders
+        ? {
+            'dd-client-token': options.clientToken,
+            'dd-application-id': options.applicationId,
+          }
+        : {}),
+      ...options.customHeaders,
+    },
+    body: JSON.stringify({
+      data: {
+        type: 'precompute-assignments-request',
+        attributes: {
+          env: {
+            name: options.env,
+            dd_env: options.env
+          },
+          subject: {
+            targeting_key: context.targetingKey || '',
+            targeting_attributes: stringifiedContext,
           },
         },
-      }),
-    },
-  )
+      },
+    }),
+  })
   const precomputed = await response.json()
   return {
     precomputed: {
