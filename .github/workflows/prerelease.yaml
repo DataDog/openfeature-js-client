@@ -55,23 +55,25 @@ jobs:
       - name: Create packages
         run: yarn lerna run pack --stream
 
-      - name: Configure npm
+      - name: Publish core package
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
           npm config set access public
-
-      - name: Publish all packages
-        run: |
-          # Get the version from lerna.json
-          VERSION=$(node -p "require('./lerna.json').version")
-          
-          # Publish all packages with the alpha tag
-          yarn lerna publish from-package --yes --dist-tag alpha
+          cd packages/core
+          npm publish --tag alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
 
-      - name: Create GitHub release
+      - name: Publish browser package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
+          npm config set access public
+          cd packages/browser
+          npm publish --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Update GitHub release
         run: |
           # Extract release notes from the release body
           echo "${{ github.event.release.body }}" > release_notes.md
