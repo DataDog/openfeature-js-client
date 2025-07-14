@@ -117,14 +117,24 @@ The project also supports different SDK setups:
    - Runs `lerna run pack` to create tarballs
    - Updates test app lockfiles
 
-#### Step 3: Publish
+#### Step 3: Publish via GitHub Release
 
-1. **Publish to npm:**
-   ```bash
-   yarn lerna publish from-git
-   ```
+**Publishing is now automated via GitHub workflows!**
 
-2. **For CDN releases, upload the bundle files from `packages/browser/bundle/`**
+1. **Create a GitHub Release:**
+   - Go to the GitHub repository
+   - Click "Releases" → "Create a new release"
+   - Set the tag to match your version (e.g., `v1.2.3`)
+   - Mark as "This is a pre-release" for alpha/beta versions
+   - Add release notes describing your changes
+   - Click "Publish release"
+
+2. **Automated Publishing:**
+   - The `prerelease.yaml` workflow will automatically trigger
+   - Validates the release type and version consistency
+   - Builds all packages in release mode
+   - Publishes packages to npm with appropriate tags
+   - Updates the GitHub release with build information
 
 ### Package-Specific Build Commands
 
@@ -235,10 +245,16 @@ The project uses a unified changelog system:
    - Run `yarn version` to update peer dependencies
    - Check that all package versions match the version in `lerna.json`
 
+4. **GitHub workflow failures:**
+   - Check the Actions tab for detailed error logs
+   - Ensure GitHub secrets are properly configured
+   - Verify the release tag matches the version in `lerna.json`
+
 #### Getting Help
 
 - Check the [README.md](README.md) for basic project information
 - Review the scripts in the `scripts/` directory for implementation details
+- Check the GitHub Actions tab for workflow status and logs
 - Open an issue on GitHub for bugs or feature requests
 
 ## Code Style
@@ -250,13 +266,13 @@ The project uses a unified changelog system:
 
 ## Commit Messages
 
-Follow conventional commit format:
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation changes
-- `style:` for formatting changes
-- `refactor:` for code refactoring
-- `test:` for test changes
-- `chore:` for maintenance tasks
+Follow conventional commit format with gitmoji:
+- `✨ feat:` for new features
+- `🐛 fix:` for bug fixes
+- `📝 docs:` for documentation changes
+- `🎨 style:` for formatting changes
+- `♻️ refactor:` for code refactoring
+- `✅ test:` for test changes
+- `👷 chore:` for maintenance tasks
 
-Example: `feat(browser): add new flag evaluation method` 
+Example: `✨ feat(browser): add new flag evaluation method` 
