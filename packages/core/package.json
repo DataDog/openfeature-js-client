@@ -8,6 +8,12 @@
     "url": "https://github.com/DataDog/openfeature-js-client.git",
     "directory": "packages/core"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "private": true,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
