@@ -1,4 +1,12 @@
 {
   "extends": "./tsconfig.base.json",
-  "files": []
+  "compilerOptions": {
+    "module": "es2020",
+    "target": "es2018",
+    "lib": ["es2018", "dom"],
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
 }

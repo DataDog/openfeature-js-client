@@ -9,5 +9,14 @@ node_modules
 !.yarn/sdks
 !.yarn/versions
 
+# Build artifacts
+dist/
+cjs/
+esm/
+bundle/
+*.tgz
+*.tar.gz
+
 # IDEs
 .idea/
+.vscode/

@@ -1,4 +1,4 @@
-const path = import('node:path')
+const path = require('path')
 const webpack = require('webpack')
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin')
 const TerserPlugin = require('terser-webpack-plugin')
@@ -20,11 +20,8 @@ module.exports = ({
     filename,
     chunkFilename:
       mode === 'development'
-        ? // Use a fixed name for each chunk during development so that the developer extension
-          // can redirect requests for them reliably.
-          `chunks/[name]-${filename}`
-        : // Include a content hash in chunk names in production.
-          `chunks/[name]-[contenthash]-${filename}`,
+        ? `chunks/[name]-${filename}`
+        : `chunks/[name]-[contenthash]-${filename}`,
     path: path.resolve('./bundle'),
   },
   target: ['web', 'es2018'],
@@ -47,16 +44,10 @@ module.exports = ({
       },
     ],
   },
-
   resolve: {
     extensions: ['.ts', '.js', '.tsx'],
     plugins: [new TsconfigPathsPlugin({ configFile: tsconfigPath })],
-    alias: {
-      // The default "pako.esm.js" build is not transpiled to es5
-      pako: 'pako/dist/pako.es5.js',
-    },
   },
-
   optimization: {
     chunkIds: 'named',
     minimizer: [
@@ -74,20 +65,8 @@ module.exports = ({
       }),
     ],
   },
-
   plugins: [
-    new webpack.SourceMapDevToolPlugin(
-      mode === 'development'
-        ? // Use an inline source map during development (default options)
-          {}
-        : // When bundling for release, produce a source map file so it can be used for source code integration,
-          // but don't append the source map comment to bundles as we don't upload the source map to
-          // the CDN (yet).
-          {
-            filename: '[file].map',
-            append: false,
-          },
-    ),
+    // Removed SourceMapDevToolPlugin for quick fix
     createDefinePlugin({ keepBuildEnvVariables }),
     ...(plugins || []),
   ],

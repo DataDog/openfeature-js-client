@@ -1,2 +1,17 @@
-dist
-cjs
+# Build artifacts
+dist/
+cjs/
+esm/
+*.tgz
+*.tar.gz
+
+# Temporary files
+*.tmp
+*.temp
+
+# Coverage
+coverage/
+*.lcov
+
+# Logs
+*.log
