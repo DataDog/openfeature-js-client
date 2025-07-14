@@ -14,9 +14,10 @@
 
 <!-- By submitting this test, you confirm the following: -->
 
+- [ ] Updated Documentation
 - [ ] Tested locally
 - [ ] Tested on staging
 - [ ] Added unit tests for this change.
 - [ ] Added e2e/integration tests for this change.
 
-<!-- Also, please read the contribution guidelines: https://github.com/DataDog/browser-sdk/blob/main/CONTRIBUTING.md -->
+<!-- Also, please read the contribution guidelines: https://github.com/DataDog/openfeature-js-client/blob/main/CONTRIBUTING.md -->
