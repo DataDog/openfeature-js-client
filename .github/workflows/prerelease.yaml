@@ -72,35 +72,3 @@ jobs:
           npm publish --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.secrets.NPM_PUBLISH_TOKEN }}
-
-      - name: Update GitHub release
-        run: |
-          # Extract release notes from the release body
-          echo "${{ github.event.release.body }}" > release_notes.md
-          
-          # Create the updated release body
-          cat > updated_release_body.md << 'EOF'
-          $(cat release_notes.md)
-          
-          ## 📦 Published Packages
-          
-          This prerelease includes the following packages:
-          
-          - **@datadog/flagging-core@${{ github.event.release.tag_name }}** - Runtime-agnostic flag-evaluation logic
-          - **@datadog/openfeature-browser@${{ github.event.release.tag_name }}** - Browser-specific bindings for OpenFeature
-          
-          ## 🔧 Build Information
-          
-          - **Build Mode**: Release
-          - **Node Version**: 20.x
-          - **Package Manager**: Yarn 4.9.2
-          - **Published with**: alpha tag
-          EOF
-          
-          # Update the release with build information
-          gh api \
-            --method PATCH \
-            /repos/${{ github.repository }}/releases/${{ github.event.release.id }} \
-            --field body="$(cat updated_release_body.md)"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
