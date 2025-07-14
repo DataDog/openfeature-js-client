@@ -196,14 +196,14 @@ Since this project uses **fixed versioning**:
 - Peer dependencies are automatically updated to match the fixed version
 - A single version commit and tag is created for the entire project
 
-### Unified Changelog
+### TODO Unified Changelog
 
-The project uses a unified changelog system:
+~~The project uses a unified changelog system:~~
 
-- All changes across all packages are documented in a single `CHANGELOG.md` file
-- The changelog is generated automatically during the release process
-- Changes are categorized and organized by type
-- The changelog follows a consistent format for all releases
+- ~~All changes across all packages are documented in a single `CHANGELOG.md` file~~
+- ~~The changelog is generated automatically during the release process~~
+- ~~Changes are categorized and organized by type~~
+- ~~The changelog follows a consistent format for all releases~~
 
 ### Testing Before Release
 
