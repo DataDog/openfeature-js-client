@@ -1,4 +1,4 @@
-const path = require('path')
+const path = import('node:path')
 
 const webpackBase = require('../../webpack.base')
 
