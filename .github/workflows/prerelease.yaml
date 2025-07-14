@@ -66,9 +66,9 @@ jobs:
 
       - name: Publish browser package
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/browser
           npm publish --tag alpha
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.secrets.NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
