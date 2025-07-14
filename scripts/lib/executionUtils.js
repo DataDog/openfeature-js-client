@@ -40,14 +40,16 @@ function command(strings, ...values) {
           }
         })
       })
-    }
+    },
   }
 }
 
 async function fetchHandlingError(url, options) {
   const response = await fetch(url, options)
   if (!response.ok) {
-    const error = new Error(`HTTP Error Response: ${response.status} ${response.statusText}`)
+    const error = new Error(
+      `HTTP Error Response: ${response.status} ${response.statusText}`,
+    )
     error.status = response.status
     throw error
   }
@@ -65,5 +67,5 @@ module.exports = {
   printError,
   printLog,
   fetchHandlingError,
-  timeout
-} 
+  timeout,
+}

@@ -39,7 +39,7 @@ cmd_release () {
 }
 
 cmd_version () {
-  node ./scripts/release/generate-changelog
+#  node ./scripts/release/generate-changelog TODO: auto-generate changelog
   node ./scripts/release/update-peer-dependency-versions.js
   lerna run pack --stream
   # keep test apps lockfiles up to date

@@ -62,7 +62,9 @@ function getBuildMode() {
   if (BUILD_MODES.includes(process.env.BUILD_MODE)) {
     return process.env.BUILD_MODE
   }
-  console.log(`Invalid build mode "${process.env.BUILD_MODE}". Possible build modes are: ${BUILD_MODES.join(', ')}`)
+  console.log(
+    `Invalid build mode "${process.env.BUILD_MODE}". Possible build modes are: ${BUILD_MODES.join(', ')}`,
+  )
   process.exit(1)
 }
 
@@ -73,7 +75,9 @@ function getSdkSetup() {
   if (SDK_SETUPS.includes(process.env.SDK_SETUP)) {
     return process.env.SDK_SETUP
   }
-  console.log(`Invalid SDK setup "${process.env.SDK_SETUP}". Possible SDK setups are: ${SDK_SETUPS.join(', ')}`)
+  console.log(
+    `Invalid SDK setup "${process.env.SDK_SETUP}". Possible SDK setups are: ${SDK_SETUPS.join(', ')}`,
+  )
   process.exit(1)
 }
 
@@ -84,7 +88,10 @@ function getOpenFeatureVersion() {
     const lernaJson = JSON.parse(readFileSync(lernaJsonPath, 'utf8'))
     return lernaJson.version
   } catch (error) {
-    console.warn('Could not read lerna.json version, using "0.1.0-alpha.2"')
+    console.warn(
+      'Could not read lerna.json version, using "0.1.0-alpha.2"',
+      error,
+    )
     return '0.1.0-alpha.2'
   }
-} 
+}
