@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-browser",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "MIT",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
@@ -45,7 +45,7 @@
     "typescript": "^5.5.0"
   },
   "peerDependencies": {
-    "@datadog/browser-core": ">=6.0.0",
+    "@datadog/browser-core": "0.1.0-alpha.3",
     "webpack": "^5.99.9",
     "webpack-cli": "^6.0.1"
   }
