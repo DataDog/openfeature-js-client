@@ -60,7 +60,7 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
           npm config set access public
           cd packages/core
-          npm publish --tag alpha --dry-run
+          npm publish --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
 
@@ -69,6 +69,6 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/browser
-          npm publish --tag alpha --dry-run
+          npm publish --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
