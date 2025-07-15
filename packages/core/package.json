@@ -14,7 +14,6 @@
   "files": [
     "dist"
   ],
-  "private": true,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -27,7 +26,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm",
-    "prepack": "npm run build",
+    "prepack": "yarn build",
     "clean": "rm -rf dist",
     "test": "jest --passWithNoTests",
     "typecheck": "tsc --noEmit"
