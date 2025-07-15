@@ -19,6 +19,7 @@
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
   "scripts": {
+    "prepack": "yarn build",
     "pack": "yarn pack",
     "build": "run-p build:cjs build:esm",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",

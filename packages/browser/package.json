@@ -17,6 +17,7 @@
     "access": "public"
   },
   "scripts": {
+    "prepack": "yarn build",
     "pack": "yarn pack",
     "build": "run-p build:cjs build:esm build:bundle",
     "build:bundle": "rm -rf bundle && SDK_SETUP=cdn webpack --mode=production",
