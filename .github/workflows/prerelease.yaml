@@ -7,6 +7,9 @@ permissions:
 on:
   release:
     types: [created]
+  push:
+    branches:
+      - typo/*
   workflow_dispatch:
     inputs:
       dry-run:
