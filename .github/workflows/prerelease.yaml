@@ -7,15 +7,6 @@ permissions:
 on:
   release:
     types: [created]
-  push:
-    branches:
-      - typo/*
-  workflow_dispatch:
-    inputs:
-      dry-run:
-        description: "Dry run the release"
-        required: false
-        default: "true"
 
 jobs:
   validate-release:
@@ -64,42 +55,20 @@ jobs:
       - name: Create packages
         run: yarn lerna run pack --stream
 
-      - name: Dry run publish core package
-        if: inputs.dry-run == 'true'
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
-          npm config set access public
-          cd packages/core
-          npm publish --tag alpha --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
-
-      - name: Dry run publish browser package
-        if: inputs.dry-run == 'true'
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
-          npm config set access public
-          cd packages/browser
-          npm publish --tag alpha --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
-
       - name: Publish core package
-        if: inputs.dry-run == 'false'
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
           npm config set access public
           cd packages/core
-          npm publish --tag alpha
+          npm publish --tag alpha --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
 
       - name: Publish browser package
-        if: inputs.dry-run == 'false'
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/browser
-          npm publish --tag alpha
+          npm publish --tag alpha --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
