@@ -491,10 +491,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/browser-core@npm:^6.10.0":
-  version: 6.13.0
-  resolution: "@datadog/browser-core@npm:6.13.0"
-  checksum: 10c0/fec3fef0b4ec3972d7b9470ee1ac4063139eee0273ec672076699e9d2dc83a67460afa7b6c57ce27b0e60884e523698a4c83eb01f450b45e08eac98e51ba3af9
+"@datadog/browser-core@npm:^6.17.0":
+  version: 6.17.0
+  resolution: "@datadog/browser-core@npm:6.17.0"
+  checksum: 10c0/cb108241c1b5f149e6f5104f909186e096156c70b59fd8a7b208d308b677bbd93783db5d8f0061a59aa9701a12fc3e60b8a84e23e4a20d5003144072f345061b
   languageName: node
   linkType: hard
 
@@ -511,6 +511,9 @@ __metadata:
     ts-jest: "npm:^29.4.0"
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
+  peerDependencies:
+    "@openfeature/core": ^1.8.1
+    "@openfeature/web-sdk": ^1.5.0
   languageName: unknown
   linkType: soft
 
@@ -518,7 +521,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
-    "@datadog/browser-core": "npm:^6.10.0"
+    "@datadog/browser-core": "npm:^6.17.0"
     "@datadog/flagging-core": "npm:0.1.0-alpha.8"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
@@ -530,6 +533,9 @@ __metadata:
     ts-jest: "npm:^29.4.0"
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
+  peerDependencies:
+    "@openfeature/core": ^1.8.0
+    "@openfeature/web-sdk": ^1.5.0
   languageName: unknown
   linkType: soft
 

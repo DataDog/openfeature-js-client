@@ -29,12 +29,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "0.1.0-alpha.8",
-    "@openfeature/core": "^1.8.1",
+    "@datadog/browser-core": "^6.17.0",
+    "@datadog/flagging-core": "0.1.0-alpha.8"
+  },
+  "peerDependencies": {
+    "@openfeature/core": "^1.8.0",
     "@openfeature/web-sdk": "^1.5.0"
   },
   "devDependencies": {
-    "@datadog/browser-core": "^6.10.0",
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0",
     "@types/jest": "^29.4.0",
     "@types/node": "^20.0.0",
     "jest": "^30.0.4",

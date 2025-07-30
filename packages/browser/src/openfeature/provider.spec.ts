@@ -1,17 +1,19 @@
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
+import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 import { DatadogProvider } from './provider'
+import { FlaggingInitConfiguration } from '../domain/configuration'
 
 describe('DatadogProvider', () => {
   let provider: DatadogProvider
   let mockLogger: Logger
   let mockContext: EvaluationContext
 
-  const options = {
+  const options: FlaggingInitConfiguration = {
     clientToken: 'xxx',
     applicationId: 'xxx',
     env: 'test',
-    site: 'http://localhost:8000',
+    site: INTAKE_SITE_STAGING,
   }
 
   beforeEach(() => {
@@ -106,12 +108,12 @@ describe('DatadogProvider', () => {
         customAttribute: 'value',
       }
 
-      await provider.onContextChange(options, mockContext)
+      await provider.onContextChange({}, mockContext)
 
       // Check that fetch was called with the correct URL and method
       expect(fetchMock).toHaveBeenCalled()
       const [url, requestOptions] = fetchMock.mock.calls[0]
-      expect(url.toString()).toBe(`${options.site}/api/unstable/precompute-assignments`)
+      expect(url.toString()).toBe(`https://dd.datad0g.com/api/unstable/precompute-assignments`)
       expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly

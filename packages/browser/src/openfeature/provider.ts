@@ -1,10 +1,8 @@
-import { dateNow } from '@datadog/browser-core'
-import type { Configuration } from '@datadog/flagging-core'
+import type { InitConfiguration } from '@datadog/browser-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
-  EvaluationDetails,
-  FlagValue,
-  HookContext,
+  Hook,
   JsonValue,
   Logger,
   Paradigm,
@@ -13,60 +11,20 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 /* eslint-disable-next-line local-rules/disallow-side-effects */
-import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
+import { ProviderStatus } from '@openfeature/web-sdk'
 import { evaluate } from '../evaluation'
+import { createRumTrackingHook, createRumExposureHook, createExposureLoggingHook } from './exposures'
 import type { DDRum } from './rumIntegration'
+import {
+  validateAndBuildFlaggingConfiguration,
+  type FlaggingInitConfiguration,
+  type FlaggingConfiguration,
+} from '../domain/configuration'
 
-export type DatadogProviderOptions = {
-  /**
-   * The application key for Datadog. Required for initializing the Datadog Flagging client.
-   */
-  applicationId: string
-
-  /**
-   * The client token for Datadog. Required for initializing the Datadog Flagging client.
-   */
-  clientToken: string
-
-  /**
-   * The application environment.
-   */
-  env: string
-
-  /**
-   * The site to use for the Datadog API.
-   */
-  site?: string
-
-  initialConfiguration?: Configuration
-
-  /**
-   * RUM integration options
-   */
-  rum?: {
-    /**
-     * The RUM SDK instance to use for tracking
-     */
-    sdk: DDRum
-    /**
-     * Whether to track feature flag evaluations in RUM
-     */
-    ddFlaggingTracking?: boolean
-    /**
-     * Whether to log exposures in RUM
-     */
-    ddExposureLogging?: boolean
-  }
-  /**
-   * Custom headers to add to the request to the Datadog API.
-   */
-  customHeaders?: Record<string, string>
-
-  /**
-   * Whether to overwrite the default request headers.
-   */
-  overwriteRequestHeaders?: boolean
-}
+/**
+ * @deprecated Use FlaggingInitConfiguration instead
+ */
+export type DatadogProviderOptions = FlaggingInitConfiguration
 
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
@@ -76,59 +34,56 @@ export class DatadogProvider implements Provider {
     name: 'datadog',
   }
   readonly runsOn: Paradigm = 'client'
+  hooks?: Hook[]
 
   status: ProviderStatus
-  private configuration: Configuration = {}
+  private flagsConfiguration: FlagsConfiguration = {}
+  private configuration?: FlaggingConfiguration
 
-  private options: DatadogProviderOptions
+  constructor(options: FlaggingInitConfiguration) {
+    this.configuration = validateAndBuildFlaggingConfiguration(options)
 
-  constructor(options: DatadogProviderOptions) {
-    this.options = options
-    const trackFlags = options.rum?.ddFlaggingTracking ?? false
-    const logExposures = options.rum?.ddExposureLogging ?? false
+    // Set up provider-managed hooks based on configuration
+    this.hooks = []
 
-    if (options.rum) {
-      const rum = options.rum.sdk
-      // Add OpenFeature hook
-      OpenFeature.addHooks({
-        after(_hookContext: HookContext, details: EvaluationDetails<FlagValue>) {
-          if (trackFlags) {
-            // Track feature flag evaluation
-            rum.addFeatureFlagEvaluation(details.flagKey, details.value)
-          }
-          if (logExposures) {
-            // Log exposure
-            rum.addAction('__dd_exposure', {
-              timestamp: dateNow(),
-              flag_key: details.flagKey,
-              allocation_key: (details.flagMetadata?.allocationKey as string) ?? '',
-              exposure_key: `${details.flagKey}-${details.flagMetadata?.allocationKey}`,
-              subject_key: _hookContext.context.targetingKey,
-              subject_attributes: _hookContext.context,
-              variant_key: details.variant,
-            })
-          }
-        },
-      })
+    // Add RUM flag tracking hook (DEPRECATED)
+    if (options.rum?.ddFlaggingTracking) {
+      this.hooks.push(createRumTrackingHook(options.rum.sdk))
     }
 
-    if (options.initialConfiguration) {
-      this.configuration = options.initialConfiguration
+    // Add RUM exposure logging hook (DEPRECATED)
+    if (options.rum?.ddExposureLogging) {
+      this.hooks.push(createRumExposureHook(options.rum.sdk))
+    }
+
+    // Add proper exposure logging hook (creates batch internally)
+    if (options.enableExposureLogging && this.configuration) {
+      this.hooks.push(createExposureLoggingHook(this.configuration))
+    }
+
+    if (options.initialFlagsConfiguration) {
+      this.flagsConfiguration = options.initialFlagsConfiguration
       this.status = ProviderStatus.READY
     } else {
-      this.configuration = {}
+      this.flagsConfiguration = {}
       this.status = ProviderStatus.NOT_READY
     }
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
-    this.configuration = await fetchConfiguration(this.options, context)
+    if (!this.configuration) {
+      throw new Error('Invalid configuration')
+    }
+    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
   }
 
   async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
+    if (!this.configuration) {
+      throw new Error('Invalid configuration')
+    }
     this.status = ProviderStatus.RECONCILING
-    this.configuration = await fetchConfiguration(this.options, context)
+    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
   }
 
@@ -138,7 +93,7 @@ export class DatadogProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<boolean> {
-    return evaluate(this.configuration, 'boolean', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
   }
 
   resolveStringEvaluation(
@@ -147,7 +102,7 @@ export class DatadogProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<string> {
-    return evaluate(this.configuration, 'string', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
   }
 
   resolveNumberEvaluation(
@@ -156,7 +111,7 @@ export class DatadogProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<number> {
-    return evaluate(this.configuration, 'number', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
@@ -171,55 +126,6 @@ export class DatadogProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(this.configuration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
-  }
-}
-
-async function fetchConfiguration(options: DatadogProviderOptions, context: EvaluationContext): Promise<Configuration> {
-  const baseUrl = options.site || 'https://dd.datad0g.com'
-
-  // Stringify all context values
-  const stringifiedContext: Record<string, string> = {}
-  for (const [key, value] of Object.entries(context)) {
-    stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
-  }
-
-  const url = new URL(`${baseUrl}/api/unstable/precompute-assignments`)
-
-  const response = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/vnd.api+json',
-      ...(!options.overwriteRequestHeaders
-        ? {
-            'dd-client-token': options.clientToken,
-            'dd-application-id': options.applicationId,
-          }
-        : {}),
-      ...options.customHeaders,
-    },
-    body: JSON.stringify({
-      data: {
-        type: 'precompute-assignments-request',
-        attributes: {
-          env: {
-            name: options.env,
-            dd_env: options.env,
-          },
-          subject: {
-            targeting_key: context.targetingKey || '',
-            targeting_attributes: stringifiedContext,
-          },
-        },
-      },
-    }),
-  })
-  const precomputed = await response.json()
-  return {
-    precomputed: {
-      response: precomputed,
-      context,
-      fetchedAt: dateNow(),
-    },
+    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
   }
 }
