@@ -21,10 +21,10 @@
   "scripts": {
     "prepack": "yarn build",
     "pack": "yarn pack",
-    "build": "run-p build:cjs build:esm",
+    "build": "run-p build:cjs build:esm build:bundle",
+    "build:bundle": "rm -rf bundle && SDK_SETUP=cdn webpack --mode=production",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
-    "build:bundle": "yarn build",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
     "clean": "rm -rf dist cjs esm",
     "test": "jest --passWithNoTests",
@@ -36,6 +36,7 @@
     "jest": "^30.0.4",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.0",
+    "ts-loader": "^9.5.2",
     "typescript": "^5.5.0"
   },
   "dependencies": {
