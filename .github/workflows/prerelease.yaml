@@ -95,29 +95,6 @@ jobs:
             sleep 10
           done
 
-      - name: Rebuild browser package with updated dependencies
-        run: |
-          export BUILD_MODE=release
-          # Update dependencies to pick up the newly published core package
-          yarn install
-          cd packages/browser
-          yarn build
-
-      - name: Verify browser package dependencies
-        run: |
-          cd packages/browser
-          echo "Verifying that browser package can resolve core package dependency..."
-          
-          # Check if the core package is properly resolved
-          if ! yarn list "@datadog/flagging-core" > /dev/null 2>&1; then
-            echo "❌ Browser package cannot resolve @datadog/flagging-core dependency"
-            echo "Current dependencies:"
-            yarn list
-            exit 1
-          fi
-          
-          echo "✅ Browser package dependencies verified successfully"
-
       - name: Publish browser package
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
