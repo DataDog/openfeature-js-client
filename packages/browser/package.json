@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-provider",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "MIT",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
