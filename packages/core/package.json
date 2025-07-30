@@ -12,9 +12,6 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "files": [
-    "dist"
-  ],
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
