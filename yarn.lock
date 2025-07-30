@@ -511,25 +511,8 @@ __metadata:
     ts-jest: "npm:^29.4.0"
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
-  languageName: unknown
-  linkType: soft
-
-"@datadog/openfeature-browser@workspace:packages/browser":
-  version: 0.0.0-use.local
-  resolution: "@datadog/openfeature-browser@workspace:packages/browser"
-  dependencies:
-    "@datadog/browser-core": "npm:^6.10.0"
-    "@datadog/flagging-core": "workspace:*"
-    "@openfeature/core": "npm:^1.8.1"
-    "@openfeature/web-sdk": "npm:^1.5.0"
-    "@types/jest": "npm:^29.4.0"
-    "@types/node": "npm:^20.0.0"
-    jest: "npm:^30.0.4"
-    jest-util: "npm:^30.0.2"
-    npm-run-all: "npm:^4.1.5"
-    ts-jest: "npm:^29.4.0"
-    ts-loader: "npm:^9.5.2"
-    typescript: "npm:^5.5.0"
+  peerDependencies:
+    webpack: ^5.0.0
   languageName: unknown
   linkType: soft
 
@@ -553,6 +536,27 @@ __metadata:
     webpack: "npm:5.99.9"
     webpack-cli: "npm:6.0.1"
     webpack-dev-middleware: "npm:7.4.2"
+  languageName: unknown
+  linkType: soft
+
+"@datadog/openfeature-provider@workspace:packages/browser":
+  version: 0.0.0-use.local
+  resolution: "@datadog/openfeature-provider@workspace:packages/browser"
+  dependencies:
+    "@datadog/browser-core": "npm:^6.10.0"
+    "@datadog/flagging-core": "workspace:*"
+    "@openfeature/core": "npm:^1.8.1"
+    "@openfeature/web-sdk": "npm:^1.5.0"
+    "@types/jest": "npm:^29.4.0"
+    "@types/node": "npm:^20.0.0"
+    jest: "npm:^30.0.4"
+    jest-util: "npm:^30.0.2"
+    npm-run-all: "npm:^4.1.5"
+    ts-jest: "npm:^29.4.0"
+    ts-loader: "npm:^9.5.2"
+    typescript: "npm:^5.5.0"
+  peerDependencies:
+    webpack: ^5.0.0
   languageName: unknown
   linkType: soft
 

@@ -22,7 +22,7 @@
     "prepack": "yarn build",
     "pack": "yarn pack",
     "build": "run-p build:cjs build:esm build:bundle",
-    "build:bundle": "rm -rf bundle && SDK_SETUP=cdn webpack --mode=production",
+    "build:bundle": "rm -rf bundle && SDK_SETUP=cdn node ../../scripts/webpack-runner.js webpack.config.js --mode=production",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
@@ -42,5 +42,8 @@
   "dependencies": {
     "@openfeature/core": "^1.8.1",
     "@openfeature/web-sdk": "^1.5.0"
+  },
+  "peerDependencies": {
+    "webpack": "^5.0.0"
   }
 }
