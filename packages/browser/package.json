@@ -1,5 +1,5 @@
 {
-  "name": "@datadog/openfeature-provider",
+  "name": "@datadog/openfeature-browser",
   "version": "0.1.0-alpha.5",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "MIT",
