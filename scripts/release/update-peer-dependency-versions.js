@@ -18,10 +18,12 @@ runMain(async () => {
   )
   const version = lernaJson.version
 
+  console.log('Updating peer dependency versions to', version)
+  console.log('JSON_FILES', JSON_FILES)
   // Update peer dependencies
   for (const jsonFile of JSON_FILES) {
     await modifyFile(jsonFile, (content) =>
-      updateJsonPeerDependencies(content, version),
+      updatePackageDependencies(content, version),
     )
   }
 
@@ -29,12 +31,18 @@ runMain(async () => {
   command`yarn`.run()
 })
 
-function updateJsonPeerDependencies(content, version) {
+function updatePackageDependencies(content, version) {
   const json = JSON.parse(content)
   Object.keys(json.peerDependencies || {})
     .filter((key) => key.startsWith('@datadog'))
     .forEach((key) => {
       json.peerDependencies[key] = version
     })
+  Object.keys(json.dependencies || {})
+  .filter((key) => key.startsWith('@datadog'))
+  .forEach((key) => {
+    json.dependencies[key] = version
+  })
   return `${JSON.stringify(json, null, 2)}\n`
 }
+
