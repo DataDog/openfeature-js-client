@@ -498,7 +498,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/flagging-core@workspace:*, @datadog/flagging-core@workspace:packages/core":
+"@datadog/flagging-core@npm:0.1.0-alpha.7, @datadog/flagging-core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
   dependencies:
@@ -521,7 +521,7 @@ __metadata:
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:^6.10.0"
-    "@datadog/flagging-core": "workspace:*"
+    "@datadog/flagging-core": "npm:0.1.0-alpha.7"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/jest": "npm:^29.4.0"
