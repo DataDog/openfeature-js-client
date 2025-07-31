@@ -6,6 +6,9 @@ export {
   configurationToString,
 } from '@datadog/flagging-core'
 
+// Build environment placeholder for testing
+const SDK_VERSION = __BUILD_ENV__SDK_VERSION__
+
 interface BrowserWindow extends Window {
   DD_FLAGGING?: {
     Provider: typeof DatadogProvider

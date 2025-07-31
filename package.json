@@ -7,19 +7,38 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspaces foreach -R run build",
-    "test": "yarn workspaces foreach -R run test",
+    "build": "lerna run build --stream",
+    "build:bundle": "lerna run build:bundle --stream",
+    "test": "lerna run test --stream",
+    "test:unit": "lerna run test --stream",
+    "test:unit:watch": "lerna run test --stream --parallel",
     "lint": "biome check . --diagnostic-level=error",
-    "clean": "yarn workspaces foreach -R run clean"
+    "lint:fix": "biome check --write .",
+    "typecheck": "lerna run typecheck --stream",
+    "clean": "lerna run clean --stream",
+    "release": "scripts/cli release",
+    "version": "scripts/cli version",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@types/node": "^20.0.0",
+    "glob": "^11.0.3",
     "jest": "^30.0.4",
+    "lerna": "^8.2.3",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.6.2",
     "rimraf": "^6.0.0",
+    "terser-webpack-plugin": "^5.3.14",
+    "ts-loader": "^9.5.2",
     "ts-node": "^10.9.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.5.0"
+    "tsconfig-paths-webpack-plugin": "^4.2.0",
+    "typescript": "^5.5.0",
+    "webpack": "5.99.9"
   },
-  "packageManager": "yarn@4.9.2"
+  "packageManager": "yarn@4.9.2",
+  "dependencies": {
+    "emoji-name-map": "^2.0.3"
+  }
 }

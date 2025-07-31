@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -euo pipefail
+
+PATH="$PATH:node_modules/.bin"
+
+main () {
+  if [[ $# -lt 1 ]]; then
+    cmd_help
+  fi
+
+  local command="cmd_$1"
+  shift
+
+  "$command" "$@"
+}
+
+cmd_help () {
+  local available_commands=$(set | perl -nle'print $& while m{^cmd_\K\w+}g')
+  echo -e "Available commands:\n$available_commands"
+  exit 1
+}
+
+cmd_typecheck () {
+  local project_path="${1}"
+  tsc -p "$project_path" --noEmit true
+}
+
+cmd_lint () {
+  local project_path="${1}"
+  biome check "$project_path" --diagnostic-level=error
+}
+
+cmd_release () {
+  [[ `git branch --show-current` != "main" ]] || fail 'please do not release from `main` branch'
+  # We should publish all packages regardless of if there are changes in each.
+  # --force-publish will skip the `lerna changed` check for changed packages
+  yarn lerna version --exact --force-publish
+}
+
+cmd_version () {
+  EDITOR=catyarn node ./scripts/release/generate-changelog
+  yarn node ./scripts/release/update-peer-dependency-versions.js
+  lerna run pack --stream
+}
+
+cmd_generate_changelog () {
+  yarn node ./scripts/release/generate-changelog
+}
+
+fail () {
+  echo
+  echo "❌ ${1}"
+  echo
+
+  exit 1
+}
+
+main "$@" 
