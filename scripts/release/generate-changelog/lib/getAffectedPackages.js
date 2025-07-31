@@ -47,15 +47,13 @@ function isToplevelPackage(packageDirectoryName) {
   return !PACKAGES_REVERSE_DEPENDENCIES.has(packageDirectoryName)
 }
 
+const PACKAGE_NAME_TO_DIRECTORY = {
+  '@datadog/openfeature-browser': 'browser',
+  '@datadog/flagging-core': 'core'
+}
+
 function getPackageDirectoryNameFromPackageName(packageName) {
-  // Handle @datadog/openfeature-browser -> browser
-  if (packageName.startsWith('@datadog/openfeature-')) {
-    return packageName.slice('@datadog/openfeature-'.length)
-  }
-  // Handle @datadog/flagging-core -> core
-  if (packageName.startsWith('@datadog/flagging-')) {
-    return packageName.slice('@datadog/flagging-'.length)
-  }
+  return PACKAGE_NAME_TO_DIRECTORY[packageName]
 }
 
 function getDepenciesRecursively(packageDirectoryName) {
