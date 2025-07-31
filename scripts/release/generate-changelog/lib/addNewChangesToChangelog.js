@@ -56,7 +56,7 @@ async function getEmojisLegend() {
 
 function getChangeLists() {
   const lastTagName = getLastReleaseTagName()
-  const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:%H %s`.run().split('\n')
+  const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`.run().split('\n')
 
   const internalChanges = []
   const publicChanges = []
@@ -92,6 +92,7 @@ function getLastReleaseTagName() {
   if (!match) {
     throw new Error('Could not find the last release version in the changelog')
   }
+  console.log(match[1])
   return match[1]
 }
 

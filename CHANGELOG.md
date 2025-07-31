@@ -2,15 +2,17 @@
 
 > **Legend**
 >
-> - 💥 breaking change
-> - ✨ feature
-> - 🐛 bug fix  
-> - ⚡ performance improvement
-> - 📝 documentation update
->
 > See [Gitmoji](https://gitmoji.dev/) for a guide on the emojis used.
 
 ---
+
+## v0.1.0-alpha.9
+
+**Internal Changes:**
+
+- autogen changelog
+- clean up unused code [BROWSER]
+- update contributing
 
 ## v0.1.0-alpha.8
 
