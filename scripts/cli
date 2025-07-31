@@ -39,32 +39,13 @@ cmd_release () {
 }
 
 cmd_version () {
-#  node ./scripts/release/generate-changelog TODO: auto-generate changelog
-  node ./scripts/release/update-peer-dependency-versions.js
+  yarn node ./scripts/release/generate-changelog
+  yarn node ./scripts/release/update-peer-dependency-versions.js
   lerna run pack --stream
-  # keep test apps lockfiles up to date
-  for app_package_path in $(git ls-files test/apps/*/package.json 2>/dev/null || true); do
-    app_dir=$(dirname "$app_package_path");
-    cd "$app_dir"
-    yarn up
-    git add yarn.lock
-    cd - > /dev/null
-  done
 }
 
-cmd_build_testing_extensions () {
-  echo "No testing extensions to build for openfeature-js-client"
-}
-
-cmd_check_server_side_rendering_compatibility () {
-  yarn build
-  yarn lerna run pack --stream
-  echo "SSR compatibility check not implemented for openfeature-js-client"
-}
-
-cmd_woke () {
-  command -v woke || fail 'woke not installed, see https://github.com/get-woke/woke#installation'
-  woke --exit-1-on-failure
+cmd_generate_changelog () {
+  yarn node ./scripts/release/generate-changelog
 }
 
 fail () {

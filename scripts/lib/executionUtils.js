@@ -44,28 +44,43 @@ function command(strings, ...values) {
   }
 }
 
-async function fetchHandlingError(url, options) {
-  const response = await fetch(url, options)
-  if (!response.ok) {
-    const error = new Error(
-      `HTTP Error Response: ${response.status} ${response.statusText}`,
-    )
-    error.status = response.status
-    throw error
-  }
-
-  return response
+// Synchronous command execution that returns stdout
+function syncCommand(command) {
+  const { execSync } = require('child_process')
+  return execSync(command, { encoding: 'utf-8' }).trim()
 }
 
-function timeout(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Command template that returns stdout synchronously (for changelog generation)
+function commandSync(strings, ...values) {
+  const command = strings.reduce((result, string, index) => {
+    return result + string + (values[index] || '')
+  }, '')
+
+  return {
+    run() {
+      return syncCommand(command)
+    },
+  }
+}
+
+function spawnCommand(command, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: 'inherit' })
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(`Command failed with exit code ${code}`))
+      }
+    })
+  })
 }
 
 module.exports = {
   runMain,
   command,
+  commandSync,
+  spawnCommand,
   printError,
   printLog,
-  fetchHandlingError,
-  timeout,
 }
