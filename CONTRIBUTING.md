@@ -47,6 +47,9 @@ The project uses **fixed versioning**, meaning all packages share the same versi
 - All tests must pass
 - Code must be linted and type-checked
 - Changes should be committed and pushed
+- Proper GitHub secrets must be configured:
+  - `NPM_PUBLISH_TOKEN_FLAGGING_CORE` - Token for publishing core package
+  - `NPM_PUBLISH_TOKEN` - Token for publishing browser package
 
 ### Build Modes
 
@@ -83,65 +86,69 @@ The project also supports different SDK setups:
    git checkout -b release/v1.2.3
    ```
 
-2. **Update the version:**
+
+#### Step 2: Prepare Package Dependencies
+
+2. **Update the version using the CLI:**
    ```bash
    yarn release
    ```
    
    This command:
+   - Validates you're not on the `main` branch
    - Runs `lerna version --exact --force-publish` to update the version
    - Prompts for the new version number (applied to all packages)
    - Creates version commits and tags
    - Updates all package versions to match
-
-#### Step 2: Build for Release
-
-1. **Build all packages in release mode:**
-   ```bash
-   BUILD_MODE=release yarn build
-   ```
-
-2. **Build browser bundle for CDN:**
-   ```bash
-   BUILD_MODE=release SDK_SETUP=cdn yarn build:bundle
-   ```
-
-3. **Create packages for distribution:**
-   ```bash
-   yarn version
-   ```
-   
-   This command:
-   - Generates a unified changelog for the entire project
-   - Updates peer dependency versions to match the fixed version
-   - Runs `lerna run pack` to create tarballs
-   - Updates test app lockfiles
+   - Pushes version tag to Github
 
 #### Step 3: Publish via GitHub Release
 
-**Publishing is now automated via GitHub workflows!**
+**Publishing is fully automated via GitHub workflows!**
 
 1. **Create a GitHub Release:**
    - Go to the GitHub repository
    - Click "Releases" → "Create a new release"
-   - Set the tag to match your version (e.g., `v1.2.3`)
-   - Mark as "This is a pre-release" for alpha/beta versions
-   - Add release notes describing your changes
+   - Set the tag to match your version (e.g., `v0.1.0-alpha.8`)
+   - **Important:** Mark as "This is a pre-release" for alpha/beta versions
+   - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
 
-2. **Automated Publishing:**
-   - The `prerelease.yaml` workflow will automatically trigger
-   - Validates the release type and version consistency
-   - Builds all packages in release mode
-   - Publishes packages to npm with appropriate tags
-   - Updates the GitHub release with build information
+2. **Automated Publishing Workflow:**
+   
+   The `prerelease.yaml` workflow will automatically trigger and:
+   
+   **Validation Phase:**
+   - Validates that the release is marked as a prerelease
+   - Checks that the GitHub release tag matches the version in `lerna.json`
+   - Fails fast if validation doesn't pass
+   
+   **Build and Publish Phase:**
+   - Installs dependencies with `yarn install --frozen-lockfile`
+   - Builds all packages in release mode (`BUILD_MODE=release`)
+   - Creates package tarballs with `yarn lerna run pack --stream`
+   
+   **Publishing Sequence:**
+   1. **Publishes core package first** (`@datadog/flagging-core`)
+      - Uses `NPM_PUBLISH_TOKEN_FLAGGING_CORE` secret
+      - Publishes with `--tag alpha` for prerelease versions
+   
+   2. **Waits for npm registry propagation**
+      - Polls npm registry for up to 5 minutes
+      - Ensures core package is available before proceeding
+      - Prevents dependency resolution issues
+   
+   3. **Publishes browser package** (`@datadog/openfeature-browser`)
+      - Uses `NPM_PUBLISH_TOKEN` secret
+      - Publishes with `--tag alpha` for prerelease versions
+      - Will have updated dependency on the just-published core package
 
 ### Package-Specific Build Commands
 
 #### Core Package (`@datadog/flagging-core`)
 
 ```bash
-# Build CommonJS and ESM modules
+# Build all formats (CommonJS and ESM)
 cd packages/core
 yarn build
 
@@ -196,14 +203,27 @@ Since this project uses **fixed versioning**:
 - Peer dependencies are automatically updated to match the fixed version
 - A single version commit and tag is created for the entire project
 
-### TODO Unified Changelog
+### Automated Release Workflow Details
 
-~~The project uses a unified changelog system:~~
+The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures:
 
-- ~~All changes across all packages are documented in a single `CHANGELOG.md` file~~
-- ~~The changelog is generated automatically during the release process~~
-- ~~Changes are categorized and organized by type~~
-- ~~The changelog follows a consistent format for all releases~~
+1. **Release Type Validation:**
+   - Only triggers on prerelease GitHub releases
+   - Prevents accidental production releases without proper workflow
+
+2. **Version Consistency Check:**
+   - Compares GitHub release tag with `lerna.json` version
+   - Ensures tags and versions are synchronized
+
+3. **Dependency Coordination:**
+   - Core package is published first
+   - Waits for npm registry propagation (up to 5 minutes)
+   - Browser package gets updated core dependency automatically
+
+4. **Build Integrity:**
+   - Uses `BUILD_MODE=release` for production builds
+   - Replaces build environment variables correctly
+   - Creates both npm packages and CDN bundles
 
 ### Testing Before Release
 
@@ -229,6 +249,11 @@ Since this project uses **fixed versioning**:
    yarn build:bundle
    ```
 
+5. **Package creation test:**
+   ```bash
+   yarn version  # Test dependency updates and package creation
+   ```
+
 ### Troubleshooting
 
 #### Common Issues
@@ -237,25 +262,64 @@ Since this project uses **fixed versioning**:
    - Error: "please do not release from `main` branch"
    - Solution: Create a feature branch for releases
 
-2. **Build environment issues:**
+2. **Version mismatch in GitHub workflow:**
+   - Error: "Release tag doesn't match lerna.json version"
+   - Solution: Ensure the GitHub release tag exactly matches `v{version}` format where `{version}` is from `lerna.json`
+
+3. **Build environment issues:**
    - Ensure `BUILD_MODE` and `SDK_SETUP` are set correctly
    - Check that all dependencies are installed
 
-3. **Version synchronization issues:**
+4. **Version synchronization issues:**
    - Run `yarn version` to update peer dependencies
    - Check that all package versions match the version in `lerna.json`
 
-4. **GitHub workflow failures:**
+5. **GitHub workflow failures:**
    - Check the Actions tab for detailed error logs
-   - Ensure GitHub secrets are properly configured
+   - Ensure GitHub secrets are properly configured:
+     - `NPM_PUBLISH_TOKEN_FLAGGING_CORE` for core package
+     - `NPM_PUBLISH_TOKEN` for browser package
    - Verify the release tag matches the version in `lerna.json`
+
+6. **npm registry propagation delays:**
+   - The workflow waits up to 5 minutes for the core package to be available
+   - If this fails, it may indicate npm registry issues
+   - Check npm status page or try republishing manually
+
+7. **Webpack build issues:**
+   - Ensure all TypeScript configurations are valid
+   - Check that webpack configurations in each package are correct
+   - Verify all required dependencies are installed
 
 #### Getting Help
 
 - Check the [README.md](README.md) for basic project information
 - Review the scripts in the `scripts/` directory for implementation details
 - Check the GitHub Actions tab for workflow status and logs
+- Examine the `scripts/cli` script for available commands (`release`, `version`, `typecheck`, `lint`)
 - Open an issue on GitHub for bugs or feature requests
+
+#### Manual Publishing (Emergency Only)
+
+If the automated workflow fails and you need to publish manually:
+
+1. **Build packages:**
+   ```bash
+   BUILD_MODE=release yarn build
+   yarn version
+   ```
+
+2. **Publish core package:**
+   ```bash
+   cd packages/core
+   npm publish --tag alpha
+   ```
+
+3. **Wait for propagation, then publish browser package:**
+   ```bash
+   cd packages/browser
+   npm publish --tag alpha
+   ```
 
 ## Code Style
 
