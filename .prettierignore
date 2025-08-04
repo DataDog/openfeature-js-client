@@ -1,0 +1,8 @@
+bundle
+cjs
+esm
+coverage
+.yarn
+test/**/dist
+yarn.lock
+/docs
