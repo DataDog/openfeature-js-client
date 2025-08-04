@@ -17,4 +17,4 @@ runMain(async () => {
   command`yarn run prettier --write ${CHANGELOG_FILE}`.run()
 
   command`git add ${CHANGELOG_FILE}`.run()
-}) 
+})

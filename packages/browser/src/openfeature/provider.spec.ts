@@ -1,8 +1,4 @@
-import {
-  type EvaluationContext,
-  type Logger,
-  StandardResolutionReasons,
-} from '@openfeature/core'
+import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 import { DatadogProvider } from './provider'
 
@@ -43,12 +39,7 @@ describe('DatadogProvider', () => {
 
   describe('resolveBooleanEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveBooleanEvaluation(
-        'test-flag',
-        true,
-        mockContext,
-        mockLogger,
-      )
+      const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
       expect(result).toEqual({
         value: true,
         reason: StandardResolutionReasons.DEFAULT,
@@ -58,12 +49,7 @@ describe('DatadogProvider', () => {
 
   describe('resolveStringEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveStringEvaluation(
-        'test-flag',
-        'default',
-        mockContext,
-        mockLogger,
-      )
+      const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
       expect(result).toEqual({
         value: 'default',
         reason: StandardResolutionReasons.DEFAULT,
@@ -73,12 +59,7 @@ describe('DatadogProvider', () => {
 
   describe('resolveNumberEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
-      const result = provider.resolveNumberEvaluation(
-        'test-flag',
-        42,
-        mockContext,
-        mockLogger,
-      )
+      const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
       expect(result).toEqual({
         value: 42,
         reason: StandardResolutionReasons.DEFAULT,
@@ -89,12 +70,7 @@ describe('DatadogProvider', () => {
   describe('resolveObjectEvaluation', () => {
     it('should return default value with DEFAULT reason', () => {
       const defaultValue = { key: 'value' }
-      const result = provider.resolveObjectEvaluation(
-        'test-flag',
-        defaultValue,
-        mockContext,
-        mockLogger,
-      )
+      const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
       expect(result).toEqual({
         value: defaultValue,
         reason: StandardResolutionReasons.DEFAULT,
@@ -103,10 +79,7 @@ describe('DatadogProvider', () => {
   })
 
   describe('onContextChange', () => {
-    let originalFetch: (
-      input: RequestInfo | URL,
-      init?: RequestInit | undefined,
-    ) => Promise<Response>
+    let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
     let fetchMock: jest.Mock
 
     beforeAll(() => {
@@ -138,9 +111,7 @@ describe('DatadogProvider', () => {
       // Check that fetch was called with the correct URL and method
       expect(fetchMock).toHaveBeenCalled()
       const [url, requestOptions] = fetchMock.mock.calls[0]
-      expect(url.toString()).toBe(
-        `${options.site}/api/unstable/precompute-assignments`,
-      )
+      expect(url.toString()).toBe(`${options.site}/api/unstable/precompute-assignments`)
       expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly
@@ -172,12 +143,7 @@ describe('DatadogProvider', () => {
       })
 
       // Request an evaluation to verify the context updated
-      const result = provider.resolveStringEvaluation(
-        'string-flag',
-        'default',
-        mockContext,
-        mockLogger,
-      )
+      const result = provider.resolveStringEvaluation('string-flag', 'default', mockContext, mockLogger)
 
       expect(result).toEqual({
         value: 'red',

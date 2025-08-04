@@ -25,10 +25,12 @@ webpack(config, (err, stats) => {
     console.error('Webpack build failed:', err || stats.toString())
     process.exit(1)
   }
-  
+
   console.log('Webpack build completed successfully')
-  console.log(stats.toString({
-    chunks: false,
-    colors: true
-  }))
-}) 
+  console.log(
+    stats.toString({
+      chunks: false,
+      colors: true,
+    })
+  )
+})
