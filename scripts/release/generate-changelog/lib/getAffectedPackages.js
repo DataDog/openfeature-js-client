@@ -49,7 +49,7 @@ function isToplevelPackage(packageDirectoryName) {
 
 const PACKAGE_NAME_TO_DIRECTORY = {
   '@datadog/openfeature-browser': 'browser',
-  '@datadog/flagging-core': 'core'
+  '@datadog/flagging-core': 'core',
 }
 
 function getPackageDirectoryNameFromPackageName(packageName) {
@@ -58,7 +58,9 @@ function getPackageDirectoryNameFromPackageName(packageName) {
 
 function getDepenciesRecursively(packageDirectoryName) {
   const packageDirectoryNameJson = JSON.parse(
-    fs.readFileSync(`packages/${packageDirectoryName}/package.json`, { encoding: 'utf-8' })
+    fs.readFileSync(`packages/${packageDirectoryName}/package.json`, {
+      encoding: 'utf-8',
+    })
   )
   const dependencies = new Set()
   if (packageDirectoryNameJson.dependencies) {
@@ -73,4 +75,4 @@ function getDepenciesRecursively(packageDirectoryName) {
     }
   }
   return dependencies
-} 
+}

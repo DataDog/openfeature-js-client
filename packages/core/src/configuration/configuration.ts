@@ -1,9 +1,4 @@
-import type {
-  EvaluationContext,
-  FlagValueType,
-  JsonValue,
-  ResolutionReason,
-} from '@openfeature/web-sdk'
+import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/web-sdk'
 
 /**
  * Internal configuration for DatadogProvider.

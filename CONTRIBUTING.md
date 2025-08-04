@@ -14,21 +14,25 @@ The project uses **fixed versioning**, meaning all packages share the same versi
 ## Development Setup
 
 1. **Install dependencies:**
+
    ```bash
    yarn install
    ```
 
 2. **Build all packages:**
+
    ```bash
    yarn build
    ```
 
 3. **Run tests:**
+
    ```bash
    yarn test
    ```
 
 4. **Type checking:**
+
    ```bash
    yarn typecheck
    ```
@@ -56,16 +60,19 @@ The project uses **fixed versioning**, meaning all packages share the same versi
 The project supports different build modes that affect how the SDK version is determined:
 
 #### 1. Development Mode (`dev`)
+
 - **Default mode** when `BUILD_MODE` is not set
 - SDK version is set to `"dev"`
 - Used during development and testing
 
 #### 2. Release Mode (`release`)
+
 - Used for public releases
 - SDK version uses the actual version from `lerna.json`
 - This is the mode used for production releases
 
 #### 3. Canary Mode (`canary`)
+
 - Used on staging and production Datadog web app
 - SDK version format: `{lerna-version}-{commit-sha}`
 - Example: `0.1.0-alpha.2-a1b2c3d4`
@@ -86,14 +93,14 @@ The project also supports different SDK setups:
    git checkout -b release/v1.2.3
    ```
 
-
 #### Step 2: Prepare Package Dependencies
 
 2. **Update the version using the CLI:**
+
    ```bash
    yarn release
    ```
-   
+
    This command:
    - Validates you're not on the `main` branch
    - Runs `lerna version --exact --force-publish` to update the version
@@ -115,29 +122,27 @@ The project also supports different SDK setups:
    - Click "Publish release"
 
 2. **Automated Publishing Workflow:**
-   
+
    The `prerelease.yaml` workflow will automatically trigger and:
-   
+
    **Validation Phase:**
    - Validates that the release is marked as a prerelease
    - Checks that the GitHub release tag matches the version in `lerna.json`
    - Fails fast if validation doesn't pass
-   
+
    **Build and Publish Phase:**
    - Installs dependencies with `yarn install --frozen-lockfile`
    - Builds all packages in release mode (`BUILD_MODE=release`)
    - Creates package tarballs with `yarn lerna run pack --stream`
-   
+
    **Publishing Sequence:**
    1. **Publishes core package first** (`@datadog/flagging-core`)
       - Uses `NPM_PUBLISH_TOKEN_FLAGGING_CORE` secret
       - Publishes with `--tag alpha` for prerelease versions
-   
    2. **Waits for npm registry propagation**
       - Polls npm registry for up to 5 minutes
       - Ensures core package is available before proceeding
       - Prevents dependency resolution issues
-   
    3. **Publishes browser package** (`@datadog/openfeature-browser`)
       - Uses `NPM_PUBLISH_TOKEN` secret
       - Publishes with `--tag alpha` for prerelease versions
@@ -228,21 +233,25 @@ The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures
 ### Testing Before Release
 
 1. **Run all tests:**
+
    ```bash
    yarn test
    ```
 
 2. **Type checking:**
+
    ```bash
    yarn typecheck
    ```
 
 3. **Linting:**
+
    ```bash
    yarn lint
    ```
 
 4. **Build verification:**
+
    ```bash
    yarn clean
    yarn build
@@ -304,12 +313,14 @@ The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures
 If the automated workflow fails and you need to publish manually:
 
 1. **Build packages:**
+
    ```bash
    BUILD_MODE=release yarn build
    yarn version
    ```
 
 2. **Publish core package:**
+
    ```bash
    cd packages/core
    npm publish --tag alpha
@@ -331,6 +342,7 @@ If the automated workflow fails and you need to publish manually:
 ## Commit Messages
 
 Follow conventional commit format with gitmoji:
+
 - `✨ feat:` for new features
 - `🐛 fix:` for bug fixes
 - `📝 docs:` for documentation changes
@@ -339,4 +351,4 @@ Follow conventional commit format with gitmoji:
 - `✅ test:` for test changes
 - `👷 chore:` for maintenance tasks
 
-Example: `✨ feat(browser): add new flag evaluation method` 
+Example: `✨ feat(browser): add new flag evaluation method`

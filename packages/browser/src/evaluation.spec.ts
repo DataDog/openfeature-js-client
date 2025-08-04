@@ -5,7 +5,7 @@ import { evaluate } from './evaluation'
 
 const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
-  JSON.stringify(configurationWire),
+  JSON.stringify(configurationWire)
 )
 
 describe('evaluate', () => {
@@ -18,13 +18,7 @@ describe('evaluate', () => {
   })
 
   it('returns default for unknown flag', () => {
-    const result = evaluate(
-      configuration,
-      'string',
-      'unknown-flag',
-      'default',
-      {},
-    )
+    const result = evaluate(configuration, 'string', 'unknown-flag', 'default', {})
     expect(result).toEqual({
       value: 'default',
       reason: 'ERROR',
@@ -47,13 +41,7 @@ describe('evaluate', () => {
   })
 
   it('resolves string flag', () => {
-    const result = evaluate(
-      configuration,
-      'string',
-      'string-flag',
-      'default',
-      {},
-    )
+    const result = evaluate(configuration, 'string', 'string-flag', 'default', {})
     expect(result).toEqual({
       value: 'red',
       variant: 'variation-123',
@@ -67,13 +55,7 @@ describe('evaluate', () => {
   })
 
   it('resolves object flag', () => {
-    const result = evaluate<any>(
-      configuration,
-      'object',
-      'json-flag',
-      { hello: 'world' },
-      {},
-    )
+    const result = evaluate<any>(configuration, 'object', 'json-flag', { hello: 'world' }, {})
     expect(result).toEqual({
       value: { key: 'value', prop: 123 },
       variant: 'variation-127',

@@ -1,18 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": [
-    "packages",
-    "scripts",
-    "test",
-    "eslint.config.mjs",
-    "eslint-local-rules"
-  ],
-  "exclude": [
-    "packages/*/cjs",
-    "packages/*/esm",
-    "packages/*/bundle",
-    "test/e2e",
-    "test/apps",
-    "developer-extension"
-  ]
+  "include": ["packages", "scripts", "test", "eslint.config.mjs", "eslint-local-rules"],
+  "exclude": ["packages/*/cjs", "packages/*/esm", "packages/*/bundle", "test/e2e", "test/apps", "developer-extension"]
 }

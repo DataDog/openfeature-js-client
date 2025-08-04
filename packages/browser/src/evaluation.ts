@@ -1,30 +1,15 @@
-import type {
-  Configuration,
-  FlagTypeToValue,
-  PrecomputedConfiguration,
-} from '@datadog/flagging-core'
-import type {
-  ErrorCode,
-  EvaluationContext,
-  FlagValueType,
-  ResolutionDetails,
-} from '@openfeature/web-sdk'
+import type { Configuration, FlagTypeToValue, PrecomputedConfiguration } from '@datadog/flagging-core'
+import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/web-sdk'
 
 export function evaluate<T extends FlagValueType>(
   configuration: Configuration,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  context: EvaluationContext,
+  context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (configuration.precomputed) {
-    return evaluatePrecomputed(
-      configuration.precomputed,
-      type,
-      flagKey,
-      defaultValue,
-      context,
-    )
+    return evaluatePrecomputed(configuration.precomputed, type, flagKey, defaultValue, context)
   }
 
   return {
@@ -38,7 +23,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  _context: EvaluationContext,
+  _context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const flag = precomputed.response.data.attributes.flags[flagKey]
   if (!flag) {
@@ -49,10 +34,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
     }
   }
 
-  if (
-    flag.variationType &&
-    flag.variationType.toLowerCase() !== type.toLowerCase()
-  ) {
+  if (flag.variationType && flag.variationType.toLowerCase() !== type.toLowerCase()) {
     return {
       value: defaultValue,
       reason: 'ERROR',

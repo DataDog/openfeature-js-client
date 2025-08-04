@@ -14,4 +14,4 @@ exports.INTERNAL_EMOJI_PRIORITY = [
   '👌',
   '📄',
   '⚗️', // experiment
-] 
+]

@@ -132,7 +132,10 @@ function emojiNameToUnicode(message) {
 }
 
 function addLinksToGithubIssues(message) {
-  return message.replace(/\(#(\d+)\)/gm, (_, id) => `([#${id}](https://github.com/DataDog/openfeature-js-client/pull/${id}))`)
+  return message.replace(
+    /\(#(\d+)\)/gm,
+    (_, id) => `([#${id}](https://github.com/DataDog/openfeature-js-client/pull/${id}))`
+  )
 }
 
 function findFirstEmoji(message) {
@@ -145,4 +148,4 @@ function isVersionMessage(line) {
 
 function isStagingBumpMessage(line) {
   return /Bump staging to staging-\d+/.test(line)
-} 
+}
