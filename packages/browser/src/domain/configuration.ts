@@ -1,6 +1,5 @@
 import type { Configuration, InitConfiguration } from '@datadog/browser-core'
 import { validateAndBuildConfiguration, display } from '@datadog/browser-core'
-import type { DDRum } from '../openfeature/rumIntegration'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
@@ -18,28 +17,6 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Initial flags configuration (precomputed flags)
    */
   initialFlagsConfiguration?: FlagsConfiguration
-
-  /**
-   * RUM integration options
-   * @deprecated Use enableExposureLogging instead. RUM-based exposure tracking will be removed in a future version.
-   */
-  rum?: {
-    /**
-     * The RUM SDK instance to use for tracking
-     * @deprecated Use enableExposureLogging instead
-     */
-    sdk: DDRum
-    /**
-     * Whether to track feature flag evaluations in RUM
-     * @deprecated Use enableExposureLogging instead
-     */
-    ddFlaggingTracking?: boolean
-    /**
-     * Whether to log exposures in RUM
-     * @deprecated Use enableExposureLogging instead. This legacy approach logs exposures as RUM actions.
-     */
-    ddExposureLogging?: boolean
-  }
 
   /**
    * Whether to enable exposure logging via the exposures intake
