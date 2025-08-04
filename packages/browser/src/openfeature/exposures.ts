@@ -66,7 +66,7 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
       }
 
       const exposureEvent = {
-        timestamp: new Date().toISOString(),
+        timestamp: dateNow(),
         allocation: {
           key: allocationKey,
         },

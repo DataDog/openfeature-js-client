@@ -1,6 +1,6 @@
 export interface ExposureEvent {
-  /** RFC 3339 timestamp */
-  timestamp: string
+  /** Unix timestamp in milliseconds */
+  timestamp: number
   allocation: {
     key: string
   }

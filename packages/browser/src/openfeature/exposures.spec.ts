@@ -122,14 +122,14 @@ describe('Exposures End-to-End', () => {
     // Expected exposure events (order matches evaluation order)
     const expectedEvents = [
       {
-        timestamp: '2025-08-04T17:00:00.000Z',
+        timestamp: new Date('2025-08-04T17:00:00.000Z').getTime(),
         allocation: { key: 'allocation-123' },
         flag: { key: 'string-flag' },
         variant: { key: 'variation-123' },
         subject: { id: 'test-user-123' },
       },
       {
-        timestamp: '2025-08-04T17:00:00.000Z',
+        timestamp: new Date('2025-08-04T17:00:00.000Z').getTime(),
         allocation: { key: 'allocation-124' },
         flag: { key: 'boolean-flag' },
         variant: { key: 'variation-124' },
@@ -235,7 +235,7 @@ describe('Exposures End-to-End', () => {
       const exposureEvents = parseExposureEvents(exposuresCalls[0][1].body)
       const expectedEvents = [
         {
-          timestamp: '2025-08-04T17:00:00.000Z',
+          timestamp: new Date('2025-08-04T17:00:00.000Z').getTime(),
           allocation: { key: 'allocation-124' },
           flag: { key: 'boolean-flag' },
           variant: { key: 'variation-124' },
