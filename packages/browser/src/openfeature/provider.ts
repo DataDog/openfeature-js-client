@@ -13,12 +13,18 @@ import type {
 /* eslint-disable-next-line local-rules/disallow-side-effects */
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { evaluate } from '../evaluation'
-import { createExposureLoggingHook } from './exposures'
+import { createRumTrackingHook, createRumExposureHook, createExposureLoggingHook } from './exposures'
+import type { DDRum } from './rumIntegration'
 import {
   validateAndBuildFlaggingConfiguration,
   type FlaggingInitConfiguration,
   type FlaggingConfiguration,
 } from '../domain/configuration'
+
+/**
+ * @deprecated Use FlaggingInitConfiguration instead
+ */
+export type DatadogProviderOptions = FlaggingInitConfiguration
 
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
@@ -39,6 +45,16 @@ export class DatadogProvider implements Provider {
 
     // Set up provider-managed hooks based on configuration
     this.hooks = []
+
+    // Add RUM flag tracking hook (DEPRECATED)
+    if (options.rum?.ddFlaggingTracking) {
+      this.hooks.push(createRumTrackingHook(options.rum.sdk))
+    }
+
+    // Add RUM exposure logging hook (DEPRECATED)
+    if (options.rum?.ddExposureLogging) {
+      this.hooks.push(createRumExposureHook(options.rum.sdk))
+    }
 
     // Add proper exposure logging hook (creates batch internally)
     if (options.enableExposureLogging && this.configuration) {
