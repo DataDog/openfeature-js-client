@@ -2,6 +2,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { configurationFromString } from '@datadog/flagging-core'
 import { DatadogProvider } from './provider'
+import { extractSubjectAttributes } from './exposures'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import precomputedServerResponse from '../../test/data/precomputed-v1.json'
 
@@ -126,14 +127,20 @@ describe('Exposures End-to-End', () => {
         allocation: { key: 'allocation-123' },
         flag: { key: 'string-flag' },
         variant: { key: 'variation-123' },
-        subject: { id: 'test-user-123' },
+        subject: {
+          id: 'test-user-123',
+          attributes: { customAttribute: 'test-value' },
+        },
       },
       {
         timestamp: new Date('2025-08-04T17:00:00.000Z').getTime(),
         allocation: { key: 'allocation-124' },
         flag: { key: 'boolean-flag' },
         variant: { key: 'variation-124' },
-        subject: { id: 'test-user-123' },
+        subject: {
+          id: 'test-user-123',
+          attributes: { customAttribute: 'test-value' },
+        },
       },
     ]
 
@@ -239,11 +246,80 @@ describe('Exposures End-to-End', () => {
           allocation: { key: 'allocation-124' },
           flag: { key: 'boolean-flag' },
           variant: { key: 'variation-124' },
-          subject: { id: 'test-user-123' },
+          subject: {
+            id: 'test-user-123',
+            attributes: {},
+          },
         },
       ]
 
       expect(exposureEvents).toEqual(expectedEvents)
     }
+  })
+})
+
+describe('extractSubjectAttributes', () => {
+  it('should extract primitive attributes and exclude targetingKey', () => {
+    const context = {
+      targetingKey: 'user-123',
+      platform: 'ios',
+      language: 'en-US',
+      hasPushEnabled: false,
+      buildNumber: 42,
+      lastLoginDays: 3,
+      lifetimeValue: 543.21,
+      complexObject: { key: 'value' },
+      arrayValue: [1, 2, 3],
+    }
+
+    const result = extractSubjectAttributes(context)
+
+    expect(result).toEqual({
+      platform: 'ios',
+      language: 'en-US',
+      hasPushEnabled: false,
+      buildNumber: 42,
+      lastLoginDays: 3,
+      lifetimeValue: 543.21,
+    })
+  })
+
+  it('should return empty object for empty context', () => {
+    const context = {}
+    const result = extractSubjectAttributes(context)
+    expect(result).toEqual({})
+  })
+
+  it('should return empty object for context with only targetingKey', () => {
+    const context = { targetingKey: 'user-123' }
+    const result = extractSubjectAttributes(context)
+    expect(result).toEqual({})
+  })
+
+  it('should handle context with only non-primitive values', () => {
+    const context = {
+      targetingKey: 'user-123',
+      complexObject: { key: 'value' },
+      arrayValue: [1, 2, 3],
+    }
+    const result = extractSubjectAttributes(context)
+    expect(result).toEqual({})
+  })
+
+  it('should handle mixed primitive and non-primitive values', () => {
+    const context = {
+      targetingKey: 'user-123',
+      platform: 'ios',
+      complexObject: { key: 'value' },
+      buildNumber: 42,
+      arrayValue: [1, 2, 3],
+      isActive: true,
+    }
+    const result = extractSubjectAttributes(context)
+    expect(result).toEqual({
+      platform: 'ios',
+      buildNumber: 42,
+      isActive: true,
+    })
   })
 })

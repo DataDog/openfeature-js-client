@@ -5,6 +5,24 @@ import { startExposuresBatch } from '../transport/startExposuresBatch'
 import type { ExposureEvent } from '../exposureEvent.types'
 import type { DDRum } from './rumIntegration'
 import type { FlaggingConfiguration } from '../domain/configuration'
+import type { EvaluationContext } from '@openfeature/web-sdk'
+
+/**
+ * Extract primitive attributes from evaluation context for exposure logging.
+ * Filters out targetingKey and non-primitive values.
+ */
+export function extractSubjectAttributes(context: EvaluationContext): Record<string, string | number | boolean> {
+  const attrs: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(context)) {
+    if (
+      key !== 'targetingKey' &&
+      (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+    ) {
+      attrs[key] = value as string | number | boolean
+    }
+  }
+  return attrs
+}
 
 /**
  * Create hook for RUM flag tracking
@@ -78,6 +96,8 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
         },
         subject: {
           id: hookContext.context.targetingKey || '',
+          // Add attributes here.
+          attributes: extractSubjectAttributes(hookContext.context),
         },
       } satisfies ExposureEvent
 

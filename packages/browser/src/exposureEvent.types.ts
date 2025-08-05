@@ -12,5 +12,6 @@ export interface ExposureEvent {
   }
   subject: {
     id: string
+    attributes: Record<string, string | number | boolean>
   }
 }
