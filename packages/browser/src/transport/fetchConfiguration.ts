@@ -4,11 +4,16 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 
 function buildEndpointHost(site: string): string {
-  // Use 'dd.' prefix only for staging, 'app.' for production
-  if (site === 'datad0g.com') {
-    return `dd.${site}`
+  switch (site) {
+    case 'datad0g.com':
+      return `dd.${site}`
+    case 'datadoghq.com':
+    case 'datadoghq.eu':
+    case 'ddog-gov.com':
+      return `app.${site}`
+    default:
+      return site
   }
-  return `app.${site}`
 }
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
