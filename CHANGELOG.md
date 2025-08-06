@@ -6,14 +6,6 @@
 
 ---
 
-## v0.1.0-alpha.9
-
-**Internal Changes:**
-
-- autogen changelog
-- clean up unused code [BROWSER]
-- update contributing
-
 ## v0.1.0-alpha.8
 
 **Public Changes:**
