@@ -1,3 +1,5 @@
+import type { EvaluationContext } from '@openfeature/core'
+
 export interface ExposureEvent {
   /** Unix timestamp in milliseconds */
   timestamp: number
@@ -12,6 +14,6 @@ export interface ExposureEvent {
   }
   subject: {
     id: string
-    attributes: Record<string, string | number | boolean>
+    attributes: EvaluationContext
   }
 }

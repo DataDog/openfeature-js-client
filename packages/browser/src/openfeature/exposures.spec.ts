@@ -1,8 +1,6 @@
 import { OpenFeature } from '@openfeature/web-sdk'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { configurationFromString } from '@datadog/flagging-core'
 import { DatadogProvider } from './provider'
-import { extractSubjectAttributes } from './exposures'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import precomputedServerResponse from '../../test/data/precomputed-v1.json'
 
@@ -255,71 +253,5 @@ describe('Exposures End-to-End', () => {
 
       expect(exposureEvents).toEqual(expectedEvents)
     }
-  })
-})
-
-describe('extractSubjectAttributes', () => {
-  it('should extract primitive attributes and exclude targetingKey', () => {
-    const context = {
-      targetingKey: 'user-123',
-      platform: 'ios',
-      language: 'en-US',
-      hasPushEnabled: false,
-      buildNumber: 42,
-      lastLoginDays: 3,
-      lifetimeValue: 543.21,
-      complexObject: { key: 'value' },
-      arrayValue: [1, 2, 3],
-    }
-
-    const result = extractSubjectAttributes(context)
-
-    expect(result).toEqual({
-      platform: 'ios',
-      language: 'en-US',
-      hasPushEnabled: false,
-      buildNumber: 42,
-      lastLoginDays: 3,
-      lifetimeValue: 543.21,
-    })
-  })
-
-  it('should return empty object for empty context', () => {
-    const context = {}
-    const result = extractSubjectAttributes(context)
-    expect(result).toEqual({})
-  })
-
-  it('should return empty object for context with only targetingKey', () => {
-    const context = { targetingKey: 'user-123' }
-    const result = extractSubjectAttributes(context)
-    expect(result).toEqual({})
-  })
-
-  it('should handle context with only non-primitive values', () => {
-    const context = {
-      targetingKey: 'user-123',
-      complexObject: { key: 'value' },
-      arrayValue: [1, 2, 3],
-    }
-    const result = extractSubjectAttributes(context)
-    expect(result).toEqual({})
-  })
-
-  it('should handle mixed primitive and non-primitive values', () => {
-    const context = {
-      targetingKey: 'user-123',
-      platform: 'ios',
-      complexObject: { key: 'value' },
-      buildNumber: 42,
-      arrayValue: [1, 2, 3],
-      isActive: true,
-    }
-    const result = extractSubjectAttributes(context)
-    expect(result).toEqual({
-      platform: 'ios',
-      buildNumber: 42,
-      isActive: true,
-    })
   })
 })

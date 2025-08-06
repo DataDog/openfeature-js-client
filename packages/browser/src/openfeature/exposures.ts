@@ -1,28 +1,11 @@
 import { dateNow, createPageMayExitObservable, addTelemetryDebug } from '@datadog/browser-core'
-import type { RawError } from '@datadog/browser-core'
+import type { Context, RawError } from '@datadog/browser-core'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import type { ExposureEvent } from '../exposureEvent.types'
 import type { DDRum } from './rumIntegration'
 import type { FlaggingConfiguration } from '../domain/configuration'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-
-/**
- * Extract primitive attributes from evaluation context for exposure logging.
- * Filters out targetingKey and non-primitive values.
- */
-export function extractSubjectAttributes(context: EvaluationContext): Record<string, string | number | boolean> {
-  const attrs: Record<string, string | number | boolean> = {}
-  for (const [key, value] of Object.entries(context)) {
-    if (
-      key !== 'targetingKey' &&
-      (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-    ) {
-      attrs[key] = value as string | number | boolean
-    }
-  }
-  return attrs
-}
 
 /**
  * Create hook for RUM flag tracking
@@ -83,6 +66,8 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
         return
       }
 
+      const { targetingKey: id = '', ...attributes } = hookContext.context
+
       const exposureEvent = {
         timestamp: dateNow(),
         allocation: {
@@ -95,14 +80,13 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
           key: variantKey,
         },
         subject: {
-          id: hookContext.context.targetingKey || '',
-          // Add attributes here.
-          attributes: extractSubjectAttributes(hookContext.context),
+          id,
+          attributes,
         },
       } satisfies ExposureEvent
 
       // Add context and send via exposures batch
-      exposuresBatch.add(exposureEvent)
+      exposuresBatch.add(exposureEvent as unknown as Context)
     },
   }
 }
