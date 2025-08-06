@@ -36,6 +36,7 @@ function command(strings, ...values) {
           if (code === 0) {
             resolve()
           } else {
+            console.log('command', command)
             reject(new Error(`Command failed with exit code ${code}`))
           }
         })
