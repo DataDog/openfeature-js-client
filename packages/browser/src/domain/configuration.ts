@@ -55,6 +55,11 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Whether to overwrite the default request headers.
    */
   overwriteRequestHeaders?: boolean
+
+  /**
+   * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
+   */
+  flaggingProxy?: string
 }
 
 export interface FlaggingConfiguration extends Configuration {
