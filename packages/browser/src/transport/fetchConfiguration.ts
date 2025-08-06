@@ -17,15 +17,7 @@ function buildEndpointHost(site: string): string {
 }
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
-  let host: string
-
-  if (initConfiguration.flaggingProxy) {
-    // Use flaggingProxy if provided
-    host = initConfiguration.flaggingProxy
-  } else {
-    // Use site parameter or default
-    host = initConfiguration.site || 'datad0g.com'
-  }
+  const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datad0g.com')
 
   const url = new URL(`https://${host}/api/unstable/precompute-assignments`)
 
