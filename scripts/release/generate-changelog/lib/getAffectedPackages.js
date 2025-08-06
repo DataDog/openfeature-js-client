@@ -2,6 +2,11 @@ const fs = require('fs')
 const { packagesDirectoryNames } = require('../../../lib/packagesDirectoryNames')
 const { commandSync } = require('../../../lib/executionUtils')
 
+const PACKAGE_NAME_TO_DIRECTORY = {
+  '@datadog/openfeature-browser': 'browser',
+  '@datadog/flagging-core': 'core',
+}
+
 const PACKAGES_REVERSE_DEPENDENCIES = (() => {
   const result = new Map()
   packagesDirectoryNames.forEach((packageDirectoryName) => {
@@ -45,11 +50,6 @@ function getPackageDirectoryNameFromFilePath(filePath) {
 
 function isToplevelPackage(packageDirectoryName) {
   return !PACKAGES_REVERSE_DEPENDENCIES.has(packageDirectoryName)
-}
-
-const PACKAGE_NAME_TO_DIRECTORY = {
-  '@datadog/openfeature-browser': 'browser',
-  '@datadog/flagging-core': 'core',
 }
 
 function getPackageDirectoryNameFromPackageName(packageName) {

@@ -16,24 +16,25 @@ runMain(async () => {
 
   console.log('Updating peer dependency versions to', version)
   console.log('JSON_FILES', JSON_FILES)
+  const targetDeps = ['@datadog/openfeature-browser', '@datadog/flagging-core']
   // Update peer dependencies
   for (const jsonFile of JSON_FILES) {
-    await modifyFile(jsonFile, (content) => updatePackageDependencies(content, version))
+    await modifyFile(jsonFile, (content) => updatePackageDependencies(content, version, targetDeps))
   }
 
   // update yarn.lock to match the updated JSON files
   command`yarn`.run()
 })
 
-function updatePackageDependencies(content, version) {
+function updatePackageDependencies(content, version, targetDeps) {
   const json = JSON.parse(content)
   Object.keys(json.peerDependencies || {})
-    .filter((key) => key.startsWith('@datadog'))
+    .filter((key) => targetDeps.includes(key))
     .forEach((key) => {
       json.peerDependencies[key] = version
     })
   Object.keys(json.dependencies || {})
-    .filter((key) => key.startsWith('@datadog'))
+    .filter((key) => targetDeps.includes(key))
     .forEach((key) => {
       json.dependencies[key] = version
     })

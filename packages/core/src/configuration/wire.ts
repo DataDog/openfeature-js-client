@@ -1,6 +1,6 @@
 import type { EvaluationContext } from '@openfeature/web-sdk'
 
-import type { Configuration, UnixTimestamp } from './configuration'
+import type { FlagsConfiguration, UnixTimestamp } from './configuration'
 
 type ConfigurationWire = {
   version: 1
@@ -14,7 +14,7 @@ type ConfigurationWire = {
 /**
  * Create configuration from a string created with `configurationToString`.
  */
-export function configurationFromString(s: string): Configuration {
+export function configurationFromString(s: string): FlagsConfiguration {
   try {
     const wire: ConfigurationWire = JSON.parse(s)
 
@@ -23,7 +23,7 @@ export function configurationFromString(s: string): Configuration {
       return {}
     }
 
-    const configuration: Configuration = {}
+    const configuration: FlagsConfiguration = {}
     if (wire.precomputed) {
       configuration.precomputed = {
         ...wire.precomputed,
@@ -42,7 +42,7 @@ export function configurationFromString(s: string): Configuration {
  * `configurationFromString`. The serialized string format is
  * unspecified.
  */
-export function configurationToString(configuration: Configuration): string {
+export function configurationToString(configuration: FlagsConfiguration): string {
   const wire: ConfigurationWire = {
     version: 1,
   }

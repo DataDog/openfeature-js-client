@@ -1,6 +1,6 @@
 {
   "name": "@datadog/flagging-core",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
   "license": "MIT",
   "repository": {
@@ -27,6 +27,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0",
     "@types/jest": "^29.4.0",
     "@types/node": "^20.0.0",
     "jest": "^30.0.4",
@@ -35,7 +37,7 @@
     "ts-loader": "^9.5.2",
     "typescript": "^5.5.0"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@openfeature/core": "^1.8.1",
     "@openfeature/web-sdk": "^1.5.0"
   }

@@ -39,7 +39,7 @@ cmd_release () {
 }
 
 cmd_version () {
-  EDITOR=catyarn node ./scripts/release/generate-changelog
+  EDITOR=cat node ./scripts/release/generate-changelog
   yarn node ./scripts/release/update-peer-dependency-versions.js
   lerna run pack --stream
 }
