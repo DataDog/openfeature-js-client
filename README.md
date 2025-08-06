@@ -24,6 +24,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 const provider = new DatadogProvider({
   clientToken: 'your-datadog-client-token',
   applicationId: 'your-application-id',
+  enableExposureLogging: true,
   site: 'datadoghq.com',
   service: 'my-service',
   version: '1.0.0',
@@ -43,6 +44,7 @@ const flagValue = await client.getBooleanValue('my-flag', false)
 const provider = new DatadogProvider({
   // Required
   clientToken: 'pub_...', // Your Datadog client token
+  // Temporary for alpha releases
   applicationId: 'app-id', // Your application ID
 
   // Optional Datadog configuration
