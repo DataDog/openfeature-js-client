@@ -16,7 +16,7 @@ runMain(async () => {
 
   console.log('Updating peer dependency versions to', version)
   console.log('JSON_FILES', JSON_FILES)
-  const targetDeps = ['@datadog/openfeature-browser','@datadog/flagging-core']
+  const targetDeps = ['@datadog/openfeature-browser', '@datadog/flagging-core']
   // Update peer dependencies
   for (const jsonFile of JSON_FILES) {
     await modifyFile(jsonFile, (content) => updatePackageDependencies(content, version, targetDeps))
