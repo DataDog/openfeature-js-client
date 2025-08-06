@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-alpha.10
+
+**Internal Changes:**
+
+- feat: flagging config proxy [BROWSER]
+- fix release scripts
+
 ## v0.1.0-alpha.9
 
 **Internal Changes:**
