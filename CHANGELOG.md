@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-alpha.11
+
+**Internal Changes:**
+
+- docs: add lightweight documentation to README.md ([#14](https://github.com/DataDog/openfeature-js-client/pull/14))
+- [FFL-450] Add exposures logging to EVP track ([#10](https://github.com/DataDog/openfeature-js-client/pull/10)) [BROWSER]
+
 ## v0.1.0-alpha.9
 
 **Internal Changes:**
