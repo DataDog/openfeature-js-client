@@ -605,10 +605,14 @@ __metadata:
   resolution: "@datadog/openfeature-client-monorepo@workspace:."
   dependencies:
     "@biomejs/biome": "npm:^2.0.0"
+    "@openfeature/core": "npm:^1.8.1"
+    "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/node": "npm:^20.0.0"
+    dotenv: "npm:^17.2.1"
     emoji-name-map: "npm:^2.0.3"
     glob: "npm:^11.0.3"
     jest: "npm:^30.0.4"
+    jsdom: "npm:^26.1.0"
     lerna: "npm:^8.2.3"
     npm-run-all: "npm:^4.1.5"
     prettier: "npm:^3.6.2"
@@ -618,6 +622,7 @@ __metadata:
     ts-node: "npm:^10.9.0"
     tsconfig-paths-webpack-plugin: "npm:^4.2.0"
     typescript: "npm:^5.5.0"
+    uuid: "npm:^11.1.0"
     webpack: "npm:5.99.9"
   languageName: unknown
   linkType: soft
@@ -3711,6 +3716,13 @@ __metadata:
   version: 16.6.1
   resolution: "dotenv@npm:16.6.1"
   checksum: 10c0/15ce56608326ea0d1d9414a5c8ee6dcf0fffc79d2c16422b4ac2268e7e2d76ff5a572d37ffe747c377de12005f14b3cc22361e79fc7f1061cce81f77d2c973dc
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^17.2.1":
+  version: 17.2.1
+  resolution: "dotenv@npm:17.2.1"
+  checksum: 10c0/918dd2f9d8b8f86b0afabad9534793d51de3718c437f9e7b6525628cf68c1d4ae768cc37a5afff38c066f58a8ecf549f4ac6cd5617485bd328e826112cc2650a
   languageName: node
   linkType: hard
 
@@ -9662,6 +9674,15 @@ __metadata:
   bin:
     uuid: dist/bin/uuid
   checksum: 10c0/eab18c27fe4ab9fb9709a5d5f40119b45f2ec8314f8d4cf12ce27e4c6f4ffa4a6321dc7db6c515068fa373c075b49691ba969f0010bf37f44c37ca40cd6bf7fe
+  languageName: node
+  linkType: hard
+
+"uuid@npm:^11.1.0":
+  version: 11.1.0
+  resolution: "uuid@npm:11.1.0"
+  bin:
+    uuid: dist/esm/bin/uuid
+  checksum: 10c0/34aa51b9874ae398c2b799c88a127701408cd581ee89ec3baa53509dd8728cbb25826f2a038f9465f8b7be446f0fbf11558862965b18d21c993684297628d4d3
   languageName: node
   linkType: hard
 

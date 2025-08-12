@@ -94,3 +94,66 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+## Testing Flag Randomization
+
+A test script is included to verify flag randomization behavior across multiple subjects:
+
+```bash
+node test-randomization.js <flagKey> <numberOfTests>
+```
+
+### Setup
+
+1. Build the packages:
+```bash
+yarn build
+```
+
+2. Create a `.env` file in the project root with your Datadog credentials:
+```env
+DD_CLIENT_TOKEN=your_client_token
+DD_APPLICATION_ID=your_application_id
+DD_API_KEY=your_api_key
+DD_APPLICATION_KEY=your_application_key
+```
+
+3. Run the script:
+```bash
+# Test a boolean flag with 1000 random subjects
+yarn node test-randomization.js my-feature-flag 1000
+
+# Test with fewer subjects for quick validation
+yarn node test-randomization.js my-feature-flag 100
+```
+
+### Output
+
+The script will:
+- Generate random subject keys (UUIDs)
+- Evaluate the flag for each subject with different targeting contexts
+- Display distribution statistics and randomization quality analysis
+- Show percentage breakdown of true/false values
+- Indicate deviation from expected 50/50 split for boolean flags
+
+Example output:
+```
+Testing flag randomization for "my-flag" with 1000 subjects...
+============================================================
+
+Results:
+============================================================
+Total successful tests: 1000
+Total unique values: 2
+
+Value               Count     Percentage
+----------------------------------------
+true                523       52.30%
+false               477       47.70%
+
+Summary:
+--------------------
+📊 Boolean split: 52.3% true, 47.7% false
+📈 Deviation from 50/50 split: 2.30%
+✅ Good randomization (< 5% deviation)
+```

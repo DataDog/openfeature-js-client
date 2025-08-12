@@ -16,6 +16,10 @@ bundle/
 *.tgz
 *.tar.gz
 
+# Environment variables
+.env
+.env.local
+
 # IDEs
 .idea/
 .vscode/

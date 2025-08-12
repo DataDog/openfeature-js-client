@@ -39,6 +39,11 @@
   },
   "packageManager": "yarn@4.9.2",
   "dependencies": {
-    "emoji-name-map": "^2.0.3"
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/web-sdk": "^1.5.0",
+    "dotenv": "^17.2.1",
+    "emoji-name-map": "^2.0.3",
+    "jsdom": "^26.1.0",
+    "uuid": "^11.1.0"
   }
 }
