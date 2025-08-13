@@ -118,6 +118,9 @@ DD_CLIENT_TOKEN=your_client_token
 DD_APPLICATION_ID=your_application_id
 DD_API_KEY=your_api_key
 DD_APPLICATION_KEY=your_application_key
+
+# Optional: Override Datadog site (defaults to datadoghq.com)
+# DD_SITE=datadoghq.eu
 ```
 
 3. Run the script:

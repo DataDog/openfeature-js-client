@@ -12,6 +12,9 @@
  *   DD_APPLICATION_ID - Datadog application ID
  *   DD_API_KEY - Datadog API key
  *   DD_APPLICATION_KEY - Datadog application key
+ *
+ * Optional environment variables:
+ *   DD_SITE - Datadog site (defaults to datadoghq.com)
  */
 
 require('dotenv').config()
@@ -43,7 +46,7 @@ const PROVIDER_CONFIG = {
   apiKey: process.env.DD_API_KEY,
   applicationKey: process.env.DD_APPLICATION_KEY,
   env: 'test',
-  site: 'datadoghq.com',
+  site: process.env.DD_SITE || 'datadoghq.com',
   service: 'randomization-test',
   version: '1.0.0',
   enableExposureLogging: false, // Disable for testing to avoid noise
@@ -175,6 +178,9 @@ async function main() {
     console.error('  DD_APPLICATION_ID - Datadog application ID')
     console.error('  DD_API_KEY - Datadog API key')
     console.error('  DD_APPLICATION_KEY - Datadog application key')
+    console.error('')
+    console.error('Optional environment variables:')
+    console.error('  DD_SITE - Datadog site (defaults to datadoghq.com)')
     console.error('')
     console.error('You can set these in a .env file in the project root.')
     process.exit(1)
