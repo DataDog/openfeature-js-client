@@ -18,7 +18,8 @@ async function modifyFile(filePath, modifier) {
 }
 
 function findOpenFeaturePackageJsonFiles() {
-  const manifestPaths = command`git ls-files -- package.json */package.json`.run()
+  const manifestPaths =
+    command`git ls-files -- package.json */package.json`.run()
   return manifestPaths
     .trim()
     .split('\n')

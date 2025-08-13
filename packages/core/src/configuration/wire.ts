@@ -42,7 +42,9 @@ export function configurationFromString(s: string): FlagsConfiguration {
  * `configurationFromString`. The serialized string format is
  * unspecified.
  */
-export function configurationToString(configuration: FlagsConfiguration): string {
+export function configurationToString(
+  configuration: FlagsConfiguration,
+): string {
   const wire: ConfigurationWire = {
     version: 1,
   }

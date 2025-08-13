@@ -1,5 +1,7 @@
 const fs = require('fs')
-const { packagesDirectoryNames } = require('../../../lib/packagesDirectoryNames')
+const {
+  packagesDirectoryNames,
+} = require('../../../lib/packagesDirectoryNames')
 const { commandSync } = require('../../../lib/executionUtils')
 
 const PACKAGE_NAME_TO_DIRECTORY = {
@@ -21,18 +23,24 @@ const PACKAGES_REVERSE_DEPENDENCIES = (() => {
 })()
 
 exports.getAffectedPackages = (hash) => {
-  const changedFiles = commandSync`git diff-tree --no-commit-id --name-only -r ${hash}`.run().trim().split('\n')
+  const changedFiles =
+    commandSync`git diff-tree --no-commit-id --name-only -r ${hash}`
+      .run()
+      .trim()
+      .split('\n')
   const affectedPackages = new Set()
 
   changedFiles.forEach((filePath) => {
     const packageDirectoryName = getPackageDirectoryNameFromFilePath(filePath)
     if (packageDirectoryName) {
       if (!isToplevelPackage(packageDirectoryName)) {
-        PACKAGES_REVERSE_DEPENDENCIES.get(packageDirectoryName).forEach((dependentPackageDirectoryName) => {
-          if (isToplevelPackage(dependentPackageDirectoryName)) {
-            affectedPackages.add(dependentPackageDirectoryName)
-          }
-        })
+        PACKAGES_REVERSE_DEPENDENCIES.get(packageDirectoryName).forEach(
+          (dependentPackageDirectoryName) => {
+            if (isToplevelPackage(dependentPackageDirectoryName)) {
+              affectedPackages.add(dependentPackageDirectoryName)
+            }
+          },
+        )
       } else {
         affectedPackages.add(packageDirectoryName)
       }
@@ -60,15 +68,21 @@ function getDepenciesRecursively(packageDirectoryName) {
   const packageDirectoryNameJson = JSON.parse(
     fs.readFileSync(`packages/${packageDirectoryName}/package.json`, {
       encoding: 'utf-8',
-    })
+    }),
   )
   const dependencies = new Set()
   if (packageDirectoryNameJson.dependencies) {
-    for (const dependencyPackageName of Object.keys(packageDirectoryNameJson.dependencies)) {
-      const packageDirectoryName = getPackageDirectoryNameFromPackageName(dependencyPackageName)
+    for (const dependencyPackageName of Object.keys(
+      packageDirectoryNameJson.dependencies,
+    )) {
+      const packageDirectoryName = getPackageDirectoryNameFromPackageName(
+        dependencyPackageName,
+      )
       if (packageDirectoryName) {
         dependencies.add(packageDirectoryName)
-        for (let transitiveDependency of getDepenciesRecursively(packageDirectoryName)) {
+        for (const transitiveDependency of getDepenciesRecursively(
+          packageDirectoryName,
+        )) {
           dependencies.add(transitiveDependency)
         }
       }

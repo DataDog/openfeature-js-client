@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
+/* eslint-disable no-console */
 /**
  * Script to test flag randomization through the OpenFeature SDK
- * 
+ *
  * Usage: node test-randomization.js <flagKey> <numberOfTests>
  * Example: node test-randomization.js my-flag 1000
- * 
+ *
  * Required environment variables:
  *   DD_CLIENT_TOKEN - Datadog client token
  *   DD_APPLICATION_ID - Datadog application ID
@@ -20,7 +21,7 @@ const { JSDOM } = require('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
   url: 'http://localhost',
   pretendToBeVisual: true,
-  resources: 'usable'
+  resources: 'usable',
 })
 
 // Set up global browser objects
@@ -45,21 +46,23 @@ const PROVIDER_CONFIG = {
   site: 'datadoghq.com',
   service: 'randomization-test',
   version: '1.0.0',
-  enableExposureLogging: false // Disable for testing to avoid noise
+  enableExposureLogging: false, // Disable for testing to avoid noise
 }
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function testFlagRandomization(flagKey, numberOfTests) {
-  console.log(`Testing flag randomization for "${flagKey}" with ${numberOfTests} subjects...`)
-  console.log('=' .repeat(60))
+  console.log(
+    `Testing flag randomization for "${flagKey}" with ${numberOfTests} subjects...`,
+  )
+  console.log('='.repeat(60))
 
   // Initialize the provider
   const provider = new DatadogProvider(PROVIDER_CONFIG)
   await OpenFeature.setProvider(provider)
-  
+
   // Get the client
   const client = OpenFeature.getClient()
 
@@ -71,12 +74,12 @@ async function testFlagRandomization(flagKey, numberOfTests) {
   for (let i = 0; i < numberOfTests; i++) {
     // Generate pseudo-random subject key
     const subjectKey = `user-${i}-${uuidv4()}`
-    
+
     try {
       // Set the targeting context
       await OpenFeature.setContext({
         targetingKey: subjectKey,
-        user: { id: subjectKey }
+        user: { id: subjectKey },
       })
 
       // Get boolean flag value
@@ -86,7 +89,6 @@ async function testFlagRandomization(flagKey, numberOfTests) {
       const valueStr = String(flagValue)
       results.set(valueStr, (results.get(valueStr) || 0) + 1)
       totalTests++
-
     } catch (error) {
       console.error(`Error testing subject ${subjectKey}:`, error.message)
     }
@@ -96,7 +98,9 @@ async function testFlagRandomization(flagKey, numberOfTests) {
 
     // Progress indicator for large tests
     if (numberOfTests > 100 && i % Math.floor(numberOfTests / 10) === 0) {
-      process.stdout.write(`Progress: ${Math.round((i / numberOfTests) * 100)}%\r`)
+      process.stdout.write(
+        `Progress: ${Math.round((i / numberOfTests) * 100)}%\r`,
+      )
     }
   }
 
@@ -106,40 +110,48 @@ async function testFlagRandomization(flagKey, numberOfTests) {
 
   // Display results
   console.log('\nResults:')
-  console.log('=' .repeat(60))
+  console.log('='.repeat(60))
   console.log(`Total successful tests: ${totalTests}`)
   console.log(`Total unique values: ${results.size}`)
   console.log('')
 
   // Sort results by count (descending)
-  const sortedResults = Array.from(results.entries()).sort((a, b) => b[1] - a[1])
+  const sortedResults = Array.from(results.entries()).sort(
+    (a, b) => b[1] - a[1],
+  )
 
   console.log('Value'.padEnd(20) + 'Count'.padEnd(10) + 'Percentage')
   console.log('-'.repeat(40))
 
   for (const [value, count] of sortedResults) {
     const percentage = ((count / totalTests) * 100).toFixed(2)
-    console.log(`${value.padEnd(20)}${count.toString().padEnd(10)}${percentage}%`)
+    console.log(
+      `${value.padEnd(20)}${count.toString().padEnd(10)}${percentage}%`,
+    )
   }
 
   // Summary statistics for boolean flags
   console.log('')
   console.log('Summary:')
   console.log('-'.repeat(20))
-  
+
   if (results.size === 1) {
-    console.log('⚠️  All subjects received the same value - no randomization detected')
+    console.log(
+      '⚠️  All subjects received the same value - no randomization detected',
+    )
   } else if (results.size === 2) {
     const trueCount = results.get('true') || 0
     const falseCount = results.get('false') || 0
     const truePercentage = ((trueCount / totalTests) * 100).toFixed(1)
     const falsePercentage = ((falseCount / totalTests) * 100).toFixed(1)
-    
-    console.log(`📊 Boolean split: ${truePercentage}% true, ${falsePercentage}% false`)
-    
-    const deviation = Math.abs(0.5 - (trueCount / totalTests)) * 100
+
+    console.log(
+      `📊 Boolean split: ${truePercentage}% true, ${falsePercentage}% false`,
+    )
+
+    const deviation = Math.abs(0.5 - trueCount / totalTests) * 100
     console.log(`📈 Deviation from 50/50 split: ${deviation.toFixed(2)}%`)
-    
+
     if (deviation < 5) {
       console.log('✅ Good randomization (< 5% deviation)')
     } else if (deviation < 10) {
@@ -153,7 +165,7 @@ async function testFlagRandomization(flagKey, numberOfTests) {
 // Main execution
 async function main() {
   const args = process.argv.slice(2)
-  
+
   if (args.length !== 2) {
     console.error('Usage: node test-randomization.js <flagKey> <numberOfTests>')
     console.error('Example: node test-randomization.js my-flag 1000')
@@ -177,17 +189,24 @@ async function main() {
   }
 
   if (numberOfTests > 10000) {
-    console.error('Error: numberOfTests too large (max 10,000 to avoid endpoint stress)')
+    console.error(
+      'Error: numberOfTests too large (max 10,000 to avoid endpoint stress)',
+    )
     process.exit(1)
   }
 
   // Check for required environment variables
-  const requiredEnvVars = ['DD_CLIENT_TOKEN', 'DD_APPLICATION_ID', 'DD_API_KEY', 'DD_APPLICATION_KEY']
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName])
-  
+  const requiredEnvVars = [
+    'DD_CLIENT_TOKEN',
+    'DD_APPLICATION_ID',
+    'DD_API_KEY',
+    'DD_APPLICATION_KEY',
+  ]
+  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
+
   if (missingVars.length > 0) {
     console.error('Error: Missing required environment variables:')
-    missingVars.forEach(varName => console.error(`  ${varName}`))
+    missingVars.forEach((varName) => console.error(`  ${varName}`))
     console.error('\nYou can set these in a .env file in the project root.')
     process.exit(1)
   }
@@ -212,3 +231,4 @@ if (require.main === module) {
 }
 
 module.exports = { testFlagRandomization }
+

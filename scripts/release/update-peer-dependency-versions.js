@@ -3,7 +3,9 @@ const { modifyFile } = require('../lib/filesUtils')
 const { command } = require('../lib/executionUtils')
 const { packagesDirectoryNames } = require('../lib/packagesDirectoryNames')
 
-const JSON_FILES = packagesDirectoryNames.map((packageName) => `./packages/${packageName}/package.json`)
+const JSON_FILES = packagesDirectoryNames.map(
+  (packageName) => `./packages/${packageName}/package.json`,
+)
 
 // This script updates the peer dependency versions between packages to match the new
 // versions during a release. Since we're using fixed versioning, we need to
@@ -11,7 +13,9 @@ const JSON_FILES = packagesDirectoryNames.map((packageName) => `./packages/${pac
 runMain(async () => {
   // Read the version from lerna.json
   const lernaJsonPath = require('node:path').join(__dirname, '../../lerna.json')
-  const lernaJson = JSON.parse(await require('node:fs').promises.readFile(lernaJsonPath, 'utf8'))
+  const lernaJson = JSON.parse(
+    await require('node:fs').promises.readFile(lernaJsonPath, 'utf8'),
+  )
   const version = lernaJson.version
 
   console.log('Updating peer dependency versions to', version)
@@ -19,7 +23,9 @@ runMain(async () => {
   const targetDeps = ['@datadog/openfeature-browser', '@datadog/flagging-core']
   // Update peer dependencies
   for (const jsonFile of JSON_FILES) {
-    await modifyFile(jsonFile, (content) => updatePackageDependencies(content, version, targetDeps))
+    await modifyFile(jsonFile, (content) =>
+      updatePackageDependencies(content, version, targetDeps),
+    )
   }
 
   // update yarn.lock to match the updated JSON files

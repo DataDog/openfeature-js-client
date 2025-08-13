@@ -1,5 +1,9 @@
 const { command } = require('../../lib/executionUtils')
-const { spawnCommand, printError, runMain } = require('../../lib/executionUtils')
+const {
+  spawnCommand,
+  printError,
+  runMain,
+} = require('../../lib/executionUtils')
 const { modifyFile } = require('../../lib/filesUtils')
 const { addNewChangesToChangelog } = require('./lib/addNewChangesToChangelog')
 const { CHANGELOG_FILE } = require('./lib/constants')

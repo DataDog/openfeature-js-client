@@ -1,15 +1,16 @@
-import { OpenFeature } from '@openfeature/web-sdk'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { DatadogProvider } from './provider'
-import type { FlaggingInitConfiguration } from '../domain/configuration'
+import { OpenFeature } from '@openfeature/web-sdk'
 import precomputedServerResponse from '../../test/data/precomputed-v1.json'
+import type { FlaggingInitConfiguration } from '../domain/configuration'
+import { DatadogProvider } from './provider'
 
 describe('Exposures End-to-End', () => {
   let fetchMock: jest.Mock
   let originalFetch: typeof global.fetch
 
   // Test helpers
-  const getExposuresCalls = () => fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))
+  const getExposuresCalls = () =>
+    fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))
   const parseExposureEvents = (body: string) =>
     body
       .trim()
@@ -106,7 +107,7 @@ describe('Exposures End-to-End', () => {
 
     // Verify endpoint URL pattern (request ID and version are dynamic)
     expect(exposuresUrl.toString()).toMatch(
-      /^https:\/\/browser-intake-datad0g\.com\/api\/v2\/exposures\?ddsource=browser&dd-api-key=test-client-token&dd-evp-origin-version=\d+\.\d+\.\d+&dd-evp-origin=browser&dd-request-id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+      /^https:\/\/browser-intake-datad0g\.com\/api\/v2\/exposures\?ddsource=browser&dd-api-key=test-client-token&dd-evp-origin-version=\d+\.\d+\.\d+&dd-evp-origin=browser&dd-request-id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     )
 
     // Verify exact request properties
@@ -194,7 +195,9 @@ describe('Exposures End-to-End', () => {
               doLog: false, // Should not log
             },
             'boolean-flag': {
-              ...precomputedServerResponse.data.attributes.flags['boolean-flag'],
+              ...precomputedServerResponse.data.attributes.flags[
+                'boolean-flag'
+              ],
               doLog: true, // Should log
             },
           },

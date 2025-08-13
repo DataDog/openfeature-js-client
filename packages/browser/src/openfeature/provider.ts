@@ -12,14 +12,18 @@ import type {
 } from '@openfeature/web-sdk'
 /* eslint-disable-next-line local-rules/disallow-side-effects */
 import { ProviderStatus } from '@openfeature/web-sdk'
-import { evaluate } from '../evaluation'
-import { createRumTrackingHook, createRumExposureHook, createExposureLoggingHook } from './exposures'
-import type { DDRum } from './rumIntegration'
 import {
-  validateAndBuildFlaggingConfiguration,
-  type FlaggingInitConfiguration,
   type FlaggingConfiguration,
+  type FlaggingInitConfiguration,
+  validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
+import { evaluate } from '../evaluation'
+import {
+  createExposureLoggingHook,
+  createRumExposureHook,
+  createRumTrackingHook,
+} from './exposures'
+import type { DDRum } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -74,16 +78,21 @@ export class DatadogProvider implements Provider {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
-    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+    this.flagsConfiguration =
+      await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
   }
 
-  async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
+  async onContextChange(
+    _oldContext: EvaluationContext,
+    context: EvaluationContext,
+  ): Promise<void> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
     this.status = ProviderStatus.RECONCILING
-    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+    this.flagsConfiguration =
+      await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
   }
 
@@ -91,34 +100,52 @@ export class DatadogProvider implements Provider {
     flagKey: string,
     defaultValue: boolean,
     context: EvaluationContext,
-    _logger: Logger
+    _logger: Logger,
   ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
+    return evaluate(
+      this.flagsConfiguration,
+      'boolean',
+      flagKey,
+      defaultValue,
+      context,
+    )
   }
 
   resolveStringEvaluation(
     flagKey: string,
     defaultValue: string,
     context: EvaluationContext,
-    _logger: Logger
+    _logger: Logger,
   ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
+    return evaluate(
+      this.flagsConfiguration,
+      'string',
+      flagKey,
+      defaultValue,
+      context,
+    )
   }
 
   resolveNumberEvaluation(
     flagKey: string,
     defaultValue: number,
     context: EvaluationContext,
-    _logger: Logger
+    _logger: Logger,
   ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
+    return evaluate(
+      this.flagsConfiguration,
+      'number',
+      flagKey,
+      defaultValue,
+      context,
+    )
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
     context: EvaluationContext,
-    _logger: Logger
+    _logger: Logger,
   ): ResolutionDetails<T> {
     // type safety: OpenFeature interface requires us to return a
     // specific T for *any* value of T (which could be any subtype of
@@ -126,6 +153,12 @@ export class DatadogProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
+    return evaluate(
+      this.flagsConfiguration,
+      'object',
+      flagKey,
+      defaultValue,
+      context,
+    ) as ResolutionDetails<T>
   }
 }

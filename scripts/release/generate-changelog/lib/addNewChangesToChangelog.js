@@ -6,7 +6,12 @@ const emojiNameMap = require('emoji-name-map')
 const { openfeatureVersion } = require('../../../lib/openfeatureVersion')
 const { commandSync } = require('../../../lib/executionUtils')
 const { getAffectedPackages } = require('./getAffectedPackages')
-const { CHANGELOG_FILE, CONTRIBUTING_FILE, PUBLIC_EMOJI_PRIORITY, INTERNAL_EMOJI_PRIORITY } = require('./constants')
+const {
+  CHANGELOG_FILE,
+  CONTRIBUTING_FILE,
+  PUBLIC_EMOJI_PRIORITY,
+  INTERNAL_EMOJI_PRIORITY,
+} = require('./constants')
 
 const FIRST_EMOJI_REGEX = /\p{Extended_Pictographic}/u
 
@@ -49,14 +54,20 @@ async function getEmojisLegend() {
     }
   }
 
-  lines.push('>', '> See [Gitmoji](https://gitmoji.dev/) for a guide on the emojis used.')
+  lines.push(
+    '>',
+    '> See [Gitmoji](https://gitmoji.dev/) for a guide on the emojis used.',
+  )
 
   return lines.join('\n')
 }
 
 function getChangeLists() {
   const lastTagName = getLastReleaseTagName()
-  const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`.run().split('\n')
+  const commits =
+    commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`
+      .run()
+      .split('\n')
 
   const internalChanges = []
   const publicChanges = []
@@ -80,7 +91,11 @@ function getChangeLists() {
 
   return [
     formatChangeList('Public Changes', publicChanges, PUBLIC_EMOJI_PRIORITY),
-    formatChangeList('Internal Changes', internalChanges, INTERNAL_EMOJI_PRIORITY),
+    formatChangeList(
+      'Internal Changes',
+      internalChanges,
+      INTERNAL_EMOJI_PRIORITY,
+    ),
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -99,7 +114,9 @@ function getLastReleaseTagName() {
 function sortByEmojiPriority(a, b, priorityList) {
   const getFirstRelevantEmojiIndex = (text) => {
     const emoji = findFirstEmoji(text)
-    return emoji && priorityList.includes(emoji) ? priorityList.indexOf(emoji) : Number.MAX_VALUE
+    return emoji && priorityList.includes(emoji)
+      ? priorityList.indexOf(emoji)
+      : Number.MAX_VALUE
   }
   return getFirstRelevantEmojiIndex(a) - getFirstRelevantEmojiIndex(b)
 }
@@ -109,7 +126,9 @@ function formatChangeList(title, changes, priority) {
     return ''
   }
 
-  const formatedList = changes.sort((a, b) => sortByEmojiPriority(a, b, priority)).join('\n')
+  const formatedList = changes
+    .sort((a, b) => sortByEmojiPriority(a, b, priority))
+    .join('\n')
   return `**${title}:**\n\n${formatedList}`
 }
 
@@ -128,13 +147,17 @@ function formatChange(hash, message) {
 }
 
 function emojiNameToUnicode(message) {
-  return message.replace(/:[^:\s]*(?:::[^:\s]*)*:/g, (emoji) => emojiNameMap.get(emoji) || emoji)
+  return message.replace(
+    /:[^:\s]*(?:::[^:\s]*)*:/g,
+    (emoji) => emojiNameMap.get(emoji) || emoji,
+  )
 }
 
 function addLinksToGithubIssues(message) {
   return message.replace(
     /\(#(\d+)\)/gm,
-    (_, id) => `([#${id}](https://github.com/DataDog/openfeature-js-client/pull/${id}))`
+    (_, id) =>
+      `([#${id}](https://github.com/DataDog/openfeature-js-client/pull/${id}))`,
   )
 }
 

@@ -14,7 +14,9 @@ if (!configPath) {
 const configFactory = require(path.resolve(configPath))
 
 // Parse mode from command line arguments
-const mode = process.argv.includes('--mode=production') ? 'production' : 'development'
+const mode = process.argv.includes('--mode=production')
+  ? 'production'
+  : 'development'
 
 // Call the config function with the mode
 const config = configFactory({}, { mode })
@@ -31,6 +33,6 @@ webpack(config, (err, stats) => {
     stats.toString({
       chunks: false,
       colors: true,
-    })
+    }),
   )
 })

@@ -24,7 +24,10 @@ runMain(async () => {
 
 function replaceBuildEnv(content) {
   return buildEnvKeys.reduce(
-    (content, key) => content.replaceAll(`__BUILD_ENV__${key}__`, () => JSON.stringify(getBuildEnvValue(key))),
-    content
+    (content, key) =>
+      content.replaceAll(`__BUILD_ENV__${key}__`, () =>
+        JSON.stringify(getBuildEnvValue(key)),
+      ),
+    content,
   )
 }

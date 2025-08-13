@@ -1,8 +1,8 @@
 import type { Configuration, InitConfiguration } from '@datadog/browser-core'
-import { validateAndBuildConfiguration, display } from '@datadog/browser-core'
-import type { DDRum } from '../openfeature/rumIntegration'
+import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
 
 /**
@@ -63,14 +63,18 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 }
 
 export interface FlaggingConfiguration extends Configuration {
-  fetchFlagsConfiguration: (context: EvaluationContext) => Promise<FlagsConfiguration>
+  fetchFlagsConfiguration: (
+    context: EvaluationContext,
+  ) => Promise<FlagsConfiguration>
 }
 
 export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration
+  initConfiguration: FlaggingInitConfiguration,
 ): FlaggingConfiguration | undefined {
   if (!initConfiguration.applicationId) {
-    display.error('Application ID is not configured, no flagging data will be collected.')
+    display.error(
+      'Application ID is not configured, no flagging data will be collected.',
+    )
     return
   }
 
