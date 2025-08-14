@@ -128,6 +128,10 @@ describe('DatadogProvider', () => {
       global.fetch = originalFetch
     })
 
+    beforeEach(() => {
+      fetchMock.mockClear()
+    })
+
     it('should send expected information in the request', async () => {
       // Set a targeting key in the context
       mockContext = {
@@ -191,6 +195,78 @@ describe('DatadogProvider', () => {
           variationType: 'STRING',
         },
       })
+    })
+  })
+
+  describe('configuration with flaggingProxy', () => {
+    let originalFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit | undefined,
+    ) => Promise<Response>
+    let fetchMock: jest.Mock
+
+    beforeAll(() => {
+      originalFetch = global.fetch
+      fetchMock = jest.fn().mockImplementation(async (_url, _options) => ({
+        json: async () => precomputedResponse,
+      }))
+      global.fetch = fetchMock
+    })
+
+    afterAll(() => {
+      global.fetch = originalFetch
+    })
+
+    beforeEach(() => {
+      fetchMock.mockClear()
+    })
+
+    it('should use flaggingProxy with protocol when provided', async () => {
+      const flaggingProxyOptions: FlaggingInitConfiguration = {
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        flaggingProxy: 'https://custom-proxy.example.com/api/flags',
+      }
+
+      const provider = new DatadogProvider(flaggingProxyOptions)
+      await provider.onContextChange({}, { targetingKey: 'test-user' })
+
+      expect(fetchMock).toHaveBeenCalled()
+      const [url] = fetchMock.mock.calls[0]
+      expect(url.toString()).toBe('https://custom-proxy.example.com/api/flags')
+    })
+
+    it('should use flaggingProxy without protocol when provided', async () => {
+      const flaggingProxyOptions: FlaggingInitConfiguration = {
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        flaggingProxy: 'custom-proxy.example.com/api/flags',
+      }
+
+      const provider = new DatadogProvider(flaggingProxyOptions)
+      await provider.onContextChange({}, { targetingKey: 'test-user' })
+
+      expect(fetchMock).toHaveBeenCalled()
+      const [url] = fetchMock.mock.calls[0]
+      expect(url.toString()).toBe('https://custom-proxy.example.com/api/flags/api/unstable/precompute-assignments')
+    })
+
+    it('should fall back to site when flaggingProxy is not provided', async () => {
+      const siteOptions: FlaggingInitConfiguration = {
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        site: 'datadoghq.com',
+      }
+
+      const provider = new DatadogProvider(siteOptions)
+      await provider.onContextChange({}, { targetingKey: 'test-user' })
+
+      expect(fetchMock).toHaveBeenCalled()
+      const [url] = fetchMock.mock.calls[0]
+      expect(url.toString()).toBe('https://app.datadoghq.com/api/unstable/precompute-assignments')
     })
   })
 })

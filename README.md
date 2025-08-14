@@ -130,6 +130,9 @@ DD_APPLICATION_KEY=your_application_key
 
 # Optional: Proxy URL for flagging configuration requests
 # DD_PROXY_SITE=http://localhost:8080
+
+# Optional: Environment name (defaults to prod)
+# DD_ENV=staging
 ```
 
 3. Run the script:

@@ -23,7 +23,14 @@ export function createFlagsConfigurationFetcher(
     initConfiguration.flaggingProxy ||
     buildEndpointHost(initConfiguration.site || 'datad0g.com')
 
-  const url = new URL(`https://${host}/api/unstable/precompute-assignments`)
+  let url: URL
+  if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
+    // If flaggingProxy has a protocol, use it as-is
+    url = new URL(`${host}/api/unstable/precompute-assignments`)
+  } else {
+    // Otherwise, prepend https://
+    url = new URL(`https://${host}/api/unstable/precompute-assignments`)
+  }
 
   const defaultHeaders = {
     'Content-Type': 'application/vnd.api+json',
