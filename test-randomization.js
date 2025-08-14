@@ -4,8 +4,10 @@
 /**
  * Script to test flag randomization through the OpenFeature SDK
  *
- * Usage: node test-randomization.js <flagKey> <numberOfTests>
+ * Usage: node test-randomization.js <flagKey> <numberOfTests> [flagType] [defaultValue]
  * Example: node test-randomization.js my-flag 1000
+ * Example: node test-randomization.js my-flag 1000 boolean true
+ * Example: node test-randomization.js my-flag 1000 string "default"
  *
  * Required environment variables:
  *   DD_CLIENT_TOKEN - Datadog client token
@@ -56,10 +58,19 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function testFlagRandomization(flagKey, numberOfTests) {
+async function testFlagRandomization(flagKey, numberOfTests, flagType = 'boolean', defaultValue = null) {
+  // Set appropriate default value based on flag type if not provided
+  if (defaultValue === null) {
+    defaultValue = flagType === 'boolean' ? false : 'default'
+  } else if (flagType === 'boolean') {
+    // Convert string to boolean for boolean flags
+    defaultValue = defaultValue === 'true' || defaultValue === true
+  }
+
   console.log(
     `Testing flag randomization for "${flagKey}" with ${numberOfTests} subjects...`,
   )
+  console.log(`Flag type: ${flagType}, Default value: ${defaultValue}`)
   console.log('='.repeat(60))
 
   // Initialize the provider
@@ -83,10 +94,18 @@ async function testFlagRandomization(flagKey, numberOfTests) {
       await OpenFeature.setContext({
         targetingKey: subjectKey,
         user: { id: subjectKey },
+        user_type: 'premium',
       })
 
-      // Get boolean flag value
-      const flagValue = await client.getBooleanValue(flagKey, false)
+      // Get flag value based on type
+      let flagValue
+      if (flagType === 'boolean') {
+        flagValue = await client.getBooleanValue(flagKey, defaultValue)
+      } else if (flagType === 'string') {
+        flagValue = await client.getStringValue(flagKey, defaultValue)
+      } else {
+        throw new Error(`Unsupported flag type: ${flagType}`)
+      }
 
       // Track the result
       const valueStr = String(flagValue)
@@ -133,7 +152,7 @@ async function testFlagRandomization(flagKey, numberOfTests) {
     )
   }
 
-  // Summary statistics for boolean flags
+  // Summary statistics
   console.log('')
   console.log('Summary:')
   console.log('-'.repeat(20))
@@ -142,7 +161,8 @@ async function testFlagRandomization(flagKey, numberOfTests) {
     console.log(
       '⚠️  All subjects received the same value - no randomization detected',
     )
-  } else if (results.size === 2) {
+  } else if (flagType === 'boolean' && results.size === 2) {
+    // Boolean-specific analysis
     const trueCount = results.get('true') || 0
     const falseCount = results.get('false') || 0
     const truePercentage = ((trueCount / totalTests) * 100).toFixed(1)
@@ -162,6 +182,26 @@ async function testFlagRandomization(flagKey, numberOfTests) {
     } else {
       console.log('❌ Poor randomization (> 10% deviation)')
     }
+  } else {
+    // General analysis for string flags or multiple values
+    const mostCommonValue = sortedResults[0]
+    const dominantPercentage = ((mostCommonValue[1] / totalTests) * 100).toFixed(1)
+    
+    console.log(`📊 Values distributed across ${results.size} different outcomes`)
+    console.log(`📈 Most common value: "${mostCommonValue[0]}" (${dominantPercentage}%)`)
+    
+    if (results.size >= 2) {
+      const evenDistribution = 100 / results.size
+      const deviation = Math.abs(evenDistribution - dominantPercentage)
+      
+      if (deviation < 10) {
+        console.log('✅ Good distribution - values are fairly spread')
+      } else if (deviation < 25) {
+        console.log('⚠️  Moderate distribution - some bias detected')
+      } else {
+        console.log('❌ Poor distribution - heavily skewed toward one value')
+      }
+    }
   }
 }
 
@@ -169,9 +209,12 @@ async function testFlagRandomization(flagKey, numberOfTests) {
 async function main() {
   const args = process.argv.slice(2)
 
-  if (args.length !== 2) {
-    console.error('Usage: node test-randomization.js <flagKey> <numberOfTests>')
-    console.error('Example: node test-randomization.js my-flag 1000')
+  if (args.length < 2 || args.length > 4) {
+    console.error('Usage: node test-randomization.js <flagKey> <numberOfTests> [flagType] [defaultValue]')
+    console.error('Examples:')
+    console.error('  node test-randomization.js my-flag 1000')
+    console.error('  node test-randomization.js my-flag 1000 boolean true')
+    console.error('  node test-randomization.js my-flag 1000 string "default"')
     console.error('')
     console.error('Required environment variables:')
     console.error('  DD_CLIENT_TOKEN - Datadog client token')
@@ -188,6 +231,14 @@ async function main() {
 
   const flagKey = args[0]
   const numberOfTests = parseInt(args[1], 10)
+  const flagType = args[2] || 'boolean'
+  const defaultValue = args[3] || null
+
+  // Validate flag type
+  if (!['boolean', 'string'].includes(flagType)) {
+    console.error(`Error: Unsupported flag type "${flagType}". Supported types: boolean, string`)
+    process.exit(1)
+  }
 
   if (isNaN(numberOfTests) || numberOfTests <= 0) {
     console.error('Error: numberOfTests must be a positive integer')
@@ -218,7 +269,7 @@ async function main() {
   }
 
   try {
-    await testFlagRandomization(flagKey, numberOfTests)
+    await testFlagRandomization(flagKey, numberOfTests, flagType, defaultValue)
   } catch (error) {
     console.error('Error running randomization test:', error.message)
     process.exit(1)

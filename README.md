@@ -100,8 +100,14 @@ console.log(result.reason) // Evaluation reason
 A test script is included to verify flag randomization behavior across multiple subjects:
 
 ```bash
-node test-randomization.js <flagKey> <numberOfTests>
+node test-randomization.js <flagKey> <numberOfTests> [flagType] [defaultValue]
 ```
+
+**Parameters:**
+- `flagKey` - The feature flag key to test
+- `numberOfTests` - Number of random subjects to test with
+- `flagType` (optional) - Flag type: `boolean` or `string` (defaults to `boolean`)
+- `defaultValue` (optional) - Default value to use when flag is not found
 
 ### Setup
 
@@ -126,10 +132,16 @@ DD_APPLICATION_KEY=your_application_key
 3. Run the script:
 
 ```bash
-# Test a boolean flag with 1000 random subjects
+# Test a boolean flag with 1000 random subjects (default behavior)
 yarn node test-randomization.js my-feature-flag 1000
 
-# Test with fewer subjects for quick validation
+# Test a boolean flag with custom default value
+yarn node test-randomization.js my-feature-flag 1000 boolean true
+
+# Test a string flag with custom default
+yarn node test-randomization.js my-string-flag 500 string "default-value"
+
+# Quick validation with fewer subjects
 yarn node test-randomization.js my-feature-flag 100
 ```
 
