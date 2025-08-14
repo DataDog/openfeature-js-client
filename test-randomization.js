@@ -100,7 +100,7 @@ async function testFlagRandomization(flagKey, numberOfTests, flagType = 'boolean
       // Set the targeting context
       await OpenFeature.setContext({
         targetingKey: subjectKey,
-        user: { id: subjectKey ,  country: 'US'},
+        country: 'US',
       })
 
       // Get flag value based on type

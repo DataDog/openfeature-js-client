@@ -86,7 +86,8 @@ Context must be set globally before flag evaluation and affects all subsequent e
 // Set global context (async operation)
 await OpenFeature.setContext({
   targetingKey: 'user-123',
-  user: { id: 'user-123', email: 'user@example.com' },
+  id: 'user-123',
+  email: 'user@example.com',
 })
 
 // Now evaluate flags with the context
