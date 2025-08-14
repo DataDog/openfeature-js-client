@@ -100,8 +100,7 @@ async function testFlagRandomization(flagKey, numberOfTests, flagType = 'boolean
       // Set the targeting context
       await OpenFeature.setContext({
         targetingKey: subjectKey,
-        user: { id: subjectKey },
-        user_type: 'premium',
+        user: { id: subjectKey ,  country: 'US'},
       })
 
       // Get flag value based on type
@@ -123,7 +122,7 @@ async function testFlagRandomization(flagKey, numberOfTests, flagType = 'boolean
     }
 
     // Short sleep to avoid hammering the endpoint
-    await sleep(10)
+    await sleep(5)
 
     // Progress indicator for large tests
     if (numberOfTests > 100 && i % Math.floor(numberOfTests / 10) === 0) {
@@ -196,19 +195,21 @@ async function testFlagRandomization(flagKey, numberOfTests, flagType = 'boolean
     
     console.log(`📊 Values distributed across ${results.size} different outcomes`)
     console.log(`📈 Most common value: "${mostCommonValue[0]}" (${dominantPercentage}%)`)
+
     
-    if (results.size >= 2) {
-      const evenDistribution = 100 / results.size
-      const deviation = Math.abs(evenDistribution - dominantPercentage)
+    // This assumes that an equal distribution is expected, but the distribution is arbitrary.
+    // if (results.size >= 2) {
+    //   const evenDistribution = 100 / results.size
+    //   const deviation = Math.abs(evenDistribution - dominantPercentage)
       
-      if (deviation < 10) {
-        console.log('✅ Good distribution - values are fairly spread')
-      } else if (deviation < 25) {
-        console.log('⚠️  Moderate distribution - some bias detected')
-      } else {
-        console.log('❌ Poor distribution - heavily skewed toward one value')
-      }
-    }
+    //   if (deviation < 10) {
+    //     console.log('✅ Good distribution - values are fairly spread')
+    //   } else if (deviation < 25) {
+    //     console.log('⚠️  Moderate distribution - some bias detected')
+    //   } else {
+    //     console.log('❌ Poor distribution - heavily skewed toward one value')
+    //   }
+    // }
   }
 }
 

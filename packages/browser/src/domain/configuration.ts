@@ -60,6 +60,8 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
    */
   flaggingProxy?: string
+  apiKey?: string
+  applicationKey?: string
 }
 
 export interface FlaggingConfiguration extends Configuration {

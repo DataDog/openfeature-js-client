@@ -39,6 +39,8 @@ export function createFlagsConfigurationFetcher(
       : {
           'dd-client-token': initConfiguration.clientToken,
           'dd-application-id': initConfiguration.applicationId,
+          'dd-api-key': initConfiguration.apiKey,
+          'dd-application-key': initConfiguration.applicationKey,
         }),
     ...initConfiguration.customHeaders,
   }
