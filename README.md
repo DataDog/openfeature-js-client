@@ -127,6 +127,9 @@ DD_APPLICATION_KEY=your_application_key
 
 # Optional: Override Datadog site (defaults to datadoghq.com)
 # DD_SITE=datadoghq.eu
+
+# Optional: Proxy URL for flagging configuration requests
+# DD_PROXY_SITE=http://localhost:8080
 ```
 
 3. Run the script:

@@ -17,6 +17,7 @@
  *
  * Optional environment variables:
  *   DD_SITE - Datadog site (defaults to datadoghq.com)
+ *   DD_PROXY_SITE - Proxy URL for flagging configuration requests
  */
 
 require('dotenv').config()
@@ -52,6 +53,11 @@ const PROVIDER_CONFIG = {
   service: 'randomization-test',
   version: '1.0.0',
   enableExposureLogging: false, // Disable for testing to avoid noise
+}
+
+// Add proxy configuration if provided
+if (process.env.DD_PROXY_SITE) {
+  PROVIDER_CONFIG.flaggingProxy = process.env.DD_PROXY_SITE
 }
 
 function sleep(ms) {
@@ -224,6 +230,7 @@ async function main() {
     console.error('')
     console.error('Optional environment variables:')
     console.error('  DD_SITE - Datadog site (defaults to datadoghq.com)')
+    console.error('  DD_PROXY_SITE - Proxy URL for flagging configuration requests')
     console.error('')
     console.error('You can set these in a .env file in the project root.')
     process.exit(1)
