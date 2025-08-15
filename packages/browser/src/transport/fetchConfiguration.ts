@@ -16,6 +16,8 @@ function buildEndpointHost(site: string): string {
   }
 }
 
+const endpointPath = '/api/unstable/precompute-assignments'
+
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
 ) {
@@ -26,10 +28,10 @@ export function createFlagsConfigurationFetcher(
   let url: URL
   if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
     // If flaggingProxy has a protocol, use it as-is
-    url = new URL(`${host}/api/unstable/precompute-assignments`)
+    url = new URL(`${host}${endpointPath}`)
   } else {
     // Otherwise, prepend https://
-    url = new URL(`https://${host}/api/unstable/precompute-assignments`)
+    url = new URL(`https://${host}${endpointPath}`)
   }
 
   const defaultHeaders = {
