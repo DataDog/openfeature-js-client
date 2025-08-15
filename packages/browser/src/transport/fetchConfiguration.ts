@@ -16,10 +16,21 @@ function buildEndpointHost(site: string): string {
   }
 }
 
-export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
-  const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datad0g.com')
+export function createFlagsConfigurationFetcher(
+  initConfiguration: FlaggingInitConfiguration,
+) {
+  const host =
+    initConfiguration.flaggingProxy ||
+    buildEndpointHost(initConfiguration.site || 'datadoghq.com')
 
-  const url = new URL(`https://${host}/api/unstable/precompute-assignments`)
+  let url: URL
+  if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
+    // If flaggingProxy has a protocol, use it as-is
+    url = new URL(`${host}/api/unstable/precompute-assignments`)
+  } else {
+    // Otherwise, prepend https://
+    url = new URL(`https://${host}/api/unstable/precompute-assignments`)
+  }
 
   const defaultHeaders = {
     'Content-Type': 'application/vnd.api+json',
@@ -41,7 +52,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     // Stringify all context values
     const stringifiedContext: Record<string, string> = {}
     for (const [key, value] of Object.entries(context)) {
-      stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+      stringifiedContext[key] =
+        typeof value === 'string' ? value : JSON.stringify(value)
     }
 
     const response = await fetch(url.toString(), {
