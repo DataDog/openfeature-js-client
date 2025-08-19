@@ -6,6 +6,12 @@
 
 ---
 
+## v0.1.0-alpha.12
+
+**Internal Changes:**
+
+- fix: preserve proxy protocol, add app key and api key to config ([#17](https://github.com/DataDog/openfeature-js-client/pull/17)) [BROWSER]
+
 ## v0.1.0-alpha.11
 
 **Internal Changes:**
