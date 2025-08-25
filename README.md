@@ -8,8 +8,6 @@ This repository hosts Browser and React Native clients for Datadog's OpenFeature
 
 ```bash
 npm install @datadog/openfeature-browser@alpha
-# or
-npm install @datadog/openfeature-browser@0.1.0-alpha.9
 ```
 
 ## Quick Start

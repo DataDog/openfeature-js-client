@@ -16,7 +16,7 @@ function buildEndpointHost(site: string): string {
   }
 }
 
-const endpointPath = '/api/unstable/precompute-assignments'
+const endpointPath = '/api/v2/feature-flagging/config/compute-assignments'
 
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,

@@ -113,7 +113,7 @@ describe('DatadogProvider', () => {
       // Check that fetch was called with the correct URL and method
       expect(fetchMock).toHaveBeenCalled()
       const [url, requestOptions] = fetchMock.mock.calls[0]
-      expect(url.toString()).toBe(`https://dd.datad0g.com/api/unstable/precompute-assignments`)
+      expect(url.toString()).toBe(`https://dd.datad0g.com/api/v2/feature-flagging/config/compute-assignments`)
       expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly
