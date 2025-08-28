@@ -1,0 +1,320 @@
+import { createFlagsConfigurationFetcher } from './fetchConfiguration'
+import type { FlaggingInitConfiguration } from '../domain/configuration'
+import type { EvaluationContext } from '@openfeature/web-sdk'
+
+// Mock dateNow from @datadog/browser-core
+jest.mock('@datadog/browser-core', () => ({
+  dateNow: jest.fn(() => 1234567890),
+}))
+
+describe('createFlagsConfigurationFetcher', () => {
+  let originalFetch: typeof global.fetch
+  let mockFetch: jest.Mock
+
+  beforeEach(() => {
+    originalFetch = global.fetch
+    mockFetch = jest.fn().mockResolvedValue({
+      json: jest.fn().mockResolvedValue({ mockResponse: true }),
+    })
+    global.fetch = mockFetch
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    jest.clearAllMocks()
+  })
+
+  const baseConfig: FlaggingInitConfiguration = {
+    clientToken: 'test-token',
+    applicationId: 'test-app-id',
+    env: 'test',
+  }
+
+  const mockContext: EvaluationContext = {
+    targetingKey: 'user-123',
+    customAttr: 'value',
+    numericAttr: 42,
+    booleanAttr: true,
+  }
+
+  describe('URL construction with flaggingProxy', () => {
+    describe('when flaggingProxy has protocol', () => {
+      const testCases = [
+        {
+          description: 'HTTP protocol',
+          flaggingProxy: 'http://localhost:8080',
+          expectedUrl: 'http://localhost:8080/',
+        },
+        {
+          description: 'HTTPS protocol',
+          flaggingProxy: 'https://proxy.example.com',
+          expectedUrl: 'https://proxy.example.com/',
+        },
+        {
+          description: 'HTTPS protocol with path',
+          flaggingProxy: 'https://proxy.example.com/api/flags',
+          expectedUrl: 'https://proxy.example.com/api/flags',
+        },
+        {
+          description: 'HTTP protocol with port and path',
+          flaggingProxy: 'http://localhost:3000/proxy',
+          expectedUrl: 'http://localhost:3000/proxy',
+        },
+      ]
+
+      test.each(testCases)('should use proxy URL as-is for $description', async ({ flaggingProxy, expectedUrl }) => {
+        const config = { ...baseConfig, flaggingProxy }
+        const fetcher = createFlagsConfigurationFetcher(config)
+        
+        await fetcher(mockContext)
+        
+        expect(mockFetch).toHaveBeenCalledWith(
+          expectedUrl,
+          expect.objectContaining({
+            method: 'POST',
+          })
+        )
+      })
+    })
+
+    describe('when flaggingProxy has no protocol', () => {
+      const testCases = [
+        {
+          description: 'domain only',
+          flaggingProxy: 'proxy.example.com',
+          expectedUrl: 'https://proxy.example.com/',
+        },
+        {
+          description: 'domain with port',
+          flaggingProxy: 'proxy.example.com:8080',
+          expectedUrl: 'https://proxy.example.com:8080/',
+        },
+        {
+          description: 'localhost with port',
+          flaggingProxy: 'localhost:3000',
+          expectedUrl: 'https://localhost:3000/',
+        },
+        {
+          description: 'domain with path',
+          flaggingProxy: 'proxy.example.com/api',
+          expectedUrl: 'https://proxy.example.com/api',
+        },
+      ]
+
+      test.each(testCases)('should prepend https:// for $description', async ({ flaggingProxy, expectedUrl }) => {
+        const config = { ...baseConfig, flaggingProxy }
+        const fetcher = createFlagsConfigurationFetcher(config)
+        
+        await fetcher(mockContext)
+        
+        expect(mockFetch).toHaveBeenCalledWith(
+          expectedUrl,
+          expect.objectContaining({
+            method: 'POST',
+          })
+        )
+      })
+    })
+
+    describe('when no flaggingProxy is provided', () => {
+      const testCases = [
+        {
+          description: 'default site',
+          config: baseConfig,
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
+        },
+        {
+          description: 'specific site',
+          config: { ...baseConfig, site: 'datadoghq.eu' as const },
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments',
+        },
+        {
+          description: 'US3 site',
+          config: { ...baseConfig, site: 'us3.datadoghq.com' as const },
+          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments',
+        },
+      ]
+
+      test.each(testCases)('should use buildEndpointHost with /precompute-assignments for $description', async ({ config, expectedUrl }) => {
+        const fetcher = createFlagsConfigurationFetcher(config)
+        
+        await fetcher(mockContext)
+        
+        expect(mockFetch).toHaveBeenCalledWith(
+          expectedUrl,
+          expect.objectContaining({
+            method: 'POST',
+          })
+        )
+      })
+    })
+  })
+
+  describe('request headers', () => {
+    it('should include default headers when not overwriting', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'dd-client-token': 'test-token',
+            'dd-application-id': 'test-app-id',
+          },
+        })
+      )
+    })
+
+    it('should exclude dd headers when overwriteRequestHeaders is true', async () => {
+      const config = { 
+        ...baseConfig, 
+        flaggingProxy: 'https://proxy.example.com',
+        overwriteRequestHeaders: true 
+      }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+          },
+        })
+      )
+    })
+
+    it('should include custom headers', async () => {
+      const config = { 
+        ...baseConfig, 
+        flaggingProxy: 'https://proxy.example.com',
+        customHeaders: {
+          'X-Custom-Header': 'custom-value',
+          'Authorization': 'Bearer token',
+        }
+      }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'dd-client-token': 'test-token',
+            'dd-application-id': 'test-app-id',
+            'X-Custom-Header': 'custom-value',
+            'Authorization': 'Bearer token',
+          },
+        })
+      )
+    })
+
+    it('should not include dd-application-id when applicationId is not provided', async () => {
+      const config = { 
+        clientToken: 'test-token',
+        env: 'test',
+        flaggingProxy: 'https://proxy.example.com'
+      }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'dd-client-token': 'test-token',
+          },
+        })
+      )
+    })
+  })
+
+  describe('request body construction', () => {
+    it('should stringify non-string context values', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(requestBody.data.attributes.subject.targeting_attributes).toEqual({
+        targetingKey: 'user-123',
+        customAttr: 'value',
+        numericAttr: '42',
+        booleanAttr: 'true',
+      })
+    })
+
+    it('should handle empty context', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher({})
+      
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(requestBody.data.attributes.subject).toEqual({
+        targeting_key: '',
+        targeting_attributes: {},
+      })
+    })
+
+    it('should use targetingKey when provided', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      const context = { targetingKey: 'custom-user-id' }
+      
+      await fetcher(context)
+      
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(requestBody.data.attributes.subject.targeting_key).toBe('custom-user-id')
+    })
+
+    it('should include environment payload', async () => {
+      const config = { 
+        ...baseConfig, 
+        env: 'production',
+        flaggingProxy: 'https://proxy.example.com' 
+      }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      await fetcher(mockContext)
+      
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(requestBody.data.attributes.env).toEqual({
+        name: 'production',
+        dd_env: 'production',
+      })
+    })
+  })
+
+  describe('return value', () => {
+    it('should return precomputed configuration with context and timestamp', async () => {
+      const mockResponse = { flags: { 'test-flag': 'value' } }
+      mockFetch.mockResolvedValue({
+        json: jest.fn().mockResolvedValue(mockResponse),
+      })
+      
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+      
+      const result = await fetcher(mockContext)
+      
+      expect(result).toEqual({
+        precomputed: {
+          response: mockResponse,
+          context: mockContext,
+          fetchedAt: 1234567890,
+        },
+      })
+    })
+  })
+})
