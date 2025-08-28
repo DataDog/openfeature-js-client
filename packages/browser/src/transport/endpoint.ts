@@ -31,7 +31,7 @@ export function buildEndpointHost(site?: string, customerDomain = 'preview'): st
   const dc = config.dc ?? ''
   const tld = config.tld ?? 'com'
 
-  // custom domain is for future use
+  // customer domain is for future use
   // ff-cdn is the subdomain pointing to the CDN servers
   // dc is the datacenter, if specified
   // tld is the top level domain, changes for eu DCs
