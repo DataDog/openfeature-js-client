@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-alpha.13
+
+**Internal Changes:**
+
+- [FFL-888] feat: use fastly endpoints ([#22](https://github.com/DataDog/openfeature-js-client/pull/22)) [BROWSER]
+- [FFL-887] Make application ID an optional param ([#21](https://github.com/DataDog/openfeature-js-client/pull/21)) [BROWSER]
+
 ## v0.1.0-alpha.12
 
 **Internal Changes:**
