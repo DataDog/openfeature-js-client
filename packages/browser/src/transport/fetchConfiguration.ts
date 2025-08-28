@@ -2,42 +2,21 @@ import { dateNow } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
+import { buildEndpointHost } from './endpoint'
 
-function buildEndpointHost(site: string, custDomain = 'preview'): string {
-  switch (site) {
-    case 'datad0g.com':
-      return `${custDomain}.ff-cdn.datad0g.com`
-    case 'datadoghq.com':
-      return `${custDomain}.ff-cdn.datadoghq.com`
-    case 'us3.datadoghq.com':
-      return `${custDomain}.ff-cdn.us3.datadoghq.com`
-    case 'us5.datadoghq.com':
-      return `${custDomain}.ff-cdn.us5.datadoghq.com`
-    case 'ap1.datadoghq.com':
-      return `${custDomain}.ff-cdn.ap1.datadoghq.com`
-    case 'ap2.datadoghq.com':
-      return `${custDomain}.ff-cdn.ap2.datadoghq.com`
-    case 'datadoghq.eu':
-      return `${custDomain}.ff-cdn.datadoghq.eu`
-    case 'ddog-gov.com':
-      throw new Error('ddog-gov.com is not supported for flagging endpoints')
-    default:
-      return `${custDomain}.ff-cdn.${site}`
-  }
-}
-
-const endpointPath = '/precompute-assignments'
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
-  const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datadoghq.com')
 
   let url: URL
-  if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
+  if (initConfiguration.flaggingProxy && (initConfiguration.flaggingProxy.match('https?://'))) {
     // If flaggingProxy has a protocol, use it as-is
-    url = new URL(`${host}${endpointPath}`)
+    url = new URL(`${initConfiguration.flaggingProxy}`)
+  } else if (initConfiguration.flaggingProxy) {
+    // Otherwise, prepend https:// to the proxy
+    url = new URL(`https://${initConfiguration.flaggingProxy}`)
   } else {
-    // Otherwise, prepend https://
-    url = new URL(`https://${host}${endpointPath}`)
+    const host = buildEndpointHost(initConfiguration.site)
+    url = new URL(`https://${host}/precompute-assignments`)
   }
 
   const defaultHeaders = {
