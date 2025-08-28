@@ -4,11 +4,9 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
 
-
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
-
   let url: URL
-  if (initConfiguration.flaggingProxy && (initConfiguration.flaggingProxy.match('https?://'))) {
+  if (initConfiguration.flaggingProxy && initConfiguration.flaggingProxy.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
     url = new URL(`${initConfiguration.flaggingProxy}`)
   } else if (initConfiguration.flaggingProxy) {

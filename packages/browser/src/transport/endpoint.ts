@@ -8,13 +8,13 @@ const siteConfig: Record<string, { dc?: string; tld?: string }> = {
   'datadoghq.eu': { tld: 'eu' },
 }
 
-export function buildEndpointHost(site?: string, custDomain = 'preview'): string {
+export function buildEndpointHost(site?: string, customerDomain = 'preview'): string {
   if (site === 'ddog-gov.com') {
     throw new Error('ddog-gov.com is not supported for flagging endpoints')
   }
 
   if (site === 'datad0g.com') {
-    return `${custDomain}.ff-cdn.datad0g.com`
+    return `${customerDomain}.ff-cdn.datad0g.com`
   }
 
   // If no site provided, default to datadoghq.com
@@ -35,5 +35,5 @@ export function buildEndpointHost(site?: string, custDomain = 'preview'): string
   // ff-cdn is the subdomain pointing to the CDN servers
   // dc is the datacenter, if specified
   // tld is the top level domain, changes for eu DCs
-  return `${custDomain}.ff-cdn.${dc ? dc + '.' : ''}datadoghq.${tld}`
+  return `${customerDomain}.ff-cdn.${dc ? dc + '.' : ''}datadoghq.${tld}`
 }

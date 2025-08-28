@@ -1,87 +1,112 @@
 import { buildEndpointHost } from './endpoint'
 
 describe('buildEndpointHost', () => {
-  describe('with default custDomain (preview)', () => {
-    it('should return default datadoghq.com endpoint when no site is provided', () => {
-      const result = buildEndpointHost()
-      expect(result).toBe('preview.ff-cdn.datadoghq.com')
-    })
+  describe('with default customer subdomain (preview)', () => {
+    const testCases = [
+      {
+        description: 'when no site is provided',
+        site: undefined,
+        expected: 'preview.ff-cdn.datadoghq.com',
+      },
+      {
+        description: 'when undefined site is provided',
+        site: undefined,
+        expected: 'preview.ff-cdn.datadoghq.com',
+      },
+      {
+        description: 'for datadoghq.com site',
+        site: 'datadoghq.com',
+        expected: 'preview.ff-cdn.datadoghq.com',
+      },
+      {
+        description: 'for us3.datadoghq.com site',
+        site: 'us3.datadoghq.com',
+        expected: 'preview.ff-cdn.us3.datadoghq.com',
+      },
+      {
+        description: 'for us5.datadoghq.com site',
+        site: 'us5.datadoghq.com',
+        expected: 'preview.ff-cdn.us5.datadoghq.com',
+      },
+      {
+        description: 'for ap1.datadoghq.com site',
+        site: 'ap1.datadoghq.com',
+        expected: 'preview.ff-cdn.ap1.datadoghq.com',
+      },
+      {
+        description: 'for ap2.datadoghq.com site',
+        site: 'ap2.datadoghq.com',
+        expected: 'preview.ff-cdn.ap2.datadoghq.com',
+      },
+      {
+        description: 'for datadoghq.eu site',
+        site: 'datadoghq.eu',
+        expected: 'preview.ff-cdn.datadoghq.eu',
+      },
+      {
+        description: 'for datad0g.com site',
+        site: 'datad0g.com',
+        expected: 'preview.ff-cdn.datad0g.com',
+      },
+    ]
 
-    it('should return default datadoghq.com endpoint when undefined site is provided', () => {
-      const result = buildEndpointHost(undefined)
-      expect(result).toBe('preview.ff-cdn.datadoghq.com')
-    })
-
-    it('should return datadoghq.com endpoint for datadoghq.com site', () => {
-      const result = buildEndpointHost('datadoghq.com')
-      expect(result).toBe('preview.ff-cdn.datadoghq.com')
-    })
-
-    it('should return us3 datacenter endpoint for us3.datadoghq.com site', () => {
-      const result = buildEndpointHost('us3.datadoghq.com')
-      expect(result).toBe('preview.ff-cdn.us3.datadoghq.com')
-    })
-
-    it('should return us5 datacenter endpoint for us5.datadoghq.com site', () => {
-      const result = buildEndpointHost('us5.datadoghq.com')
-      expect(result).toBe('preview.ff-cdn.us5.datadoghq.com')
-    })
-
-    it('should return ap1 datacenter endpoint for ap1.datadoghq.com site', () => {
-      const result = buildEndpointHost('ap1.datadoghq.com')
-      expect(result).toBe('preview.ff-cdn.ap1.datadoghq.com')
-    })
-
-    it('should return ap2 datacenter endpoint for ap2.datadoghq.com site', () => {
-      const result = buildEndpointHost('ap2.datadoghq.com')
-      expect(result).toBe('preview.ff-cdn.ap2.datadoghq.com')
-    })
-
-    it('should return EU endpoint for datadoghq.eu site', () => {
-      const result = buildEndpointHost('datadoghq.eu')
-      expect(result).toBe('preview.ff-cdn.datadoghq.eu')
-    })
-
-    it('should return staging endpoint for datad0g.com site', () => {
-      const result = buildEndpointHost('datad0g.com')
-      expect(result).toBe('preview.ff-cdn.datad0g.com')
+    test.each(testCases)('should return $expected $description', ({ site, expected }) => {
+      const result = buildEndpointHost(site)
+      expect(result).toBe(expected)
     })
   })
 
-  describe('with custom custDomain', () => {
-    it('should use custom domain for datadoghq.com site', () => {
-      const result = buildEndpointHost('datadoghq.com', 'custom')
-      expect(result).toBe('custom.ff-cdn.datadoghq.com')
-    })
+  describe('with customer subdomain', () => {
+    const testCases = [
+      {
+        description: 'for datadoghq.com site',
+        site: 'datadoghq.com',
+        customerDomain: 'custom',
+        expected: 'custom.ff-cdn.datadoghq.com',
+      },
+      {
+        description: 'for us3.datadoghq.com site (non-default datacenter)',
+        site: 'us3.datadoghq.com',
+        customerDomain: 'custom',
+        expected: 'custom.ff-cdn.us3.datadoghq.com',
+      },
+      {
+        description: 'for datadoghq.eu site (non-default top-level domain)',
+        site: 'datadoghq.eu',
+        customerDomain: 'custom',
+        expected: 'custom.ff-cdn.datadoghq.eu',
+      },
+      {
+        description: 'for datad0g.com site (ddstaging)',
+        site: 'datad0g.com',
+        customerDomain: 'custom',
+        expected: 'custom.ff-cdn.datad0g.com',
+      },
+    ]
 
-    it('should use custom domain for us3.datadoghq.com site', () => {
-      const result = buildEndpointHost('us3.datadoghq.com', 'custom')
-      expect(result).toBe('custom.ff-cdn.us3.datadoghq.com')
-    })
-
-    it('should use custom domain for datadoghq.eu site', () => {
-      const result = buildEndpointHost('datadoghq.eu', 'custom')
-      expect(result).toBe('custom.ff-cdn.datadoghq.eu')
-    })
-
-    it('should use custom domain for datad0g.com site', () => {
-      const result = buildEndpointHost('datad0g.com', 'custom')
-      expect(result).toBe('custom.ff-cdn.datad0g.com')
+    test.each(testCases)('should use custom domain $description', ({ site, customerDomain, expected }) => {
+      const result = buildEndpointHost(site, customerDomain)
+      expect(result).toBe(expected)
     })
   })
 
   describe('error cases', () => {
-    it('should throw error for ddog-gov.com site', () => {
-      expect(() => buildEndpointHost('ddog-gov.com')).toThrow(
-        'ddog-gov.com is not supported for flagging endpoints'
-      )
-    })
+    const errorTestCases = [
+      {
+        description: 'for ddog-gov.com site',
+        site: 'ddog-gov.com',
+        expectedError: 'ddog-gov.com is not supported for flagging endpoints',
+      },
+      {
+        description: 'for unsupported site',
+        site: 'unsupported.example.com',
+        expectedError:
+          'Unsupported site: unsupported.example.com. Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu',
+      },
+    ]
 
-    it('should throw error for unsupported site', () => {
-      const unsupportedSite = 'unsupported.example.com'
-      expect(() => buildEndpointHost(unsupportedSite)).toThrow(
-        `Unsupported site: ${unsupportedSite}. Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu`
-      )
+    test.each(errorTestCases)('should throw error $description', ({ site, expectedError }) => {
+      expect(() => buildEndpointHost(site)).toThrow(expectedError)
     })
 
     it('should default to datadoghq.com for empty string site', () => {
@@ -91,14 +116,24 @@ describe('buildEndpointHost', () => {
   })
 
   describe('edge cases', () => {
-    it('should handle empty custDomain', () => {
-      const result = buildEndpointHost('datadoghq.com', '')
-      expect(result).toBe('.ff-cdn.datadoghq.com')
-    })
+    const edgeTestCases = [
+      {
+        description: 'empty custDomain',
+        site: 'datadoghq.com',
+        custDomain: '',
+        expected: '.ff-cdn.datadoghq.com',
+      },
+      {
+        description: 'special characters in custDomain',
+        site: 'datadoghq.com',
+        custDomain: 'test-env',
+        expected: 'test-env.ff-cdn.datadoghq.com',
+      },
+    ]
 
-    it('should handle special characters in custDomain', () => {
-      const result = buildEndpointHost('datadoghq.com', 'test-env')
-      expect(result).toBe('test-env.ff-cdn.datadoghq.com')
+    test.each(edgeTestCases)('should handle $description', ({ site, custDomain, expected }) => {
+      const result = buildEndpointHost(site, custDomain)
+      expect(result).toBe(expected)
     })
   })
 })
