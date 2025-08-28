@@ -27,6 +27,19 @@ describe('DatadogProvider', () => {
     mockContext = {}
   })
 
+  describe('configuration validation', () => {
+    it('should throw error when ddog-gov.com site is provided', () => {
+      const invalidOptions: FlaggingInitConfiguration = {
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        site: 'ddog-gov.com',
+      }
+
+      expect(() => new DatadogProvider(invalidOptions)).toThrow('ddog-gov.com is not supported for flagging endpoints')
+    })
+  })
+
   describe('metadata', () => {
     it('should have correct metadata', () => {
       expect(provider.metadata).toEqual({
@@ -113,7 +126,7 @@ describe('DatadogProvider', () => {
       // Check that fetch was called with the correct URL and method
       expect(fetchMock).toHaveBeenCalled()
       const [url, requestOptions] = fetchMock.mock.calls[0]
-      expect(url.toString()).toBe(`https://dd.datad0g.com/api/unstable/precompute-assignments`)
+      expect(url.toString()).toBe(`https://preview.ff-cdn.datad0g.com/precompute-assignments`)
       expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly

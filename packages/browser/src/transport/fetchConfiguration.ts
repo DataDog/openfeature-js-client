@@ -2,32 +2,19 @@ import { dateNow } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
-
-function buildEndpointHost(site: string): string {
-  switch (site) {
-    case 'datad0g.com':
-      return `dd.${site}`
-    case 'datadoghq.com':
-    case 'datadoghq.eu':
-    case 'ddog-gov.com':
-      return `app.${site}`
-    default:
-      return site
-  }
-}
-
-const endpointPath = '/api/unstable/precompute-assignments'
+import { buildEndpointHost } from './endpoint'
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
-  const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datadoghq.com')
-
   let url: URL
-  if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
+  if (initConfiguration.flaggingProxy && initConfiguration.flaggingProxy.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
-    url = new URL(`${host}${endpointPath}`)
+    url = new URL(`${initConfiguration.flaggingProxy}`)
+  } else if (initConfiguration.flaggingProxy) {
+    // Otherwise, prepend https:// to the proxy
+    url = new URL(`https://${initConfiguration.flaggingProxy}`)
   } else {
-    // Otherwise, prepend https://
-    url = new URL(`https://${host}${endpointPath}`)
+    const host = buildEndpointHost(initConfiguration.site || 'datadoghq.com')
+    url = new URL(`https://${host}/precompute-assignments`)
   }
 
   const defaultHeaders = {
