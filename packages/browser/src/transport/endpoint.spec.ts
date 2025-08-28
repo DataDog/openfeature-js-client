@@ -4,16 +4,6 @@ describe('buildEndpointHost', () => {
   describe('with default customer subdomain (preview)', () => {
     const testCases = [
       {
-        description: 'when no site is provided',
-        site: undefined,
-        expected: 'preview.ff-cdn.datadoghq.com',
-      },
-      {
-        description: 'when undefined site is provided',
-        site: undefined,
-        expected: 'preview.ff-cdn.datadoghq.com',
-      },
-      {
         description: 'for datadoghq.com site',
         site: 'datadoghq.com',
         expected: 'preview.ff-cdn.datadoghq.com',
@@ -103,15 +93,16 @@ describe('buildEndpointHost', () => {
         expectedError:
           'Unsupported site: unsupported.example.com. Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu',
       },
+      {
+        description: 'for empty string site',
+        site: '',
+        expectedError:
+          'Unsupported site: . Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu',
+      },
     ]
 
     test.each(errorTestCases)('should throw error $description', ({ site, expectedError }) => {
       expect(() => buildEndpointHost(site)).toThrow(expectedError)
-    })
-
-    it('should default to datadoghq.com for empty string site', () => {
-      const result = buildEndpointHost('')
-      expect(result).toBe('preview.ff-cdn.datadoghq.com')
     })
   })
 

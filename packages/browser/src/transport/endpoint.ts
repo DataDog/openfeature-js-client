@@ -8,18 +8,13 @@ const siteConfig: Record<string, { dc?: string; tld?: string }> = {
   'datadoghq.eu': { tld: 'eu' },
 }
 
-export function buildEndpointHost(site?: string, customerDomain = 'preview'): string {
+export function buildEndpointHost(site: string, customerDomain = 'preview'): string {
   if (site === 'ddog-gov.com') {
     throw new Error('ddog-gov.com is not supported for flagging endpoints')
   }
 
   if (site === 'datad0g.com') {
     return `${customerDomain}.ff-cdn.datad0g.com`
-  }
-
-  // If no site provided, default to datadoghq.com
-  if (!site) {
-    site = 'datadoghq.com'
   }
 
   // Throw error if site is not in the map

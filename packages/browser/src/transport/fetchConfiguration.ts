@@ -13,7 +13,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     // Otherwise, prepend https:// to the proxy
     url = new URL(`https://${initConfiguration.flaggingProxy}`)
   } else {
-    const host = buildEndpointHost(initConfiguration.site)
+    const host = buildEndpointHost(initConfiguration.site || 'datadoghq.com')
     url = new URL(`https://${host}/precompute-assignments`)
   }
 
