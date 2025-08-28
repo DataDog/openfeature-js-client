@@ -18,12 +18,8 @@ function buildEndpointHost(site: string): string {
 
 const endpointPath = '/api/unstable/precompute-assignments'
 
-export function createFlagsConfigurationFetcher(
-  initConfiguration: FlaggingInitConfiguration,
-) {
-  const host =
-    initConfiguration.flaggingProxy ||
-    buildEndpointHost(initConfiguration.site || 'datadoghq.com')
+export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
+  const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datadoghq.com')
 
   let url: URL
   if (initConfiguration.flaggingProxy && (host.startsWith('http://') || host.startsWith('https://'))) {
@@ -40,7 +36,7 @@ export function createFlagsConfigurationFetcher(
       ? {}
       : {
           'dd-client-token': initConfiguration.clientToken,
-          'dd-application-id': initConfiguration.applicationId,
+          ...(initConfiguration.applicationId && { 'dd-application-id': initConfiguration.applicationId }),
         }),
     ...initConfiguration.customHeaders,
   }
@@ -54,8 +50,7 @@ export function createFlagsConfigurationFetcher(
     // Stringify all context values
     const stringifiedContext: Record<string, string> = {}
     for (const [key, value] of Object.entries(context)) {
-      stringifiedContext[key] =
-        typeof value === 'string' ? value : JSON.stringify(value)
+      stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
     }
 
     const response = await fetch(url.toString(), {

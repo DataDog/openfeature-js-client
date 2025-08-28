@@ -45,7 +45,7 @@ const provider = new DatadogProvider({
   // Required
   clientToken: 'pub_...', // Your Datadog client token
   // Temporary for alpha releases
-  applicationId: 'app-id', // Your application ID
+  applicationId: 'app-id', // Your application ID (optional - if provided, will be sent as dd-application-id header)
 
   // Optional Datadog configuration
   site: 'datadoghq.com', // Datadog site (datadoghq.com, datadoghq.eu, etc.)
