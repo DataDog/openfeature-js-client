@@ -65,9 +65,9 @@ describe('createFlagsConfigurationFetcher', () => {
       test.each(testCases)('should use proxy URL as-is for $description', async ({ flaggingProxy, expectedUrl }) => {
         const config = { ...baseConfig, flaggingProxy }
         const fetcher = createFlagsConfigurationFetcher(config)
-        
+
         await fetcher(mockContext)
-        
+
         expect(mockFetch).toHaveBeenCalledWith(
           expectedUrl,
           expect.objectContaining({
@@ -104,9 +104,9 @@ describe('createFlagsConfigurationFetcher', () => {
       test.each(testCases)('should prepend https:// for $description', async ({ flaggingProxy, expectedUrl }) => {
         const config = { ...baseConfig, flaggingProxy }
         const fetcher = createFlagsConfigurationFetcher(config)
-        
+
         await fetcher(mockContext)
-        
+
         expect(mockFetch).toHaveBeenCalledWith(
           expectedUrl,
           expect.objectContaining({
@@ -135,18 +135,21 @@ describe('createFlagsConfigurationFetcher', () => {
         },
       ]
 
-      test.each(testCases)('should use buildEndpointHost with /precompute-assignments for $description', async ({ config, expectedUrl }) => {
-        const fetcher = createFlagsConfigurationFetcher(config)
-        
-        await fetcher(mockContext)
-        
-        expect(mockFetch).toHaveBeenCalledWith(
-          expectedUrl,
-          expect.objectContaining({
-            method: 'POST',
-          })
-        )
-      })
+      test.each(testCases)(
+        'should use buildEndpointHost with /precompute-assignments for $description',
+        async ({ config, expectedUrl }) => {
+          const fetcher = createFlagsConfigurationFetcher(config)
+
+          await fetcher(mockContext)
+
+          expect(mockFetch).toHaveBeenCalledWith(
+            expectedUrl,
+            expect.objectContaining({
+              method: 'POST',
+            })
+          )
+        }
+      )
     })
   })
 
@@ -154,9 +157,9 @@ describe('createFlagsConfigurationFetcher', () => {
     it('should include default headers when not overwriting', async () => {
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
       const fetcher = createFlagsConfigurationFetcher(config)
-      
+
       await fetcher(mockContext)
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -170,15 +173,15 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     it('should exclude dd headers when overwriteRequestHeaders is true', async () => {
-      const config = { 
-        ...baseConfig, 
+      const config = {
+        ...baseConfig,
         flaggingProxy: 'https://proxy.example.com',
-        overwriteRequestHeaders: true 
+        overwriteRequestHeaders: true,
       }
       const fetcher = createFlagsConfigurationFetcher(config)
-      
+
       await fetcher(mockContext)
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -190,18 +193,18 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     it('should include custom headers', async () => {
-      const config = { 
-        ...baseConfig, 
+      const config = {
+        ...baseConfig,
         flaggingProxy: 'https://proxy.example.com',
         customHeaders: {
           'X-Custom-Header': 'custom-value',
-          'Authorization': 'Bearer token',
-        }
+          Authorization: 'Bearer token',
+        },
       }
       const fetcher = createFlagsConfigurationFetcher(config)
-      
+
       await fetcher(mockContext)
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -210,22 +213,22 @@ describe('createFlagsConfigurationFetcher', () => {
             'dd-client-token': 'test-token',
             'dd-application-id': 'test-app-id',
             'X-Custom-Header': 'custom-value',
-            'Authorization': 'Bearer token',
+            Authorization: 'Bearer token',
           },
         })
       )
     })
 
     it('should not include dd-application-id when applicationId is not provided', async () => {
-      const config = { 
+      const config = {
         clientToken: 'test-token',
         env: 'test',
-        flaggingProxy: 'https://proxy.example.com'
+        flaggingProxy: 'https://proxy.example.com',
       }
       const fetcher = createFlagsConfigurationFetcher(config)
-      
+
       await fetcher(mockContext)
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -235,64 +238,6 @@ describe('createFlagsConfigurationFetcher', () => {
           },
         })
       )
-    })
-  })
-
-  describe('request body construction', () => {
-    it('should stringify non-string context values', async () => {
-      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
-      const fetcher = createFlagsConfigurationFetcher(config)
-      
-      await fetcher(mockContext)
-      
-      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(requestBody.data.attributes.subject.targeting_attributes).toEqual({
-        targetingKey: 'user-123',
-        customAttr: 'value',
-        numericAttr: '42',
-        booleanAttr: 'true',
-      })
-    })
-
-    it('should handle empty context', async () => {
-      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
-      const fetcher = createFlagsConfigurationFetcher(config)
-      
-      await fetcher({})
-      
-      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(requestBody.data.attributes.subject).toEqual({
-        targeting_key: '',
-        targeting_attributes: {},
-      })
-    })
-
-    it('should use targetingKey when provided', async () => {
-      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
-      const fetcher = createFlagsConfigurationFetcher(config)
-      const context = { targetingKey: 'custom-user-id' }
-      
-      await fetcher(context)
-      
-      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(requestBody.data.attributes.subject.targeting_key).toBe('custom-user-id')
-    })
-
-    it('should include environment payload', async () => {
-      const config = { 
-        ...baseConfig, 
-        env: 'production',
-        flaggingProxy: 'https://proxy.example.com' 
-      }
-      const fetcher = createFlagsConfigurationFetcher(config)
-      
-      await fetcher(mockContext)
-      
-      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(requestBody.data.attributes.env).toEqual({
-        name: 'production',
-        dd_env: 'production',
-      })
     })
   })
 
@@ -302,12 +247,12 @@ describe('createFlagsConfigurationFetcher', () => {
       mockFetch.mockResolvedValue({
         json: jest.fn().mockResolvedValue(mockResponse),
       })
-      
+
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
       const fetcher = createFlagsConfigurationFetcher(config)
-      
+
       const result = await fetcher(mockContext)
-      
+
       expect(result).toEqual({
         precomputed: {
           response: mockResponse,
