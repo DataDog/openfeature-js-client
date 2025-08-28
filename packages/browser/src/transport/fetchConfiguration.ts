@@ -36,7 +36,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       ? {}
       : {
           'dd-client-token': initConfiguration.clientToken,
-          'dd-application-id': initConfiguration.applicationId,
+          ...(initConfiguration.applicationId && { 'dd-application-id': initConfiguration.applicationId }),
         }),
     ...initConfiguration.customHeaders,
   }

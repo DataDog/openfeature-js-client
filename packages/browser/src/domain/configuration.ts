@@ -10,9 +10,9 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
  */
 export interface FlaggingInitConfiguration extends InitConfiguration {
   /**
-   * The application ID for flagging.
+   * The RUM application ID.
    */
-  applicationId: string
+  applicationId?: string
 
   /**
    * Initial flags configuration (precomputed flags)
