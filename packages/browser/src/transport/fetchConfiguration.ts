@@ -3,20 +3,30 @@ import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 
-function buildEndpointHost(site: string): string {
+function buildEndpointHost(site: string, custDomain = 'preview'): string {
   switch (site) {
     case 'datad0g.com':
-      return `dd.${site}`
+      return `${custDomain}.ff-cdn.datad0g.com`
     case 'datadoghq.com':
+      return `${custDomain}.ff-cdn.datadoghq.com`
+    case 'us3.datadoghq.com':
+      return `${custDomain}.ff-cdn.us3.datadoghq.com`
+    case 'us5.datadoghq.com':
+      return `${custDomain}.ff-cdn.us5.datadoghq.com`
+    case 'ap1.datadoghq.com':
+      return `${custDomain}.ff-cdn.ap1.datadoghq.com`
+    case 'ap2.datadoghq.com':
+      return `${custDomain}.ff-cdn.ap2.datadoghq.com`
     case 'datadoghq.eu':
+      return `${custDomain}.ff-cdn.datadoghq.eu`
     case 'ddog-gov.com':
-      return `app.${site}`
+      throw new Error('ddog-gov.com is not supported for flagging endpoints')
     default:
-      return site
+      return `${custDomain}.ff-cdn.${site}`
   }
 }
 
-const endpointPath = '/api/unstable/precompute-assignments'
+const endpointPath = '/precompute-assignments'
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   const host = initConfiguration.flaggingProxy || buildEndpointHost(initConfiguration.site || 'datadoghq.com')
