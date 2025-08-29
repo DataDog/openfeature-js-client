@@ -61,7 +61,7 @@ jobs:
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           
           # Check if the release tag contains "preview"
-          if [[ "$RELEASE_TAG" == *"preview"* ]]; then
+          if [[ "$RELEASE_TAG" =~ '.*preview.*' ]]; then
             echo "tag=preview" >> "$GITHUB_OUTPUT"
             echo "Using 'preview' npm tag for release $RELEASE_TAG"
           else
