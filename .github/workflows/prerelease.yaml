@@ -55,12 +55,26 @@ jobs:
       - name: Create packages
         run: yarn lerna run pack --stream
 
+      - name: Determine npm tag
+        id: npm-tag
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          
+          # Check if the release tag contains "preview"
+          if [[ "$RELEASE_TAG" == *"preview"* ]]; then
+            echo "tag=preview" >> $GITHUB_OUTPUT
+            echo "Using 'preview' npm tag for release $RELEASE_TAG"
+          else
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+            echo "Using 'alpha' npm tag for release $RELEASE_TAG"
+          fi
+
       - name: Publish core package
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
           npm config set access public
           cd packages/core
-          npm publish --tag alpha
+          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
 
@@ -100,6 +114,6 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/browser
-          npm publish --tag alpha
+          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
