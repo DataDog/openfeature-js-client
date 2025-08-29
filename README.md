@@ -51,11 +51,8 @@ import { OpenFeature } from '@openfeature/web-sdk'
 // Initialize the provider
 const provider = new DatadogProvider({
   clientToken: 'your-datadog-client-token',
-  applicationId: 'your-application-id',
   enableExposureLogging: true,
   site: 'datadoghq.com',
-  service: 'my-service',
-  version: '1.0.0',
 })
 
 // Set the provider
@@ -72,14 +69,13 @@ const flagValue = await client.getBooleanValue('my-flag', false)
 const provider = new DatadogProvider({
   // Required
   clientToken: 'pub_...', // Your Datadog client token
-  // Temporary for alpha releases
-  applicationId: 'app-id', // Your application ID (optional - if provided, will be sent as dd-application-id header)
+  site: 'datadoghq.com', // Datadog site (datadoghq.com, datadoghq.eu, etc.)
+  env: 'production', // Environment
 
   // Optional Datadog configuration
-  site: 'datadoghq.com', // Datadog site (datadoghq.com, datadoghq.eu, etc.)
   service: 'my-service', // Service name
   version: '1.0.0', // Application version
-  env: 'production', // Environment
+  applicationId: 'app-id', // Your application ID for RUM attribution
 
   // Enable exposure logging
   enableExposureLogging: true,
