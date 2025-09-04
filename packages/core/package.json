@@ -8,6 +8,11 @@
     "url": "https://github.com/DataDog/openfeature-js-client.git",
     "directory": "packages/core"
   },
+  "files": [
+    "cjs/",
+    "esm/",
+    "*.d.ts"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
