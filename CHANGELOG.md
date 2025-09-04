@@ -6,6 +6,14 @@
 
 ---
 
+## v0.1.0-alpha.14
+
+**Internal Changes:**
+
+- add files to browser/core package.json to (hopefully) pack esm directory for import in shopist ([#26](https://github.com/DataDog/openfeature-js-client/pull/26)) [BROWSER]
+- Add support for publishing preview releases. ([#25](https://github.com/DataDog/openfeature-js-client/pull/25))
+- bump docs for alpha 13; required & optional init ([#24](https://github.com/DataDog/openfeature-js-client/pull/24))
+
 ## v0.1.0-alpha.13
 
 **Internal Changes:**

@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-browser",
-  "version": "0.1.0-alpha.13",
+  "version": "0.1.0-alpha.14",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "MIT",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@datadog/browser-core": "^6.17.0",
-    "@datadog/flagging-core": "0.1.0-alpha.13"
+    "@datadog/flagging-core": "0.1.0-alpha.14"
   },
   "peerDependencies": {
     "@openfeature/core": "^1.8.0",
