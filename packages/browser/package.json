@@ -13,6 +13,12 @@
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
   "sideEffects": false,
+  "files": [
+    "cjs/",
+    "esm/",
+    "bundle/",
+    "*.d.ts"
+  ],
   "publishConfig": {
     "access": "public"
   },
