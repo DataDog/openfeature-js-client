@@ -6,9 +6,11 @@
 
 ---
 
-## v0.1.0-preview.2
+## v0.1.0-preview.3
 
-Release tag `v0.1.0-alpha.15` as `v0.1.0-preview.2`
+**Internal Changes:**
+
+- Match RELEASE_TAG on preview to tag correctly. ([#31](https://github.com/DataDog/openfeature-js-client/pull/31))
 
 ## v0.1.0-alpha.15
 
