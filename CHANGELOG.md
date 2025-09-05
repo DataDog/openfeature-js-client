@@ -6,6 +6,12 @@
 
 ---
 
+## v0.1.0-alpha.15
+
+**Internal Changes:**
+
+- fix: browser-core dep ([#28](https://github.com/DataDog/openfeature-js-client/pull/28)) [BROWSER]
+
 ## v0.1.0-alpha.14
 
 **Internal Changes:**
