@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "declaration": true,
+    "rootDir": "./src/",
+    "outDir": "./dist/",
+    "types": ["jest", "node", "react-native"]
+  },
+  "include": ["./src/**/*.ts", "./src/**/*.d.ts"],
+  "exclude": ["./src/**/*.spec.ts", "./src/**/*.specHelper.ts"]
+}
