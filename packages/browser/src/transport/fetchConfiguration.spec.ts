@@ -7,7 +7,6 @@ jest.mock('@datadog/browser-core', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
-
 describe('createFlagsConfigurationFetcher', () => {
   let originalFetch: typeof global.fetch
   let mockFetch: jest.Mock
@@ -44,22 +43,27 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'HTTP protocol',
           flaggingProxy: 'http://localhost:8080',
-          expectedUrl: 'http://localhost:8080/',
+          expectedUrl: 'http://localhost:8080/?dd_env=test',
         },
         {
           description: 'HTTPS protocol',
           flaggingProxy: 'https://proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test',
         },
         {
           description: 'HTTPS protocol with path',
           flaggingProxy: 'https://proxy.example.com/api/flags',
-          expectedUrl: 'https://proxy.example.com/api/flags',
+          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test',
         },
         {
           description: 'HTTP protocol with port and path',
           flaggingProxy: 'http://localhost:3000/proxy',
-          expectedUrl: 'http://localhost:3000/proxy',
+          expectedUrl: 'http://localhost:3000/proxy?dd_env=test',
+        },
+        {
+          description: 'HTTP protocol with port, path and params',
+          flaggingProxy: 'http://localhost:3000/proxy?foo=bar',
+          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test',
         },
       ]
 
@@ -69,9 +73,8 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
-        const expectedUrlWithQuery = `${expectedUrl}${expectedUrl.includes('?') ? '&' : '?'}dd_env=test`
         expect(mockFetch).toHaveBeenCalledWith(
-          expectedUrlWithQuery,
+          expectedUrl,
           expect.objectContaining({
             method: 'POST',
           })
@@ -84,22 +87,22 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'domain only',
           flaggingProxy: 'proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test',
         },
         {
           description: 'domain with port',
           flaggingProxy: 'proxy.example.com:8080',
-          expectedUrl: 'https://proxy.example.com:8080/',
+          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test',
         },
         {
           description: 'localhost with port',
           flaggingProxy: 'localhost:3000',
-          expectedUrl: 'https://localhost:3000/',
+          expectedUrl: 'https://localhost:3000/?dd_env=test',
         },
         {
           description: 'domain with path',
           flaggingProxy: 'proxy.example.com/api',
-          expectedUrl: 'https://proxy.example.com/api',
+          expectedUrl: 'https://proxy.example.com/api?dd_env=test',
         },
       ]
 
@@ -109,9 +112,8 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
-        const expectedUrlWithQuery = `${expectedUrl}${expectedUrl.includes('?') ? '&' : '?'}dd_env=test`
         expect(mockFetch).toHaveBeenCalledWith(
-          expectedUrlWithQuery,
+          expectedUrl,
           expect.objectContaining({
             method: 'POST',
           })
@@ -124,17 +126,17 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'default site',
           config: baseConfig,
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test',
         },
         {
           description: 'specific site',
           config: { ...baseConfig, site: 'datadoghq.eu' as const },
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test',
         },
         {
           description: 'US3 site',
           config: { ...baseConfig, site: 'us3.datadoghq.com' as const },
-          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test',
         },
       ]
 
@@ -145,9 +147,8 @@ describe('createFlagsConfigurationFetcher', () => {
 
           await fetcher(mockContext)
 
-          const expectedUrlWithQuery = `${expectedUrl}?dd_env=${config.env}`
           expect(mockFetch).toHaveBeenCalledWith(
-            expectedUrlWithQuery,
+            expectedUrl,
             expect.objectContaining({
               method: 'POST',
             })

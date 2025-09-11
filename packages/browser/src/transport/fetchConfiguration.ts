@@ -22,9 +22,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     url = new URL(`https://${host}/precompute-assignments`)
   }
 
-  if (initConfiguration.env) {
-    url.searchParams.set('dd_env', initConfiguration.env)
-  }
+  url.searchParams.set('dd_env', initConfiguration.env || '')
 
   const defaultHeaders = {
     'Content-Type': 'application/vnd.api+json',
