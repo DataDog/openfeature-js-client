@@ -43,22 +43,27 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'HTTP protocol',
           flaggingProxy: 'http://localhost:8080',
-          expectedUrl: 'http://localhost:8080/',
+          expectedUrl: 'http://localhost:8080/?dd_env=test',
         },
         {
           description: 'HTTPS protocol',
           flaggingProxy: 'https://proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test',
         },
         {
           description: 'HTTPS protocol with path',
           flaggingProxy: 'https://proxy.example.com/api/flags',
-          expectedUrl: 'https://proxy.example.com/api/flags',
+          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test',
         },
         {
           description: 'HTTP protocol with port and path',
           flaggingProxy: 'http://localhost:3000/proxy',
-          expectedUrl: 'http://localhost:3000/proxy',
+          expectedUrl: 'http://localhost:3000/proxy?dd_env=test',
+        },
+        {
+          description: 'HTTP protocol with port, path and params',
+          flaggingProxy: 'http://localhost:3000/proxy?foo=bar',
+          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test',
         },
       ]
 
@@ -82,22 +87,22 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'domain only',
           flaggingProxy: 'proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test',
         },
         {
           description: 'domain with port',
           flaggingProxy: 'proxy.example.com:8080',
-          expectedUrl: 'https://proxy.example.com:8080/',
+          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test',
         },
         {
           description: 'localhost with port',
           flaggingProxy: 'localhost:3000',
-          expectedUrl: 'https://localhost:3000/',
+          expectedUrl: 'https://localhost:3000/?dd_env=test',
         },
         {
           description: 'domain with path',
           flaggingProxy: 'proxy.example.com/api',
-          expectedUrl: 'https://proxy.example.com/api',
+          expectedUrl: 'https://proxy.example.com/api?dd_env=test',
         },
       ]
 
@@ -121,17 +126,17 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'default site',
           config: baseConfig,
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test',
         },
         {
           description: 'specific site',
           config: { ...baseConfig, site: 'datadoghq.eu' as const },
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test',
         },
         {
           description: 'US3 site',
           config: { ...baseConfig, site: 'us3.datadoghq.com' as const },
-          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments',
+          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test',
         },
       ]
 
@@ -236,6 +241,74 @@ describe('createFlagsConfigurationFetcher', () => {
             'Content-Type': 'application/vnd.api+json',
             'dd-client-token': 'test-token',
           },
+        })
+      )
+    })
+  })
+
+  describe('request body', () => {
+    it('should include SDK payload with browser name and version', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"sdk":{"name":"browser","version":"1.0.0-test"}'),
+        })
+      )
+    })
+
+    it('should include env payload with dd_env but not name', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      const expectedBody = JSON.stringify({
+        data: {
+          type: 'precompute-assignments-request',
+          attributes: {
+            env: {
+              dd_env: 'test',
+            },
+            sdk: {
+              name: 'browser',
+              version: '1.0.0-test',
+            },
+            subject: {
+              targeting_key: 'user-123',
+              targeting_attributes: {
+                targetingKey: 'user-123',
+                customAttr: 'value',
+                numericAttr: '42',
+                booleanAttr: 'true',
+              },
+            },
+          },
+        },
+      })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expectedBody,
+        })
+      )
+    })
+
+    it('should not include name field in env payload', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.not.stringContaining('"name":"test"'),
         })
       )
     })

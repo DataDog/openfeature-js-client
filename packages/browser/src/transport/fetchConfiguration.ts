@@ -4,6 +4,11 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
 
+const sdkPayload = {
+  name: 'browser',
+  version: __BUILD_ENV__SDK_VERSION__,
+}
+
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   let url: URL
   if (initConfiguration.flaggingProxy && initConfiguration.flaggingProxy.match('https?://')) {
@@ -17,6 +22,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     url = new URL(`https://${host}/precompute-assignments`)
   }
 
+  url.searchParams.set('dd_env', initConfiguration.env || '')
+
   const defaultHeaders = {
     'Content-Type': 'application/vnd.api+json',
     ...(initConfiguration.overwriteRequestHeaders
@@ -29,8 +36,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   }
 
   const envPayload = {
-    name: initConfiguration.env,
-    dd_env: initConfiguration.env,
+    dd_env: initConfiguration.env || '',
   }
 
   return async (context: EvaluationContext): Promise<FlagsConfiguration> => {
@@ -48,6 +54,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
           type: 'precompute-assignments-request',
           attributes: {
             env: envPayload,
+            sdk: sdkPayload,
             subject: {
               targeting_key: context.targetingKey || '',
               targeting_attributes: stringifiedContext,
