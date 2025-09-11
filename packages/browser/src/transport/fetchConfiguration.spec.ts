@@ -7,6 +7,7 @@ jest.mock('@datadog/browser-core', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
+
 describe('createFlagsConfigurationFetcher', () => {
   let originalFetch: typeof global.fetch
   let mockFetch: jest.Mock
@@ -68,8 +69,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
+        const expectedUrlWithQuery = `${expectedUrl}${expectedUrl.includes('?') ? '&' : '?'}dd_env=test`
         expect(mockFetch).toHaveBeenCalledWith(
-          expectedUrl,
+          expectedUrlWithQuery,
           expect.objectContaining({
             method: 'POST',
           })
@@ -107,8 +109,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
+        const expectedUrlWithQuery = `${expectedUrl}${expectedUrl.includes('?') ? '&' : '?'}dd_env=test`
         expect(mockFetch).toHaveBeenCalledWith(
-          expectedUrl,
+          expectedUrlWithQuery,
           expect.objectContaining({
             method: 'POST',
           })
@@ -142,8 +145,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
           await fetcher(mockContext)
 
+          const expectedUrlWithQuery = `${expectedUrl}?dd_env=${config.env}`
           expect(mockFetch).toHaveBeenCalledWith(
-            expectedUrl,
+            expectedUrlWithQuery,
             expect.objectContaining({
               method: 'POST',
             })
@@ -236,6 +240,74 @@ describe('createFlagsConfigurationFetcher', () => {
             'Content-Type': 'application/vnd.api+json',
             'dd-client-token': 'test-token',
           },
+        })
+      )
+    })
+  })
+
+  describe('request body', () => {
+    it('should include SDK payload with browser name and version', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"sdk":{"name":"browser","version":"1.0.0-test"}'),
+        })
+      )
+    })
+
+    it('should include env payload with dd_env but not name', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      const expectedBody = JSON.stringify({
+        data: {
+          type: 'precompute-assignments-request',
+          attributes: {
+            env: {
+              dd_env: 'test',
+            },
+            sdk: {
+              name: 'browser',
+              version: '1.0.0-test',
+            },
+            subject: {
+              targeting_key: 'user-123',
+              targeting_attributes: {
+                targetingKey: 'user-123',
+                customAttr: 'value',
+                numericAttr: '42',
+                booleanAttr: 'true',
+              },
+            },
+          },
+        },
+      })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expectedBody,
+        })
+      )
+    })
+
+    it('should not include name field in env payload', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const fetcher = createFlagsConfigurationFetcher(config)
+
+      await fetcher(mockContext)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.not.stringContaining('"name":"test"'),
         })
       )
     })

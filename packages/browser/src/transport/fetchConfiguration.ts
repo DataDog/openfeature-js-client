@@ -4,6 +4,11 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
 
+const sdkPayload = {
+  name: 'browser',
+  version: __BUILD_ENV__SDK_VERSION__,
+}
+
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   let url: URL
   if (initConfiguration.flaggingProxy && initConfiguration.flaggingProxy.match('https?://')) {
@@ -15,6 +20,10 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   } else {
     const host = buildEndpointHost(initConfiguration.site || 'datadoghq.com')
     url = new URL(`https://${host}/precompute-assignments`)
+  }
+
+  if (initConfiguration.env) {
+    url.searchParams.set('dd_env', initConfiguration.env)
   }
 
   const defaultHeaders = {
@@ -29,8 +38,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   }
 
   const envPayload = {
-    name: initConfiguration.env,
-    dd_env: initConfiguration.env,
+    dd_env: initConfiguration.env || '',
   }
 
   return async (context: EvaluationContext): Promise<FlagsConfiguration> => {
@@ -48,6 +56,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
           type: 'precompute-assignments-request',
           attributes: {
             env: envPayload,
+            sdk: sdkPayload,
             subject: {
               targeting_key: context.targetingKey || '',
               targeting_attributes: stringifiedContext,
