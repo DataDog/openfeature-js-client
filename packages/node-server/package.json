@@ -1,25 +1,26 @@
 {
-  "name": "@datadog/flagging-core",
-  "version": "0.1.0-preview.4",
-  "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
+  "name": "@datadog/openfeature-node-server",
+  "version": "0.1.0-preview.3",
+  "description": "React Native bindings for OpenFeature (wraps @datadog/flagging-core)",
   "license": "MIT",
+  "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/DataDog/openfeature-js-client.git",
-    "directory": "packages/core"
+    "directory": "packages/node-server"
   },
+  "main": "cjs/index.js",
+  "module": "esm/index.js",
+  "types": "cjs/index.d.ts",
+  "sideEffects": false,
   "files": [
     "cjs/",
     "esm/",
     "*.d.ts"
   ],
   "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+    "access": "public"
   },
-  "main": "cjs/index.js",
-  "module": "esm/index.js",
-  "types": "cjs/index.d.ts",
   "scripts": {
     "prepack": "yarn build",
     "pack": "yarn pack",
@@ -31,23 +32,21 @@
     "test": "jest --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@datadog/flagging-core": "0.1.0-preview.3",
+    "@openfeature/server-sdk": "^1.19.0"
+  },
+  "peerDependencies": {
+    "@openfeature/core": "^1.8.0"
+  },
   "devDependencies": {
-    "@openfeature/core": "^1.8.1",
-    "@openfeature/web-sdk": "^1.5.0",
-    "@types/jest": "^29.4.0",
+    "@openfeature/core": "^1.9.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
-    "@types/semver": "^7.7.1",
     "jest": "^30.0.4",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.5.0"
-  },
-  "peerDependencies": {
-    "@openfeature/core": "^1.8.1",
-    "@openfeature/web-sdk": "^1.5.0"
-  },
-  "dependencies": {
-    "semver": "7.7.2"
   }
 }
