@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-preview.4
+
+**Internal Changes:**
+
+- fix: export FlaggingInitConfiguration ([#36](https://github.com/DataDog/openfeature-js-client/pull/36)) [BROWSER]
+- chore: remove env name param from request and add sdk details ([#34](https://github.com/DataDog/openfeature-js-client/pull/34)) [BROWSER]
+
 ## v0.1.0-preview.3
 
 **Internal Changes:**
