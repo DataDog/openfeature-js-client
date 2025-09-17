@@ -1,4 +1,4 @@
-import { buildEndpointHost } from './endpoint'
+import { buildEndpointHost } from '../../src/transport/endpoint'
 
 describe('buildEndpointHost', () => {
   describe('with default customer subdomain (preview)', () => {

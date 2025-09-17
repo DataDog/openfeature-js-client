@@ -1,7 +1,7 @@
 import { configurationFromString } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
-import configurationWire from '../test/data/precomputed-v1-wire.json'
-import { evaluate } from './evaluation'
+import configurationWire from './data/precomputed-v1-wire.json'
+import { evaluate } from '../src/evaluation'
 
 const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
