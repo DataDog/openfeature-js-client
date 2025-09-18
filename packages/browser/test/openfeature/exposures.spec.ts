@@ -1,8 +1,8 @@
 import { OpenFeature } from '@openfeature/web-sdk'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { DatadogProvider } from './provider'
-import type { FlaggingInitConfiguration } from '../domain/configuration'
-import precomputedServerResponse from '../../test/data/precomputed-v1.json'
+import { DatadogProvider } from '../../src/openfeature/provider'
+import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
   let fetchMock: jest.Mock

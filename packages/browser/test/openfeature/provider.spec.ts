@@ -1,8 +1,8 @@
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
-import { DatadogProvider } from './provider'
-import { FlaggingInitConfiguration } from '../domain/configuration'
+import { DatadogProvider } from '../../src/openfeature/provider'
+import { FlaggingInitConfiguration } from '../../src/domain/configuration'
 
 describe('DatadogProvider', () => {
   let provider: DatadogProvider

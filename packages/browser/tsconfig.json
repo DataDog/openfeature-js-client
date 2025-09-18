@@ -5,7 +5,7 @@
     "declaration": true,
     "rootDir": "./src/",
     "outDir": "./dist/",
-    "types": ["jest", "node"]
+    "types": ["node"]
   },
   "include": ["./src/**/*.ts", "./src/**/*.d.ts"],
   "exclude": ["./src/**/*.spec.ts", "./src/**/*.specHelper.ts"]

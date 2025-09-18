@@ -1,8 +1,9 @@
 {
   "extends": "./tsconfig.cjs.json",
   "compilerOptions": {
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "rootDir": "."
   },
-  "include": ["./src/**/*.spec.ts", "./src/**/*.test.ts", "./src/**/*.d.ts", "./src/test-setup.ts"],
+  "include": ["./src/**/*.ts", "./test/**/*.ts"],
   "exclude": []
 }

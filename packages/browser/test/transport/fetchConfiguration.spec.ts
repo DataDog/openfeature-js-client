@@ -1,5 +1,5 @@
-import { createFlagsConfigurationFetcher } from './fetchConfiguration'
-import type { FlaggingInitConfiguration } from '../domain/configuration'
+import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
+import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 
 // Mock dateNow from @datadog/browser-core
