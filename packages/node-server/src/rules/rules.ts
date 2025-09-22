@@ -40,21 +40,17 @@ type NotOneOfCondition = {
   value: string[]
 }
 
-type StandardNumericCondition = {
+type NumericCondition = {
   operator: NumericOperator
   attribute: string
   value: number
 }
 
-type NumericCondition = StandardNumericCondition
-
-type StandardNullCondition = {
+type NullCondition = {
   operator: OperatorType.IS_NULL
   attribute: string
   value: boolean
 }
-
-type NullCondition = StandardNullCondition
 
 export type Condition =
   | MatchesCondition
