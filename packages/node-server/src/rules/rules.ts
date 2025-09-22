@@ -73,7 +73,7 @@ export function matchesRule(rule: Rule, subjectAttributes: Record<string, Attrib
   return !conditionEvaluations.includes(false)
 }
 
-function evaluateRuleConditions(subjectAttributes: Record<string, any>, conditions: Condition[]): boolean[] {
+function evaluateRuleConditions(subjectAttributes: Record<string, AttributeType>, conditions: Condition[]): boolean[] {
   return conditions.map((condition) => evaluateCondition(subjectAttributes, condition))
 }
 

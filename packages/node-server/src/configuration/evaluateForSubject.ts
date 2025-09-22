@@ -50,7 +50,7 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const variantValues = Object.values(flag.variations).map((variation) => variation.value);
+    const variantValues = Object.values(flag.variations).map((variation) => variation.value)
     const isValid = validateTypeMatch(variantValues, type, flag.variationType)
     if (!isValid) {
       logger.debug(`variant value type mismatch, returning default value`, {
@@ -76,7 +76,6 @@ export function evaluateForSubject<T extends FlagValueType>(
           subjectKey,
           assignment: variation.value,
         })
-
 
         return {
           value: variation.value,

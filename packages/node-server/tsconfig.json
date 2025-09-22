@@ -6,7 +6,7 @@
     "rootDir": "./src/",
     "outDir": "./dist/",
     "types": ["jest", "node"],
-    "noImplicitAny": true
+    "strict": true
   },
   "include": ["./src/**/*.ts", "./src/**/*.d.ts"]
 }

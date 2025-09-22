@@ -59,17 +59,19 @@ describe('Universal Flag Configuration V1', () => {
 
   describe.each(getTestCaseFileNames())('should evaluate for %s', (testCaseFileName) => {
     const testCases = getTestCases(testCaseFileName)
-    const stringifiedContexts = testCases.map((testCase) => JSON.stringify({
-      targetingKey: testCase.targetingKey,
-      ...testCase.attributes,
-    })) 
-    let i = 0;
+    const stringifiedContexts = testCases.map((testCase) =>
+      JSON.stringify({
+        targetingKey: testCase.targetingKey,
+        ...testCase.attributes,
+      })
+    )
+    let i = 0
     it.each(stringifiedContexts)('with context %s', async (contextString) => {
       const testCase = testCases[i]
       const context = JSON.parse(contextString)
       const resultValue = await evaluateFlag(testCase, context)
       expect(resultValue).toEqual(testCase.result.value)
-      i++;
+      i++
     })
   })
 })
