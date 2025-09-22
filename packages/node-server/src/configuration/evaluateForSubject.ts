@@ -24,9 +24,8 @@ export function evaluateForSubject<T extends FlagValueType>(
     }
   }
 
+  const now = new Date()
   for (const allocation of flag.allocations) {
-    const now = new Date()
-
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,
