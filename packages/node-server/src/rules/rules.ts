@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { gt as semverGt, gte as semverGte, lt as semverLt, lte as semverLte, valid as validSemver } from 'semver'
 
-import { ConditionValueType } from './types'
+export type AttributeType = string | number | boolean
+export type ConditionValueType = AttributeType | AttributeType[]
 
 export enum OperatorType {
   MATCHES = 'MATCHES',
@@ -15,18 +16,6 @@ export enum OperatorType {
   IS_NULL = 'IS_NULL',
 }
 
-export enum ObfuscatedOperatorType {
-  MATCHES = '05015086bdd8402218f6aad6528bef08',
-  NOT_MATCHES = '8323761667755378c3a78e0a6ed37a78',
-  GTE = '32d35312e8f24bc1669bd2b45c00d47c',
-  GT = 'cd6a9bd2a175104eed40f0d33a8b4020',
-  LTE = 'cc981ecc65ecf63ad1673cbec9c64198',
-  LT = 'c562607189d77eb9dfb707464c1e7b0b',
-  ONE_OF = '27457ce369f2a74203396a35ef537c0b',
-  NOT_ONE_OF = '602f5ee0b6e84fe29f43ab48b9e1addf',
-  IS_NULL = 'dbd9c38e0339e6c34bd48cafc59be388',
-}
-
 enum OperatorValueType {
   PLAIN_STRING = 'PLAIN_STRING',
   STRING_ARRAY = 'STRING_ARRAY',
@@ -36,32 +25,26 @@ enum OperatorValueType {
 
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT
 
-type ObfuscatedNumericOperator =
-  | ObfuscatedOperatorType.GTE
-  | ObfuscatedOperatorType.GT
-  | ObfuscatedOperatorType.LTE
-  | ObfuscatedOperatorType.LT
-
 type MatchesCondition = {
-  operator: OperatorType.MATCHES | ObfuscatedOperatorType.MATCHES
+  operator: OperatorType.MATCHES
   attribute: string
   value: string
 }
 
 type NotMatchesCondition = {
-  operator: OperatorType.NOT_MATCHES | ObfuscatedOperatorType.NOT_MATCHES
+  operator: OperatorType.NOT_MATCHES
   attribute: string
   value: string
 }
 
 type OneOfCondition = {
-  operator: OperatorType.ONE_OF | ObfuscatedOperatorType.ONE_OF
+  operator: OperatorType.ONE_OF
   attribute: string
   value: string[]
 }
 
 type NotOneOfCondition = {
-  operator: OperatorType.NOT_ONE_OF | ObfuscatedOperatorType.NOT_ONE_OF
+  operator: OperatorType.NOT_ONE_OF
   attribute: string
   value: string[]
 }
@@ -78,13 +61,7 @@ type StandardNumericCondition = {
   value: number
 }
 
-type ObfuscatedNumericCondition = {
-  operator: ObfuscatedNumericOperator
-  attribute: string
-  value: string
-}
-
-type NumericCondition = StandardNumericCondition | ObfuscatedNumericCondition
+type NumericCondition = StandardNumericCondition
 
 type StandardNullCondition = {
   operator: OperatorType.IS_NULL
@@ -92,13 +69,7 @@ type StandardNullCondition = {
   value: boolean
 }
 
-type ObfuscatedNullCondition = {
-  operator: ObfuscatedOperatorType.IS_NULL
-  attribute: string
-  value: string
-}
-
-type NullCondition = StandardNullCondition | ObfuscatedNullCondition
+type NullCondition = StandardNullCondition
 
 export type Condition =
   | MatchesCondition
