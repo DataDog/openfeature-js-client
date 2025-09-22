@@ -13,13 +13,6 @@ export enum OperatorType {
   IS_NULL = 'IS_NULL',
 }
 
-enum OperatorValueType {
-  PLAIN_STRING = 'PLAIN_STRING',
-  STRING_ARRAY = 'STRING_ARRAY',
-  SEM_VER = 'SEM_VER',
-  NUMERIC = 'NUMERIC',
-}
-
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT
 
 type MatchesCondition = {
@@ -81,7 +74,7 @@ export interface Rule {
   conditions: Condition[]
 }
 
-export function matchesRule(rule: Rule, subjectAttributes: Record<string, any>): boolean {
+export function matchesRule(rule: Rule, subjectAttributes: Record<string, AttributeType>): boolean {
   const conditionEvaluations = evaluateRuleConditions(subjectAttributes, rule.conditions)
   // TODO: short-circuit return when false condition is found
   return !conditionEvaluations.includes(false)
@@ -91,7 +84,7 @@ function evaluateRuleConditions(subjectAttributes: Record<string, any>, conditio
   return conditions.map((condition) => evaluateCondition(subjectAttributes, condition))
 }
 
-function evaluateCondition(subjectAttributes: Record<string, any>, condition: Condition): boolean {
+function evaluateCondition(subjectAttributes: Record<string, AttributeType>, condition: Condition): boolean {
   const value = subjectAttributes[condition.attribute]
   if (condition.operator === OperatorType.IS_NULL) {
     if (condition.value) {
@@ -142,8 +135,8 @@ function getMatchingStringValues(attributeValue: string, conditionValues: string
 }
 
 function compareNumber(
-  attributeValue: any,
-  conditionValue: any,
+  attributeValue: AttributeType,
+  conditionValue: ConditionValueType,
   compareFn: (a: number, b: number) => boolean
 ): boolean {
   return compareFn(Number(attributeValue), Number(conditionValue))

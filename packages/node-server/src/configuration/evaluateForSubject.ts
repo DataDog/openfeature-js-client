@@ -1,4 +1,4 @@
-import { matchesRule, Rule } from '../rules/rules'
+import { AttributeType, matchesRule, Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { Flag, Split } from './ufc-v1'
 import { ErrorCode, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
@@ -147,7 +147,7 @@ export function containsMatchingRule(
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes))
+  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes as Record<string, AttributeType>))
   return !!matchedRule
     ? {
         matched: true,
