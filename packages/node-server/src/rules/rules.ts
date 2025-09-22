@@ -103,9 +103,9 @@ function evaluateCondition(subjectAttributes: Record<string, AttributeType>, con
         return compareNumber(value, condition.value, comparator)
       }
       case OperatorType.MATCHES:
-        return new RegExp(condition.value as string).test(value as string)
+        return new RegExp(condition.value).test(String(value))
       case OperatorType.NOT_MATCHES:
-        return !new RegExp(condition.value as string).test(value as string)
+        return !new RegExp(condition.value).test(String(value))
       case OperatorType.ONE_OF:
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
@@ -115,12 +115,12 @@ function evaluateCondition(subjectAttributes: Record<string, AttributeType>, con
   return false
 }
 
-function isOneOf(attributeValue: string, conditionValue: string[]) {
+function isOneOf(attributeValue: string, conditionValues: string[]) {
   return conditionValues.includes(attributeValue)
 }
 
-function isNotOneOf(attributeValue: string, conditionValue: string[]) {
-  return !isOneOf(attributeValue, conditionValue)
+function isNotOneOf(attributeValue: string, conditionValues: string[]) {
+  return !isOneOf(attributeValue, conditionValues)
 }
 
 function compareNumber(
