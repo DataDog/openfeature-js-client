@@ -110,6 +110,65 @@
                     {
                       "attribute": "email",
                       "operator": "MATCHES",
+                      "value": "@test\\.com"
+                    }
+                  ]
+                }
+              ],
+              "splits": [
+                {
+                  "variationKey": "test",
+                  "shards": []
+                }
+              ],
+              "doLog": true
+            }
+          ]
+        },
+        "regex-flag-vulnerable": {
+          "key": "regex-flag-vulnerable",
+          "enabled": true,
+          "variationType": "STRING",
+          "variations": {
+            "partial-example": {
+              "key": "partial-example",
+              "value": "partial-example"
+            },
+            "test": {
+              "key": "test",
+              "value": "test"
+            }
+          },
+          "allocations": [
+            {
+              "key": "partial-example",
+              "rules": [
+                {
+                  "conditions": [
+                    {
+                      "attribute": "email",
+                      "operator": "MATCHES",
+                      "value": ".*@example\\.com"
+                    }
+                  ]
+                }
+              ],
+              "splits": [
+                {
+                  "variationKey": "partial-example",
+                  "shards": []
+                }
+              ],
+              "doLog": true
+            },
+            {
+              "key": "test",
+              "rules": [
+                {
+                  "conditions": [
+                    {
+                      "attribute": "email",
+                      "operator": "MATCHES",
                       "value": ".*@test\\.com"
                     }
                   ]

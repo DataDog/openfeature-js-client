@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "@datadog/flagging-core": "0.1.0-preview.3",
-    "@openfeature/server-sdk": "^1.19.0"
+    "@openfeature/server-sdk": "^1.19.0",
+    "recheck": "^4.5.0"
   },
   "peerDependencies": {
     "@openfeature/core": "^1.8.0"
