@@ -23,6 +23,23 @@ export function evaluateForSubject<T extends FlagValueType>(
     }
   }
 
+  const variantValues = Object.values(flag.variations).map((variation) => variation.value)
+  const isValid = validateTypeMatch(variantValues, type, flag.variationType)
+  if (!isValid) {
+    logger.debug(`variant value type mismatch, returning default value`, {
+      flagKey: flag.key,
+      subjectKey,
+      expectedType: type,
+      variantType: flag.variationType,
+      variantValues: JSON.stringify(variantValues),
+    })
+    return {
+      value: defaultValue,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.TYPE_MISMATCH,
+    }
+  }
+
   const now = new Date()
   for (const allocation of flag.allocations) {
     if (allocation.startAt && now < new Date(allocation.startAt)) {
@@ -48,23 +65,6 @@ export function evaluateForSubject<T extends FlagValueType>(
     const { matched } = containsMatchingRule(allocation.rules, subjectAttributes, logger)
     if (!matched) {
       continue
-    }
-
-    const variantValues = Object.values(flag.variations).map((variation) => variation.value)
-    const isValid = validateTypeMatch(variantValues, type, flag.variationType)
-    if (!isValid) {
-      logger.debug(`variant value type mismatch, returning default value`, {
-        flagKey: flag.key,
-        subjectKey,
-        expectedType: type,
-        variantType: flag.variationType,
-        variantValues: JSON.stringify(variantValues),
-      })
-      return {
-        value: defaultValue,
-        reason: StandardResolutionReasons.ERROR,
-        errorCode: ErrorCode.TYPE_MISMATCH,
-      }
     }
 
     const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
