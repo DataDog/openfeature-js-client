@@ -54,7 +54,6 @@ describe('Universal Flag Configuration V1', () => {
     if (testCase.variationType === 'JSON') {
       return await client.getObjectValue(testCase.flag, testCase.defaultValue as Record<string, any>)
     }
-    console.log(JSON.stringify(testCase, null, 2))
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
   }
 
