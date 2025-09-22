@@ -2,7 +2,6 @@ import { matchesRule, Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { Flag, Split } from './ufc-v1'
 import { ErrorCode, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
-import { VariantValue } from './VariantValue'
 import { FlagTypeToValue } from '@datadog/flagging-core'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -51,6 +50,23 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
+    const variantValues = Object.values(flag.variations).map((variation) => variation.value);
+    const isValid = validateTypeMatch(variantValues, type, flag.variationType)
+    if (!isValid) {
+      logger.debug(`variant value type mismatch, returning default value`, {
+        flagKey: flag.key,
+        subjectKey,
+        expectedType: type,
+        variantType: flag.variationType,
+        variantValues: JSON.stringify(variantValues),
+      })
+      return {
+        value: defaultValue,
+        reason: StandardResolutionReasons.ERROR,
+        errorCode: ErrorCode.TYPE_MISMATCH,
+      }
+    }
+
     const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
     if (selectedSplit) {
       const variation = flag.variations[selectedSplit.variationKey]
@@ -61,22 +77,6 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variation.value,
         })
 
-        const isValid = validateTypeMatch(variation.value, type, flag.variationType)
-        if (!isValid) {
-          logger.debug(`variation value type mismatch, returning null`, {
-            flagKey: flag.key,
-            subjectKey,
-            variationKey: selectedSplit.variationKey,
-            variationValue: variation.value,
-            expectedType: type,
-            variantType: flag.variationType,
-          })
-          return {
-            value: defaultValue,
-            reason: StandardResolutionReasons.ERROR,
-            errorCode: ErrorCode.TYPE_MISMATCH,
-          }
-        }
 
         return {
           value: variation.value,
@@ -104,22 +104,30 @@ export function evaluateForSubject<T extends FlagValueType>(
 }
 
 function validateTypeMatch(
-  value: any,
+  variantValues: boolean[] | string[] | number[] | object[],
   expectedType: FlagValueType,
   variantType: string
 ): boolean {
-  const variantValue = new VariantValue(value, variantType)
   if (expectedType === 'boolean') {
-    return variantValue.validateBoolean()
-  }
-  if (expectedType === 'number') {
-    return variantValue.validateNumber()
-  }
-  if (expectedType === 'object') {
-    return variantValue.validateObject()
+    return variantType === 'BOOLEAN'
   }
   if (expectedType === 'string') {
-    return variantValue.validateString()
+    return variantType === 'STRING'
+  }
+  if (expectedType === 'number') {
+    if (variantType === 'INTEGER') {
+      return variantValues.every((value) => Number.isInteger(Number(value)))
+    }
+    if (variantType === 'NUMERIC') {
+      return variantValues.every((value) => !isNaN(Number(value)))
+    }
+    return false
+  }
+  if (expectedType === 'object') {
+    if (variantType === 'JSON') {
+      return variantValues.every((value) => typeof value === 'object')
+    }
+    return false
   }
   throw new Error(`Invalid expected type: ${expectedType}`)
 }
