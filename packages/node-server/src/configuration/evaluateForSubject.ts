@@ -135,19 +135,12 @@ export function containsMatchingRule(
       matchedRule: null,
     }
   }
-  let matchedRule: Rule | null = null
   logger.debug(`evaluating rules`, {
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  const hasMatch = rules.some((rule) => {
-    const matched = matchesRule(rule, subjectAttributes)
-    if (matched) {
-      matchedRule = rule
-    }
-    return matched
-  })
-  return hasMatch
+  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes))
+  return !!matchedRule
     ? {
         matched: true,
         matchedRule,
