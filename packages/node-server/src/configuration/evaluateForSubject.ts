@@ -37,7 +37,7 @@ export function evaluateForSubject<T extends FlagValueType>(
       errorCode: ErrorCode.TYPE_MISMATCH,
     }
   }
-  
+
   const now = new Date()
   for (const allocation of flag.allocations) {
     if (allocation.startAt && now < new Date(allocation.startAt)) {
@@ -158,16 +158,6 @@ function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: 
       variationKey: split.variationKey,
       shards: split.shards,
     })
-
-    // If split has no shards, it matches all subjects
-    if (!split.shards || split.shards.length === 0) {
-      logger.debug(`split has no shards, matches all subjects`, {
-        flagKey,
-        subjectKey,
-        variationKey: split.variationKey,
-      })
-      return split
-    }
 
     const matches = split.shards.every((shard) => {
       const shardMatches = matchesShard(shard, subjectKey)
