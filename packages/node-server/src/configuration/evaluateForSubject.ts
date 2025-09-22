@@ -1,7 +1,7 @@
 import { AttributeType, matchesRule, Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { Flag, Split } from './ufc-v1'
-import { ErrorCode, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
+import { ErrorCode, FlagValue, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
 import { FlagTypeToValue } from '@datadog/flagging-core'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -78,7 +78,7 @@ export function evaluateForSubject<T extends FlagValueType>(
         })
 
         return {
-          value: variation.value,
+          value: variation.value as FlagTypeToValue<T>,
           reason: StandardResolutionReasons.TARGETING_MATCH,
         }
       }
@@ -103,7 +103,7 @@ export function evaluateForSubject<T extends FlagValueType>(
 }
 
 function validateTypeMatch(
-  variantValues: boolean[] | string[] | number[] | object[],
+  variantValues: FlagValue[],
   expectedType: FlagValueType,
   variantType: string
 ): boolean {
