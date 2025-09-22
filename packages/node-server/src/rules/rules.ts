@@ -86,7 +86,7 @@ function evaluateCondition(subjectAttributes: Record<string, AttributeType>, con
     return value !== null && value !== undefined
   }
 
-  if (value != null) {
+  if (value !== null && value !== undefined) {
     switch (condition.operator) {
       case OperatorType.GTE:
       case OperatorType.GT:
