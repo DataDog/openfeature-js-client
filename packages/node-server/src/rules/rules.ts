@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { gt as semverGt, gte as semverGte, lt as semverLt, lte as semverLte, valid as validSemver } from 'semver'
-
 export type AttributeType = string | number | boolean
 export type ConditionValueType = AttributeType | AttributeType[]
 
@@ -109,19 +106,6 @@ function evaluateCondition(subjectAttributes: Record<string, any>, condition: Co
       case OperatorType.GT:
       case OperatorType.LTE:
       case OperatorType.LT: {
-        const conditionValueType = targetingRuleConditionValuesTypesFromValues(condition.value)
-        if (conditionValueType === OperatorValueType.SEM_VER) {
-          const comparator =
-            condition.operator === OperatorType.GTE
-              ? semverGte
-              : condition.operator === OperatorType.GT
-                ? semverGt
-                : condition.operator === OperatorType.LTE
-                  ? semverLte
-                  : semverLt
-          return compareSemVer(value, condition.value, comparator)
-        }
-
         const comparator = (a: number, b: number) =>
           condition.operator === OperatorType.GTE
             ? a >= b
@@ -163,36 +147,4 @@ function compareNumber(
   compareFn: (a: number, b: number) => boolean
 ): boolean {
   return compareFn(Number(attributeValue), Number(conditionValue))
-}
-
-function compareSemVer(
-  attributeValue: any,
-  conditionValue: any,
-  compareFn: (a: string, b: string) => boolean
-): boolean {
-  return !!validSemver(attributeValue) && !!validSemver(conditionValue) && compareFn(attributeValue, conditionValue)
-}
-
-function targetingRuleConditionValuesTypesFromValues(value: ConditionValueType): OperatorValueType {
-  // Check if input is a number
-  if (typeof value === 'number') {
-    return OperatorValueType.NUMERIC
-  }
-
-  if (Array.isArray(value)) {
-    return OperatorValueType.STRING_ARRAY
-  }
-
-  // Check if input is a string that represents a SemVer
-  if (typeof value === 'string' && validSemver(value)) {
-    return OperatorValueType.SEM_VER
-  }
-
-  // Check if input is a string that represents a number
-  if (!isNaN(Number(value))) {
-    return OperatorValueType.NUMERIC
-  }
-
-  // If none of the above, it's a general string
-  return OperatorValueType.PLAIN_STRING
 }
