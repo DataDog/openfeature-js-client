@@ -60,7 +60,7 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const { matched } = containsMatchingRule(allocation.rules, subjectAttributes, logger)
+    const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger)
     if (!matched) {
       continue
     }
@@ -123,27 +123,15 @@ export function containsMatchingRule(
   rules: Rule[] | undefined,
   subjectAttributes: EvaluationContext,
   logger: Logger
-): { matched: boolean; matchedRule: Rule | null } {
+): boolean {
   if (!rules?.length) {
-    return {
-      matched: true,
-      matchedRule: null,
-    }
+    return true
   }
   logger.debug(`evaluating rules`, {
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes))
-  return !!matchedRule
-    ? {
-        matched: true,
-        matchedRule,
-      }
-    : {
-        matched: false,
-        matchedRule: null,
-      }
+  return rules.some((rule) => matchesRule(rule, subjectAttributes))
 }
 
 function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: string, logger: Logger): Split | null {
