@@ -1,10 +1,12 @@
+import { FlagValue } from '@openfeature/core'
 import { Rule } from '../rules/rules'
 
 export type VariantType = 'BOOLEAN' | 'INTEGER' | 'NUMERIC' | 'STRING' | 'JSON'
 
+export type VariantValue = boolean | number | string | object
 export interface VariantConfiguration {
   key: string
-  value: any
+  value: FlagValue
 }
 
 export interface ShardRange {

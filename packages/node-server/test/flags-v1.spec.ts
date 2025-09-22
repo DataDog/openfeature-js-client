@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { TestCase } from './TestCaseResult.types'
 import { DatadogNodeServerProvider } from '../src/provider'
-import type { Logger, EvaluationContext } from '@openfeature/core'
+import type { Logger, EvaluationContext, FlagValue } from '@openfeature/core'
 import { OpenFeature } from '@openfeature/server-sdk'
 
 describe('Universal Flag Configuration V1', () => {
@@ -52,7 +52,7 @@ describe('Universal Flag Configuration V1', () => {
       return await client.getNumberValue(testCase.flag, testCase.defaultValue as number)
     }
     if (testCase.variationType === 'JSON') {
-      return await client.getObjectValue(testCase.flag, testCase.defaultValue as Record<string, any>)
+      return await client.getObjectValue(testCase.flag, testCase.defaultValue as Record<string, FlagValue>)
     }
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
   }
