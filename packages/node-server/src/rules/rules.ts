@@ -39,12 +39,6 @@ type NotOneOfCondition = {
   value: string[]
 }
 
-type SemVerCondition = {
-  operator: NumericOperator
-  attribute: string
-  value: string
-}
-
 type StandardNumericCondition = {
   operator: NumericOperator
   attribute: string
@@ -66,7 +60,6 @@ export type Condition =
   | NotMatchesCondition
   | OneOfCondition
   | NotOneOfCondition
-  | SemVerCondition
   | NumericCondition
   | NullCondition
 
