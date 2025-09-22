@@ -1,5 +1,4 @@
 import { EvaluationContext, EvaluationContextValue } from "@openfeature/server-sdk"
-import { checkSync } from "recheck"
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
@@ -75,13 +74,6 @@ function evaluateRuleConditions(subjectAttributes: EvaluationContext, conditions
   return conditions.map((condition) => evaluateCondition(subjectAttributes, condition))
 }
 
-const matchesSafeRegex = (regex: string, value: string): boolean => {
-  if (checkSync(regex, '').status !== 'safe') {
-    throw new Error(`regex is not safe: ${regex}`)
-  }
-  return new RegExp(regex).test(value)
-}
-
 function evaluateCondition(subjectAttributes: EvaluationContext, condition: Condition): boolean {
   const value = subjectAttributes[condition.attribute]
   if (condition.operator === OperatorType.IS_NULL) {
@@ -108,9 +100,11 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         return compareNumber(value, condition.value, comparator)
       }
       case OperatorType.MATCHES:
-        return matchesSafeRegex(condition.value, String(value))
+        // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
+        return new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.NOT_MATCHES:
-        return !matchesSafeRegex(condition.value, String(value))
+        // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
+        return !new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.ONE_OF:
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:

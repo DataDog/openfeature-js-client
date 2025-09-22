@@ -14,7 +14,7 @@ describe('Universal Flag Configuration V1', () => {
       error: console.error,
       warn: console.warn,
       info: console.info,
-      debug: jest.fn(),
+      debug: console.debug,
     }
   })
 
