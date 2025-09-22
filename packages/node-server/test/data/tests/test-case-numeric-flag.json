@@ -1,81 +1,40 @@
-{
-  "flag": "numeric_flag",
-  "variationType": "NUMERIC",
-  "defaultValue": 0.0,
-  "subjects": [
-    {
-      "subjectKey": "alice",
-      "subjectAttributes": {
-        "email": "alice@mycompany.com",
-        "country": "US"
-      },
-      "assignment": 3.1415926,
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "MATCH",
-        "flagEvaluationDescription": "alice belongs to the range of traffic assigned to \"pi\" defined in allocation \"rollout\".",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": "pi",
-        "variationValue": 3.1415926,
-        "matchedRule": null,
-        "matchedAllocation": {
-          "key": "rollout",
-          "allocationEvaluationCode": "MATCH",
-          "orderPosition": 1
-        },
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+[
+  {
+    "flag": "numeric_flag",
+    "variationType": "NUMERIC",
+    "defaultValue": 0.0,
+    "targetingKey": "alice",
+    "attributes": {
+      "email": "alice@mycompany.com",
+      "country": "US"
     },
-    {
-      "subjectKey": "bob",
-      "subjectAttributes": {
-        "email": "bob@example.com",
-        "country": "Canada"
-      },
-      "assignment": 3.1415926,
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "MATCH",
-        "flagEvaluationDescription": "bob belongs to the range of traffic assigned to \"pi\" defined in allocation \"rollout\".",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": "pi",
-        "variationValue": 3.1415926,
-        "matchedRule": null,
-        "matchedAllocation": {
-          "key": "rollout",
-          "allocationEvaluationCode": "MATCH",
-          "orderPosition": 1
-        },
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
-    },
-    {
-      "subjectKey": "charlie",
-      "subjectAttributes": {
-        "age": 50
-      },
-      "assignment": 3.1415926,
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "MATCH",
-        "flagEvaluationDescription": "charlie belongs to the range of traffic assigned to \"pi\" defined in allocation \"rollout\".",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": "pi",
-        "variationValue": 3.1415926,
-        "matchedRule": null,
-        "matchedAllocation": {
-          "key": "rollout",
-          "allocationEvaluationCode": "MATCH",
-          "orderPosition": 1
-        },
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+    "result": {
+      "value": 3.1415926
     }
-  ]
-}
+  },
+  {
+    "flag": "numeric_flag",
+    "variationType": "NUMERIC",
+    "defaultValue": 0.0,
+    "targetingKey": "bob",
+    "attributes": {
+      "email": "bob@example.com",
+      "country": "Canada"
+    },
+    "result": {
+      "value": 3.1415926
+    }
+  },
+  {
+    "flag": "numeric_flag",
+    "variationType": "NUMERIC",
+    "defaultValue": 0.0,
+    "targetingKey": "charlie",
+    "attributes": {
+      "age": 50
+    },
+    "result": {
+      "value": 3.1415926
+    }
+  }
+]

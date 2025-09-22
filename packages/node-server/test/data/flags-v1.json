@@ -30,11 +30,11 @@
           "variations": {
             "control": {
               "key": "control",
-              "value": "{\"variant\": \"control\"}"
+              "value": {"variant": "control"}
             },
             "treatment": {
               "key": "treatment",
-              "value": "{\"variant\": \"treatment\"}"
+              "value": {"variant": "treatment"}
             }
           },
           "allocations": []
@@ -56,55 +56,6 @@
           "allocations": [
             {
               "key": "rollout",
-              "splits": [
-                {
-                  "variationKey": "pi",
-                  "shards": []
-                }
-              ],
-              "doLog": true
-            }
-          ]
-        },
-        "invalid-value-flag": {
-          "key": "invalid-value-flag",
-          "enabled": true,
-          "variationType": "INTEGER",
-          "variations": {
-            "one": {
-              "key": "one",
-              "value": 1
-            },
-            "pi": {
-              "key": "pi",
-              "value": 3.1415926
-            }
-          },
-          "allocations": [
-            {
-              "key": "valid",
-              "rules": [
-                {
-                  "conditions": [
-                    {
-                      "attribute": "country",
-                      "operator": "ONE_OF",
-                      "value": ["Canada"]
-                    }
-                  ]
-                }
-              ],
-              "splits": [
-                {
-                  "variationKey": "one",
-                  "shards": []
-                }
-              ],
-              "doLog": true
-            },
-            {
-              "key": "invalid",
-              "rules": [],
               "splits": [
                 {
                   "variationKey": "pi",
@@ -201,7 +152,9 @@
                     {
                       "attribute": "number",
                       "operator": "ONE_OF",
-                      "value": ["1"]
+                      "value": [
+                        "1"
+                      ]
                     }
                   ]
                 }
@@ -222,7 +175,9 @@
                     {
                       "attribute": "number",
                       "operator": "ONE_OF",
-                      "value": ["123456789"]
+                      "value": [
+                        "123456789"
+                      ]
                     }
                   ]
                 }
@@ -243,7 +198,9 @@
                     {
                       "attribute": "number",
                       "operator": "NOT_ONE_OF",
-                      "value": ["2"]
+                      "value": [
+                        "2"
+                      ]
                     }
                   ]
                 }
@@ -293,7 +250,9 @@
                     {
                       "attribute": "one_of_flag",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -335,7 +294,9 @@
                     {
                       "attribute": "not_one_of_flag",
                       "operator": "NOT_ONE_OF",
-                      "value": ["false"]
+                      "value": [
+                        "false"
+                      ]
                     }
                   ]
                 }
@@ -377,7 +338,9 @@
                     {
                       "attribute": "null_flag",
                       "operator": "ONE_OF",
-                      "value": ["null"]
+                      "value": [
+                        "null"
+                      ]
                     }
                   ]
                 }
@@ -487,7 +450,11 @@
                     {
                       "attribute": "country",
                       "operator": "ONE_OF",
-                      "value": ["US", "Canada", "Mexico"]
+                      "value": [
+                        "US",
+                        "Canada",
+                        "Mexico"
+                      ]
                     }
                   ]
                 }
@@ -549,95 +516,6 @@
               "splits": [
                 {
                   "variationKey": "off",
-                  "shards": []
-                }
-              ],
-              "doLog": true
-            }
-          ]
-        },
-        "semver-test": {
-          "key": "semver-test",
-          "enabled": true,
-          "variationType": "STRING",
-          "variations": {
-            "old": {
-              "key": "old",
-              "value": "old"
-            },
-            "current": {
-              "key": "current",
-              "value": "current"
-            },
-            "new": {
-              "key": "new",
-              "value": "new"
-            }
-          },
-          "allocations": [
-            {
-              "key": "old-versions",
-              "rules": [
-                {
-                  "conditions": [
-                    {
-                      "attribute": "version",
-                      "operator": "LT",
-                      "value": "1.5.0"
-                    }
-                  ]
-                }
-              ],
-              "splits": [
-                {
-                  "variationKey": "old",
-                  "shards": []
-                }
-              ],
-              "doLog": true
-            },
-            {
-              "key": "current-versions",
-              "rules": [
-                {
-                  "conditions": [
-                    {
-                      "attribute": "version",
-                      "operator": "GTE",
-                      "value": "1.5.0"
-                    },
-                    {
-                      "attribute": "version",
-                      "operator": "LTE",
-                      "value": "2.2.13"
-                    }
-                  ]
-                }
-              ],
-              "splits": [
-                {
-                  "variationKey": "current",
-                  "shards": []
-                }
-              ],
-              "doLog": true
-            },
-            {
-              "key": "new-versions",
-              "rules": [
-                {
-                  "conditions": [
-                    {
-                      "attribute": "version",
-                      "operator": "GT",
-                      "value": "3.1.0"
-                    }
-                  ]
-                }
-              ],
-              "splits": [
-                {
-                  "variationKey": "new",
                   "shards": []
                 }
               ],
@@ -768,7 +646,7 @@
               "key": "future-versions",
               "splits": [
                 {
-                  "variationKey": "future",
+                  "variationKey": "new",
                   "shards": []
                 }
               ],
@@ -938,7 +816,11 @@
                     {
                       "attribute": "country",
                       "operator": "NOT_ONE_OF",
-                      "value": ["US", "Canada", "Mexico"]
+                      "value": [
+                        "US",
+                        "Canada",
+                        "Mexico"
+                      ]
                     }
                   ]
                 }
@@ -1030,7 +912,11 @@
                     {
                       "attribute": "country",
                       "operator": "ONE_OF",
-                      "value": ["US", "Canada", "Mexico"]
+                      "value": [
+                        "US",
+                        "Canada",
+                        "Mexico"
+                      ]
                     }
                   ]
                 }
@@ -1087,7 +973,11 @@
                     {
                       "attribute": "country",
                       "operator": "ONE_OF",
-                      "value": ["US", "Canada", "Mexico"]
+                      "value": [
+                        "US",
+                        "Canada",
+                        "Mexico"
+                      ]
                     }
                   ]
                 },
@@ -1166,15 +1056,15 @@
           "variations": {
             "one": {
               "key": "one",
-              "value": "{ \"integer\": 1, \"string\": \"one\", \"float\": 1.0 }"
+              "value": { "integer": 1, "string": "one", "float": 1.0 }
             },
             "two": {
               "key": "two",
-              "value": "{ \"integer\": 2, \"string\": \"two\", \"float\": 2.0 }"
+              "value": { "integer": 2, "string": "two", "float": 2.0 }
             },
             "empty": {
               "key": "empty",
-              "value": "{}"
+              "value": {}
             }
           },
           "allocations": [
@@ -1186,7 +1076,9 @@
                     {
                       "attribute": "Force Empty",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1276,19 +1168,19 @@
           "variations": {
             "de": {
               "key": "de",
-              "value": "{\"a\": \"kümmert\", \"b\": \"schön\"}"
+              "value": {"a": "kümmert", "b": "schön"}
             },
             "ua": {
               "key": "ua",
-              "value": "{\"a\": \"піклуватися\", \"b\": \"любов\"}"
+              "value": {"a": "піклуватися", "b": "любов"}
             },
             "zh": {
               "key": "zh",
-              "value": "{\"a\": \"照顾\", \"b\": \"漂亮\"}"
+              "value": {"a": "照顾", "b": "漂亮"}
             },
             "emoji": {
               "key": "emoji",
-              "value": "{\"a\": \"🤗\", \"b\": \"🌸\"}"
+              "value": {"a": "🤗", "b": "🌸"}
             }
           },
           "allocations": [
@@ -1650,7 +1542,9 @@
                     {
                       "attribute": "string_with_spaces",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1671,7 +1565,9 @@
                     {
                       "attribute": "string_with_only_one_space",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1692,7 +1588,9 @@
                     {
                       "attribute": "string_with_only_multiple_spaces",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1713,7 +1611,9 @@
                     {
                       "attribute": "string_with_dots",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1734,7 +1634,9 @@
                     {
                       "attribute": "string_with_only_one_dot",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1755,7 +1657,9 @@
                     {
                       "attribute": "string_with_only_multiple_dots",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1776,7 +1680,9 @@
                     {
                       "attribute": "string_with_comas",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1797,7 +1703,9 @@
                     {
                       "attribute": "string_with_only_one_coma",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1818,7 +1726,9 @@
                     {
                       "attribute": "string_with_only_multiple_comas",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1839,7 +1749,9 @@
                     {
                       "attribute": "string_with_colons",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1860,7 +1772,9 @@
                     {
                       "attribute": "string_with_only_one_colon",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1881,7 +1795,9 @@
                     {
                       "attribute": "string_with_only_multiple_colons",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1902,7 +1818,9 @@
                     {
                       "attribute": "string_with_semicolons",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1923,7 +1841,9 @@
                     {
                       "attribute": "string_with_only_one_semicolon",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1944,7 +1864,9 @@
                     {
                       "attribute": "string_with_only_multiple_semicolons",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1965,7 +1887,9 @@
                     {
                       "attribute": "string_with_slashes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -1986,7 +1910,9 @@
                     {
                       "attribute": "string_with_only_one_slash",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2007,7 +1933,9 @@
                     {
                       "attribute": "string_with_only_multiple_slashes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2028,7 +1956,9 @@
                     {
                       "attribute": "string_with_dashes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2049,7 +1979,9 @@
                     {
                       "attribute": "string_with_only_one_dash",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2070,7 +2002,9 @@
                     {
                       "attribute": "string_with_only_multiple_dashes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2091,7 +2025,9 @@
                     {
                       "attribute": "string_with_underscores",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2112,7 +2048,9 @@
                     {
                       "attribute": "string_with_only_one_underscore",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2133,7 +2071,9 @@
                     {
                       "attribute": "string_with_only_multiple_underscores",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2154,7 +2094,9 @@
                     {
                       "attribute": "string_with_plus_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2175,7 +2117,9 @@
                     {
                       "attribute": "string_with_only_one_plus_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2196,7 +2140,9 @@
                     {
                       "attribute": "string_with_only_multiple_plus_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2217,7 +2163,9 @@
                     {
                       "attribute": "string_with_equal_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2238,7 +2186,9 @@
                     {
                       "attribute": "string_with_only_one_equal_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2259,7 +2209,9 @@
                     {
                       "attribute": "string_with_only_multiple_equal_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2280,7 +2232,9 @@
                     {
                       "attribute": "string_with_dollar_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2301,7 +2255,9 @@
                     {
                       "attribute": "string_with_only_one_dollar_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2322,7 +2278,9 @@
                     {
                       "attribute": "string_with_only_multiple_dollar_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2343,7 +2301,9 @@
                     {
                       "attribute": "string_with_at_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2364,7 +2324,9 @@
                     {
                       "attribute": "string_with_only_one_at_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2385,7 +2347,9 @@
                     {
                       "attribute": "string_with_only_multiple_at_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2406,7 +2370,9 @@
                     {
                       "attribute": "string_with_amp_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2427,7 +2393,9 @@
                     {
                       "attribute": "string_with_only_one_amp_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2448,7 +2416,9 @@
                     {
                       "attribute": "string_with_only_multiple_amp_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2469,7 +2439,9 @@
                     {
                       "attribute": "string_with_hash_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2490,7 +2462,9 @@
                     {
                       "attribute": "string_with_only_one_hash_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2511,7 +2485,9 @@
                     {
                       "attribute": "string_with_only_multiple_hash_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2532,7 +2508,9 @@
                     {
                       "attribute": "string_with_percentage_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2553,7 +2531,9 @@
                     {
                       "attribute": "string_with_only_one_percentage_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2574,7 +2554,9 @@
                     {
                       "attribute": "string_with_only_multiple_percentage_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2595,7 +2577,9 @@
                     {
                       "attribute": "string_with_tilde_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2616,7 +2600,9 @@
                     {
                       "attribute": "string_with_only_one_tilde_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2637,7 +2623,9 @@
                     {
                       "attribute": "string_with_only_multiple_tilde_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2658,7 +2646,9 @@
                     {
                       "attribute": "string_with_asterix_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2679,7 +2669,9 @@
                     {
                       "attribute": "string_with_only_one_asterix_sign",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2700,7 +2692,9 @@
                     {
                       "attribute": "string_with_only_multiple_asterix_signs",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2721,7 +2715,9 @@
                     {
                       "attribute": "string_with_single_quotes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2742,7 +2738,9 @@
                     {
                       "attribute": "string_with_only_one_single_quote",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2763,7 +2761,9 @@
                     {
                       "attribute": "string_with_only_multiple_single_quotes",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2784,7 +2784,9 @@
                     {
                       "attribute": "string_with_question_marks",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2805,7 +2807,9 @@
                     {
                       "attribute": "string_with_only_one_question_mark",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2826,7 +2830,9 @@
                     {
                       "attribute": "string_with_only_multiple_question_marks",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2847,7 +2853,9 @@
                     {
                       "attribute": "string_with_exclamation_marks",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2868,7 +2876,9 @@
                     {
                       "attribute": "string_with_only_one_exclamation_mark",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2889,7 +2899,9 @@
                     {
                       "attribute": "string_with_only_multiple_exclamation_marks",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2910,7 +2922,9 @@
                     {
                       "attribute": "string_with_opening_parentheses",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2931,7 +2945,9 @@
                     {
                       "attribute": "string_with_only_one_opening_parenthese",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2952,7 +2968,9 @@
                     {
                       "attribute": "string_with_only_multiple_opening_parentheses",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2973,7 +2991,9 @@
                     {
                       "attribute": "string_with_closing_parentheses",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -2994,7 +3014,9 @@
                     {
                       "attribute": "string_with_only_one_closing_parenthese",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }
@@ -3015,7 +3037,9 @@
                     {
                       "attribute": "string_with_only_multiple_closing_parentheses",
                       "operator": "ONE_OF",
-                      "value": ["true"]
+                      "value": [
+                        "true"
+                      ]
                     }
                   ]
                 }

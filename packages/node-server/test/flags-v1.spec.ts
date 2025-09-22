@@ -19,18 +19,18 @@ describe('Universal Flag Configuration V1', () => {
   })
 
   const getUFC = (): UniversalFlagConfigurationV1 => {
-    const ufcJson = fs.readFileSync(path.join(__dirname, '../test/data', 'flags-v1.json'), 'utf8')
+    const ufcJson = fs.readFileSync(path.join(__dirname, './data', 'flags-v1.json'), 'utf8')
     const ufcResponse = JSON.parse(ufcJson) as UniversalFlagConfigurationV1Response
     return ufcResponse.data.attributes
   }
 
   const getTestCaseFileNames = (): string[] => {
-    return fs.readdirSync(path.join(__dirname, '../test/data/tests'))
+    return fs.readdirSync(path.join(__dirname, './data/tests'))
   }
 
-  const getTestCase = (testCaseFileName: string): TestCase => {
-    const testCaseJson = fs.readFileSync(path.join(__dirname, '../test/data/tests', testCaseFileName), 'utf8')
-    return JSON.parse(testCaseJson) as TestCase
+  const getTestCases = (testCaseFileName: string): TestCase[] => {
+    const testCaseJson = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
+    return JSON.parse(testCaseJson) as TestCase[]
   }
 
   const evaluateFlag = async (testCase: TestCase, context: EvaluationContext) => {
@@ -54,23 +54,23 @@ describe('Universal Flag Configuration V1', () => {
     if (testCase.variationType === 'JSON') {
       return await client.getObjectValue(testCase.flag, testCase.defaultValue as Record<string, any>)
     }
+    console.log(JSON.stringify(testCase, null, 2))
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
   }
 
-  describe.each(getTestCaseFileNames())('should be able to evaluate the flag for %s', (testCaseFileName) => {
-    const testCase = getTestCase(testCaseFileName)
-    const subjectKeys = testCase.subjects.map((subject) => subject.subjectKey)
-    it.each(subjectKeys)('for subject %s', async (subjectKey) => {
-      const subject = testCase.subjects.find((subject) => subject.subjectKey === subjectKey)
-      const context: EvaluationContext = {
-        targetingKey: subjectKey,
-        ...subject?.subjectAttributes,
-      }
-      if (!subject) {
-        throw new Error(`Subject ${subjectKey} not found in test case`)
-      }
-      const result = await evaluateFlag(testCase, context)
-      expect(result).toEqual(subject.assignment)
+  describe.each(getTestCaseFileNames())('should evaluate for %s', (testCaseFileName) => {
+    const testCases = getTestCases(testCaseFileName)
+    const stringifiedContexts = testCases.map((testCase) => JSON.stringify({
+      targetingKey: testCase.targetingKey,
+      ...testCase.attributes,
+    })) 
+    let i = 0;
+    it.each(stringifiedContexts)('with context %s', async (contextString) => {
+      const testCase = testCases[i]
+      const context = JSON.parse(contextString)
+      const resultValue = await evaluateFlag(testCase, context)
+      expect(resultValue).toEqual(testCase.result.value)
+      i++;
     })
   })
 })

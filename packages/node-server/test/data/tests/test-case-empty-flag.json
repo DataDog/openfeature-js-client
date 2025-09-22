@@ -1,69 +1,40 @@
-{
-  "flag": "empty_flag",
-  "variationType": "STRING",
-  "defaultValue": "default_value",
-  "subjects": [
-    {
-      "subjectKey": "alice",
-      "subjectAttributes": {
-        "email": "alice@mycompany.com",
-        "country": "US"
-      },
-      "assignment": "default_value",
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+[
+  {
+    "flag": "empty_flag",
+    "variationType": "STRING",
+    "defaultValue": "default_value",
+    "targetingKey": "alice",
+    "attributes": {
+      "email": "alice@mycompany.com",
+      "country": "US"
     },
-    {
-      "subjectKey": "bob",
-      "subjectAttributes": {
-        "email": "bob@example.com",
-        "country": "Canada"
-      },
-      "assignment": "default_value",
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
-    },
-    {
-      "subjectKey": "charlie",
-      "subjectAttributes": {
-        "age": 50
-      },
-      "assignment": "default_value",
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+    "result": {
+      "value": "default_value"
     }
-  ]
-}
+  },
+  {
+    "flag": "empty_flag",
+    "variationType": "STRING",
+    "defaultValue": "default_value",
+    "targetingKey": "bob",
+    "attributes": {
+      "email": "bob@example.com",
+      "country": "Canada"
+    },
+    "result": {
+      "value": "default_value"
+    }
+  },
+  {
+    "flag": "empty_flag",
+    "variationType": "STRING",
+    "defaultValue": "default_value",
+    "targetingKey": "charlie",
+    "attributes": {
+      "age": 50
+    },
+    "result": {
+      "value": "default_value"
+    }
+  }
+]

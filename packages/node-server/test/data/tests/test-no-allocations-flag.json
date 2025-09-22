@@ -1,77 +1,52 @@
-{
-  "flag": "no_allocations_flag",
-  "variationType": "JSON",
-  "defaultValue": {
-    "message": "Hello, world!"
-  },
-  "subjects": [
-    {
-      "subjectKey": "alice",
-      "subjectAttributes": {
-        "email": "alice@mycompany.com",
-        "country": "US"
-      },
-      "assignment": {
-        "message": "Hello, world!"
-      },
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+[
+  {
+    "flag": "no_allocations_flag",
+    "variationType": "JSON",
+    "defaultValue": {
+      "message": "Hello, world!"
     },
-    {
-      "subjectKey": "bob",
-      "subjectAttributes": {
-        "email": "bob@example.com",
-        "country": "Canada"
-      },
-      "assignment": {
-        "message": "Hello, world!"
-      },
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
-      }
+    "targetingKey": "alice",
+    "attributes": {
+      "email": "alice@mycompany.com",
+      "country": "US"
     },
-    {
-      "subjectKey": "charlie",
-      "subjectAttributes": {
-        "age": 50
-      },
-      "assignment": {
+    "result": {
+      "value": {
         "message": "Hello, world!"
-      },
-      "evaluationDetails": {
-        "environmentName": "Test",
-        "flagEvaluationCode": "DEFAULT_ALLOCATION_NULL",
-        "flagEvaluationDescription": "No allocations matched. Falling back to \"Default Allocation\", serving NULL",
-        "banditKey": null,
-        "banditAction": null,
-        "variationKey": null,
-        "variationValue": null,
-        "matchedRule": null,
-        "matchedAllocation": null,
-        "unmatchedAllocations": [],
-        "unevaluatedAllocations": []
       }
     }
-  ]
-}
+  },
+  {
+    "flag": "no_allocations_flag",
+    "variationType": "JSON",
+    "defaultValue": {
+      "message": "Hello, world!"
+    },
+    "targetingKey": "bob",
+    "attributes": {
+      "email": "bob@example.com",
+      "country": "Canada"
+    },
+    "result": {
+      "value": {
+        "message": "Hello, world!"
+      }
+    }
+  },
+  {
+    "flag": "no_allocations_flag",
+    "variationType": "JSON",
+    "defaultValue": {
+      "message": "Hello, world!"
+    },
+    "targetingKey": "charlie",
+    "attributes": {
+      "age": 50
+    },
+    "result": {
+      "value": {
+        "message": "Hello, world!"
+      }
+    }
+  }
+]
