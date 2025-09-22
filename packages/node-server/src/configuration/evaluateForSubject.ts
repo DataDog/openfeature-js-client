@@ -61,7 +61,7 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variation.value,
         })
 
-        const { value: convertedValue, isValid } = getMatchingValue(variation.value, type, flag.variationType)
+        const isValid = validateTypeMatch(variation.value, type, flag.variationType)
         if (!isValid) {
           logger.debug(`variation value type mismatch, returning null`, {
             flagKey: flag.key,
@@ -79,7 +79,7 @@ export function evaluateForSubject<T extends FlagValueType>(
         }
 
         return {
-          value: convertedValue,
+          value: variation.value,
           reason: StandardResolutionReasons.TARGETING_MATCH,
         }
       }
@@ -103,23 +103,23 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 }
 
-function getMatchingValue(
+function validateTypeMatch(
   value: any,
   expectedType: FlagValueType,
   variantType: string
-): { value: any | null; isValid: boolean } {
+): boolean {
   const variantValue = new VariantValue(value, variantType)
   if (expectedType === 'boolean') {
-    return variantValue.parseBoolean()
+    return variantValue.validateBoolean()
   }
   if (expectedType === 'number') {
-    return variantValue.parseNumber()
+    return variantValue.validateNumber()
   }
   if (expectedType === 'object') {
-    return variantValue.parseObject()
+    return variantValue.validateObject()
   }
   if (expectedType === 'string') {
-    return variantValue.parseString()
+    return variantValue.validateString()
   }
   throw new Error(`Invalid expected type: ${expectedType}`)
 }

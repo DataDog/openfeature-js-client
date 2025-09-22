@@ -22,52 +22,49 @@ export class VariantValue {
     }
   }
 
-  parseBoolean(): { value: boolean | null; isValid: boolean } {
+  validateBoolean(): boolean {
     if (this.variantType === 'BOOLEAN') {
       if (typeof this.value === 'string') {
-        const isValid = this.value === 'true' || this.value === 'false'
-        return { value: isValid ? this.value === 'true' : null, isValid }
+        return this.value === 'true' || this.value === 'false'
       }
       if (typeof this.value === 'boolean') {
-        return { value: this.value, isValid: true }
+        return true
       }
-      return { value: null, isValid: false }
+      return false
     }
-    return { value: null, isValid: false }
+    return false
   }
 
-  parseString(): { value: string | null; isValid: boolean } {
+  validateString(): boolean {
     if (this.variantType === 'STRING') {
-      const isValid = typeof this.value === 'string'
-      return { value: isValid ? (this.value as string) : null, isValid }
+      return typeof this.value === 'string'
     }
-    return { value: null, isValid: false }
+    return false
   }
 
-  parseNumber(): { value: number | null; isValid: boolean } {
+  validateNumber(): boolean {
     if (this.variantType === 'INTEGER') {
-      return { value: Number(this.value), isValid: Number.isInteger(Number(this.value)) }
+      return Number.isInteger(Number(this.value))
     }
     if (this.variantType === 'NUMERIC') {
-      return { value: Number(this.value), isValid: !isNaN(Number(this.value)) }
+      return !isNaN(Number(this.value))
     }
-    return { value: null, isValid: false }
+    return false
   }
 
-  parseObject(): { value: object | null; isValid: boolean } {
+  validateObject(): boolean {
     if (this.variantType === 'JSON') {
       if (typeof this.value === 'string') {
         try {
-          const isValid = this.value.startsWith('{')
-          return { value: isValid ? JSON.parse(this.value) : null, isValid }
+          return JSON.parse(this.value) !== undefined
         } catch {
-          return { value: null, isValid: false }
+          return false
         }
       }
       if (typeof this.value === 'object') {
-        return { value: this.value, isValid: true }
+        return true
       }
     }
-    return { value: null, isValid: false }
+    return false
   }
 }
