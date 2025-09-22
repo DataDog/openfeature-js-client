@@ -100,9 +100,11 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         return compareNumber(value, condition.value, comparator)
       }
       case OperatorType.MATCHES:
-        return new RegExp(condition.value).test(String(value))
+        // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
+        return new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.NOT_MATCHES:
-        return !new RegExp(condition.value).test(String(value))
+        // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
+        return !new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.ONE_OF:
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
