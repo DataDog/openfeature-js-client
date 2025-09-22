@@ -116,15 +116,11 @@ function evaluateCondition(subjectAttributes: Record<string, AttributeType>, con
 }
 
 function isOneOf(attributeValue: string, conditionValue: string[]) {
-  return getMatchingStringValues(attributeValue, conditionValue).length > 0
+  return conditionValues.includes(attributeValue)
 }
 
 function isNotOneOf(attributeValue: string, conditionValue: string[]) {
-  return getMatchingStringValues(attributeValue, conditionValue).length === 0
-}
-
-function getMatchingStringValues(attributeValue: string, conditionValues: string[]): string[] {
-  return conditionValues.filter((value) => value === attributeValue)
+  return !isOneOf(attributeValue, conditionValue)
 }
 
 function compareNumber(
