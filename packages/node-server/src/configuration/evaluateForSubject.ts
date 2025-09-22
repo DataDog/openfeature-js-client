@@ -1,14 +1,14 @@
-import { AttributeType, matchesRule, Rule } from '../rules/rules'
+import { matchesRule, Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
-import { Flag, Split } from './ufc-v1'
-import { ErrorCode, FlagValue, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
+import { Flag, Split, VariantType } from './ufc-v1'
+import { ErrorCode, EvaluationContext, FlagValue, FlagValueType, Logger, ResolutionDetails, StandardResolutionReasons } from '@openfeature/server-sdk'
 import { FlagTypeToValue } from '@datadog/flagging-core'
 
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag | undefined,
   type: T,
   subjectKey: string,
-  subjectAttributes: Record<string, unknown>,
+  subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
@@ -23,15 +23,13 @@ export function evaluateForSubject<T extends FlagValueType>(
     }
   }
 
-  const variantValues = Object.values(flag.variations).map((variation) => variation.value)
-  const isValid = validateTypeMatch(variantValues, type, flag.variationType)
+  const isValid = validateTypeMatch(type, flag.variationType)
   if (!isValid) {
     logger.debug(`variant value type mismatch, returning default value`, {
       flagKey: flag.key,
       subjectKey,
       expectedType: type,
       variantType: flag.variationType,
-      variantValues: JSON.stringify(variantValues),
     })
     return {
       value: defaultValue,
@@ -39,7 +37,7 @@ export function evaluateForSubject<T extends FlagValueType>(
       errorCode: ErrorCode.TYPE_MISMATCH,
     }
   }
-
+  
   const now = new Date()
   for (const allocation of flag.allocations) {
     if (allocation.startAt && now < new Date(allocation.startAt)) {
@@ -103,9 +101,8 @@ export function evaluateForSubject<T extends FlagValueType>(
 }
 
 function validateTypeMatch(
-  variantValues: FlagValue[],
   expectedType: FlagValueType,
-  variantType: string
+  variantType: VariantType
 ): boolean {
   if (expectedType === 'boolean') {
     return variantType === 'BOOLEAN'
@@ -114,26 +111,17 @@ function validateTypeMatch(
     return variantType === 'STRING'
   }
   if (expectedType === 'number') {
-    if (variantType === 'INTEGER') {
-      return variantValues.every((value) => Number.isInteger(Number(value)))
-    }
-    if (variantType === 'NUMERIC') {
-      return variantValues.every((value) => !isNaN(Number(value)))
-    }
-    return false
+    return variantType === 'INTEGER' || variantType === 'NUMERIC'
   }
   if (expectedType === 'object') {
-    if (variantType === 'JSON') {
-      return variantValues.every((value) => typeof value === 'object')
-    }
-    return false
+    return variantType === 'JSON'
   }
   throw new Error(`Invalid expected type: ${expectedType}`)
 }
 
 export function containsMatchingRule(
   rules: Rule[] | undefined,
-  subjectAttributes: Record<string, unknown>,
+  subjectAttributes: EvaluationContext,
   logger: Logger
 ): { matched: boolean; matchedRule: Rule | null } {
   if (!rules?.length) {
@@ -146,7 +134,7 @@ export function containsMatchingRule(
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes as Record<string, AttributeType>))
+  const matchedRule = rules.find((rule) => matchesRule(rule, subjectAttributes))
   return !!matchedRule
     ? {
         matched: true,

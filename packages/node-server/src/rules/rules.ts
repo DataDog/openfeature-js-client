@@ -1,5 +1,6 @@
-export type AttributeType = string | number | boolean
-export type ConditionValueType = AttributeType | AttributeType[]
+import { EvaluationContext, EvaluationContextValue } from "@openfeature/server-sdk"
+
+export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
 export enum OperatorType {
   MATCHES = 'MATCHES',
@@ -67,17 +68,17 @@ export interface Rule {
   conditions: Condition[]
 }
 
-export function matchesRule(rule: Rule, subjectAttributes: Record<string, AttributeType>): boolean {
+export function matchesRule(rule: Rule, subjectAttributes: EvaluationContext): boolean {
   const conditionEvaluations = evaluateRuleConditions(subjectAttributes, rule.conditions)
   // TODO: short-circuit return when false condition is found
   return !conditionEvaluations.includes(false)
 }
 
-function evaluateRuleConditions(subjectAttributes: Record<string, AttributeType>, conditions: Condition[]): boolean[] {
+function evaluateRuleConditions(subjectAttributes: EvaluationContext, conditions: Condition[]): boolean[] {
   return conditions.map((condition) => evaluateCondition(subjectAttributes, condition))
 }
 
-function evaluateCondition(subjectAttributes: Record<string, AttributeType>, condition: Condition): boolean {
+function evaluateCondition(subjectAttributes: EvaluationContext, condition: Condition): boolean {
   const value = subjectAttributes[condition.attribute]
   if (condition.operator === OperatorType.IS_NULL) {
     if (condition.value) {
@@ -124,7 +125,7 @@ function isNotOneOf(attributeValue: string, conditionValues: string[]) {
 }
 
 function compareNumber(
-  attributeValue: AttributeType,
+  attributeValue: EvaluationContextValue,
   conditionValue: ConditionValueType,
   compareFn: (a: number, b: number) => boolean
 ): boolean {
