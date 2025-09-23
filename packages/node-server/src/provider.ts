@@ -16,8 +16,8 @@ import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
 import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
+import type { Channel } from 'node:diagnostics_channel';
 
-export type ExposureEventHandler = (exposureEvent: ExposureEvent) => void
 export interface DatadogNodeServerProviderOptions {
   /**
    * Remote config agent
@@ -27,7 +27,7 @@ export interface DatadogNodeServerProviderOptions {
   /**
    * Log experiment exposures
    */
-  onExperimentExposure?: ExposureEventHandler;
+  exposureChannel: Channel<ExposureEvent>;
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -117,8 +117,8 @@ export class DatadogNodeServerProvider implements Provider {
       flagMetadata: resolutionDetails.flagMetadata ?? {},
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
-    if (this.options.onExperimentExposure && exposureEvent) {
-      this.options.onExperimentExposure(exposureEvent)
+    if (exposureEvent && this.options.exposureChannel.hasSubscribers) {
+      this.options.exposureChannel.publish(exposureEvent)
     }
   }
 }
