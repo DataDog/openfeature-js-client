@@ -22,12 +22,12 @@ export interface DatadogNodeServerProviderOptions {
   /**
    * Remote config agent
    */
-  configuration: UniversalFlagConfigurationV1;
+  configuration?: UniversalFlagConfigurationV1;
   
   /**
    * Log experiment exposures
    */
-  onExperimentExposure: ExposureEventHandler;
+  onExperimentExposure?: ExposureEventHandler;
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -38,11 +38,13 @@ export class DatadogNodeServerProvider implements Provider {
   hooks?: Hook[]
 
   status: ProviderStatus = ProviderStatus.NOT_READY
-  private configuration: UniversalFlagConfigurationV1
+  private configuration?: UniversalFlagConfigurationV1
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
     this.configuration = options.configuration
-    this.status = ProviderStatus.READY
+    if (this.configuration) {
+      this.status = ProviderStatus.READY
+    }
   }
 
   getConfiguration() {
@@ -51,6 +53,11 @@ export class DatadogNodeServerProvider implements Provider {
 
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
     this.configuration = configuration
+    if (this.configuration) {
+      this.status = ProviderStatus.READY
+    } else {
+      this.status = ProviderStatus.NOT_READY
+    }
   }
 
   async resolveBooleanEvaluation(
