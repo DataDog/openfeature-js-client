@@ -25,9 +25,9 @@ export interface DatadogNodeServerProviderOptions {
   configuration: UniversalFlagConfigurationV1;
   
   /**
-   * Log evaluations
+   * Log experiment exposures
    */
-  onExposure: ExposureEventHandler;
+  onExperimentExposure: ExposureEventHandler;
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -110,8 +110,8 @@ export class DatadogNodeServerProvider implements Provider {
       flagMetadata: resolutionDetails.flagMetadata ?? {},
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
-    if (this.options.onExposure && exposureEvent) {
-      this.options.onExposure(exposureEvent)
+    if (this.options.onExperimentExposure && exposureEvent) {
+      this.options.onExperimentExposure(exposureEvent)
     }
   }
 }
