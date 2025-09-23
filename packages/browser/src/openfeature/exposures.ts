@@ -2,10 +2,9 @@ import { dateNow, createPageMayExitObservable, addTelemetryDebug } from '@datado
 import type { Context, RawError } from '@datadog/browser-core'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
-import type { ExposureEvent } from '../exposureEvent.types'
 import type { DDRum } from './rumIntegration'
 import type { FlaggingConfiguration } from '../domain/configuration'
-import type { EvaluationContext } from '@openfeature/web-sdk'
+import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
 
 /**
  * Create hook for RUM flag tracking
@@ -54,37 +53,10 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      // Only log if doLog flag is true
-      if (!details.flagMetadata?.doLog) {
+      const exposureEvent = createExposureEvent(hookContext.context, details)
+      if (!exposureEvent) {
         return
       }
-
-      // Skip logging if allocation key or variant is missing (this should never happen)
-      const allocationKey = details.flagMetadata?.allocationKey as string
-      const variantKey = details.variant
-      if (!allocationKey || !variantKey) {
-        return
-      }
-
-      const { targetingKey: id = '', ...attributes } = hookContext.context
-
-      const exposureEvent = {
-        timestamp: dateNow(),
-        allocation: {
-          key: allocationKey,
-        },
-        flag: {
-          key: details.flagKey,
-        },
-        variant: {
-          key: variantKey,
-        },
-        subject: {
-          id,
-          attributes,
-        },
-      } satisfies ExposureEvent
-
       // Add context and send via exposures batch
       exposuresBatch.add(exposureEvent as unknown as Context)
     },

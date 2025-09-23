@@ -1,4 +1,5 @@
 import type {
+  EvaluationDetails,
   JsonValue,
   Logger,
   Provider,
@@ -6,18 +7,27 @@ import type {
   ResolutionDetails,
   Paradigm,
   Hook,
+  FlagValue,
 } from '@openfeature/server-sdk'
 
 import { EvaluationContext } from '@openfeature/core'
 import { ProviderStatus } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
+import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
 
+export type ExposureEventHandler = (exposureEvent: ExposureEvent) => void
 export interface DatadogNodeServerProviderOptions {
   /**
    * Remote config agent
    */
-  configuration: UniversalFlagConfigurationV1
+  configuration: UniversalFlagConfigurationV1;
+  
+  /**
+   * Log evaluations
+   */
+  onExposure: ExposureEventHandler;
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -30,7 +40,7 @@ export class DatadogNodeServerProvider implements Provider {
   status: ProviderStatus = ProviderStatus.NOT_READY
   private configuration: UniversalFlagConfigurationV1
 
-  constructor(options: DatadogNodeServerProviderOptions) {
+  constructor(private readonly options: DatadogNodeServerProviderOptions) {
     this.configuration = options.configuration
     this.status = ProviderStatus.READY
   }
@@ -49,7 +59,9 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    return evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    this.handleExposure(flagKey, context, resolutionDetails)
+    return resolutionDetails
   }
 
   async resolveStringEvaluation(
@@ -58,7 +70,9 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    return evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    this.handleExposure(flagKey, context, resolutionDetails)
+    return resolutionDetails
   }
 
   async resolveNumberEvaluation(
@@ -67,7 +81,9 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    return evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    this.handleExposure(flagKey, context, resolutionDetails)
+    return resolutionDetails
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -82,6 +98,20 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(this.configuration, 'object', flagKey, defaultValue, context, _logger) as ResolutionDetails<T>
+    const resolutionDetails = evaluate(this.configuration, 'object', flagKey, defaultValue, context, _logger) as ResolutionDetails<T>
+    this.handleExposure(flagKey, context, resolutionDetails)
+    return resolutionDetails
+  }
+
+  private handleExposure<T extends FlagValue>(flagKey: string, context: EvaluationContext, resolutionDetails: ResolutionDetails<T>): void {
+    const evalutationDetails: EvaluationDetails<T> = {
+      ...resolutionDetails,
+      flagKey: flagKey,
+      flagMetadata: resolutionDetails.flagMetadata ?? {},
+    }
+    const exposureEvent = createExposureEvent(context, evalutationDetails)
+    if (this.options.onExposure && exposureEvent) {
+      this.options.onExposure(exposureEvent)
+    }
   }
 }
