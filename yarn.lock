@@ -557,17 +557,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/flagging-core@npm:0.1.0-preview.3":
-  version: 0.1.0-preview.3
-  resolution: "@datadog/flagging-core@npm:0.1.0-preview.3"
-  peerDependencies:
-    "@openfeature/core": ^1.8.1
-    "@openfeature/web-sdk": ^1.5.0
-  checksum: 10c0/e8493f62d6db986644b7431dbe0c7054bca40daf54b5313f0ac86aa721d25b003e200da9c04e0d1de40a48f4cfd0104ba84de4521d8fb62b85fd150b92d79fd6
-  languageName: node
-  linkType: hard
-
-"@datadog/flagging-core@npm:0.1.0-preview.4, @datadog/flagging-core@workspace:packages/core":
+"@datadog/flagging-core@npm:0.1.0-preview.5, @datadog/flagging-core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
   dependencies:
@@ -591,7 +581,7 @@ __metadata:
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:^6.19.0"
-    "@datadog/flagging-core": "npm:0.1.0-preview.4"
+    "@datadog/flagging-core": "npm:0.1.0-preview.5"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/jest": "npm:^29.4.0"
@@ -638,7 +628,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-node-server@workspace:packages/node-server"
   dependencies:
-    "@datadog/flagging-core": "npm:0.1.0-preview.3"
+    "@datadog/flagging-core": "npm:0.1.0-preview.5"
     "@openfeature/core": "npm:^1.9.0"
     "@openfeature/server-sdk": "npm:^1.19.0"
     "@types/jest": "npm:^30.0.0"
@@ -649,7 +639,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/core": ^1.8.0
+    "@openfeature/server-sdk": ^1.19.0
   languageName: unknown
   linkType: soft
 

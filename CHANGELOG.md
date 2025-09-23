@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-preview.5
+
+**Internal Changes:**
+
+- feat: OpenFeature support for NodeJS, internal package support only
+- chore: fix editor errors in jest test files
+
 ## v0.1.0-preview.4
 
 **Internal Changes:**

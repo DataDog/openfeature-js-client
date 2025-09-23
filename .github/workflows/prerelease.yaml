@@ -71,12 +71,12 @@ jobs:
 
       - name: Publish core package
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/core
           npm publish --tag ${{ steps.npm-tag.outputs.tag }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN_FLAGGING_CORE }}
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
 
       - name: Wait for core package to be available
         run: |
@@ -111,9 +111,18 @@ jobs:
 
       - name: Publish browser package
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/browser
           npm publish --tag ${{ steps.npm-tag.outputs.tag }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
+
+      - name: Publish node-server package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
+          npm config set access public
+          cd packages/node-server
+          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
