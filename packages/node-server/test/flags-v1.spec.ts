@@ -1,13 +1,12 @@
-import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
-import fs from 'fs'
-import path from 'path'
-import { TestCase } from './TestCaseResult.types'
-import { DatadogNodeServerProvider } from '../src/provider'
-import type { Logger, EvaluationContext, FlagValue, EvaluationDetails, JsonValue } from '@openfeature/core'
-import { OpenFeature } from '@openfeature/server-sdk'
-import { Channel, channel } from 'node:diagnostics_channel'
 import type { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
-import { exit } from 'node:process'
+import type { EvaluationContext, EvaluationDetails, FlagValue, JsonValue, Logger } from '@openfeature/core'
+import { OpenFeature } from '@openfeature/server-sdk'
+import fs from 'fs'
+import { Channel } from 'node:diagnostics_channel'
+import path from 'path'
+import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
+import { DatadogNodeServerProvider } from '../src/provider'
+import { TestCase } from './TestCaseResult.types'
 
 type ExposureChannelListener = (message: ExposureEvent, name: string | symbol) => void
 
@@ -45,8 +44,8 @@ describe('Universal Flag Configuration V1', () => {
   }
 
   const getTestCases = (testCaseFileName: string): TestCase[] => {
-    const testCaseJson = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
-    return JSON.parse(testCaseJson) as TestCase[]
+    const testCases = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
+    return JSON.parse(testCases) as TestCase[]
   }
 
   const evaluateDetails = async (
@@ -91,18 +90,18 @@ describe('Universal Flag Configuration V1', () => {
       const context = JSON.parse(contextString)
       const details = await evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
-      if (details.flagMetadata?.doLog) {
+      if (testCase.result.flagMetadata?.doLog) {
         expect(exposureChannelMessageHandler).toHaveBeenCalledWith(
           {
             timestamp: expect.any(Number),
             allocation: {
-              key: expect.any(String), // TODO evaluation details test cases
+              key: testCase.result.flagMetadata?.allocationKey,
             },
             flag: {
               key: testCase.flag,
             },
             variant: {
-              key: expect.any(String), // TODO evaluation details test cases
+              key: testCase.result.variant,
             },
             subject: {
               id: testCase.targetingKey,
