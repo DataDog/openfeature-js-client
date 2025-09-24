@@ -11,13 +11,21 @@ import { UniversalFlagConfigurationV1 } from './ufc-v1'
 import { evaluateForSubject } from './evaluateForSubject'
 
 export function evaluate<T extends FlagValueType>(
-  config: UniversalFlagConfigurationV1,
+  config: UniversalFlagConfigurationV1 | undefined,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  if (!config) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: ErrorCode.PROVIDER_NOT_READY,
+    }
+  }
+
   const { targetingKey: subjectKey, ...remainingContext } = context
   if (!subjectKey) {
     return {

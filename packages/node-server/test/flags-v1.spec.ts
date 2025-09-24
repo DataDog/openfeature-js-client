@@ -1,21 +1,36 @@
-import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
-import fs from 'fs'
-import path from 'path'
-import { TestCase } from './TestCaseResult.types'
-import { DatadogNodeServerProvider } from '../src/provider'
-import type { Logger, EvaluationContext, FlagValue } from '@openfeature/core'
+import type { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
+import type { EvaluationContext, EvaluationDetails, FlagValue, JsonValue, Logger } from '@openfeature/core'
 import { OpenFeature } from '@openfeature/server-sdk'
+import fs from 'fs'
+import { Channel } from 'node:diagnostics_channel'
+import path from 'path'
+import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
+import { DatadogNodeServerProvider } from '../src/provider'
+import { TestCase } from './TestCaseResult.types'
+
+type ExposureChannelListener = (message: ExposureEvent, name: string | symbol) => void
 
 describe('Universal Flag Configuration V1', () => {
   let logger: Logger
+
+  const exposureChannelMessageHandler: jest.Mock<ExposureChannelListener> = jest.fn()
+
+  const exposureChannel = {
+    hasSubscribers: true,
+    publish: jest.fn((message: ExposureEvent) => {
+      exposureChannelMessageHandler(message, 'ffe:exposure:submit')
+    }),
+    subscribe: jest.fn(),
+  } as unknown as Channel<ExposureEvent, ExposureEvent>
 
   beforeEach(() => {
     logger = {
       error: console.error,
       warn: console.warn,
       info: console.info,
-      debug: console.debug,
+      debug: jest.fn(),
     }
+    exposureChannelMessageHandler.mockClear()
   })
 
   const getUFC = (): UniversalFlagConfigurationV1 => {
@@ -29,49 +44,73 @@ describe('Universal Flag Configuration V1', () => {
   }
 
   const getTestCases = (testCaseFileName: string): TestCase[] => {
-    const testCaseJson = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
-    return JSON.parse(testCaseJson) as TestCase[]
+    const testCases = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
+    return JSON.parse(testCases) as TestCase[]
   }
 
-  const evaluateFlag = async (testCase: TestCase, context: EvaluationContext) => {
+  const evaluateDetails = async (
+    testCase: TestCase,
+    context: EvaluationContext
+  ): Promise<EvaluationDetails<boolean | string | number | JsonValue>> => {
     const ufc = getUFC()
     const provider = new DatadogNodeServerProvider({
       configuration: ufc,
+      exposureChannel: exposureChannel,
     })
     OpenFeature.setProvider(provider)
     OpenFeature.setLogger(logger)
     OpenFeature.setContext(context)
     const client = OpenFeature.getClient()
     if (testCase.variationType === 'BOOLEAN') {
-      return await client.getBooleanValue(testCase.flag, testCase.defaultValue as boolean)
+      return await client.getBooleanDetails(testCase.flag, testCase.defaultValue as boolean)
     }
     if (testCase.variationType === 'STRING') {
-      return await client.getStringValue(testCase.flag, testCase.defaultValue as string)
+      return await client.getStringDetails(testCase.flag, testCase.defaultValue as string)
     }
     if (testCase.variationType === 'INTEGER' || testCase.variationType === 'NUMERIC') {
-      return await client.getNumberValue(testCase.flag, testCase.defaultValue as number)
+      return await client.getNumberDetails(testCase.flag, testCase.defaultValue as number)
     }
     if (testCase.variationType === 'JSON') {
-      return await client.getObjectValue(testCase.flag, testCase.defaultValue as Record<string, FlagValue>)
+      return await client.getObjectDetails(testCase.flag, testCase.defaultValue as Record<string, FlagValue>)
     }
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
   }
 
   describe.each(getTestCaseFileNames())('should evaluate for %s', (testCaseFileName) => {
     const testCases = getTestCases(testCaseFileName)
-    const stringifiedContexts = testCases.map((testCase) =>
-      JSON.stringify({
+    const testCasesWithContext = testCases.map((testCase) => ({
+      contextString: JSON.stringify({
         targetingKey: testCase.targetingKey,
         ...testCase.attributes,
-      })
-    )
-    let i = 0
-    it.each(stringifiedContexts)('with context %s', async (contextString) => {
-      const testCase = testCases[i]
+      }),
+      testCase,
+    }))
+
+    it.each(testCasesWithContext)('with context $contextString', async ({ contextString, testCase }) => {
       const context = JSON.parse(contextString)
-      const resultValue = await evaluateFlag(testCase, context)
-      expect(resultValue).toEqual(testCase.result.value)
-      i++
+      const details = await evaluateDetails(testCase, context)
+      expect(details.value).toEqual(testCase.result.value)
+      if (testCase.result.flagMetadata?.doLog) {
+        expect(exposureChannelMessageHandler).toHaveBeenCalledWith(
+          {
+            timestamp: expect.any(Number),
+            allocation: {
+              key: testCase.result.flagMetadata?.allocationKey,
+            },
+            flag: {
+              key: testCase.flag,
+            },
+            variant: {
+              key: testCase.result.variant,
+            },
+            subject: {
+              id: testCase.targetingKey,
+              attributes: testCase.attributes,
+            },
+          },
+          'ffe:exposure:submit'
+        )
+      }
     })
   })
 })
