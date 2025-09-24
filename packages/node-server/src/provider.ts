@@ -35,12 +35,13 @@ export class DatadogNodeServerProvider implements Provider {
     name: 'datadog-node-server',
   }
   readonly runsOn: Paradigm = 'server'
-  readonlyhooks?: Hook[]
+  readonly hooks?: Hook[]
 
   status: ProviderStatus = ProviderStatus.NOT_READY
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
+    this.hooks = []
     this.configuration = options.configuration
     if (this.configuration) {
       this.status = ProviderStatus.READY
