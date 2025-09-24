@@ -22,7 +22,7 @@ export function createExposureEvent<T extends FlagValue>(
   return {
     timestamp: Date.now(),
     allocation: {
-      key: details.flagMetadata?.allocationKey as string,
+      key: allocationKey,
     },
     flag: {
       key: details.flagKey,
