@@ -6,6 +6,12 @@
 
 ---
 
+## v0.1.0-preview.6
+
+**Internal Changes:**
+
+- feat: exposure logging in node sdk
+
 ## v0.1.0-preview.5
 
 **Internal Changes:**
