@@ -1,9 +1,17 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["jest", "node"],
-    "rootDir": "."
+    "types": [
+      "jest",
+      "node"
+    ],
+    "rootDir": ".",
+    "strict": true,
+    "noImplicitAny": true
   },
-  "include": ["./src/**/*.ts", "./test/**/*.spec.ts"],
+  "include": [
+    "./src/**/*.ts",
+    "./test/**/*.spec.ts"
+  ],
   "exclude": []
 }

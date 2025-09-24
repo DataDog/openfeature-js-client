@@ -25,7 +25,7 @@ export function evaluate<T extends FlagValueType>(
       errorCode: ErrorCode.PROVIDER_NOT_READY,
     }
   }
-  
+
   const { targetingKey: subjectKey, ...remainingContext } = context
   if (!subjectKey) {
     return {

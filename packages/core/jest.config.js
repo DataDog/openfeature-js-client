@@ -5,7 +5,7 @@ module.exports = {
     '^.+\\.ts$': [
       'ts-jest',
       {
-        tsconfig: 'tsconfig.test.json',
+        tsconfig: require.resolve('./tsconfig.test.json'),
       },
     ],
   },

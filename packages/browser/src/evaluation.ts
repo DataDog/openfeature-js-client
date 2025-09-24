@@ -1,5 +1,6 @@
 import type { FlagsConfiguration, FlagTypeToValue, PrecomputedConfiguration } from '@datadog/flagging-core'
 import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/web-sdk'
+import type { PrecomputedFlagMetadata } from '@datadog/flagging-core/src/configuration/configuration'
 
 export function evaluate<T extends FlagValueType>(
   flagsConfiguration: FlagsConfiguration,
@@ -49,7 +50,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,
-    },
+    } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
 }

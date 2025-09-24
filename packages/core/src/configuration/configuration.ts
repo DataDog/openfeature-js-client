@@ -50,3 +50,10 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   doLog: boolean
   extraLogging: Record<string, unknown>
 }
+
+/** @internal */
+export type PrecomputedFlagMetadata = {
+  allocationKey: string
+  variationType: FlagValueType
+  doLog: boolean
+}

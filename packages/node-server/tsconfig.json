@@ -5,8 +5,13 @@
     "declaration": true,
     "rootDir": "./src/",
     "outDir": "./dist/",
-    "types": ["jest", "node"],
+    "types": [
+      "node"
+    ],
     "strict": true
   },
-  "include": ["./src/**/*.ts", "./src/**/*.d.ts"]
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.d.ts",
+  ]
 }

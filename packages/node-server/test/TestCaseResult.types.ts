@@ -1,12 +1,13 @@
-import { VariantType } from 'src/configuration/ufc-v1'
+import { FlagValue } from '@openfeature/server-sdk'
+import { VariantType } from '../src/configuration/ufc-v1'
 
 export interface TestCase {
   flag: string
   variationType: VariantType
-  defaultValue: number | string | boolean | object
+  defaultValue: FlagValue
   targetingKey: string
-  attributes: Record<string, number | string | boolean>
+  attributes: Record<string, FlagValue>
   result: {
-    value: number | string | boolean | object
+    value: FlagValue
   }
 }

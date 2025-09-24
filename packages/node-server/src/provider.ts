@@ -16,18 +16,18 @@ import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
 import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
-import type { Channel } from 'node:diagnostics_channel';
+import type { Channel } from 'node:diagnostics_channel'
 
 export interface DatadogNodeServerProviderOptions {
   /**
    * Remote config agent
    */
-  configuration?: UniversalFlagConfigurationV1;
-  
+  configuration?: UniversalFlagConfigurationV1
+
   /**
    * Log experiment exposures
    */
-  exposureChannel: Channel<ExposureEvent>;
+  exposureChannel: Channel<ExposureEvent>
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -105,12 +105,23 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    const resolutionDetails = evaluate(this.configuration, 'object', flagKey, defaultValue, context, _logger) as ResolutionDetails<T>
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'object',
+      flagKey,
+      defaultValue,
+      context,
+      _logger
+    ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
 
-  private handleExposure<T extends FlagValue>(flagKey: string, context: EvaluationContext, resolutionDetails: ResolutionDetails<T>): void {
+  private handleExposure<T extends FlagValue>(
+    flagKey: string,
+    context: EvaluationContext,
+    resolutionDetails: ResolutionDetails<T>
+  ): void {
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,
