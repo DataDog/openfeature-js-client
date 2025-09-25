@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "@datadog/flagging-core": "0.1.0-preview.6",
-    "@openfeature/server-sdk": "^1.19.0"
+    "@openfeature/server-sdk": "^1.19.0",
+    "spark-md5": "^3.0.2"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": "^1.19.0"
@@ -43,6 +44,7 @@
     "@openfeature/core": "^1.9.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
+    "@types/spark-md5": "^3",
     "jest": "^30.0.4",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.0",
