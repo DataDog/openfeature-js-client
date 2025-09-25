@@ -54,9 +54,9 @@ describe('Universal Flag Configuration V1', () => {
   ): Promise<EvaluationDetails<boolean | string | number | JsonValue>> => {
     const ufc = getUFC()
     const provider = new DatadogNodeServerProvider({
-      configuration: ufc,
       exposureChannel: exposureChannel,
     })
+    provider.setConfiguration(ufc)
     OpenFeature.setProvider(provider)
     OpenFeature.setLogger(logger)
     OpenFeature.setContext(context)
