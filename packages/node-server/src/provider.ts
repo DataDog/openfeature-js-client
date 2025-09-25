@@ -16,8 +16,8 @@ import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk
 import { EvaluationContext } from '@openfeature/core'
 import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
-import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
-import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
+import { ExposureEvent } from '@datadog/flagging-core'
+import { createExposureEvent } from '@datadog/flagging-core'
 import type { Channel } from 'node:diagnostics_channel'
 
 export interface DatadogNodeServerProviderOptions {

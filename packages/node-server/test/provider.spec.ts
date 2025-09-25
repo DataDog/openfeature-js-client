@@ -15,7 +15,7 @@ import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } fr
 import fs from 'fs'
 import path from 'path'
 import { Channel } from 'diagnostics_channel'
-import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
+import { ExposureEvent } from '@datadog/flagging-core'
 
 describe('DatadogNodeServerProvider', () => {
   let logger: Logger
