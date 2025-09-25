@@ -8,10 +8,12 @@ import type {
   Paradigm,
   Hook,
   FlagValue,
+  ProviderEventEmitter,
 } from '@openfeature/server-sdk'
 
+import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
+
 import { EvaluationContext } from '@openfeature/core'
-import { ProviderStatus } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
@@ -19,11 +21,6 @@ import { createExposureEvent } from '@datadog/flagging-core/src/configuration/ex
 import type { Channel } from 'node:diagnostics_channel'
 
 export interface DatadogNodeServerProviderOptions {
-  /**
-   * Remote config agent
-   */
-  configuration?: UniversalFlagConfigurationV1 | undefined
-
   /**
    * Log experiment exposures
    */
@@ -37,28 +34,70 @@ export class DatadogNodeServerProvider implements Provider {
   readonly runsOn: Paradigm = 'server'
   readonly hooks?: Hook[]
 
-  status: ProviderStatus = ProviderStatus.NOT_READY
+  private resolveInitialization?: (value?: void | PromiseLike<void>) => void
+  private rejectInitialization?: (reason?: unknown) => void
+  readonly events: ProviderEventEmitter<ProviderEvents>
+
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
     this.hooks = []
-    this.configuration = options.configuration
-    if (this.configuration) {
-      this.status = ProviderStatus.READY
-    }
+    this.events = new OpenFeatureEventEmitter()
   }
 
+  /**
+   * Used by dd-source-js
+   */
   getConfiguration() {
     return this.configuration
   }
 
-  setConfiguration(configuration: UniversalFlagConfigurationV1 | undefined) {
-    this.configuration = configuration
-    if (this.configuration) {
-      this.status = ProviderStatus.READY
-    } else {
-      this.status = ProviderStatus.NOT_READY
+  /**
+   * Used by dd-source-js
+   */
+  setConfiguration(configuration: UniversalFlagConfigurationV1) {
+    if (this.configuration && this.configuration !== configuration) {
+      this.events.emit(ProviderEvents.ConfigurationChanged)
+      return
     }
+    this.configuration = configuration
+    if (this.resolveInitialization) {
+      this.resolveInitialization()
+      this.resolveInitialization = undefined
+      this.rejectInitialization = undefined
+    }
+  }
+
+  /**
+   * Used by dd-source-js
+   */
+  setError(error: unknown) {
+    if (this.rejectInitialization) {
+      this.rejectInitialization(error)
+      this.resolveInitialization = undefined
+      this.rejectInitialization = undefined
+    } else {
+      this.events.emit(ProviderEvents.Error, { error })
+    }
+  }
+
+  /**
+   * Used by the OpenFeature SDK to set the status based on initialization.
+   * Status of 'PROVIDER_READY' is emitted with a resolved promise.
+   * Status of 'PROVIDER_ERROR' is emitted with a rejected promise.
+   *
+   * Since we aren't loading the configuration in this Provider, we will simulate
+   * loading functionality via resolveInitialization and rejectInitialization.
+   * See setConfiguration and setError for more details.
+   */
+  initialize(): Promise<void> {
+    if (this.configuration) {
+      return Promise.resolve()
+    }
+    return new Promise((resolve, reject) => {
+      this.resolveInitialization = resolve
+      this.rejectInitialization = reject
+    })
   }
 
   async resolveBooleanEvaluation(
