@@ -1,4 +1,3 @@
-import type { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
 import type { EvaluationContext, EvaluationDetails, FlagValue, JsonValue, Logger } from '@openfeature/core'
 import { OpenFeature } from '@openfeature/server-sdk'
 import fs from 'fs'
@@ -7,6 +6,7 @@ import path from 'path'
 import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
 import { TestCase } from './TestCaseResult.types'
+import { ExposureEvent } from '@datadog/flagging-core'
 
 type ExposureChannelListener = (message: ExposureEvent, name: string | symbol) => void
 

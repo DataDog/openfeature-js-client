@@ -1,6 +1,6 @@
 import { EvaluationContextValue, FlagValue } from '@openfeature/server-sdk'
 import { VariantType } from '../src/configuration/ufc-v1'
-import { PrecomputedFlagMetadata } from '@datadog/flagging-core/src/configuration/configuration'
+import { PrecomputedFlagMetadata } from '@datadog/flagging-core'
 
 export interface TestCase {
   flag: string

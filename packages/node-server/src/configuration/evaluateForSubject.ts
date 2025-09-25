@@ -9,7 +9,7 @@ import {
   ResolutionDetails,
   StandardResolutionReasons,
 } from '@openfeature/server-sdk'
-import { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core/src/configuration/configuration'
+import { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
 
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag | undefined,
