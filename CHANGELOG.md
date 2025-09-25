@@ -6,6 +6,15 @@
 
 ---
 
+## v0.1.0-preview.7
+
+**Internal Changes:**
+
+- fix: non-exported core functionality
+- fix: issues with status not emitting correctly in node sdk
+- fix: include spark-md5 in the correct package
+- fix: hooks availability in node sdk
+
 ## v0.1.0-preview.6
 
 **Internal Changes:**
