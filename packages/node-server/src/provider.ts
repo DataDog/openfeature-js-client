@@ -9,13 +9,11 @@ import type {
   Hook,
   FlagValue,
   ProviderEventEmitter,
-  ServerProviderEvents,
 } from '@openfeature/server-sdk'
 
-import { OpenFeatureEventEmitter } from '@openfeature/server-sdk'
+import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
 
 import { EvaluationContext } from '@openfeature/core'
-import { ProviderEvents, ProviderStatus } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { ExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent.types'
@@ -38,7 +36,7 @@ export class DatadogNodeServerProvider implements Provider {
 
   private resolveInitialization?: (value?: void | PromiseLike<void>) => void
   private rejectInitialization?: (reason?: unknown) => void
-  readonly events: ProviderEventEmitter<ServerProviderEvents>
+  readonly events: ProviderEventEmitter<ProviderEvents>
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
