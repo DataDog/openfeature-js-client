@@ -1,4 +1,4 @@
-import { EvaluationContext, EvaluationContextValue } from '@openfeature/server-sdk'
+import type { EvaluationContext, EvaluationContextValue } from '@openfeature/server-sdk'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 

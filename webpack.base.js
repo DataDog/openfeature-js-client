@@ -1,4 +1,4 @@
-const path = require('path')
+const path = require('node:path')
 const webpack = require('webpack')
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin')
 const TerserPlugin = require('terser-webpack-plugin')

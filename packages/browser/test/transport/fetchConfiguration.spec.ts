@@ -1,6 +1,6 @@
-import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
-import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
 
 // Mock dateNow from @datadog/browser-core
 jest.mock('@datadog/browser-core', () => ({

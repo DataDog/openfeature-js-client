@@ -1,8 +1,8 @@
 import type { Configuration, InitConfiguration } from '@datadog/browser-core'
-import { validateAndBuildConfiguration, display } from '@datadog/browser-core'
-import type { DDRum } from '../openfeature/rumIntegration'
+import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
 
 /**

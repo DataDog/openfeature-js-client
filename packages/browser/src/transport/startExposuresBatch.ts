@@ -1,9 +1,9 @@
-import type { Context, PageMayExitEvent, RawError } from '@datadog/browser-core'
+import type { PageMayExitEvent, RawError } from '@datadog/browser-core'
 import {
-  createIdentityEncoder,
-  createFlushController,
   createBatch,
+  createFlushController,
   createHttpRequest,
+  createIdentityEncoder,
   Observable,
 } from '@datadog/browser-core'
 import type { FlaggingConfiguration } from '../domain/configuration'

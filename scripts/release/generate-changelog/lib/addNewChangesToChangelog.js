@@ -1,5 +1,5 @@
-const { readFile } = require('fs/promises')
-const fs = require('fs')
+const { readFile } = require('node:fs/promises')
+const fs = require('node:fs')
 
 const emojiNameMap = require('emoji-name-map')
 

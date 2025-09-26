@@ -1,6 +1,6 @@
-const fs = require('fs')
-const path = require('path')
-const fsPromises = require('fs/promises')
+const fs = require('node:fs')
+const path = require('node:path')
+const fsPromises = require('node:fs/promises')
 const { command } = require('./executionUtils')
 
 /**

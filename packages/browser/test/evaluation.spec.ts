@@ -1,7 +1,7 @@
 import { configurationFromString } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
-import configurationWire from './data/precomputed-v1-wire.json'
 import { evaluate } from '../src/evaluation'
+import configurationWire from './data/precomputed-v1-wire.json'
 
 const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
@@ -55,7 +55,7 @@ describe('evaluate', () => {
   })
 
   it('resolves object flag', () => {
-    const result = evaluate<any>(configuration, 'object', 'json-flag', { hello: 'world' }, {})
+    const result = evaluate<'object'>(configuration, 'object', 'json-flag', { hello: 'world' }, {})
     expect(result).toEqual({
       value: { key: 'value', prop: 123 },
       variant: 'variation-127',

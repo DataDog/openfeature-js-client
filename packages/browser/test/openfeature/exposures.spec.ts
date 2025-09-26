@@ -1,7 +1,7 @@
-import { OpenFeature } from '@openfeature/web-sdk'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { DatadogProvider } from '../../src/openfeature/provider'
+import { OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { DatadogProvider } from '../../src/openfeature/provider'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
