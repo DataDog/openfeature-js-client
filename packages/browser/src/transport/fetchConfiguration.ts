@@ -11,7 +11,7 @@ const sdkPayload = {
 
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   let url: URL
-  if (initConfiguration.flaggingProxy && initConfiguration.flaggingProxy.match('https?://')) {
+  if (initConfiguration.flaggingProxy?.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
     url = new URL(`${initConfiguration.flaggingProxy}`)
   } else if (initConfiguration.flaggingProxy) {

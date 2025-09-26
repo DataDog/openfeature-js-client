@@ -1,5 +1,5 @@
-import { FlagValue, FlagValueType } from '@openfeature/core'
-import { Rule } from '../rules/rules'
+import type { FlagValue, FlagValueType } from '@openfeature/core'
+import type { Rule } from '../rules/rules'
 
 export type VariantType = 'BOOLEAN' | 'INTEGER' | 'NUMERIC' | 'STRING' | 'JSON'
 

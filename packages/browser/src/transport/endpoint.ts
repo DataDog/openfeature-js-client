@@ -30,5 +30,5 @@ export function buildEndpointHost(site: string, customerDomain = 'preview'): str
   // ff-cdn is the subdomain pointing to the CDN servers
   // dc is the datacenter, if specified
   // tld is the top level domain, changes for eu DCs
-  return `${customerDomain}.ff-cdn.${dc ? dc + '.' : ''}datadoghq.${tld}`
+  return `${customerDomain}.ff-cdn.${dc ? `${dc}.` : ''}datadoghq.${tld}`
 }

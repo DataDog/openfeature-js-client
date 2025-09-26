@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const webpack = require('webpack')
-const path = require('path')
+const path = require('node:path')
 
 // Get the webpack config path from command line arguments
 const configPath = process.argv[2]

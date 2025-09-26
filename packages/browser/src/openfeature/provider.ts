@@ -1,4 +1,4 @@
-import type { InitConfiguration } from '@datadog/browser-core'
+
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
@@ -12,14 +12,13 @@ import type {
 } from '@openfeature/web-sdk'
 /* eslint-disable-next-line local-rules/disallow-side-effects */
 import { ProviderStatus } from '@openfeature/web-sdk'
-import { evaluate } from '../evaluation'
-import { createRumTrackingHook, createRumExposureHook, createExposureLoggingHook } from './exposures'
-import type { DDRum } from './rumIntegration'
 import {
-  validateAndBuildFlaggingConfiguration,
-  type FlaggingInitConfiguration,
   type FlaggingConfiguration,
+  type FlaggingInitConfiguration,
+  validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
+import { evaluate } from '../evaluation'
+import { createExposureLoggingHook, createRumExposureHook, createRumTrackingHook } from './exposures'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead

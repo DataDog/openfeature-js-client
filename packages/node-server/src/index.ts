@@ -1,4 +1,4 @@
 export * from './provider'
 
 // Build environment placeholder for testing
-const SDK_VERSION = __BUILD_ENV__SDK_VERSION__
+const _SDK_VERSION = __BUILD_ENV__SDK_VERSION__

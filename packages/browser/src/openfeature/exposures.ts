@@ -1,10 +1,10 @@
-import { dateNow, createPageMayExitObservable, addTelemetryDebug } from '@datadog/browser-core'
 import type { Context, RawError } from '@datadog/browser-core'
+import { addTelemetryDebug, createPageMayExitObservable, dateNow } from '@datadog/browser-core'
+import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import type { FlaggingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import type { DDRum } from './rumIntegration'
-import type { FlaggingConfiguration } from '../domain/configuration'
-import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
 
 /**
  * Create hook for RUM flag tracking

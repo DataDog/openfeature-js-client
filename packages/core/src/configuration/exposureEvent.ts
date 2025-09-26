@@ -1,5 +1,5 @@
-import { EvaluationContext, EvaluationDetails, FlagValue } from '@openfeature/core'
-import { ExposureEvent } from './exposureEvent.types'
+import type { EvaluationContext, EvaluationDetails, FlagValue } from '@openfeature/core'
+import type { ExposureEvent } from './exposureEvent.types'
 
 export function createExposureEvent<T extends FlagValue>(
   context: EvaluationContext,

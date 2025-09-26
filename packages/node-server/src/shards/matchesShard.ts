@@ -1,5 +1,5 @@
-import { Shard, ShardRange } from '../configuration/ufc-v1'
-import { MD5Sharder, Sharder } from './sharders'
+import type { Shard, ShardRange } from '../configuration/ufc-v1'
+import { MD5Sharder, type Sharder } from './sharders'
 
 export function matchesShard(shard: Shard, subjectKey: string, customSharder?: Sharder): boolean {
   const sharder = customSharder ?? new MD5Sharder()

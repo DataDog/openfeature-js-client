@@ -1,4 +1,4 @@
-const { spawn } = require('child_process')
+const { spawn } = require('node:child_process')
 
 function runMain(main) {
   Promise.resolve()
@@ -47,7 +47,7 @@ function command(strings, ...values) {
 
 // Synchronous command execution that returns stdout
 function syncCommand(command) {
-  const { execSync } = require('child_process')
+  const { execSync } = require('node:child_process')
   return execSync(command, { encoding: 'utf-8' }).trim()
 }
 

@@ -1,15 +1,15 @@
-import { matchesRule, Rule } from '../rules/rules'
-import { matchesShard } from '../shards/matchesShard'
-import { Flag, Split, VariantType, variantTypeToFlagValueType } from './ufc-v1'
+import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
 import {
   ErrorCode,
-  EvaluationContext,
-  FlagValueType,
-  Logger,
-  ResolutionDetails,
+  type EvaluationContext,
+  type FlagValueType,
+  type Logger,
+  type ResolutionDetails,
   StandardResolutionReasons,
 } from '@openfeature/server-sdk'
-import { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import { matchesRule, type Rule } from '../rules/rules'
+import { matchesShard } from '../shards/matchesShard'
+import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag | undefined,

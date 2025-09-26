@@ -1,24 +1,21 @@
+import type { Channel } from 'node:diagnostics_channel'
+import { createExposureEvent, type ExposureEvent } from '@datadog/flagging-core'
+import type { EvaluationContext } from '@openfeature/core'
 import type {
   EvaluationDetails,
+  FlagValue,
+  Hook,
   JsonValue,
   Logger,
+  Paradigm,
   Provider,
+  ProviderEventEmitter,
   ProviderMetadata,
   ResolutionDetails,
-  Paradigm,
-  Hook,
-  FlagValue,
-  ProviderEventEmitter,
 } from '@openfeature/server-sdk'
-
 import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
-
-import { EvaluationContext } from '@openfeature/core'
 import { evaluate } from './configuration/evaluation'
-import { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
-import { ExposureEvent } from '@datadog/flagging-core'
-import { createExposureEvent } from '@datadog/flagging-core'
-import type { Channel } from 'node:diagnostics_channel'
+import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 
 export interface DatadogNodeServerProviderOptions {
   /**

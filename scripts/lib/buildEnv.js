@@ -1,7 +1,6 @@
-const { readFileSync } = require('fs')
-const path = require('path')
-const execSync = require('child_process').execSync
-const { command } = require('./executionUtils')
+const { readFileSync } = require('node:fs')
+const path = require('node:path')
+const execSync = require('node:child_process').execSync
 
 /**
  * Allows to define which sdk_version to send to the intake.

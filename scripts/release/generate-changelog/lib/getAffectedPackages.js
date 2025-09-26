@@ -1,4 +1,4 @@
-const fs = require('fs')
+const fs = require('node:fs')
 const { packagesDirectoryNames } = require('../../../lib/packagesDirectoryNames')
 const { commandSync } = require('../../../lib/executionUtils')
 
@@ -68,7 +68,7 @@ function getDepenciesRecursively(packageDirectoryName) {
       const packageDirectoryName = getPackageDirectoryNameFromPackageName(dependencyPackageName)
       if (packageDirectoryName) {
         dependencies.add(packageDirectoryName)
-        for (let transitiveDependency of getDepenciesRecursively(packageDirectoryName)) {
+        for (const transitiveDependency of getDepenciesRecursively(packageDirectoryName)) {
           dependencies.add(transitiveDependency)
         }
       }

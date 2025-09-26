@@ -1,14 +1,14 @@
 import type { FlagTypeToValue } from '@datadog/flagging-core'
 import {
   ErrorCode,
-  EvaluationContext,
-  FlagValueType,
-  Logger,
-  ResolutionDetails,
+  type EvaluationContext,
+  type FlagValueType,
+  type Logger,
+  type ResolutionDetails,
   StandardResolutionReasons,
 } from '@openfeature/server-sdk'
-import { UniversalFlagConfigurationV1 } from './ufc-v1'
 import { evaluateForSubject } from './evaluateForSubject'
+import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 export function evaluate<T extends FlagValueType>(
   config: UniversalFlagConfigurationV1 | undefined,

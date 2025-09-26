@@ -3,14 +3,14 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "correctness": {
+        "noUnusedImports": "error"
+      }
     }
   },
   "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 80
+    "enabled": false
   },
   "javascript": {
     "formatter": {
@@ -28,6 +28,6 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!**/dist", "!**/cjs", "!.pnp.*"]
+    "includes": ["**", "!**/dist", "!**/cjs", "!**/esm", "!.pnp.*", "!**/bundle"]
   }
 }

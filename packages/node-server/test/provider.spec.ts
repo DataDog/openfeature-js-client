@@ -1,21 +1,19 @@
+import type { Channel } from 'node:diagnostics_channel'
+import fs from 'node:fs'
+import path from 'node:path'
+import type { ExposureEvent } from '@datadog/flagging-core'
 import {
-  FlagValue,
-  HookContext,
-  Logger,
+  type BaseHook,
+  type EvaluationDetails,
+  type FlagValue,
+  type HookContext,
+  type HookHints,
+  type Logger,
   OpenFeature,
-  ProviderStatus,
-  Hook,
-  EvaluationDetails,
-  HookHints,
-  BaseHook,
   ProviderEvents,
 } from '@openfeature/server-sdk'
+import type { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from 'src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
-import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from 'src/configuration/ufc-v1'
-import fs from 'fs'
-import path from 'path'
-import { Channel } from 'diagnostics_channel'
-import { ExposureEvent } from '@datadog/flagging-core'
 
 describe('DatadogNodeServerProvider', () => {
   let logger: Logger

@@ -1,12 +1,12 @@
+import type { Channel } from 'node:diagnostics_channel'
+import fs from 'node:fs'
+import path from 'node:path'
+import type { ExposureEvent } from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, JsonValue, Logger } from '@openfeature/core'
 import { OpenFeature } from '@openfeature/server-sdk'
-import fs from 'fs'
-import { Channel } from 'node:diagnostics_channel'
-import path from 'path'
-import { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
+import type { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
-import { TestCase } from './TestCaseResult.types'
-import { ExposureEvent } from '@datadog/flagging-core'
+import type { TestCase } from './TestCaseResult.types'
 
 type ExposureChannelListener = (message: ExposureEvent, name: string | symbol) => void
 
