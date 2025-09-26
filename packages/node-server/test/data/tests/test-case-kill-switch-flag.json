@@ -13,7 +13,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -51,7 +49,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -69,7 +66,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -89,7 +85,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -105,7 +100,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -123,7 +117,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -142,7 +135,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-age-50+",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -160,7 +152,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -178,7 +169,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -196,7 +186,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -215,7 +204,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -234,7 +222,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-age-50+",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -252,7 +239,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -268,7 +254,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -284,7 +269,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -302,7 +286,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -320,7 +303,6 @@
       "variant": "on",
       "flagMetadata": {
         "allocationKey": "on-for-NA",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -336,7 +318,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -354,7 +335,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -372,7 +352,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -390,7 +369,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -408,7 +386,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }
@@ -426,7 +403,6 @@
       "variant": "off",
       "flagMetadata": {
         "allocationKey": "off-for-all",
-        "variationType": "boolean",
         "doLog": true
       }
     }

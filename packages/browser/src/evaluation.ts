@@ -48,9 +48,8 @@ function evaluatePrecomputed<T extends FlagValueType>(
     variant: flag.variationKey,
     flagMetadata: {
       allocationKey: flag.allocationKey,
-      variationType: flag.variationType,
       doLog: flag.doLog,
-    } as PrecomputedFlagMetadata,
+    } satisfies PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
 }

@@ -9,7 +9,7 @@ import {
 } from '@openfeature/server-sdk'
 import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
-import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
+import type { Flag, Split, VariantType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag | undefined,
@@ -88,9 +88,8 @@ export function evaluateForSubject<T extends FlagValueType>(
           variant: variant.key,
           flagMetadata: {
             allocationKey: allocation.key,
-            variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
-          } as PrecomputedFlagMetadata,
+          } satisfies PrecomputedFlagMetadata,
         }
       }
     } else {

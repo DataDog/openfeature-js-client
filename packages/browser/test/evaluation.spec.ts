@@ -35,7 +35,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-124',
         doLog: true,
-        variationType: 'BOOLEAN',
       },
     })
   })
@@ -49,7 +48,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-123',
         doLog: true,
-        variationType: 'STRING',
       },
     })
   })
@@ -63,7 +61,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-127',
         doLog: true,
-        variationType: 'OBJECT',
       },
     })
   })

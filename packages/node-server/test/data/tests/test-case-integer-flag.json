@@ -13,7 +13,6 @@
       "variant": "three",
       "flagMetadata": {
         "allocationKey": "targeted allocation",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "three",
       "flagMetadata": {
         "allocationKey": "targeted allocation",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -50,7 +48,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -70,7 +67,6 @@
       "variant": "three",
       "flagMetadata": {
         "allocationKey": "targeted allocation",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -86,7 +82,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -102,7 +97,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -118,7 +112,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -134,7 +127,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -150,7 +142,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -166,7 +157,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -182,7 +172,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -198,7 +187,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -214,7 +202,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -230,7 +217,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -246,7 +232,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -262,7 +247,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -278,7 +262,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -294,7 +277,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -310,7 +292,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -326,7 +307,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -342,7 +322,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -358,7 +337,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -374,7 +352,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "number",
         "doLog": true
       }
     }

@@ -12,7 +12,6 @@
       "variant": "1",
       "flagMetadata": {
         "allocationKey": "1-for-1",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -42,7 +41,6 @@
       "variant": "3",
       "flagMetadata": {
         "allocationKey": "3-for-not-2",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -60,7 +58,6 @@
       "variant": "3",
       "flagMetadata": {
         "allocationKey": "3-for-not-2",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -78,7 +75,6 @@
       "variant": "1",
       "flagMetadata": {
         "allocationKey": "1-for-1",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -96,7 +92,6 @@
       "variant": "1",
       "flagMetadata": {
         "allocationKey": "1-for-1",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -114,7 +109,6 @@
       "variant": "2",
       "flagMetadata": {
         "allocationKey": "2-for-123456789",
-        "variationType": "number",
         "doLog": true
       }
     }

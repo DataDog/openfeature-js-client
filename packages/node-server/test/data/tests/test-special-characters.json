@@ -13,7 +13,6 @@
       "variant": "de",
       "flagMetadata": {
         "allocationKey": "allocation-test",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "ua",
       "flagMetadata": {
         "allocationKey": "allocation-test",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -51,7 +49,6 @@
       "variant": "zh",
       "flagMetadata": {
         "allocationKey": "allocation-test",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -70,7 +67,6 @@
       "variant": "emoji",
       "flagMetadata": {
         "allocationKey": "allocation-test",
-        "variationType": "object",
         "doLog": true
       }
     }

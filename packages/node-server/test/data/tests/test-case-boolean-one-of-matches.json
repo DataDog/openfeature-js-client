@@ -12,7 +12,6 @@
       "variant": "1",
       "flagMetadata": {
         "allocationKey": "1-for-one-of",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -54,7 +53,6 @@
       "variant": "2",
       "flagMetadata": {
         "allocationKey": "2-for-matches",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -96,7 +94,6 @@
       "variant": "4",
       "flagMetadata": {
         "allocationKey": "4-for-not-matches",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -114,7 +111,6 @@
       "variant": "4",
       "flagMetadata": {
         "allocationKey": "4-for-not-matches",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -132,7 +128,6 @@
       "variant": "3",
       "flagMetadata": {
         "allocationKey": "3-for-not-one-of",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -162,7 +157,6 @@
       "variant": "3",
       "flagMetadata": {
         "allocationKey": "3-for-not-one-of",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -180,7 +174,6 @@
       "variant": "3",
       "flagMetadata": {
         "allocationKey": "3-for-not-one-of",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -210,7 +203,6 @@
       "variant": "5",
       "flagMetadata": {
         "allocationKey": "5-for-matches-null",
-        "variationType": "number",
         "doLog": true
       }
     }

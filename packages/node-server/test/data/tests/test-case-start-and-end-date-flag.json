@@ -13,7 +13,6 @@
       "variant": "current",
       "flagMetadata": {
         "allocationKey": "current-versions",
-        "variationType": "string",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "current",
       "flagMetadata": {
         "allocationKey": "current-versions",
-        "variationType": "string",
         "doLog": true
       }
     }
@@ -50,7 +48,6 @@
       "variant": "current",
       "flagMetadata": {
         "allocationKey": "current-versions",
-        "variationType": "string",
         "doLog": true
       }
     }

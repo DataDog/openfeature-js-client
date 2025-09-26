@@ -13,7 +13,6 @@
       "variant": "small",
       "flagMetadata": {
         "allocationKey": "small-size",
-        "variationType": "string",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "medium",
       "flagMetadata": {
         "allocationKey": "medum-size",
-        "variationType": "string",
         "doLog": true
       }
     }
@@ -62,7 +60,6 @@
       "variant": "large",
       "flagMetadata": {
         "allocationKey": "large-size",
-        "variationType": "string",
         "doLog": true
       }
     }

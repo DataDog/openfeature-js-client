@@ -13,7 +13,6 @@
       "variant": "pi",
       "flagMetadata": {
         "allocationKey": "rollout",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -32,7 +31,6 @@
       "variant": "pi",
       "flagMetadata": {
         "allocationKey": "rollout",
-        "variationType": "number",
         "doLog": true
       }
     }
@@ -50,7 +48,6 @@
       "variant": "pi",
       "flagMetadata": {
         "allocationKey": "rollout",
-        "variationType": "number",
         "doLog": true
       }
     }

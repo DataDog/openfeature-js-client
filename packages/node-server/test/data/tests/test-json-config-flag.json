@@ -19,7 +19,6 @@
       "variant": "one",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -44,7 +43,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -68,7 +66,6 @@
       "variant": "two",
       "flagMetadata": {
         "allocationKey": "50/50 split",
-        "variationType": "object",
         "doLog": true
       }
     }
@@ -88,7 +85,6 @@
       "variant": "empty",
       "flagMetadata": {
         "allocationKey": "Optionally Force Empty",
-        "variationType": "object",
         "doLog": true
       }
     }

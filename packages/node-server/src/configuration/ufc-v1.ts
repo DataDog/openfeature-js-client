@@ -1,4 +1,4 @@
-import type { FlagValue, FlagValueType } from '@openfeature/core'
+import type { FlagValue } from '@openfeature/core'
 import type { Rule } from '../rules/rules'
 
 export type VariantType = 'BOOLEAN' | 'INTEGER' | 'NUMERIC' | 'STRING' | 'JSON'
@@ -57,20 +57,4 @@ export interface UniversalFlagConfigurationV1Response {
     id: string
     attributes: UniversalFlagConfigurationV1
   }
-}
-
-export function variantTypeToFlagValueType(variantType: VariantType): FlagValueType {
-  if (variantType === 'BOOLEAN') {
-    return 'boolean'
-  }
-  if (variantType === 'STRING') {
-    return 'string'
-  }
-  if (variantType === 'INTEGER' || variantType === 'NUMERIC') {
-    return 'number'
-  }
-  if (variantType === 'JSON') {
-    return 'object'
-  }
-  throw new Error(`Cannot convert variant type to flag value type: ${variantType}`)
 }

@@ -12,7 +12,6 @@
       "variant": "empty_string",
       "flagMetadata": {
         "allocationKey": "allocation-empty",
-        "variationType": "string",
         "doLog": true
       }
     }
@@ -28,7 +27,6 @@
       "variant": "non_empty",
       "flagMetadata": {
         "allocationKey": "allocation-test",
-        "variationType": "string",
         "doLog": true
       }
     }
