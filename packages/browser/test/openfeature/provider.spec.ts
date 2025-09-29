@@ -1,5 +1,6 @@
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
+import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
@@ -16,7 +17,7 @@ describe('DatadogProvider', () => {
     site: INTAKE_SITE_STAGING,
   }
 
-  beforeEach(() => {
+  const setupProvider = (): DatadogProvider => {
     provider = new DatadogProvider(options)
     mockLogger = {
       debug: jest.fn(),
@@ -25,9 +26,15 @@ describe('DatadogProvider', () => {
       error: jest.fn(),
     }
     mockContext = {}
-  })
+    return provider
+  }
 
   describe('configuration validation', () => {
+    beforeEach(() => {
+      setupProvider()
+      OpenFeature.setProvider(provider)
+    })
+
     it('should throw error when ddog-gov.com site is provided', () => {
       const invalidOptions: FlaggingInitConfiguration = {
         clientToken: 'xxx',
@@ -41,6 +48,11 @@ describe('DatadogProvider', () => {
   })
 
   describe('metadata', () => {
+    beforeEach(() => {
+      setupProvider()
+      OpenFeature.setProvider(provider)
+    })
+
     it('should have correct metadata', () => {
       expect(provider.metadata).toEqual({
         name: 'datadog',
@@ -53,6 +65,10 @@ describe('DatadogProvider', () => {
   })
 
   describe('resolveBooleanEvaluation', () => {
+    beforeEach(() => {
+      setupProvider()
+    })
+
     it('should return default value with DEFAULT reason', () => {
       const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
       expect(result).toEqual({
@@ -63,6 +79,10 @@ describe('DatadogProvider', () => {
   })
 
   describe('resolveStringEvaluation', () => {
+    beforeEach(() => {
+      setupProvider()
+    })
+
     it('should return default value with DEFAULT reason', () => {
       const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
       expect(result).toEqual({
@@ -73,6 +93,10 @@ describe('DatadogProvider', () => {
   })
 
   describe('resolveNumberEvaluation', () => {
+    beforeEach(() => {
+      setupProvider()
+    })
+
     it('should return default value with DEFAULT reason', () => {
       const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
       expect(result).toEqual({
@@ -83,6 +107,10 @@ describe('DatadogProvider', () => {
   })
 
   describe('resolveObjectEvaluation', () => {
+    beforeEach(() => {
+      setupProvider()
+    })
+
     it('should return default value with DEFAULT reason', () => {
       const defaultValue = { key: 'value' }
       const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
@@ -97,12 +125,24 @@ describe('DatadogProvider', () => {
     let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
     let fetchMock: jest.Mock
 
+    beforeEach(() => {
+      setupProvider()
+      fetchMock.mockClear()
+    })
+
     beforeAll(() => {
       // Store the original fetch
       originalFetch = global.fetch
 
       // Mock the fetch function
       fetchMock = jest.fn().mockImplementation(async (_url, _options) => ({
+        ok: true,
+        headers: {
+          get: jest.fn((name: string) => {
+            if (name === 'content-type') return 'application/vnd.api+json'
+            return null
+          }),
+        },
         json: async () => precomputedResponse,
       }))
 
@@ -172,6 +212,142 @@ describe('DatadogProvider', () => {
           doLog: true,
           variationType: 'STRING',
         },
+      })
+    })
+  })
+
+  describe('error handling integration', () => {
+    let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
+    let isolatedFetchMock: jest.Mock
+    const errorHandler = jest.fn()
+    const readyHandler = jest.fn()
+
+    beforeAll(() => {
+      originalFetch = global.fetch
+    })
+
+    afterAll(() => {
+      global.fetch = originalFetch
+    })
+
+    beforeEach(async () => {
+      isolatedFetchMock = jest.fn()
+      global.fetch = isolatedFetchMock
+      errorHandler.mockReset()
+      readyHandler.mockReset()
+      OpenFeature.clearHandlers()
+      OpenFeature.addHandler(ProviderEvents.Error, errorHandler)
+      OpenFeature.addHandler(ProviderEvents.Ready, readyHandler)
+    })
+
+    describe('initialize error handling', () => {
+      it('should emit ProviderEvents.Error when fetchFlagsConfiguration fails during initialization', async () => {
+        isolatedFetchMock.mockImplementation(async () => ({
+          ok: false,
+          headers: new Headers({
+            'content-type': 'application/vnd.api+json',
+          }),
+          json: async () => {
+            throw new Error('Network error')
+          },
+        }))
+        const testProvider = new DatadogProvider(options)
+        await expect(OpenFeature.setProviderAndWait(testProvider)).rejects.toThrow('Network error')
+        expect(errorHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Network error',
+            providerName: 'datadog',
+          })
+        )
+        expect(readyHandler).not.toHaveBeenCalled()
+      })
+
+      it('should emit ProviderEvents.Ready when fetchFlagsConfiguration succeeds during initialization', async () => {
+        errorHandler.mockReset()
+        readyHandler.mockReset()
+        isolatedFetchMock.mockImplementation(async () => ({
+          ok: true,
+          headers: new Headers({
+            'content-type': 'application/vnd.api+json',
+          }),
+          json: async () => precomputedResponse,
+        }))
+        const testProvider = new DatadogProvider(options)
+        await OpenFeature.setProviderAndWait(testProvider)
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        expect(readyHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerName: 'datadog',
+          })
+        )
+        expect(errorHandler).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('onContextChange error handling', () => {
+      it('should emit ProviderEvents.Error when fetchFlagsConfiguration fails during context change', async () => {
+        errorHandler.mockReset()
+        readyHandler.mockReset()
+
+        // First call succeeds for initialization
+        isolatedFetchMock.mockImplementationOnce(async () => ({
+          ok: true,
+          headers: new Headers({
+            'content-type': 'application/vnd.api+json',
+          }),
+          json: async () => precomputedResponse,
+        }))
+
+        const testProvider = new DatadogProvider(options)
+        await OpenFeature.setProviderAndWait(testProvider)
+
+        errorHandler.mockClear()
+        readyHandler.mockClear()
+
+        // Second call fails for context change
+        isolatedFetchMock.mockImplementation(() => {
+          throw new Error('Context change fetch failed')
+        })
+
+        await OpenFeature.setContext({ targetingKey: 'new-user' })
+
+        expect(errorHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({
+              message: 'Context change fetch failed',
+            }),
+            providerName: 'datadog',
+          })
+        )
+      })
+
+      it('should emit ProviderEvents.ContextChanged when fetchFlagsConfiguration succeeds during context change', async () => {
+        errorHandler.mockReset()
+        readyHandler.mockReset()
+
+        isolatedFetchMock.mockImplementation(async () => ({
+          ok: true,
+          headers: new Headers({
+            'content-type': 'application/vnd.api+json',
+          }),
+          json: async () => precomputedResponse,
+        }))
+
+        const testProvider = new DatadogProvider(options)
+        await OpenFeature.setProviderAndWait(testProvider)
+
+        const contextChangedHandler = jest.fn()
+        OpenFeature.addHandler(ProviderEvents.ContextChanged, contextChangedHandler)
+
+        await OpenFeature.setContext({ targetingKey: 'new-user' })
+
+        expect(contextChangedHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerName: 'datadog',
+          })
+        )
+
+        OpenFeature.removeHandler(ProviderEvents.ContextChanged, contextChangedHandler)
       })
     })
   })

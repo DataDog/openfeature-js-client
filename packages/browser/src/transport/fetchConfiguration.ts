@@ -9,6 +9,26 @@ const sdkPayload = {
   version: __BUILD_ENV__SDK_VERSION__,
 }
 
+type JSONAPIError = {
+  errors: {
+    detail: string
+  }[]
+}
+
+async function getErrorMessage(response: Response) {
+  if (
+    response.headers.get('content-type') === 'application/vnd.api+json' ||
+    response.headers.get('content-type') === 'application/json'
+  ) {
+    const error = (await response.json()) as JSONAPIError
+    if ('errors' in error) {
+      return error.errors[0].detail
+    }
+    return 'Unknown error'
+  }
+  return response.statusText || 'Unknown error'
+}
+
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   let url: URL
   if (initConfiguration.flaggingProxy?.match('https?://')) {
@@ -63,6 +83,10 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         },
       }),
     })
+    if (!response.ok) {
+      const errorMessage = await getErrorMessage(response)
+      throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
+    }
     const precomputed = await response.json()
     return {
       precomputed: {

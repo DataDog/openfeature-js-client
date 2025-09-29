@@ -13,6 +13,8 @@ import type {
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
+/* eslint-disable-next-line local-rules/disallow-side-effects */
+import { OpenFeatureEventEmitter, type ProviderEventEmitter, ProviderEvents } from '@openfeature/web-sdk'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -35,6 +37,7 @@ export class DatadogProvider implements Provider {
   }
   readonly runsOn: Paradigm = 'client'
   hooks?: Hook[]
+  readonly events: ProviderEventEmitter<ProviderEvents>
 
   status: ProviderStatus
   private flagsConfiguration: FlagsConfiguration = {}
@@ -44,8 +47,9 @@ export class DatadogProvider implements Provider {
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
-    // Set up provider-managed hooks based on configuration
+    // Set up provider-managed hooks and events
     this.hooks = []
+    this.events = new OpenFeatureEventEmitter()
 
     // Add RUM flag tracking hook (DEPRECATED)
     if (options.rum?.ddFlaggingTracking) {
@@ -89,8 +93,14 @@ export class DatadogProvider implements Provider {
       throw new Error('Invalid configuration')
     }
     this.status = ProviderStatus.RECONCILING
-    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
-    this.status = ProviderStatus.READY
+    try {
+      this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+      this.events.emit(ProviderEvents.ContextChanged)
+      this.status = ProviderStatus.READY
+    } catch (error) {
+      this.events.emit(ProviderEvents.Error, { error })
+      this.status = ProviderStatus.ERROR
+    }
   }
 
   resolveBooleanEvaluation(
