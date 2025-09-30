@@ -1,6 +1,7 @@
 name: Publish prerelease packages on NPM
 
 permissions:
+  id-token: write  # Required for OIDC - https://docs.npmjs.com/trusted-publishers#supported-cicd-providers
   contents: read
   packages: read
 
