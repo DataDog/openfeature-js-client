@@ -564,7 +564,7 @@ __metadata:
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/jest": "npm:^29.4.0"
-    "@types/node": "npm:^20.0.0"
+    "@types/node": "npm:^18.0.0"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
     ts-jest: "npm:^29.4.0"
@@ -585,7 +585,7 @@ __metadata:
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/jest": "npm:^29.4.0"
-    "@types/node": "npm:^20.0.0"
+    "@types/node": "npm:^18.0.0"
     jest: "npm:^30.0.4"
     jest-environment-jsdom: "npm:^30.0.4"
     jest-util: "npm:^30.0.2"
@@ -605,7 +605,7 @@ __metadata:
   resolution: "@datadog/openfeature-client-monorepo@workspace:."
   dependencies:
     "@biomejs/biome": "npm:^2.0.0"
-    "@types/node": "npm:^20.0.0"
+    "@types/node": "npm:^18.0.0"
     emoji-name-map: "npm:^2.0.3"
     glob: "npm:^11.0.3"
     jest: "npm:^30.0.4"
@@ -628,9 +628,9 @@ __metadata:
   dependencies:
     "@datadog/flagging-core": "npm:0.1.0-preview.7"
     "@openfeature/core": "npm:^1.9.0"
-    "@openfeature/server-sdk": "npm:^1.19.0"
+    "@openfeature/server-sdk": "npm:~1.18.0"
     "@types/jest": "npm:^30.0.0"
-    "@types/node": "npm:^20.0.0"
+    "@types/node": "npm:^18.0.0"
     "@types/spark-md5": "npm:^3"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
@@ -639,7 +639,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/server-sdk": ^1.19.0
+    "@openfeature/server-sdk": ~1.18.0
   languageName: unknown
   linkType: soft
 
@@ -1743,12 +1743,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/server-sdk@npm:^1.19.0":
-  version: 1.19.0
-  resolution: "@openfeature/server-sdk@npm:1.19.0"
+"@openfeature/server-sdk@npm:~1.18.0":
+  version: 1.18.0
+  resolution: "@openfeature/server-sdk@npm:1.18.0"
   peerDependencies:
-    "@openfeature/core": ^1.9.0
-  checksum: 10c0/3b0f2b63123323403d6b93326799c20a2f4ce80f8f39e834857b0685a3beb7a084f1ff316a469cbe006f69b9a4ff75deddf9fabd7ea8e25517c99081d0bfba8c
+    "@openfeature/core": ^1.7.0
+  checksum: 10c0/5c3aa8fee5ec4ad9ec40ee74094fe0377b28cadfcc6f71414fa1762035cb994891184cc491a59dbaade71afe0139cd39c193e3897b05df8fa21f0e7b84b67c53
   languageName: node
   linkType: hard
 
@@ -2073,12 +2073,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.0.0":
-  version: 20.19.4
-  resolution: "@types/node@npm:20.19.4"
+"@types/node@npm:^18.0.0":
+  version: 18.19.128
+  resolution: "@types/node@npm:18.19.128"
   dependencies:
-    undici-types: "npm:~6.21.0"
-  checksum: 10c0/53f40c963d1804d2e87ad942636fee4be0e1ca88f2173b2a52b198797747bfb55d9ba6613cd918a0c5083a03b87d58688497c7ea58a8f3108fc86a5d627528e1
+    undici-types: "npm:~5.26.4"
+  checksum: 10c0/ff84bfed98a10fcf5761c344ea599ff763859d777f8fd9eed12d81b0ed8c2877afa1befb2dd8b6f2a7f858da87a081afd1f7225df0767d305839d1e3e9b91e0e
   languageName: node
   linkType: hard
 
@@ -9612,10 +9612,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici-types@npm:~6.21.0":
-  version: 6.21.0
-  resolution: "undici-types@npm:6.21.0"
-  checksum: 10c0/c01ed51829b10aa72fc3ce64b747f8e74ae9b60eafa19a7b46ef624403508a54c526ffab06a14a26b3120d055e1104d7abe7c9017e83ced038ea5cf52f8d5e04
+"undici-types@npm:~5.26.4":
+  version: 5.26.5
+  resolution: "undici-types@npm:5.26.5"
+  checksum: 10c0/bb673d7876c2d411b6eb6c560e0c571eef4a01c1c19925175d16e3a30c4c428181fb8d7ae802a261f283e4166a0ac435e2f505743aa9e45d893f9a3df017b501
   languageName: node
   linkType: hard
 
