@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-preview.8
+
+**Internal Changes:**
+
+- fix: support Node 18 in Node SDK
+- chore: fix linting and formatting issues
+
 ## v0.1.0-preview.7
 
 **Internal Changes:**
