@@ -9,6 +9,9 @@
     "url": "https://github.com/DataDog/openfeature-js-client.git",
     "directory": "packages/node-server"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
@@ -34,16 +37,16 @@
   },
   "dependencies": {
     "@datadog/flagging-core": "0.1.0-preview.7",
-    "@openfeature/server-sdk": "^1.19.0",
+    "@openfeature/server-sdk": "~1.18.0",
     "spark-md5": "^3.0.2"
   },
   "peerDependencies": {
-    "@openfeature/server-sdk": "^1.19.0"
+    "@openfeature/server-sdk": "~1.18.0"
   },
   "devDependencies": {
     "@openfeature/core": "^1.9.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^18.0.0",
     "@types/spark-md5": "^3",
     "jest": "^30.0.4",
     "npm-run-all": "^4.1.5",
