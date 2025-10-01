@@ -6,6 +6,12 @@
 
 ---
 
+## v0.1.0-preview.9
+
+**Internal Changes:**
+
+- fix: remove @openfeature/web-sdk dependency in core sdk
+
 ## v0.1.0-preview.8
 
 **Internal Changes:**
