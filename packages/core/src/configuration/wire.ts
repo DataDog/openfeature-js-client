@@ -1,4 +1,4 @@
-import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { EvaluationContext } from '@openfeature/core'
 
 import type { FlagsConfiguration, UnixTimestamp } from './configuration'
 
