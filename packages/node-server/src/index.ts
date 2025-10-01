@@ -1,3 +1,4 @@
+export type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 export * from './provider'
 
 // Build environment placeholder for testing

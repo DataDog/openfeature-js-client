@@ -1,4 +1,3 @@
-
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
