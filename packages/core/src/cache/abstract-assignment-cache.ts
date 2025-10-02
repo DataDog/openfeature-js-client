@@ -1,36 +1,26 @@
+import type { ExposureEvent } from '../configuration'
 import { getMD5Hash } from '../obfuscation'
 
-/**
- * Assignment cache keys are only on the subject and flag level, while the entire value is used
- * for uniqueness checking. This way that if an assigned variation or bandit action changes for a
- * flag, it evicts the old one. Then, if an older assignment is later reassigned, it will be treated
- * as new.
- */
-export type AssignmentCacheKey = {
-  subjectKey: string
-  flagKey: string
-}
-
-export type CacheKeyPair<T extends string, U extends string> = {
-  [K in T]: string
-} & {
-  [K in U]: string
-}
-
-type VariationCacheValue = CacheKeyPair<'allocationKey', 'variationKey'>
-type BanditCacheValue = CacheKeyPair<'banditKey', 'actionKey'>
-export type AssignmentCacheValue = VariationCacheValue | BanditCacheValue
-
-export type AssignmentCacheEntry = AssignmentCacheKey & AssignmentCacheValue
+export type AssignmentCacheKey = Pick<ExposureEvent, 'flag' | 'subject'>
+export type AssignmentCacheEntry = ExposureEvent
 
 /** Converts an {@link AssignmentCacheKey} to a string. */
-export function assignmentCacheKeyToString({ subjectKey, flagKey }: AssignmentCacheKey): string {
-  return getMD5Hash([subjectKey, flagKey].join(';'))
+export function assignmentCacheKeyToString(exposureEvent: AssignmentCacheKey | ExposureEvent): string {
+  const key: AssignmentCacheKey = {
+    flag: {
+      key: exposureEvent.flag.key,
+    },
+    subject: {
+      id: exposureEvent.subject.id,
+      attributes: exposureEvent.subject.attributes,
+    },
+  }
+  return getMD5Hash(JSON.stringify(key))
 }
 
 /** Converts an {@link AssignmentCacheValue} to a string. */
-export function assignmentCacheValueToString(cacheValue: AssignmentCacheValue): string {
-  return getMD5Hash(Object.values(cacheValue).join(';'))
+export function assignmentCacheValueToString(cacheValue: AssignmentCacheEntry): string {
+  return getMD5Hash(JSON.stringify(cacheValue))
 }
 
 export interface AsyncMap<K, V> {

@@ -20,7 +20,6 @@ export function createExposureEvent<T extends FlagValue>(
   const { targetingKey: id = '', ...attributes } = context
 
   return {
-    timestamp: Date.now(),
     allocation: {
       key: allocationKey,
     },

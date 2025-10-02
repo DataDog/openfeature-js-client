@@ -166,7 +166,7 @@ export class DatadogNodeServerProvider implements Provider {
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
     if (exposureEvent && this.options.exposureChannel.hasSubscribers) {
-      this.options.exposureChannel.publish(exposureEvent)
+      this.options.exposureChannel.publish({ ...exposureEvent, timestamp: Date.now() })
     }
   }
 }

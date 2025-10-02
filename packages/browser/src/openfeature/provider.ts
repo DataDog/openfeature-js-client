@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { AssignmentCache, FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   Hook,
@@ -11,6 +11,9 @@ import type {
 } from '@openfeature/web-sdk'
 /* eslint-disable-next-line local-rules/disallow-side-effects */
 import { ProviderStatus } from '@openfeature/web-sdk'
+import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
+import { chromeStorageIfAvailable } from '../cache/helpers'
+import HybridAssignmentCache from '../cache/hybrid-assignment-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -37,6 +40,7 @@ export class DatadogProvider implements Provider {
   status: ProviderStatus
   private flagsConfiguration: FlagsConfiguration = {}
   private configuration?: FlaggingConfiguration
+  private exposureCache: AssignmentCache | undefined
 
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -56,7 +60,11 @@ export class DatadogProvider implements Provider {
 
     // Add proper exposure logging hook (creates batch internally)
     if (options.enableExposureLogging && this.configuration) {
-      this.hooks.push(createExposureLoggingHook(this.configuration))
+      this.exposureCache = assignmentCacheFactory({
+        chromeStorage: chromeStorageIfAvailable(),
+        storageKeySuffix: 'dd-of-browser',
+      })
+      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
     }
 
     if (options.initialFlagsConfiguration) {
@@ -71,6 +79,9 @@ export class DatadogProvider implements Provider {
   async initialize(context: EvaluationContext = {}): Promise<void> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
+    }
+    if (this.exposureCache instanceof HybridAssignmentCache) {
+      await this.exposureCache.init()
     }
     this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
