@@ -1,4 +1,4 @@
-import { getMD5Hash } from './obfuscation'
+import { getMD5Hash } from '@datadog/flagging-core'
 
 export abstract class Sharder {
   abstract getShard(input: string, totalShards: number): number

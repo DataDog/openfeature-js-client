@@ -564,8 +564,10 @@ __metadata:
     "@openfeature/core": "npm:^1.8.1"
     "@types/jest": "npm:^29.4.0"
     "@types/node": "npm:^18.0.0"
+    "@types/spark-md5": "npm:^3.0.5"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
+    spark-md5: "npm:^3.0.2"
     ts-jest: "npm:^29.4.0"
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
@@ -629,10 +631,8 @@ __metadata:
     "@openfeature/server-sdk": "npm:~1.18.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^18.0.0"
-    "@types/spark-md5": "npm:^3"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
-    spark-md5: "npm:^3.0.2"
     ts-jest: "npm:^29.4.0"
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
@@ -2087,7 +2087,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/spark-md5@npm:^3":
+"@types/spark-md5@npm:^3.0.5":
   version: 3.0.5
   resolution: "@types/spark-md5@npm:3.0.5"
   checksum: 10c0/501b6aa80fc6d8504fb0ad961c28b2f99d7fc3d7769059f113b4060334623b6c8da7f21dac984211d7d819ac7170ee3ce47dba682453b6baff79052fe382d810
