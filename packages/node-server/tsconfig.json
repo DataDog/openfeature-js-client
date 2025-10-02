@@ -8,5 +8,5 @@
     "types": ["node"],
     "strict": true
   },
-  "include": ["./src/**/*.ts", "./src/**/*.d.ts", "../core/src/obfuscation.ts"]
+  "include": ["./src/**/*.ts", "./src/**/*.d.ts"]
 }

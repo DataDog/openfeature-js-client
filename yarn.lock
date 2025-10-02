@@ -584,6 +584,7 @@ __metadata:
     "@datadog/flagging-core": "npm:0.1.0-preview.9"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
+    "@types/chrome": "npm:^0.1.18"
     "@types/jest": "npm:^29.4.0"
     "@types/node": "npm:^18.0.0"
     jest: "npm:^30.0.4"
@@ -1958,6 +1959,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/chrome@npm:^0.1.18":
+  version: 0.1.18
+  resolution: "@types/chrome@npm:0.1.18"
+  dependencies:
+    "@types/filesystem": "npm:*"
+    "@types/har-format": "npm:*"
+  checksum: 10c0/9499b99392ff2dcad0f888ce7a1e4af6bfe8dedcc5008543e64b558ec9685f3249b119a041a80686001add40b79c3366dcc95d417a83259f289a4dc438579022
+  languageName: node
+  linkType: hard
+
 "@types/eslint-scope@npm:^3.7.7":
   version: 3.7.7
   resolution: "@types/eslint-scope@npm:3.7.7"
@@ -1982,6 +1993,29 @@ __metadata:
   version: 1.0.8
   resolution: "@types/estree@npm:1.0.8"
   checksum: 10c0/39d34d1afaa338ab9763f37ad6066e3f349444f9052b9676a7cc0252ef9485a41c6d81c9c4e0d26e9077993354edf25efc853f3224dd4b447175ef62bdcc86a5
+  languageName: node
+  linkType: hard
+
+"@types/filesystem@npm:*":
+  version: 0.0.36
+  resolution: "@types/filesystem@npm:0.0.36"
+  dependencies:
+    "@types/filewriter": "npm:*"
+  checksum: 10c0/3ebec32f0494b0a2612187d148e9f253ff55672c53f566d9a1e6d891eb6e2372df93c252b594b2775bc53e6660c4c37fdb05dc1b26e72b60a31010da8e1f7317
+  languageName: node
+  linkType: hard
+
+"@types/filewriter@npm:*":
+  version: 0.0.33
+  resolution: "@types/filewriter@npm:0.0.33"
+  checksum: 10c0/363ef9a658a961ceae04f52934562e4ebdcdc3a2564dd8544f593d77113c16574938b6ba4fea0bee418c37bda0668c1e03dfedb6adf00d55853f51fb3a59247b
+  languageName: node
+  linkType: hard
+
+"@types/har-format@npm:*":
+  version: 1.2.16
+  resolution: "@types/har-format@npm:1.2.16"
+  checksum: 10c0/77e952bc219db0c1f0588cab3b95865bc343b922e8423a76fbbd6a757c40709a256933fa415eb8fefda6ea5897c8e3dd3191bb8a82b37c13d9232467d31ae485
   languageName: node
   linkType: hard
 

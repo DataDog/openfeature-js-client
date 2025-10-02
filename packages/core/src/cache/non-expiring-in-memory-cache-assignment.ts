@@ -1,4 +1,4 @@
-import { AbstractAssignmentCache } from './abstract-assignment-cache';
+import { AbstractAssignmentCache } from './abstract-assignment-cache'
 
 /**
  * A cache that never expires.
@@ -6,10 +6,8 @@ import { AbstractAssignmentCache } from './abstract-assignment-cache';
  * The primary use case is for client-side SDKs, where the cache is only used
  * for a single user.
  */
-export class NonExpiringInMemoryAssignmentCache extends AbstractAssignmentCache<
-  Map<string, string>
-> {
+export class NonExpiringInMemoryAssignmentCache extends AbstractAssignmentCache<Map<string, string>> {
   constructor(store = new Map<string, string>()) {
-    super(store);
+    super(store)
   }
 }
