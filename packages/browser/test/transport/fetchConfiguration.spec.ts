@@ -14,6 +14,13 @@ describe('createFlagsConfigurationFetcher', () => {
   beforeEach(() => {
     originalFetch = global.fetch
     mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: jest.fn((name: string) => {
+          if (name === 'content-type') return 'application/vnd.api+json'
+          return null
+        }),
+      },
       json: jest.fn().mockResolvedValue({ mockResponse: true }),
     })
     global.fetch = mockFetch
@@ -318,6 +325,13 @@ describe('createFlagsConfigurationFetcher', () => {
     it('should return precomputed configuration with context and timestamp', async () => {
       const mockResponse = { flags: { 'test-flag': 'value' } }
       mockFetch.mockResolvedValue({
+        ok: true,
+        headers: {
+          get: jest.fn((name: string) => {
+            if (name === 'content-type') return 'application/vnd.api+json'
+            return null
+          }),
+        },
         json: jest.fn().mockResolvedValue(mockResponse),
       })
 

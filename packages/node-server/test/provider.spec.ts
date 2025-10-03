@@ -143,6 +143,6 @@ describe('DatadogNodeServerProvider', () => {
     })
     expect(eventHandler).not.toHaveBeenCalled()
     provider.setConfiguration({ ...configuration })
-    expect(eventHandler).toHaveBeenCalled()
+    expect(eventHandler).toHaveBeenCalledTimes(1)
   }, 1000)
 })
