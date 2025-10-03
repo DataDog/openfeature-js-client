@@ -159,6 +159,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
+    const timestamp = Date.now()
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,
@@ -166,7 +167,7 @@ export class DatadogNodeServerProvider implements Provider {
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
     if (exposureEvent && this.options.exposureChannel.hasSubscribers) {
-      this.options.exposureChannel.publish({ ...exposureEvent, timestamp: Date.now() })
+      this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
     }
   }
 }

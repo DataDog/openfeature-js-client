@@ -54,6 +54,7 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      const timestamp = dateNow()
       const exposureEvent = createExposureEvent(hookContext.context, details)
       if (!exposureEvent) {
         return
@@ -67,7 +68,7 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
       try {
         const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
           ...exposureEvent,
-          timestamp: dateNow(),
+          timestamp,
         }
         exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
         // Only cache if batch.add() succeeds
