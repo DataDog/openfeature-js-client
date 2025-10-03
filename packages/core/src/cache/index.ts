@@ -1,2 +1,3 @@
 export * from './abstract-assignment-cache'
+export * from './lru-in-memory-assignment-cache'
 export * from './non-expiring-in-memory-cache-assignment'

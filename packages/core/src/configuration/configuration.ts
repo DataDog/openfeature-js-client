@@ -34,7 +34,7 @@ export type PrecomputedConfigurationResponse = {
   data: {
     attributes: {
       /** When configuration was generated. */
-      createdAt: number
+      createdAt: string
       flags: Record<string, PrecomputedFlag>
     }
   }

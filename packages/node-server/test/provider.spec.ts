@@ -18,11 +18,16 @@ import { DatadogNodeServerProvider } from '../src/provider'
 describe('DatadogNodeServerProvider', () => {
   let logger: Logger
 
-  const mockExposureChannel: Channel<ExposureEvent, ExposureEvent> = {
+  const mockExposureChannel = {
     hasSubscribers: true,
     publish: jest.fn(),
     subscribe: jest.fn(),
-  } as unknown as Channel<ExposureEvent, ExposureEvent>
+    unsubscribe: jest.fn(),
+    bindStore: jest.fn(),
+    unbindStore: jest.fn(),
+    runStores: jest.fn(),
+    name: 'ffe:exposure:submit',
+  } as jest.Mocked<Channel<ExposureEvent, ExposureEvent>>
 
   const configuration = ((): UniversalFlagConfigurationV1 => {
     const ufcJson = fs.readFileSync(path.join(__dirname, './data', 'flags-v1.json'), 'utf8')
@@ -38,6 +43,51 @@ describe('DatadogNodeServerProvider', () => {
       debug: jest.fn(),
     }
   })
+
+  function getConfigurationWithDoLogEnabledOrDisabled(
+    configuration: UniversalFlagConfigurationV1,
+    flagKey: string,
+    doLog: boolean
+  ): UniversalFlagConfigurationV1 {
+    return {
+      ...configuration,
+      flags: {
+        ...configuration.flags,
+        [flagKey]: {
+          ...configuration.flags[flagKey],
+          allocations: [
+            ...configuration.flags[flagKey].allocations.map((allocation) => {
+              allocation.doLog = doLog
+              return allocation
+            }),
+          ],
+        },
+      },
+    }
+  }
+
+  function enableDoLogForFlags(
+    configuration: UniversalFlagConfigurationV1,
+    flagKeys: string[]
+  ): UniversalFlagConfigurationV1 {
+    let modifiedConfiguration = { ...configuration }
+    for (const flagKey of flagKeys) {
+      modifiedConfiguration = getConfigurationWithDoLogEnabledOrDisabled(modifiedConfiguration, flagKey, true)
+    }
+    return modifiedConfiguration
+  }
+
+  function disableDoLogForFlags(
+    configuration: UniversalFlagConfigurationV1,
+    flagKeys: string[]
+  ): UniversalFlagConfigurationV1 {
+    let modifiedConfiguration = { ...configuration }
+    for (const flagKey of flagKeys) {
+      modifiedConfiguration = getConfigurationWithDoLogEnabledOrDisabled(modifiedConfiguration, flagKey, false)
+    }
+    return modifiedConfiguration
+  }
+
   it('should allow hooks to be set', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
@@ -145,4 +195,84 @@ describe('DatadogNodeServerProvider', () => {
     provider.setConfiguration({ ...configuration })
     expect(eventHandler).toHaveBeenCalledTimes(1)
   }, 1000)
+
+  describe('Exposures end-to-end', () => {
+    beforeEach(() => {
+      // clear publish mock
+      mockExposureChannel.publish.mockClear()
+    })
+    it('should send exposure events when exposure logging is enabled', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      provider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123' })
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    })
+
+    it('should should not send duplicate exposure events', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      provider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123' })
+      await client.getBooleanDetails('kill-switch', false)
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    })
+
+    it('should should send duplicate exposure events when context changes', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      provider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123' })
+      await client.getBooleanDetails('kill-switch', false)
+      OpenFeature.setContext({ targetingKey: 'test-user-321' })
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(2)
+    })
+
+    it('logs for each unique flag', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      const modifiedConfiguration = enableDoLogForFlags(configuration, [
+        'kill-switch',
+        'new-user-onboarding',
+        'integer-flag',
+      ])
+      provider.setConfiguration(modifiedConfiguration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123', id: 'zach' })
+      await client.getBooleanDetails('kill-switch', false)
+      await client.getBooleanDetails('kill-switch', false)
+      await client.getStringDetails('new-user-onboarding', 'control')
+      await client.getStringDetails('new-user-onboarding', 'control')
+      await client.getNumberValue('integer-flag', 1)
+      await client.getNumberValue('integer-flag', 1)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(3)
+    })
+
+    it('should not send exposure events when doLog is false', async () => {
+      const modifiedConfiguration = disableDoLogForFlags(configuration, ['kill-switch'])
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      provider.setConfiguration(modifiedConfiguration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123' })
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).not.toHaveBeenCalled()
+    })
+  })
 })
