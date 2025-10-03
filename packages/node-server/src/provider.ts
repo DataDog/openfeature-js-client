@@ -1,5 +1,10 @@
 import type { Channel } from 'node:diagnostics_channel'
-import { createExposureEvent, type ExposureEvent } from '@datadog/flagging-core'
+import {
+  type AssignmentCache,
+  createExposureEvent,
+  type ExposureEvent,
+  LRUInMemoryAssignmentCache,
+} from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/core'
 import type {
   EvaluationDetails,
@@ -34,12 +39,14 @@ export class DatadogNodeServerProvider implements Provider {
   private resolveInitialization?: (value?: void | PromiseLike<void>) => void
   private rejectInitialization?: (reason?: unknown) => void
   readonly events: ProviderEventEmitter<ProviderEvents>
+  private readonly exposureCache: AssignmentCache | undefined
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
+    this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
   }
 
   /**
@@ -87,14 +94,15 @@ export class DatadogNodeServerProvider implements Provider {
    * loading functionality via resolveInitialization and rejectInitialization.
    * See setConfiguration and setError for more details.
    */
-  initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     if (this.configuration) {
-      return Promise.resolve()
+      return
     }
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       this.resolveInitialization = resolve
       this.rejectInitialization = reject
     })
+    await this.exposureCache?.init()
   }
 
   async resolveBooleanEvaluation(
@@ -166,8 +174,16 @@ export class DatadogNodeServerProvider implements Provider {
       flagMetadata: resolutionDetails.flagMetadata ?? {},
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
-    if (exposureEvent && this.options.exposureChannel.hasSubscribers) {
+    if (!exposureEvent) {
+      return
+    }
+    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
+    if (hasLoggedAssignment) {
+      return
+    }
+    if (this.options.exposureChannel.hasSubscribers) {
       this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
+      this.exposureCache?.set(exposureEvent)
     }
   }
 }
