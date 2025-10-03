@@ -9,12 +9,14 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-/* eslint-disable-next-line local-rules/disallow-side-effects */
-import { ProviderStatus } from '@openfeature/web-sdk'
+import {
+  OpenFeatureEventEmitter,
+  type ProviderEventEmitter,
+  ProviderEvents,
+  ProviderStatus,
+} from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
-/* eslint-disable-next-line local-rules/disallow-side-effects */
-import { OpenFeatureEventEmitter, type ProviderEventEmitter, ProviderEvents } from '@openfeature/web-sdk'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -95,7 +97,6 @@ export class DatadogProvider implements Provider {
     this.status = ProviderStatus.RECONCILING
     try {
       this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
-      this.events.emit(ProviderEvents.ContextChanged)
       this.status = ProviderStatus.READY
     } catch (error) {
       this.events.emit(ProviderEvents.Error, { error })
