@@ -60,8 +60,14 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
+    const prevCreatedAt = this.configuration?.createdAt
     if (this.configuration && this.configuration !== configuration) {
       this.events.emit(ProviderEvents.ConfigurationChanged)
+      const newCreatedAt = configuration?.createdAt
+      if (prevCreatedAt !== newCreatedAt) {
+        this.exposureCache?.clear()
+      }
+      this.configuration = configuration
       return
     }
     this.configuration = configuration

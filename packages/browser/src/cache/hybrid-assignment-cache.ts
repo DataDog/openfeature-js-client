@@ -37,4 +37,8 @@ export default class HybridAssignmentCache implements AssignmentCache {
   has(key: AssignmentCacheEntry): boolean {
     return this.servingStore.has(key)
   }
+
+  async clear(): Promise<void> {
+    await Promise.all([this.servingStore.clear(), this.persistentStore.clear()])
+  }
 }

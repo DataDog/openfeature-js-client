@@ -95,8 +95,8 @@ describe('Exposures End-to-End', () => {
     // Evaluate two flags that should generate exposure events
     const client = OpenFeature.getClient()
 
-    const stringResult = await client.getStringValue('string-flag', 'default')
-    const booleanResult = await client.getBooleanValue('boolean-flag', false)
+    const stringResult = client.getStringValue('string-flag', 'default')
+    const booleanResult = client.getBooleanValue('boolean-flag', false)
 
     // Verify flag evaluations worked
     expect(stringResult).toBe('red')
@@ -175,8 +175,8 @@ describe('Exposures End-to-End', () => {
 
     // Evaluate flags
     const client = OpenFeature.getClient()
-    await client.getStringValue('string-flag', 'default')
-    await client.getBooleanValue('boolean-flag', false)
+    client.getStringValue('string-flag', 'default')
+    client.getBooleanValue('boolean-flag', false)
 
     // Trigger (potential) batch timeout
     triggerBatch()
@@ -234,8 +234,8 @@ describe('Exposures End-to-End', () => {
 
     // Evaluate both flags
     const client = OpenFeature.getClient()
-    await client.getStringValue('string-flag', 'default')
-    await client.getBooleanValue('boolean-flag', false)
+    client.getStringValue('string-flag', 'default')
+    client.getBooleanValue('boolean-flag', false)
 
     // Trigger batch timeout
     triggerBatch()
@@ -465,7 +465,7 @@ describe('Exposures End-to-End', () => {
       const client = OpenFeature.getClient()
 
       // Evaluate flag with first variation
-      const firstValue = await client.getStringValue('string-flag', 'default')
+      const firstValue = client.getStringValue('string-flag', 'default')
       expect(firstValue).toBe('red')
       triggerBatch()
 
@@ -474,7 +474,7 @@ describe('Exposures End-to-End', () => {
       await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
 
       // Evaluate same flag with second variation
-      const secondValue = await client.getStringValue('string-flag', 'default')
+      const secondValue = client.getStringValue('string-flag', 'default')
       expect(secondValue).toBe('blue')
       triggerBatch()
 
@@ -491,6 +491,146 @@ describe('Exposures End-to-End', () => {
 
       // Second exposure should have variation-b
       expect(secondExposureEvents[0].variant.key).toBe('variation-b')
+    })
+
+    it('should clear exposure cache when configuration createdAt changes', async () => {
+      // Create two responses with different createdAt timestamps
+      const firstResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            createdAt: 1731939805123,
+          },
+        },
+      }
+
+      const secondResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            createdAt: 1731939999999, // Different createdAt
+          },
+        },
+      }
+
+      let configFetchCount = 0
+
+      // Mock fetch to return different configurations with different createdAt
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('exposures')) {
+          return Promise.resolve({ ok: true, status: 200 })
+        }
+        if (url.includes('precompute-assignments')) {
+          configFetchCount++
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+          })
+        }
+        return Promise.resolve({ ok: true })
+      })
+
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Initialize provider with first configuration
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      // Evaluate flag with first configuration
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Verify first exposure was logged
+      expect(getExposuresCalls()).toHaveLength(1)
+
+      // Fetch new configuration with different createdAt (cache should be cleared)
+      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+
+      // Evaluate same flag - should log again because cache was cleared
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Should have 2 exposure calls (cache was cleared)
+      expect(getExposuresCalls()).toHaveLength(2)
+    })
+
+    it('should not clear exposure cache when configuration createdAt stays the same', async () => {
+      // Create two responses with same createdAt
+      const firstResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            createdAt: 1731939805123,
+          },
+        },
+      }
+
+      const secondResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            createdAt: 1731939805123, // Same createdAt
+          },
+        },
+      }
+
+      let configFetchCount = 0
+
+      // Mock fetch to return configurations with same createdAt
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('exposures')) {
+          return Promise.resolve({ ok: true, status: 200 })
+        }
+        if (url.includes('precompute-assignments')) {
+          configFetchCount++
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+          })
+        }
+        return Promise.resolve({ ok: true })
+      })
+
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Initialize provider with first configuration
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      // Evaluate flag with first configuration
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Verify first exposure was logged
+      expect(getExposuresCalls()).toHaveLength(1)
+
+      // Fetch new configuration with same createdAt (cache should NOT be cleared)
+      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+
+      // Evaluate same flag - should not log again because cache was not cleared
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Should still have only 1 exposure call (cache was not cleared)
+      expect(getExposuresCalls()).toHaveLength(1)
     })
   })
 })

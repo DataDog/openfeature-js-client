@@ -33,4 +33,8 @@ export default class ChromeStorageAssignmentCache implements BulkReadAssignmentC
     const entries = await this.storage.entries()
     return Object.entries(entries).map(([key, value]) => [key, value] as [string, string])
   }
+
+  async clear(): Promise<void> {
+    await this.storage.clear()
+  }
 }
