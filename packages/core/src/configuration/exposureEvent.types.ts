@@ -1,8 +1,6 @@
 import type { EvaluationContext } from '@openfeature/core'
 
 export interface ExposureEvent {
-  /** Unix timestamp in milliseconds */
-  timestamp: number
   allocation: {
     key: string
   }
@@ -16,4 +14,9 @@ export interface ExposureEvent {
     id: string
     attributes: EvaluationContext
   }
+}
+
+export interface ExposureEventWithTimestamp extends ExposureEvent {
+  /** Unix timestamp in milliseconds */
+  timestamp: number
 }

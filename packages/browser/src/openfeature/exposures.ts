@@ -1,5 +1,6 @@
 import type { Context, RawError } from '@datadog/browser-core'
 import { addTelemetryDebug, createPageMayExitObservable, dateNow } from '@datadog/browser-core'
+import type { AssignmentCache, ExposureEventWithTimestamp } from '@datadog/flagging-core'
 import { createExposureEvent } from '@datadog/flagging-core/src/configuration/exposureEvent'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
@@ -41,7 +42,7 @@ export function createRumExposureHook(rum: DDRum): Hook {
 /**
  * Create hook for exposure logging.
  */
-export function createExposureLoggingHook(configuration: FlaggingConfiguration): Hook {
+export function createExposureLoggingHook(configuration: FlaggingConfiguration, exposureCache: AssignmentCache): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const exposuresBatch = startExposuresBatch(
     configuration,
@@ -53,12 +54,30 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration):
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      const timestamp = dateNow()
       const exposureEvent = createExposureEvent(hookContext.context, details)
       if (!exposureEvent) {
         return
       }
-      // Add context and send via exposures batch
-      exposuresBatch.add(exposureEvent as unknown as Context)
+
+      const hasLoggedAssignment = exposureCache.has(exposureEvent)
+      if (hasLoggedAssignment) {
+        return
+      }
+
+      try {
+        const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
+          ...exposureEvent,
+          timestamp,
+        }
+        exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
+        // Only cache if batch.add() succeeds
+        exposureCache.set(exposureEvent)
+      } catch (error) {
+        addTelemetryDebug('Error adding exposure to batch', {
+          'error.message': error instanceof Error ? error.message : String(error),
+        })
+      }
     },
   }
 }

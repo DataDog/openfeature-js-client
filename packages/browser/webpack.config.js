@@ -7,4 +7,5 @@ module.exports = (_env, argv) =>
     mode: argv.mode,
     entry: path.resolve(__dirname, 'src/index.ts'),
     filename: 'datadog-openfeature-browser.js',
+    types: ['chrome'],
   })

@@ -36,9 +36,16 @@ describe('Exposures End-to-End', () => {
     jest.useRealTimers()
   })
 
-  beforeEach(() => {
-    fetchMock.mockClear()
-    OpenFeature.clearProviders()
+  beforeEach(async () => {
+    fetchMock.mockReset()
+    await OpenFeature.clearProviders()
+    await OpenFeature.clearContext()
+    OpenFeature.clearHandlers()
+    OpenFeature.clearHooks()
+
+    // Clear localStorage to reset assignment cache between tests
+    localStorage.clear()
+
     // Mock current time to get deterministic timestamps
     jest.setSystemTime(new Date('2025-08-04T17:00:00.000Z'))
   })
@@ -253,5 +260,237 @@ describe('Exposures End-to-End', () => {
 
       expect(exposureEvents).toEqual(expectedEvents)
     }
+  })
+
+  describe('exposure logging deduplication', () => {
+    let providerConfig: FlaggingInitConfiguration
+
+    beforeEach(async () => {
+      providerConfig = {
+        ...baseProviderConfig,
+        service: 'test-service',
+        version: '1.0.0',
+        enableExposureLogging: true,
+      }
+      // Additional cleanup to ensure fresh state
+      fetchMock.mockReset()
+      await OpenFeature.clearProviders()
+      await OpenFeature.clearContext()
+      OpenFeature.clearHandlers()
+      OpenFeature.clearHooks()
+
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('exposures')) {
+          // Mock exposures batch endpoint
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+          })
+        }
+        if (url.includes('precompute-assignments')) {
+          // Mock flag configuration endpoint
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(precomputedServerResponse),
+          })
+        }
+        // Fallback for any other requests
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        })
+      })
+    })
+
+    it('does not log duplicate exposure events', async () => {
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Wait for provider to initialize and fetch configuration
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      expect(getExposuresCalls()).toHaveLength(1)
+    })
+
+    it('logs duplicate assignments on context change', async () => {
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Wait for provider to initialize and fetch configuration
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      // with original context
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // with new context
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value-2',
+      })
+      client.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      expect(getExposuresCalls()).toHaveLength(2)
+    })
+
+    it('logs for each unique flag', async () => {
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      // Evaluate three different flags multiple times each
+      client.getStringValue('string-flag', 'default')
+      client.getStringValue('string-flag', 'default')
+      client.getBooleanValue('boolean-flag', false)
+      client.getBooleanValue('boolean-flag', false)
+      client.getNumberValue('integer-flag', 0)
+      client.getNumberValue('integer-flag', 0)
+      client.getStringValue('string-flag', 'default')
+      client.getBooleanValue('boolean-flag', false)
+      client.getNumberValue('integer-flag', 0)
+
+      // Trigger batch once after all evaluations
+      triggerBatch()
+
+      // Should only have 1 exposure call
+      const exposuresCalls = getExposuresCalls()
+      expect(exposuresCalls).toHaveLength(1)
+
+      // Parse the exposure events
+      const exposureEvents = parseExposureEvents(exposuresCalls[0][1].body)
+
+      // Should only have 3 events (one per unique flag), not 9
+      expect(exposureEvents).toHaveLength(3)
+
+      // Verify we have one event for each flag
+      const flagKeys = exposureEvents.map((event) => event.flag.key)
+      expect(flagKeys).toContain('string-flag')
+      expect(flagKeys).toContain('boolean-flag')
+      expect(flagKeys).toContain('integer-flag')
+    })
+
+    it('logs twice for the same flag when variation change', async () => {
+      // Create two different server responses with different variations
+      const firstResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            flags: {
+              'string-flag': {
+                allocationKey: 'allocation-123',
+                variationKey: 'variation-a',
+                variationType: 'STRING',
+                variationValue: 'red',
+                extraLogging: {},
+                doLog: true,
+                reason: 'TARGETING_MATCH',
+              },
+            },
+          },
+        },
+      }
+
+      const secondResponse = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            flags: {
+              'string-flag': {
+                allocationKey: 'allocation-123',
+                variationKey: 'variation-b',
+                variationType: 'STRING',
+                variationValue: 'blue',
+                extraLogging: {},
+                doLog: true,
+                reason: 'TARGETING_MATCH',
+              },
+            },
+          },
+        },
+      }
+
+      let configFetchCount = 0
+
+      // Mock fetch to return different configurations on subsequent fetches
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('exposures')) {
+          return Promise.resolve({ ok: true, status: 200 })
+        }
+        if (url.includes('precompute-assignments')) {
+          configFetchCount++
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+          })
+        }
+        return Promise.resolve({ ok: true })
+      })
+
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Initialize provider with first configuration
+      const provider = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+
+      // Evaluate flag with first variation
+      const firstValue = await client.getStringValue('string-flag', 'default')
+      expect(firstValue).toBe('red')
+      triggerBatch()
+
+      // Fetch new configuration (simulating a config update)
+      // This would typically happen automatically via polling, but we trigger it manually
+      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+
+      // Evaluate same flag with second variation
+      const secondValue = await client.getStringValue('string-flag', 'default')
+      expect(secondValue).toBe('blue')
+      triggerBatch()
+
+      // Should have 2 exposure calls (one for each variation)
+      const exposuresCalls = getExposuresCalls()
+      expect(exposuresCalls).toHaveLength(2)
+
+      // Parse both exposure events
+      const firstExposureEvents = parseExposureEvents(exposuresCalls[0][1].body)
+      const secondExposureEvents = parseExposureEvents(exposuresCalls[1][1].body)
+
+      // First exposure should have variation-a
+      expect(firstExposureEvents[0].variant.key).toBe('variation-a')
+
+      // Second exposure should have variation-b
+      expect(secondExposureEvents[0].variant.key).toBe('variation-b')
+    })
   })
 })
