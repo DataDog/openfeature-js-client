@@ -32,6 +32,8 @@ export interface AsyncMap<K, V> {
 }
 
 export interface AssignmentCache {
+  init(): Promise<void>
+
   set(key: AssignmentCacheEntry): void
 
   has(key: AssignmentCacheEntry): boolean
@@ -40,6 +42,10 @@ export interface AssignmentCache {
 export abstract class AbstractAssignmentCache<T extends Map<string, string>> implements AssignmentCache {
   // key -> variation value hash
   protected constructor(protected readonly delegate: T) {}
+
+  init(): Promise<void> {
+    return Promise.resolve()
+  }
 
   /** Returns whether the provided {@link AssignmentCacheEntry} is present in the cache. */
   has(entry: AssignmentCacheEntry): boolean {

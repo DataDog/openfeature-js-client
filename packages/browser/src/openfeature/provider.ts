@@ -13,7 +13,6 @@ import type {
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
-import HybridAssignmentCache from '../cache/hybrid-assignment-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -80,9 +79,7 @@ export class DatadogProvider implements Provider {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
-    if (this.exposureCache instanceof HybridAssignmentCache) {
-      await this.exposureCache.init()
-    }
+    await this.exposureCache?.init()
     this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
     this.status = ProviderStatus.READY
   }

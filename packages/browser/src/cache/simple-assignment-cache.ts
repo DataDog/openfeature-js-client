@@ -16,6 +16,10 @@ export default class SimpleAssignmentCache implements BulkWriteAssignmentCache, 
     this.cache = new NonExpiringInMemoryAssignmentCache(this.store)
   }
 
+  init(): Promise<void> {
+    return Promise.resolve()
+  }
+
   set(key: AssignmentCacheEntry): void {
     this.cache.set(key)
   }

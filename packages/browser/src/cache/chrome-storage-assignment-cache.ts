@@ -14,6 +14,10 @@ export default class ChromeStorageAssignmentCache implements BulkReadAssignmentC
     this.storage = new ChromeStorageAsyncMap(chromeStorage)
   }
 
+  init(): Promise<void> {
+    return Promise.resolve()
+  }
+
   set(entry: AssignmentCacheEntry): void {
     // "fire-and-forget" - we intentionally don't wait for the promise to resolve
     // noinspection JSIgnoredPromiseFromCall
