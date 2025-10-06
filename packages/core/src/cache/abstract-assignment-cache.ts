@@ -37,6 +37,8 @@ export interface AssignmentCache {
   set(key: AssignmentCacheEntry): void
 
   has(key: AssignmentCacheEntry): boolean
+
+  clear(): Promise<void> | void
 }
 
 export abstract class AbstractAssignmentCache<T extends Map<string, string>> implements AssignmentCache {
@@ -70,5 +72,10 @@ export abstract class AbstractAssignmentCache<T extends Map<string, string>> imp
    */
   entries(): IterableIterator<[string, string]> {
     return this.delegate.entries()
+  }
+
+  /** Clears all entries from the cache. */
+  clear(): void {
+    this.delegate.clear()
   }
 }

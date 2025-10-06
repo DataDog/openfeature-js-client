@@ -38,4 +38,8 @@ export default class SimpleAssignmentCache implements BulkWriteAssignmentCache, 
   getEntries(): Promise<[string, string][]> {
     return Promise.resolve(Array.from(this.cache.entries()))
   }
+
+  clear(): void {
+    this.cache.clear()
+  }
 }

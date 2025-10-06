@@ -86,7 +86,7 @@ export class DatadogProvider implements Provider {
       throw new Error('Invalid configuration')
     }
     await this.exposureCache?.init()
-    this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+    this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
     this.status = ProviderStatus.READY
   }
 
@@ -96,7 +96,7 @@ export class DatadogProvider implements Provider {
     }
     this.status = ProviderStatus.RECONCILING
     try {
-      this.flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
       this.status = ProviderStatus.READY
     } catch (error) {
       this.events.emit(ProviderEvents.Error, { error })
@@ -144,5 +144,18 @@ export class DatadogProvider implements Provider {
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
     return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
+  }
+
+  private async fetchFlagsAndMaybeClearExposureCache(context: EvaluationContext): Promise<FlagsConfiguration> {
+    if (!this.configuration) {
+      throw new Error('Invalid configuration')
+    }
+    const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
+    const flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
+    const newCreatedAt = flagsConfiguration.precomputed?.response.data.attributes.createdAt
+    if (prevCreatedAt !== newCreatedAt) {
+      await this.exposureCache?.clear()
+    }
+    return flagsConfiguration
   }
 }

@@ -274,5 +274,64 @@ describe('DatadogNodeServerProvider', () => {
       await client.getBooleanDetails('kill-switch', false)
       expect(mockExposureChannel.publish).not.toHaveBeenCalled()
     })
+
+    it('should clear exposure cache when configuration createdAt changes', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      const modifiedConfiguration = enableDoLogForFlags(configuration, ['kill-switch'])
+      provider.setConfiguration(modifiedConfiguration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123', country: 'US' })
+
+      // First evaluation - should log exposure
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+
+      // Second evaluation - should not log (cached)
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+
+      // Update configuration with new createdAt
+      const updatedConfiguration = {
+        ...modifiedConfiguration,
+        createdAt: new Date().toISOString(),
+      }
+      provider.setConfiguration(updatedConfiguration)
+
+      // Third evaluation - should log again because cache was cleared
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(2)
+    })
+
+    it('should not clear exposure cache when configuration createdAt stays the same', async () => {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      const modifiedConfiguration = enableDoLogForFlags(configuration, ['kill-switch'])
+      provider.setConfiguration(modifiedConfiguration)
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      OpenFeature.setContext({ targetingKey: 'test-user-123', country: 'US' })
+
+      // First evaluation - should log exposure
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+
+      // Update configuration with same createdAt
+      const updatedConfiguration = {
+        ...modifiedConfiguration,
+        flags: {
+          ...modifiedConfiguration.flags,
+          // Change something but keep createdAt the same
+        },
+      }
+      provider.setConfiguration(updatedConfiguration)
+
+      // Second evaluation - should not log (cache not cleared)
+      await client.getBooleanDetails('kill-switch', false)
+      expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    })
   })
 })

@@ -21,4 +21,8 @@ export default class ChromeStorageAsyncMap<T> implements AsyncMap<string, T> {
   async set(key: string, value: T) {
     await this.storage.set({ [key]: value })
   }
+
+  async clear() {
+    await this.storage.clear()
+  }
 }
