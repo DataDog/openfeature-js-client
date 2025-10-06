@@ -1,6 +1,6 @@
 {
   "name": "@datadog/flagging-core",
-  "version": "0.1.0-preview.9",
+  "version": "0.1.0-preview.10",
   "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
   "license": "MIT",
   "repository": {
