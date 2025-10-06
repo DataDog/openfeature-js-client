@@ -6,6 +6,16 @@
 
 ---
 
+## v0.1.0-preview.10
+
+**Internal Changes:**
+
+- fix: allow for experimentation to clear exposure cache
+- feat: in-memory exposure caching for server SDK
+- fix: initialization errors not surfacing in browser sdk
+- feat: deduplication of exposure logging in browser SDK
+- chore(deps): bump form-data from 4.0.3 to 4.0.4
+
 ## v0.1.0-preview.9
 
 **Internal Changes:**
