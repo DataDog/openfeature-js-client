@@ -35,7 +35,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
     }
   }
 
-  if (flag.variationType && flag.variationType.toLowerCase() !== type.toLowerCase()) {
+  if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
     return {
       value: defaultValue,
       reason: 'ERROR',
@@ -53,4 +53,23 @@ function evaluatePrecomputed<T extends FlagValueType>(
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
+}
+
+function variationTypeToOpenFeature(s: string): FlagValueType {
+  const typeMap: Record<string, FlagValueType> = {
+    string: 'string',
+    boolean: 'boolean',
+    number: 'number',
+    integer: 'number',
+    float: 'number',
+    object: 'object',
+
+    BOOLEAN: 'boolean',
+    STRING: 'string',
+    NUMERIC: 'number',
+    INTEGER: 'number',
+    JSON: 'object',
+  }
+
+  return typeMap[s] || s.toLowerCase()
 }
