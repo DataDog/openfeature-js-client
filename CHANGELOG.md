@@ -6,6 +6,12 @@
 
 ---
 
+## v0.1.0-preview.11
+
+**Internal Changes:**
+
+- FFL-1239 Remap actual variationType to expected values ([#63](https://github.com/DataDog/openfeature-js-client/pull/63)) [BROWSER]
+
 ## v0.1.0-preview.10
 
 **Internal Changes:**
