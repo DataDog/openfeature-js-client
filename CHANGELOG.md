@@ -6,6 +6,14 @@
 
 ---
 
+## v0.1.0-preview.12
+
+**Internal Changes:**
+
+- point README to @preview
+- fix: install core tarball into browser when testing pack ([#67](https://github.com/DataDog/openfeature-js-client/pull/67))
+- fix: remove 'src' reference, add testing ([#65](https://github.com/DataDog/openfeature-js-client/pull/65)) [BROWSER] [NODE-SERVER]
+
 ## v0.1.0-preview.11
 
 **Internal Changes:**
