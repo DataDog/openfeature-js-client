@@ -44,8 +44,8 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '18.x'
-          cache: 'yarn'
+          node-version: "18.x"
+          cache: "yarn"
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -59,7 +59,7 @@ jobs:
         run: yarn lerna run pack --stream
 
       - name: Test package installation
-        run: yarn test:install
+        run: yarn test:browser-install
 
       - name: Determine npm tag
         id: npm-tag

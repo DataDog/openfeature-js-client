@@ -15,17 +15,31 @@ OpenFeature.setProvider(provider)
 // Get a client
 const client = OpenFeature.getClient()
 
-// Evaluate a flag
-const value = client.getBooleanValue('test-flag', false)
+// Evaluate a flag using getBooleanDetails to get full evaluation details
+const details = client.getBooleanDetails('test-flag', false)
 
 console.log('✓ Successfully imported and initialized @datadog/openfeature-browser')
-console.log(`Flag value: ${value}`)
+console.log('Flag evaluation details:', details)
+
+// Format the details for display
+const detailsJson = JSON.stringify(details, null, 2)
 
 // Update the DOM to show success
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
-    <h1>Test App</h1>
-    <p>✓ Successfully imported and initialized @datadog/openfeature-browser</p>
-    <p>Flag value: ${value}</p>
+    <h1>DataDog OpenFeature Browser Test App</h1>
+    <p class="success">✓ Successfully imported and initialized @datadog/openfeature-browser</p>
+
+    <div class="details">
+      <h2>Flag Evaluation Details</h2>
+      <p><strong>Flag Key:</strong> ${details.flagKey}</p>
+      <p><strong>Value:</strong> ${details.value}</p>
+      <p><strong>Reason:</strong> ${details.reason}</p>
+      <p><strong>Variant:</strong> ${details.variant || 'N/A'}</p>
+      <p><strong>Error Code:</strong> ${details.errorCode || 'N/A'}</p>
+
+      <h3>Full Details (JSON):</h3>
+      <pre>${detailsJson}</pre>
+    </div>
   </div>
 `
