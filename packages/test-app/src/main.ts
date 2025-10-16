@@ -1,5 +1,5 @@
-import { OpenFeature } from '@openfeature/web-sdk'
 import { DatadogProvider } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
 
 // Initialize the Datadog provider
 const provider = new DatadogProvider({
