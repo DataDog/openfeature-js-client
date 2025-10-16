@@ -41,10 +41,10 @@ yarn install --no-immutable --silent
 
 # Install the packed packages
 echo "Installing @datadog/flagging-core from tarball..."
-yarn add @datadog/flagging-core@file:./core.tgz --no-immutable --silent
+yarn add @datadog/flagging-core@file:./core.tgz --silent
 
 echo "Installing @datadog/openfeature-browser from tarball..."
-yarn add @datadog/openfeature-browser@file:./browser.tgz --no-immutable --silent
+yarn add @datadog/openfeature-browser@file:./browser.tgz --silent
 
 # Build the app
 echo "Building test app..."
