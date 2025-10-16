@@ -12,6 +12,7 @@
     "test": "lerna run test --stream",
     "test:unit": "lerna run test --stream",
     "test:unit:watch": "lerna run test --stream --parallel",
+    "test:browser-install": "scripts/test-package-install.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",
     "typecheck": "lerna run typecheck --stream",

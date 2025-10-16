@@ -1,8 +1,12 @@
 bundle
 cjs
 esm
+dist
 coverage
 .yarn
 test/**/dist
 yarn.lock
 /docs
+test-app/dist
+test-app/node_modules
+test-app/*.tgz
