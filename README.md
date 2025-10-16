@@ -8,19 +8,15 @@ This repository hosts Browser and React Native clients for Datadog's OpenFeature
 
 ### For Customers (Recommended)
 
-**We recommend pinning to an exact preview version for stability:**
+**We do not recommend pinning to an exact _preview_ version:**
 
-```bash
-npm install @datadog/openfeature-browser@0.1.0-preview.1
-```
-
-Or use the `preview` tag for the latest preview version (less stable):
+Use the `preview` tag for the latest preview version:
 
 ```bash
 npm install @datadog/openfeature-browser@preview
 ```
 
-This will install the latest preview version (currently `0.1.0-preview.x`).
+This will install the latest _preview_ version.
 
 ### For Internal Development
 
@@ -30,14 +26,14 @@ Use the `alpha` tag for internal builds (not guaranteed to be stable):
 npm install @datadog/openfeature-browser@alpha
 ```
 
-This will install the latest alpha version (currently `0.1.0-alpha.x`).
+This will install the latest _alpha_ version.
 
 ### Specific Version
 
-You can also install a specific version:
+You can also install a specific _preview_ version:
 
 ```bash
-npm install @datadog/openfeature-browser@0.1.0-preview.1
+npm install @datadog/openfeature-browser@0.1.0-preview.x
 ```
 
 ## Quick Start
