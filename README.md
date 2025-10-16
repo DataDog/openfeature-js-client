@@ -18,16 +18,6 @@ npm install @datadog/openfeature-browser@preview
 
 This will install the latest _preview_ version.
 
-### For Internal Development
-
-Use the `alpha` tag for internal builds (not guaranteed to be stable):
-
-```bash
-npm install @datadog/openfeature-browser@alpha
-```
-
-This will install the latest _alpha_ version.
-
 ### Specific Version
 
 You can also install a specific _preview_ version:
