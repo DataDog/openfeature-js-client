@@ -1,0 +1,162 @@
+name: Publish alpha prerelease on push to main
+
+permissions:
+  id-token: write # Required for OIDC - https://docs.npmjs.com/trusted-publishers#supported-cicd-providers
+  contents: write # Required for pushing tags and commits
+  packages: read
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-test-and-publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # Fetch all history for proper version bumping
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "18.x"
+          cache: "yarn"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build packages
+        run: |
+          export BUILD_MODE=release
+          yarn build
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Create packages
+        run: yarn lerna run pack --stream
+
+      - name: Test package installation
+        run: yarn test:browser-install
+
+      - name: Bump version and create alpha prerelease
+        id: version
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./lerna.json').version")
+          echo "Current version: $CURRENT_VERSION"
+
+          # Extract base version (remove any prerelease suffix)
+          BASE_VERSION=$(echo $CURRENT_VERSION | sed -E 's/-[a-z]+\.[0-9]+$//')
+
+          # Generate timestamp-based identifier for uniqueness
+          TIMESTAMP=$(date +%s)
+
+          # Create new alpha version
+          NEW_VERSION="${BASE_VERSION}-alpha.${TIMESTAMP}"
+          echo "New version: $NEW_VERSION"
+
+          # Update lerna.json
+          node -e "const fs=require('fs'); const lerna=require('./lerna.json'); lerna.version='$NEW_VERSION'; fs.writeFileSync('./lerna.json', JSON.stringify(lerna, null, 2) + '\n');"
+
+          # Update package.json versions in all packages
+          cd packages/core && npm version $NEW_VERSION --no-git-tag-version && cd ../..
+          cd packages/browser && npm version $NEW_VERSION --no-git-tag-version && cd ../..
+          cd packages/node-server && npm version $NEW_VERSION --no-git-tag-version && cd ../..
+
+          # Commit version changes
+          git add lerna.json packages/*/package.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+
+          # Create tag
+          git tag "v$NEW_VERSION"
+
+          # Push changes and tags
+          git push origin main
+          git push origin "v$NEW_VERSION"
+
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish core package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
+          npm config set access public
+          cd packages/core
+          npm publish --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
+
+      - name: Wait for core package to be available
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE_NAME="@datadog/flagging-core"
+
+          echo "Waiting for $PACKAGE_NAME@$VERSION to be available on npm..."
+          echo "This may take a few minutes due to npm registry propagation..."
+
+          # Wait up to 5 minutes (300 seconds) with 10-second intervals
+          for i in {1..30}; do
+            echo "Attempt $i/30: Checking if $PACKAGE_NAME@$VERSION is available..."
+
+            # Try to fetch the package info from npm
+            if npm view "$PACKAGE_NAME@$VERSION" --json > /dev/null 2>&1; then
+              echo "✅ $PACKAGE_NAME@$VERSION is now available on npm!"
+              echo "Package details:"
+              npm view "$PACKAGE_NAME@$VERSION" --json
+              break
+            fi
+
+            if [ $i -eq 30 ]; then
+              echo "❌ Timeout: $PACKAGE_NAME@$VERSION is still not available after 5 minutes"
+              echo "This might indicate an issue with the npm publish or registry propagation"
+              exit 1
+            fi
+
+            echo "Package not yet available, waiting 10 seconds..."
+            sleep 10
+          done
+
+      - name: Publish browser package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
+          npm config set access public
+          cd packages/browser
+          npm publish --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
+
+      - name: Publish node-server package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
+          npm config set access public
+          cd packages/node-server
+          npm publish --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = "${{ steps.version.outputs.version }}";
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${version}`,
+              name: `v${version}`,
+              body: `Alpha prerelease v${version}\n\nPublished from commit ${context.sha}`,
+              prerelease: true,
+              draft: false
+            });
