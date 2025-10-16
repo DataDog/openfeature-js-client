@@ -44,3 +44,6 @@ jobs:
 
       - name: Run tests
         run: yarn test
+
+      - name: Test package installation
+        run: yarn test:install

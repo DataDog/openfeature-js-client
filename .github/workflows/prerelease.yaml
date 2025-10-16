@@ -58,6 +58,9 @@ jobs:
       - name: Create packages
         run: yarn lerna run pack --stream
 
+      - name: Test package installation
+        run: yarn test:install
+
       - name: Determine npm tag
         id: npm-tag
         run: |
