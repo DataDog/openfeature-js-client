@@ -16,12 +16,7 @@ cd "$TEST_APP_DIR"
 
 # Clean up previous installation
 echo "Cleaning up previous installation..."
-rm -rf node_modules package-lock.json *.tgz
-
-# Create empty yarn.lock if it doesn't exist (required for yarn workspaces to treat this as separate project)
-if [ ! -f yarn.lock ]; then
-  touch yarn.lock
-fi
+rm -rf node_modules package-lock.json yarn.lock *.tgz
 
 # Pack the core package (since browser depends on it)
 echo "Packing @datadog/flagging-core..."
