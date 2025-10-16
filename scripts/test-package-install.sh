@@ -35,15 +35,16 @@ yarn pack --filename "$TEST_APP_DIR/browser.tgz" > /dev/null 2>&1
 cd "$TEST_APP_DIR"
 
 # Install dependencies (ignore workspace context from parent)
+# Note: --no-immutable allows lockfile changes, which is needed because tarball checksums change
 echo "Installing dependencies..."
-YARN_IGNORE_PATH=1 yarn install --silent
+yarn install --no-immutable --silent
 
 # Install the packed packages
 echo "Installing @datadog/flagging-core from tarball..."
-YARN_IGNORE_PATH=1 yarn add @datadog/flagging-core@file:./core.tgz --silent
+yarn add @datadog/flagging-core@file:./core.tgz --no-immutable --silent
 
 echo "Installing @datadog/openfeature-browser from tarball..."
-YARN_IGNORE_PATH=1 yarn add @datadog/openfeature-browser@file:./browser.tgz --silent
+yarn add @datadog/openfeature-browser@file:./browser.tgz --no-immutable --silent
 
 # Build the app
 echo "Building test app..."
