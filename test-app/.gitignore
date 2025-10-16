@@ -10,7 +10,7 @@ dist
 # Package tarballs
 *.tgz
 
-# yarn 
+# yarn
 .yarn/*
 !.yarn/patches
 !.yarn/plugins

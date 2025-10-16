@@ -28,6 +28,6 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!**/dist", "!**/cjs", "!**/esm", "!.pnp.*", "!**/bundle", "!**/coverage", "!**/*.tgz"]
+    "includes": ["**", "!**/dist", "!**/cjs", "!**/esm", "!.pnp.*", "!**/bundle", "!**/coverage", "!**/*.tgz", "!test-app/node_modules"]
   }
 }

@@ -7,6 +7,6 @@ coverage
 test/**/dist
 yarn.lock
 /docs
-packages/test-app/dist
-packages/test-app/node_modules
-packages/test-app/*.tgz
+test-app/dist
+test-app/node_modules
+test-app/*.tgz
