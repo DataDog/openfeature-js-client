@@ -30,6 +30,10 @@ yarn pack --filename "$TEST_APP_DIR/core.tgz" > /dev/null 2>&1
 echo "Installing packed core into browser package..."
 cd "$REPO_ROOT/packages/browser"
 
+# Save original package.json and yarn.lock
+cp package.json package.json.backup
+
+
 # Install the tarball temporarily
 yarn add "@datadog/flagging-core@file:$TEST_APP_DIR/core.tgz" --silent
 
@@ -39,9 +43,10 @@ yarn pack --filename "$TEST_APP_DIR/browser.tgz" > /dev/null 2>&1
 
 # Restore browser package to original state using git
 echo "Restoring browser package..."
-git restore package.json 2>/dev/null
+rm package.json
+mv package.json.backup package.json
+
 cd "$REPO_ROOT"
-yarn install --silent > /dev/null 2>&1
 
 # Return to test app
 cd "$TEST_APP_DIR"
