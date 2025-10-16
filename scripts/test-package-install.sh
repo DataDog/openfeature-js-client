@@ -26,10 +26,22 @@ echo "Packing @datadog/flagging-core..."
 cd "$REPO_ROOT/packages/core"
 yarn pack --filename "$TEST_APP_DIR/core.tgz" > /dev/null 2>&1
 
+# Install the packed core into browser package (so browser packs with the correct core version)
+echo "Installing packed core into browser package..."
+cd "$REPO_ROOT/packages/browser"
+
+# Install the tarball temporarily
+yarn add "@datadog/flagging-core@file:$TEST_APP_DIR/core.tgz" --silent
+
 # Pack the browser package
 echo "Packing @datadog/openfeature-browser..."
-cd "$REPO_ROOT/packages/browser"
 yarn pack --filename "$TEST_APP_DIR/browser.tgz" > /dev/null 2>&1
+
+# Restore browser package to original state using git
+echo "Restoring browser package..."
+git restore package.json 2>/dev/null
+cd "$REPO_ROOT"
+yarn install --silent > /dev/null 2>&1
 
 # Return to test app
 cd "$TEST_APP_DIR"
