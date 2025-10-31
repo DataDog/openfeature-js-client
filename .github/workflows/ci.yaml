@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Check license report
+        run: yarn license-report:check
+
       - name: Lint
         run: yarn lint
 
