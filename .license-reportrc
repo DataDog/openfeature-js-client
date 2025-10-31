@@ -1,0 +1,11 @@
+{
+  "output": "csv",
+  "escapeCsvFields": true,
+  "delimiter": ",",
+  "fields": [
+    "name",
+    "installedFrom",
+    "licenseType",
+    "author"
+  ]
+}
