@@ -1,6 +1,5 @@
 Component,Origin,License,Copyright
 @datadog/browser-core,https://registry.npmjs.org/@datadog/browser-core/-/browser-core-6.19.0.tgz,Apache-2.0,n/a
-@datadog/flagging-core,https://registry.npmjs.org/@datadog/flagging-core/-/flagging-core-0.1.0-preview.12.tgz,MIT,n/a
 @openfeature/server-sdk,https://registry.npmjs.org/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz,Apache-2.0,
 @types/chrome,https://registry.npmjs.org/@types/chrome/-/chrome-0.1.18.tgz,MIT,n/a
 emoji-name-map,https://registry.npmjs.org/emoji-name-map/-/emoji-name-map-2.0.3.tgz,MIT,Ionică Bizău <bizauionica@gmail.com> (https://ionicabizau.net)
