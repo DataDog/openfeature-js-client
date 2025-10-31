@@ -16,6 +16,7 @@ find . -type f -name package.json \
     | grep -v node_modules \
     | grep -v test-app \
     | xargs -I {} yarn license-report --only=prod --package={} \
+    | grep -v @datadog/flagging-core \
     | sort \
     | uniq \
 >> LICENSE-3rdparty.csv
