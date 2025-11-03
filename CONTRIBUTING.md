@@ -353,6 +353,10 @@ If the automated workflow fails and you need to publish manually:
    npm publish --tag alpha  # or --tag preview (same as core)
    ```
 
+## Licensing
+
+Ensure license information for newly added third party packages are included in LICENSE-3rdparty.csv. For Datadog employees, this can be done automatically with `yarn licenses:generate`.
+
 ## Code Style
 
 - Use TypeScript for all new code

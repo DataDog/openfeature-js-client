@@ -25,4 +25,4 @@ if [ -z "$GITHUB_TOKEN" ]; then
     exit 1
 fi
 
-dd-license-attribution generate-sbom-csv https://github.com/DataDog/openfeature-js-client --override-spec .ddla-overrides > LICENSE-3rdparty.csv
+dd-license-attribution generate-overrides LICENSE-3rdparty.csv
