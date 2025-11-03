@@ -104,3 +104,7 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+## End-user license agreement
+
+https://www.datadoghq.com/legal/eula
