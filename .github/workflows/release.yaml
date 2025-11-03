@@ -1,4 +1,4 @@
-name: Publish prerelease packages on NPM
+name: Publish packages on NPM
 
 permissions:
   id-token: write # Required for OIDC - https://docs.npmjs.com/trusted-publishers#supported-cicd-providers
@@ -16,14 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Validate release type
+      - name: Validate release version
         run: |
-          # Check if this is a prerelease
-          if [[ "${{ github.event.release.prerelease }}" != "true" ]]; then
-            echo "❌ This workflow is for prereleases only. Please use the main release workflow for production releases."
-            exit 1
-          fi
-
           # Check if the tag matches the version in lerna.json
           RELEASE_VERSION="${{ github.event.release.tag_name }}"
           LERNA_VERSION=$(node -p "require('./lerna.json').version")
@@ -65,14 +59,19 @@ jobs:
         id: npm-tag
         run: |
           RELEASE_TAG="${{ github.event.release.tag_name }}"
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
 
-          # Check if the release tag contains "preview"
-          if [[ "$RELEASE_TAG" =~ .*preview.* ]]; then
+          # For production releases, use 'latest' tag
+          if [[ "$IS_PRERELEASE" == "false" ]]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "Using 'latest' npm tag for production release $RELEASE_TAG"
+          # For prereleases, determine tag based on version string
+          elif [[ "$RELEASE_TAG" =~ .*preview.* ]]; then
             echo "tag=preview" >> "$GITHUB_OUTPUT"
-            echo "Using 'preview' npm tag for release $RELEASE_TAG"
+            echo "Using 'preview' npm tag for prerelease $RELEASE_TAG"
           else
             echo "tag=alpha" >> "$GITHUB_OUTPUT"
-            echo "Using 'alpha' npm tag for release $RELEASE_TAG"
+            echo "Using 'alpha' npm tag for prerelease $RELEASE_TAG"
           fi
 
       - name: Publish core package
@@ -96,7 +95,7 @@ jobs:
           # Wait up to 5 minutes (300 seconds) with 10-second intervals
           for i in {1..30}; do
             echo "Attempt $i/30: Checking if $PACKAGE_NAME@$VERSION is available..."
-            
+
             # Try to fetch the package info from npm
             if npm view "$PACKAGE_NAME@$VERSION" --json > /dev/null 2>&1; then
               echo "✅ $PACKAGE_NAME@$VERSION is now available on npm!"
@@ -104,13 +103,13 @@ jobs:
               npm view "$PACKAGE_NAME@$VERSION" --json
               break
             fi
-            
+
             if [ $i -eq 30 ]; then
               echo "❌ Timeout: $PACKAGE_NAME@$VERSION is still not available after 5 minutes"
               echo "This might indicate an issue with the npm publish or registry propagation"
               exit 1
             fi
-            
+
             echo "Package not yet available, waiting 10 seconds..."
             sleep 10
           done
