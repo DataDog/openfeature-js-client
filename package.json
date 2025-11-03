@@ -14,6 +14,7 @@
     "test:unit:watch": "lerna run test --stream --parallel",
     "test:browser-install": "scripts/test-package-install.sh",
     "licenses:generate": "scripts/licenses-generate.sh",
+    "licenses:override": "scripts/licenses-override.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",
     "typecheck": "lerna run typecheck --stream",

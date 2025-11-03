@@ -1,0 +1,1312 @@
+[
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@ampproject/remapping",
+      "origin": "@ampproject/remapping"
+    },
+    "replacement": {
+      "name": "@ampproject/remapping",
+      "origin": "@ampproject/remapping",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Justin Ridgewell"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@babel/compat-data",
+      "origin": "@babel/compat-data"
+    },
+    "replacement": {
+      "name": "@babel/compat-data",
+      "origin": "@babel/compat-data",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Sebastian McKenzie and other contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-darwin-arm64",
+      "origin": "@biomejs/cli-darwin-arm64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-darwin-arm64",
+      "origin": "@biomejs/cli-darwin-arm64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-darwin-x64",
+      "origin": "@biomejs/cli-darwin-x64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-darwin-x64",
+      "origin": "@biomejs/cli-darwin-x64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-linux-arm64",
+      "origin": "@biomejs/cli-linux-arm64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-linux-arm64",
+      "origin": "@biomejs/cli-linux-arm64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-linux-arm64-musl",
+      "origin": "@biomejs/cli-linux-arm64-musl"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-linux-arm64-musl",
+      "origin": "@biomejs/cli-linux-arm64-musl",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-linux-x64",
+      "origin": "@biomejs/cli-linux-x64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-linux-x64",
+      "origin": "@biomejs/cli-linux-x64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-linux-x64-musl",
+      "origin": "@biomejs/cli-linux-x64-musl"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-linux-x64-musl",
+      "origin": "@biomejs/cli-linux-x64-musl",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-win32-arm64",
+      "origin": "@biomejs/cli-win32-arm64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-win32-arm64",
+      "origin": "@biomejs/cli-win32-arm64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@biomejs/cli-win32-x64",
+      "origin": "@biomejs/cli-win32-x64"
+    },
+    "replacement": {
+      "name": "@biomejs/cli-win32-x64",
+      "origin": "@biomejs/cli-win32-x64",
+      "license": [
+        "Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)"
+      ],
+      "copyright": [
+        "Biome Developers and Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@datadog/browser-core",
+      "origin": "@datadog/browser-core"
+    },
+    "replacement": {
+      "name": "@datadog/browser-core",
+      "origin": "@datadog/browser-core",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Datadog, Inc."
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@datadog/flagging-core",
+      "origin": "@datadog/flagging-core"
+    },
+    "replacement": {
+      "name": "@datadog/flagging-core",
+      "origin": "@datadog/flagging-core",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Datadog, Inc."
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@hutson/parse-repository-url",
+      "origin": "@hutson/parse-repository-url"
+    },
+    "replacement": {
+      "name": "@hutson/parse-repository-url",
+      "origin": "@hutson/parse-repository-url",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Hutson Betts"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@kessler/tableify",
+      "origin": "@kessler/tableify"
+    },
+    "replacement": {
+      "name": "@kessler/tableify",
+      "origin": "@kessler/tableify",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Dan VerWeire",
+        "Yaniv Kessler"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@lerna/create",
+      "origin": "@lerna/create"
+    },
+    "replacement": {
+      "name": "@lerna/create",
+      "origin": "@lerna/create",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Daniel Stockman"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@npmcli/agent",
+      "origin": "@npmcli/agent"
+    },
+    "replacement": {
+      "name": "@npmcli/agent",
+      "origin": "@npmcli/agent",
+      "license": [
+        "ISC"
+      ],
+      "copyright": [
+        "GitHub Inc."
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@npmcli/node-gyp",
+      "origin": "@npmcli/node-gyp"
+    },
+    "replacement": {
+      "name": "@npmcli/node-gyp",
+      "origin": "@npmcli/node-gyp",
+      "license": [
+        "ISC"
+      ],
+      "copyright": [
+        "GitHub Inc."
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@octokit/plugin-paginate-rest",
+      "origin": "@octokit/plugin-paginate-rest"
+    },
+    "replacement": {
+      "name": "@octokit/plugin-paginate-rest",
+      "origin": "@octokit/plugin-paginate-rest",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Octokit contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@openfeature/core",
+      "origin": "@openfeature/core"
+    },
+    "replacement": {
+      "name": "@openfeature/core",
+      "origin": "@openfeature/core",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "OpenFeature contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@openfeature/server-sdk",
+      "origin": "@openfeature/server-sdk"
+    },
+    "replacement": {
+      "name": "@openfeature/server-sdk",
+      "origin": "@openfeature/server-sdk",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "OpenFeature contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@openfeature/web-sdk",
+      "origin": "@openfeature/web-sdk"
+    },
+    "replacement": {
+      "name": "@openfeature/web-sdk",
+      "origin": "@openfeature/web-sdk",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "OpenFeature contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@pkgr/core",
+      "origin": "@pkgr/core"
+    },
+    "replacement": {
+      "name": "@pkgr/core",
+      "origin": "@pkgr/core",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@tybys/wasm-util",
+      "origin": "@tybys/wasm-util"
+    },
+    "replacement": {
+      "name": "@tybys/wasm-util",
+      "origin": "@tybys/wasm-util",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "toyobayashi"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@types/chrome",
+      "origin": "@types/chrome"
+    },
+    "replacement": {
+      "name": "@types/chrome",
+      "origin": "@types/chrome",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Microsoft Corporation"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@types/spark-md5",
+      "origin": "@types/spark-md5"
+    },
+    "replacement": {
+      "name": "@types/spark-md5",
+      "origin": "@types/spark-md5",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Microsoft Corporation"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-android-arm-eabi",
+      "origin": "@unrs/resolver-binding-android-arm-eabi"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-android-arm-eabi",
+      "origin": "@unrs/resolver-binding-android-arm-eabi",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-android-arm64",
+      "origin": "@unrs/resolver-binding-android-arm64"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-android-arm64",
+      "origin": "@unrs/resolver-binding-android-arm64",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-darwin-arm64",
+      "origin": "@unrs/resolver-binding-darwin-arm64"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-darwin-arm64",
+      "origin": "@unrs/resolver-binding-darwin-arm64",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-darwin-x64",
+      "origin": "@unrs/resolver-binding-darwin-x64"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-darwin-x64",
+      "origin": "@unrs/resolver-binding-darwin-x64",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-freebsd-x64",
+      "origin": "@unrs/resolver-binding-freebsd-x64"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-freebsd-x64",
+      "origin": "@unrs/resolver-binding-freebsd-x64",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-arm-gnueabihf",
+      "origin": "@unrs/resolver-binding-linux-arm-gnueabihf"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-arm-gnueabihf",
+      "origin": "@unrs/resolver-binding-linux-arm-gnueabihf",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-arm-musleabihf",
+      "origin": "@unrs/resolver-binding-linux-arm-musleabihf"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-arm-musleabihf",
+      "origin": "@unrs/resolver-binding-linux-arm-musleabihf",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-arm64-gnu",
+      "origin": "@unrs/resolver-binding-linux-arm64-gnu"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-arm64-gnu",
+      "origin": "@unrs/resolver-binding-linux-arm64-gnu",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-arm64-musl",
+      "origin": "@unrs/resolver-binding-linux-arm64-musl"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-arm64-musl",
+      "origin": "@unrs/resolver-binding-linux-arm64-musl",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-ppc64-gnu",
+      "origin": "@unrs/resolver-binding-linux-ppc64-gnu"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-ppc64-gnu",
+      "origin": "@unrs/resolver-binding-linux-ppc64-gnu",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-riscv64-gnu",
+      "origin": "@unrs/resolver-binding-linux-riscv64-gnu"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-riscv64-gnu",
+      "origin": "@unrs/resolver-binding-linux-riscv64-gnu",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-riscv64-musl",
+      "origin": "@unrs/resolver-binding-linux-riscv64-musl"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-riscv64-musl",
+      "origin": "@unrs/resolver-binding-linux-riscv64-musl",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-s390x-gnu",
+      "origin": "@unrs/resolver-binding-linux-s390x-gnu"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-s390x-gnu",
+      "origin": "@unrs/resolver-binding-linux-s390x-gnu",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-x64-gnu",
+      "origin": "@unrs/resolver-binding-linux-x64-gnu"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-x64-gnu",
+      "origin": "@unrs/resolver-binding-linux-x64-gnu",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-linux-x64-musl",
+      "origin": "@unrs/resolver-binding-linux-x64-musl"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-linux-x64-musl",
+      "origin": "@unrs/resolver-binding-linux-x64-musl",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-wasm32-wasi",
+      "origin": "@unrs/resolver-binding-wasm32-wasi"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-wasm32-wasi",
+      "origin": "@unrs/resolver-binding-wasm32-wasi",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-win32-arm64-msvc",
+      "origin": "@unrs/resolver-binding-win32-arm64-msvc"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-win32-arm64-msvc",
+      "origin": "@unrs/resolver-binding-win32-arm64-msvc",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-win32-ia32-msvc",
+      "origin": "@unrs/resolver-binding-win32-ia32-msvc"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-win32-ia32-msvc",
+      "origin": "@unrs/resolver-binding-win32-ia32-msvc",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@unrs/resolver-binding-win32-x64-msvc",
+      "origin": "@unrs/resolver-binding-win32-x64-msvc"
+    },
+    "replacement": {
+      "name": "@unrs/resolver-binding-win32-x64-msvc",
+      "origin": "@unrs/resolver-binding-win32-x64-msvc",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@xtuc/long",
+      "origin": "@xtuc/long"
+    },
+    "replacement": {
+      "name": "@xtuc/long",
+      "origin": "@xtuc/long",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Daniel Wirtz"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "@yarnpkg/parsers",
+      "origin": "@yarnpkg/parsers"
+    },
+    "replacement": {
+      "name": "@yarnpkg/parsers",
+      "origin": "@yarnpkg/parsers",
+      "license": [
+        "BSD-2-Clause"
+      ],
+      "copyright": [
+        "Yarn Contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "add-stream",
+      "origin": "add-stream"
+    },
+    "replacement": {
+      "name": "add-stream",
+      "origin": "add-stream",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Majid Burney"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "caniuse-lite",
+      "origin": "caniuse-lite"
+    },
+    "replacement": {
+      "name": "caniuse-lite",
+      "origin": "caniuse-lite",
+      "license": [
+        "CC-BY-4.0"
+      ],
+      "copyright": [
+        "Ben Briggs"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "concat-map",
+      "origin": "concat-map"
+    },
+    "replacement": {
+      "name": "concat-map",
+      "origin": "concat-map",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "James Halliday"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "dedent",
+      "origin": "dedent"
+    },
+    "replacement": {
+      "name": "dedent",
+      "origin": "dedent",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Desmond Brand"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "eastasianwidth",
+      "origin": "eastasianwidth"
+    },
+    "replacement": {
+      "name": "eastasianwidth",
+      "origin": "eastasianwidth",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Masaki Komagata"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "eol",
+      "origin": "eol"
+    },
+    "replacement": {
+      "name": "eol",
+      "origin": "eol",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Ryan Van Etten"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "err-code",
+      "origin": "err-code"
+    },
+    "replacement": {
+      "name": "err-code",
+      "origin": "err-code",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "IndigoUnited"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "filelist",
+      "origin": "filelist"
+    },
+    "replacement": {
+      "name": "filelist",
+      "origin": "filelist",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Matthew Eernisse"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "gitconfiglocal",
+      "origin": "gitconfiglocal"
+    },
+    "replacement": {
+      "name": "gitconfiglocal",
+      "origin": "gitconfiglocal",
+      "license": [
+        "BSD-3-Clause"
+      ],
+      "copyright": [
+        "Ryan Day"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "is-shared-array-buffer",
+      "origin": "is-shared-array-buffer"
+    },
+    "replacement": {
+      "name": "is-shared-array-buffer",
+      "origin": "is-shared-array-buffer",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Jordan Harband"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "jackspeak",
+      "origin": "jackspeak"
+    },
+    "replacement": {
+      "name": "jackspeak",
+      "origin": "jackspeak",
+      "license": [
+        "BlueOak-1.0.0"
+      ],
+      "copyright": [
+        "Isaac Z. Schlueter"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "jake",
+      "origin": "jake"
+    },
+    "replacement": {
+      "name": "jake",
+      "origin": "jake",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Matthew Eernisse"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "license-report",
+      "origin": "license-report"
+    },
+    "replacement": {
+      "name": "license-report",
+      "origin": "license-report",
+      "license": [
+        "JSON AND MIT"
+      ],
+      "copyright": [
+        "Yaniv Kessler"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "minimist",
+      "origin": "minimist"
+    },
+    "replacement": {
+      "name": "minimist",
+      "origin": "minimist",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "James Halliday"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "nx",
+      "origin": "nx"
+    },
+    "replacement": {
+      "name": "nx",
+      "origin": "nx",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Victor Savkin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "package-json-from-dist",
+      "origin": "package-json-from-dist"
+    },
+    "replacement": {
+      "name": "package-json-from-dist",
+      "origin": "package-json-from-dist",
+      "license": [
+        "BlueOak-1.0.0"
+      ],
+      "copyright": [
+        "Isaac Z. Schlueter"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "path-scurry",
+      "origin": "path-scurry"
+    },
+    "replacement": {
+      "name": "path-scurry",
+      "origin": "path-scurry",
+      "license": [
+        "BlueOak-1.0.0"
+      ],
+      "copyright": [
+        "Isaac Z. Schlueter"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "saxes",
+      "origin": "saxes"
+    },
+    "replacement": {
+      "name": "saxes",
+      "origin": "saxes",
+      "license": [
+        "ISC"
+      ],
+      "copyright": [
+        "Louis-Dominique Dubeau"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "sigstore",
+      "origin": "sigstore"
+    },
+    "replacement": {
+      "name": "sigstore",
+      "origin": "sigstore",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "bdehamer@github.com"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "spdx-correct",
+      "origin": "spdx-correct"
+    },
+    "replacement": {
+      "name": "spdx-correct",
+      "origin": "spdx-correct",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Kyle E. Mitchell"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "spdx-license-ids",
+      "origin": "spdx-license-ids"
+    },
+    "replacement": {
+      "name": "spdx-license-ids",
+      "origin": "spdx-license-ids",
+      "license": [
+        "CC0-1.0"
+      ],
+      "copyright": [
+        "Shinnosuke Watanabe"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "split-text-to-chunks",
+      "origin": "split-text-to-chunks"
+    },
+    "replacement": {
+      "name": "split-text-to-chunks",
+      "origin": "split-text-to-chunks",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "thomas-jensen"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "string-width-cjs",
+      "origin": "string-width-cjs"
+    },
+    "replacement": {
+      "name": "string-width-cjs",
+      "origin": "string-width-cjs",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Sindre Sorhus"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "strip-ansi-cjs",
+      "origin": "strip-ansi-cjs"
+    },
+    "replacement": {
+      "name": "strip-ansi-cjs",
+      "origin": "strip-ansi-cjs",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Sindre Sorhus"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "text-table",
+      "origin": "text-table"
+    },
+    "replacement": {
+      "name": "text-table",
+      "origin": "text-table",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "James Halliday"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "unrs-resolver",
+      "origin": "unrs-resolver"
+    },
+    "replacement": {
+      "name": "unrs-resolver",
+      "origin": "unrs-resolver",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "JounQin"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "validate-npm-package-license",
+      "origin": "validate-npm-package-license"
+    },
+    "replacement": {
+      "name": "validate-npm-package-license",
+      "origin": "validate-npm-package-license",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Kyle E. Mitchell"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "vite",
+      "origin": "vite"
+    },
+    "replacement": {
+      "name": "vite",
+      "origin": "vite",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "VoidZero Inc. and Vite contributors"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "wordwrap",
+      "origin": "wordwrap"
+    },
+    "replacement": {
+      "name": "wordwrap",
+      "origin": "wordwrap",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "James Halliday"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "wrap-ansi-cjs",
+      "origin": "wrap-ansi-cjs"
+    },
+    "replacement": {
+      "name": "wrap-ansi-cjs",
+      "origin": "wrap-ansi-cjs",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Sindre Sorhus"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "xml-name-validator",
+      "origin": "xml-name-validator"
+    },
+    "replacement": {
+      "name": "xml-name-validator",
+      "origin": "xml-name-validator",
+      "license": [
+        "Apache-2.0"
+      ],
+      "copyright": [
+        "Domenic Denicola"
+      ]
+    }
+  }
+]
