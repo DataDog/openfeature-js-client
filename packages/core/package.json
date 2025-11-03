@@ -1,8 +1,8 @@
 {
   "name": "@datadog/flagging-core",
-  "version": "0.1.0-preview.13",
+  "version": "0.1.0-preview.14",
   "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/DataDog/openfeature-js-client.git",
