@@ -1,878 +1,878 @@
-"component","origin","license","copyright"
-"@ampproject/remapping","@ampproject/remapping","['Apache-2.0']","[]"
-"@asamuzakjp/css-color","@asamuzakjp/css-color","['MIT']","['Beihang)', 'ERCIM', 'Keio', 'W3C(r) (MIT', 'asamuzaK (Kazz)', 'asamuzaK (Kazz) (https://github.com/asamuzaK/)']"
-"@babel/code-frame","@babel/code-frame","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/compat-data","@babel/compat-data","[]","[]"
-"@babel/core","@babel/core","['MIT']","['Joyent, Inc. and other Node contributors', 'Node.js contributors', 'Sebastian McKenzie and other contributors', 'Titus Wormer']"
-"@babel/generator","@babel/generator","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-compilation-targets","@babel/helper-compilation-targets","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-globals","@babel/helper-globals","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-module-imports","@babel/helper-module-imports","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-module-transforms","@babel/helper-module-transforms","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-plugin-utils","@babel/helper-plugin-utils","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-string-parser","@babel/helper-string-parser","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-validator-identifier","@babel/helper-validator-identifier","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helper-validator-option","@babel/helper-validator-option","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/helpers","@babel/helpers","['MIT']","['Facebook, Inc.', 'Sebastian McKenzie and other contributors']"
-"@babel/parser","@babel/parser","['MIT']","['by various contributors']"
-"@babel/plugin-syntax-async-generators","@babel/plugin-syntax-async-generators","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-bigint","@babel/plugin-syntax-bigint","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-class-properties","@babel/plugin-syntax-class-properties","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-class-static-block","@babel/plugin-syntax-class-static-block","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-import-attributes","@babel/plugin-syntax-import-attributes","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-import-meta","@babel/plugin-syntax-import-meta","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-json-strings","@babel/plugin-syntax-json-strings","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-jsx","@babel/plugin-syntax-jsx","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-logical-assignment-operators","@babel/plugin-syntax-logical-assignment-operators","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-nullish-coalescing-operator","@babel/plugin-syntax-nullish-coalescing-operator","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-numeric-separator","@babel/plugin-syntax-numeric-separator","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-object-rest-spread","@babel/plugin-syntax-object-rest-spread","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-optional-catch-binding","@babel/plugin-syntax-optional-catch-binding","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-optional-chaining","@babel/plugin-syntax-optional-chaining","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-private-property-in-object","@babel/plugin-syntax-private-property-in-object","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-top-level-await","@babel/plugin-syntax-top-level-await","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/plugin-syntax-typescript","@babel/plugin-syntax-typescript","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/template","@babel/template","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/traverse","@babel/traverse","['MIT']","['Sebastian McKenzie and other contributors']"
-"@babel/types","@babel/types","['MIT']","['Sebastian McKenzie and other contributors']"
-"@bcoe/v8-coverage","@bcoe/v8-coverage","['ISC AND MIT']","['Charles Samborski', 'Contributors']"
-"@biomejs/biome","@biomejs/biome","['Apache-2.0 AND MIT']","['Biome Developers and Contributors', 'Rome']"
-"@biomejs/cli-darwin-arm64","@biomejs/cli-darwin-arm64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-darwin-x64","@biomejs/cli-darwin-x64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-linux-arm64","@biomejs/cli-linux-arm64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-linux-arm64-musl","@biomejs/cli-linux-arm64-musl","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-linux-x64","@biomejs/cli-linux-x64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-linux-x64-musl","@biomejs/cli-linux-x64-musl","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-win32-arm64","@biomejs/cli-win32-arm64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@biomejs/cli-win32-x64","@biomejs/cli-win32-x64","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","[]"
-"@cspotcode/source-map-support","@cspotcode/source-map-support","['MIT']","['Evan Wallace']"
-"@csstools/color-helpers","@csstools/color-helpers","['MIT-0']","['Beihang)', 'CSSTools Contributors', 'ERCIM', 'Keio', 'W3C(r) (MIT']"
-"@csstools/css-calc","@csstools/css-calc","['MIT']","['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
-"@csstools/css-color-parser","@csstools/css-color-parser","['MIT']","['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
-"@csstools/css-parser-algorithms","@csstools/css-parser-algorithms","['MIT']","['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
-"@csstools/css-tokenizer","@csstools/css-tokenizer","['MIT']","['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
-"@datadog/browser-core","@datadog/browser-core","[]","[]"
-"@datadog/flagging-core","@datadog/flagging-core","[]","[]"
-"@emnapi/core","@emnapi/core","['MIT']","['Microsoft Corporation', 'Toyobayashi']"
-"@emnapi/runtime","@emnapi/runtime","['MIT']","['Microsoft Corporation', 'Toyobayashi']"
-"@emnapi/wasi-threads","@emnapi/wasi-threads","['MIT']","['Toyobayashi']"
-"@hutson/parse-repository-url","@hutson/parse-repository-url","['Apache-2.0']","[]"
-"@isaacs/balanced-match","@isaacs/balanced-match","['MIT']","['Isaac Z. Schlueter <i@izs.me>', 'Julian Gruber <julian@juliangruber.com>']"
-"@isaacs/brace-expansion","@isaacs/brace-expansion","['MIT']","['Isaac Z. Schlueter <i@izs.me>', 'Julian Gruber <julian@juliangruber.com>']"
-"@isaacs/cliui","@isaacs/cliui","['ISC']","['Contributors']"
-"@isaacs/fs-minipass","@isaacs/fs-minipass","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"@isaacs/string-locale-compare","@isaacs/string-locale-compare","['ISC']","['Isaac Z. Schlueter']"
-"@istanbuljs/load-nyc-config","@istanbuljs/load-nyc-config","['ISC']","['Contributors']"
-"@istanbuljs/schema","@istanbuljs/schema","['MIT']","['CFWare, LLC']"
-"@jest/console","@jest/console","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/core","@jest/core","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/diff-sequences","@jest/diff-sequences","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/environment","@jest/environment","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/environment-jsdom-abstract","@jest/environment-jsdom-abstract","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/expect","@jest/expect","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/expect-utils","@jest/expect-utils","['MIT']","['Meta Platforms, Inc. and affiliates', 'Pivotal Labs']"
-"@jest/fake-timers","@jest/fake-timers","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/get-type","@jest/get-type","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/globals","@jest/globals","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/pattern","@jest/pattern","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/reporters","@jest/reporters","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/schemas","@jest/schemas","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/snapshot-utils","@jest/snapshot-utils","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/source-map","@jest/source-map","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/test-result","@jest/test-result","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/test-sequencer","@jest/test-sequencer","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/transform","@jest/transform","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jest/types","@jest/types","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"@jridgewell/gen-mapping","@jridgewell/gen-mapping","['MIT']","['Justin Ridgewell <justin@ridgewell.name>']"
-"@jridgewell/resolve-uri","@jridgewell/resolve-uri","['MIT']","['Justin Ridgewell <jridgewell@google.com>']"
-"@jridgewell/source-map","@jridgewell/source-map","['MIT']","['Justin Ridgewell <justin@ridgewell.name>']"
-"@jridgewell/sourcemap-codec","@jridgewell/sourcemap-codec","['MIT']","['Justin Ridgewell <justin@ridgewell.name>']"
-"@jridgewell/trace-mapping","@jridgewell/trace-mapping","['MIT']","['Justin Ridgewell <justin@ridgewell.name>']"
-"@kessler/tableify","@kessler/tableify","['MIT']","[]"
-"@keyv/serialize","@keyv/serialize","['MIT']","['Jared Wray', 'Jared Wray (LISCENCE)', 'Luke Childs']"
-"@lerna/create","@lerna/create","['MIT']","[]"
-"@napi-rs/wasm-runtime","@napi-rs/wasm-runtime","['MIT']","['GitHub', 'Joyent, Inc. and other Node contributors', 'LongYinan', 'Microsoft Corporation']"
-"@npmcli/agent","@npmcli/agent","['ISC']","[]"
-"@npmcli/arborist","@npmcli/arborist","['ISC']","['npm, Inc.']"
-"@npmcli/fs","@npmcli/fs","['ISC']","['JP Richardson', 'npm, Inc.']"
-"@npmcli/git","@npmcli/git","['ISC']","['npm, Inc.']"
-"@npmcli/installed-package-contents","@npmcli/installed-package-contents","['ISC']","['npm, Inc.']"
-"@npmcli/map-workspaces","@npmcli/map-workspaces","['ISC']","['npm, Inc.']"
-"@npmcli/metavuln-calculator","@npmcli/metavuln-calculator","['ISC']","['npm, Inc.']"
-"@npmcli/name-from-folder","@npmcli/name-from-folder","['ISC']","['npm, Inc.']"
-"@npmcli/node-gyp","@npmcli/node-gyp","['ISC']","[]"
-"@npmcli/package-json","@npmcli/package-json","['ISC']","['GitHub Inc.']"
-"@npmcli/promise-spawn","@npmcli/promise-spawn","['ISC']","['npm, Inc.']"
-"@npmcli/query","@npmcli/query","['ISC']","['npm, Inc.']"
-"@npmcli/redact","@npmcli/redact","['ISC AND MIT']","['npm']"
-"@npmcli/run-script","@npmcli/run-script","['ISC']","['npm, Inc.']"
-"@nx/devkit","@nx/devkit","['MIT']","['Google Inc.', 'Narwhal Technologies Inc.']"
-"@nx/nx-darwin-arm64","@nx/nx-darwin-arm64","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-darwin-x64","@nx/nx-darwin-x64","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-freebsd-x64","@nx/nx-freebsd-x64","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-linux-arm-gnueabihf","@nx/nx-linux-arm-gnueabihf","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-linux-arm64-gnu","@nx/nx-linux-arm64-gnu","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-linux-arm64-musl","@nx/nx-linux-arm64-musl","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-linux-x64-gnu","@nx/nx-linux-x64-gnu","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-linux-x64-musl","@nx/nx-linux-x64-musl","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-win32-arm64-msvc","@nx/nx-win32-arm64-msvc","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@nx/nx-win32-x64-msvc","@nx/nx-win32-x64-msvc","['MIT']","['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
-"@octokit/auth-token","@octokit/auth-token","['MIT']","['Octokit']"
-"@octokit/core","@octokit/core","['MIT']","['Octokit contributors']"
-"@octokit/endpoint","@octokit/endpoint","['MIT']","['Octokit contributors']"
-"@octokit/graphql","@octokit/graphql","['MIT']","['Octokit contributors']"
-"@octokit/openapi-types","@octokit/openapi-types","['MIT']","['GitHub.com', 'Gregor Martynus']"
-"@octokit/plugin-enterprise-rest","@octokit/plugin-enterprise-rest","['MIT']","['Octokit']"
-"@octokit/plugin-paginate-rest","@octokit/plugin-paginate-rest","['MIT']","[]"
-"@octokit/plugin-request-log","@octokit/plugin-request-log","['MIT']","['Octokit']"
-"@octokit/plugin-rest-endpoint-methods","@octokit/plugin-rest-endpoint-methods","['MIT']","['Octokit contributors']"
-"@octokit/request","@octokit/request","['MIT']","['Octokit contributors']"
-"@octokit/request-error","@octokit/request-error","['MIT']","['Octokit contributors']"
-"@octokit/rest","@octokit/rest","['MIT']","['Cloud9 IDE, Inc. (Mike de Boer)', 'Octokit contributors']"
-"@octokit/types","@octokit/types","['MIT']","['Octokit contributors']"
-"@openfeature/core","@openfeature/core","['Apache-2.0']","[]"
-"@openfeature/server-sdk","@openfeature/server-sdk","['Apache-2.0']","[]"
-"@openfeature/web-sdk","@openfeature/web-sdk","['Apache-2.0']","[]"
-"@pkgjs/parseargs","@pkgjs/parseargs","['Apache-2.0 AND MIT']","['Node.js contributors']"
-"@pkgr/core","@pkgr/core","['MIT']","[]"
-"@sec-ant/readable-stream","@sec-ant/readable-stream","['MIT']","['Ze-Zheng Wu']"
-"@sigstore/bundle","@sigstore/bundle","['Apache-2.0']","['The Sigstore Authors']"
-"@sigstore/core","@sigstore/core","['Apache-2.0']","['The Sigstore Authors']"
-"@sigstore/protobuf-specs","@sigstore/protobuf-specs","['Apache-2.0']","['The Sigstore Authors']"
-"@sigstore/sign","@sigstore/sign","['Apache-2.0']","['The Sigstore Authors']"
-"@sigstore/tuf","@sigstore/tuf","['Apache-2.0']","['The Sigstore Authors']"
-"@sigstore/verify","@sigstore/verify","['Apache-2.0']","['The Sigstore Authors']"
-"@sinclair/typebox","@sinclair/typebox","['MIT']","['Haydn Paterson', 'Haydn Paterson (sinclair) <haydn.developer@gmail.com>']"
-"@sindresorhus/is","@sindresorhus/is","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"@sinonjs/commons","@sinonjs/commons","['BSD-3-Clause']","['Sinon.JS']"
-"@sinonjs/fake-timers","@sinonjs/fake-timers","['BSD-3-Clause']","['Christian Johansen', 'christian@cjohansen.no']"
-"@szmarczak/http-timer","@szmarczak/http-timer","['MIT']","['Szymon Marczak']"
-"@tsconfig/node10","@tsconfig/node10","['MIT']","['Microsoft Corporation']"
-"@tsconfig/node12","@tsconfig/node12","['MIT']","['Microsoft Corporation']"
-"@tsconfig/node14","@tsconfig/node14","['MIT']","['Microsoft Corporation']"
-"@tsconfig/node16","@tsconfig/node16","['MIT']","['Microsoft Corporation']"
-"@tufjs/canonical-json","@tufjs/canonical-json","['MIT']","['GitHub and the TUF Contributors']"
-"@tufjs/models","@tufjs/models","['MIT']","['GitHub and the TUF Contributors']"
-"@tybys/wasm-util","@tybys/wasm-util","['MIT']","[]"
-"@types/babel__core","@types/babel__core","['MIT']","['Microsoft Corporation']"
-"@types/babel__generator","@types/babel__generator","['MIT']","['Microsoft Corporation']"
-"@types/babel__template","@types/babel__template","['MIT']","['Microsoft Corporation']"
-"@types/babel__traverse","@types/babel__traverse","['MIT']","['Microsoft Corporation']"
-"@types/chrome","@types/chrome","[]","[]"
-"@types/eslint","@types/eslint","['MIT']","['Microsoft Corporation']"
-"@types/eslint-scope","@types/eslint-scope","['MIT']","['Microsoft Corporation']"
-"@types/estree","@types/estree","['MIT']","['Microsoft Corporation']"
-"@types/filesystem","@types/filesystem","['MIT']","['Microsoft Corporation']"
-"@types/filewriter","@types/filewriter","['MIT']","['Microsoft Corporation']"
-"@types/har-format","@types/har-format","['MIT']","['Microsoft Corporation']"
-"@types/http-cache-semantics","@types/http-cache-semantics","['MIT']","['Microsoft Corporation']"
-"@types/istanbul-lib-coverage","@types/istanbul-lib-coverage","['MIT']","['Microsoft Corporation']"
-"@types/istanbul-lib-report","@types/istanbul-lib-report","['MIT']","['Microsoft Corporation']"
-"@types/istanbul-reports","@types/istanbul-reports","['MIT']","['Microsoft Corporation']"
-"@types/jest","@types/jest","['MIT']","['Microsoft Corporation']"
-"@types/jsdom","@types/jsdom","['MIT']","['Microsoft Corporation']"
-"@types/json-schema","@types/json-schema","['MIT']","['Microsoft Corporation']"
-"@types/minimatch","@types/minimatch","['MIT']","['Microsoft Corporation', 'Microsoft Corporation.']"
-"@types/minimist","@types/minimist","['MIT']","['Microsoft Corporation']"
-"@types/node","@types/node","['MIT']","['Microsoft Corporation', 'Node.js contributors']"
-"@types/normalize-package-data","@types/normalize-package-data","['MIT']","['Microsoft Corporation']"
-"@types/spark-md5","@types/spark-md5","['MIT']","[]"
-"@types/stack-utils","@types/stack-utils","['MIT']","['Microsoft Corporation']"
-"@types/tough-cookie","@types/tough-cookie","['MIT']","['Microsoft Corporation']"
-"@types/yargs","@types/yargs","['MIT']","['Microsoft Corporation']"
-"@types/yargs-parser","@types/yargs-parser","['MIT']","['Microsoft Corporation']"
-"@ungap/structured-clone","@ungap/structured-clone","['ISC']","['Andrea Giammarchi']"
-"@unrs/resolver-binding-android-arm-eabi","@unrs/resolver-binding-android-arm-eabi","[]","[]"
-"@unrs/resolver-binding-android-arm64","@unrs/resolver-binding-android-arm64","[]","[]"
-"@unrs/resolver-binding-darwin-arm64","@unrs/resolver-binding-darwin-arm64","[]","[]"
-"@unrs/resolver-binding-darwin-x64","@unrs/resolver-binding-darwin-x64","[]","[]"
-"@unrs/resolver-binding-freebsd-x64","@unrs/resolver-binding-freebsd-x64","[]","[]"
-"@unrs/resolver-binding-linux-arm-gnueabihf","@unrs/resolver-binding-linux-arm-gnueabihf","[]","[]"
-"@unrs/resolver-binding-linux-arm-musleabihf","@unrs/resolver-binding-linux-arm-musleabihf","[]","[]"
-"@unrs/resolver-binding-linux-arm64-gnu","@unrs/resolver-binding-linux-arm64-gnu","[]","[]"
-"@unrs/resolver-binding-linux-arm64-musl","@unrs/resolver-binding-linux-arm64-musl","[]","[]"
-"@unrs/resolver-binding-linux-ppc64-gnu","@unrs/resolver-binding-linux-ppc64-gnu","[]","[]"
-"@unrs/resolver-binding-linux-riscv64-gnu","@unrs/resolver-binding-linux-riscv64-gnu","[]","[]"
-"@unrs/resolver-binding-linux-riscv64-musl","@unrs/resolver-binding-linux-riscv64-musl","[]","[]"
-"@unrs/resolver-binding-linux-s390x-gnu","@unrs/resolver-binding-linux-s390x-gnu","[]","[]"
-"@unrs/resolver-binding-linux-x64-gnu","@unrs/resolver-binding-linux-x64-gnu","[]","[]"
-"@unrs/resolver-binding-linux-x64-musl","@unrs/resolver-binding-linux-x64-musl","[]","[]"
-"@unrs/resolver-binding-wasm32-wasi","@unrs/resolver-binding-wasm32-wasi","[]","[]"
-"@unrs/resolver-binding-win32-arm64-msvc","@unrs/resolver-binding-win32-arm64-msvc","[]","[]"
-"@unrs/resolver-binding-win32-ia32-msvc","@unrs/resolver-binding-win32-ia32-msvc","[]","[]"
-"@unrs/resolver-binding-win32-x64-msvc","@unrs/resolver-binding-win32-x64-msvc","[]","[]"
-"@webassemblyjs/ast","@webassemblyjs/ast","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/floating-point-hex-parser","@webassemblyjs/floating-point-hex-parser","['MIT']","['Mauro Bringolf']"
-"@webassemblyjs/helper-api-error","@webassemblyjs/helper-api-error","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/helper-buffer","@webassemblyjs/helper-buffer","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/helper-numbers","@webassemblyjs/helper-numbers","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/helper-wasm-bytecode","@webassemblyjs/helper-wasm-bytecode","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/helper-wasm-section","@webassemblyjs/helper-wasm-section","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/ieee754","@webassemblyjs/ieee754","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/leb128","@webassemblyjs/leb128","['Apache-2.0']","['The Obvious Corporation', 'The Obvious Corporation. http://obvious.com']"
-"@webassemblyjs/utf8","@webassemblyjs/utf8","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/wasm-edit","@webassemblyjs/wasm-edit","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/wasm-gen","@webassemblyjs/wasm-gen","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/wasm-opt","@webassemblyjs/wasm-opt","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/wasm-parser","@webassemblyjs/wasm-parser","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@webassemblyjs/wast-printer","@webassemblyjs/wast-printer","['MIT']","['Sven Sauleau <sven@sauleau.com>']"
-"@xtuc/ieee754","@xtuc/ieee754","['BSD-3-Clause']","['Fair Oaks Labs, Inc.']"
-"@xtuc/long","@xtuc/long","['Apache-2.0']","[]"
-"@yarnpkg/lockfile","@yarnpkg/lockfile","['BSD-2-Clause']","['Denis Pushkarev', 'Facebook, Inc.', 'Joyent, Inc. and other Node contributors']"
-"@yarnpkg/parsers","@yarnpkg/parsers","['BSD-2-Clause']","[]"
-"@zkochan/js-yaml","@zkochan/js-yaml","['MIT']","['by Vitaly Puzrin']"
-"JSONStream","JSONStream","['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)']","['Dominic Tarr']"
-"abbrev","abbrev","['ISC AND MIT']","['Isaac Z. Schlueter and Contributors']"
-"acorn","acorn","['MIT']","['by various contributors']"
-"acorn-walk","acorn-walk","['MIT']","['by various contributors']"
-"add-stream","add-stream","['MIT']","[]"
-"agent-base","agent-base","['MIT']","['Nathan Rajlich <nathan@tootallnate.net>']"
-"aggregate-error","aggregate-error","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"ajv","ajv","['MIT']","['Evgeny Poberezkin']"
-"ajv-formats","ajv-formats","['MIT']","['Evgeny Poberezkin']"
-"ajv-keywords","ajv-keywords","['MIT']","['Evgeny Poberezkin']"
-"ansi-colors","ansi-colors","['MIT']","['Brian Woodward', 'Brian Woodward (https://github.com/doowb)']"
-"ansi-escapes","ansi-escapes","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"ansi-regex","ansi-regex","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"ansi-styles","ansi-styles","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"anymatch","anymatch","['ISC']","['Elan Shanker', 'Paul Miller (https://paulmillr.com)']"
-"aproba","aproba","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"arg","arg","['MIT']","['Zeit, Inc.', 'by ZEIT, Inc.']"
-"argparse","argparse","['MIT']","['Vitaly Puzrin (https://github.com/puzrin)', 'by Vitaly Puzrin']"
-"array-buffer-byte-length","array-buffer-byte-length","['MIT']","['Inspect JS']"
-"array-differ","array-differ","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"array-ify","array-ify","['MIT']","['Steve Mao (https://github.com/stevemao)']"
-"array-union","array-union","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"arraybuffer.prototype.slice","arraybuffer.prototype.slice","['MIT']","['ECMAScript Shims']"
-"arrify","arrify","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"async","async","['MIT']","['Caolan McMahon']"
-"async-function","async-function","['MIT']","['EduardoRFS']"
-"asynckit","asynckit","['MIT']","['Alex Indigo']"
-"available-typed-arrays","available-typed-arrays","['MIT']","['Inspect JS']"
-"axios","axios","['MIT']","['Matt Zabriskie & Collaborators', 'Matt Zabriskie and contributors']"
-"babel-jest","babel-jest","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"babel-plugin-istanbul","babel-plugin-istanbul","['BSD-3-Clause']","['Istanbul Code Coverage']"
-"babel-plugin-jest-hoist","babel-plugin-jest-hoist","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"babel-preset-current-node-syntax","babel-preset-current-node-syntax","['MIT']","['Nicolo Ribaudo and other contributors']"
-"babel-preset-jest","babel-preset-jest","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"balanced-match","balanced-match","['MIT']","['Julian Gruber <julian@juliangruber.com>']"
-"base64-js","base64-js","['MIT']","['Jameson Little']"
-"before-after-hook","before-after-hook","['Apache-2.0']","['Gregor Martynus and other contributors']"
-"bin-links","bin-links","['ISC']","['npm, Inc.']"
-"bl","bl","['MIT']","['bl contributors']"
-"brace-expansion","brace-expansion","['MIT']","['Julian Gruber <julian@juliangruber.com>']"
-"braces","braces","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"browserslist","browserslist","['MIT']","['Andrey Sitnik <andrey@sitnik.ru> and other contributors']"
-"bs-logger","bs-logger","['MIT']","['Huafu Gandon']"
-"bser","bser","['Apache-2.0']","['Facebook, Inc.']"
-"buffer","buffer","['MIT']","['Feross Aboukhadijeh', 'Feross Aboukhadijeh (http://feross.org)', 'and other contributors']"
-"buffer-from","buffer-from","['MIT']","['Linus Unneback']"
-"byte-size","byte-size","['MIT']","['-23 Lloyd Brookes (https://github.com/75lb) 75pound@gmail.com', '-23 Lloyd Brookes <75pound@gmail.com>']"
-"cacache","cacache","['ISC']","['npm, Inc.']"
-"cacheable-lookup","cacheable-lookup","['MIT']","['Szymon Marczak']"
-"cacheable-request","cacheable-request","['MIT']","['Jared Wray', 'Luke Childs and Jared Wray']"
-"call-bind","call-bind","['MIT']","['Jordan Harband']"
-"call-bind-apply-helpers","call-bind-apply-helpers","['MIT']","['Jordan Harband']"
-"call-bound","call-bound","['MIT']","['Jordan Harband']"
-"callsites","callsites","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"camelcase","camelcase","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"camelcase-keys","camelcase-keys","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"caniuse-lite","caniuse-lite","[]","[]"
-"chalk","chalk","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"char-regex","char-regex","['MIT']","['Richie Bendall']"
-"chardet","chardet","['MIT']","['Dmitry Shirokov']"
-"chownr","chownr","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"chrome-trace-event","chrome-trace-event","['MIT']","['Joyent Inc.']"
-"ci-info","ci-info","['MIT']","['Thomas Watson Steen']"
-"cjs-module-lexer","cjs-module-lexer","['MIT']","['Guy Bedford', 'by various contributors']"
-"clean-stack","clean-stack","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"cli-cursor","cli-cursor","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"cli-spinners","cli-spinners","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"cli-width","cli-width","['ISC']","['Ilya Radchenko <ilya@burstcreations.com>']"
-"cliui","cliui","['ISC']","['Contributors', 'npm, Inc. and Contributors']"
-"clone","clone","['MIT']","['Paul Vorbach (http://paul.vorba.ch/) and contributors (https://github.com/pvorb/node-clone/graphs/contributors)', 'Paul Vorbach (http://paul.vorba.ch/) and contributors (https://github.com/pvorb/node-clone/graphs/contributors).', 'Paul Vorbach <paul@vorba.ch>']"
-"clone-deep","clone-deep","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"cmd-shim","cmd-shim","['ISC']","['npm, Inc. and Contributors']"
-"co","co","['MIT']","['TJ Holowaychuk <tj@vision-media.ca>']"
-"collect-v8-coverage","collect-v8-coverage","['MIT']","['Simen Bekkhus']"
-"color-convert","color-convert","['MIT']","['Heather Arthur <fayearthur@gmail.com>', 'Heather Arthur and Josh Junon', 'Heather Arthur and Josh Junon.']"
-"color-name","color-name","['MIT']","['Dmitry Ivanov']"
-"color-support","color-support","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"columnify","columnify","['MIT']","['Tim Oxley']"
-"com.github.DataDog/openfeature-js-client","git+https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['Datadog, Inc.']"
-"combined-stream","combined-stream","['MIT']","['Debuggable Limited <felix@debuggable.com>']"
-"commander","commander","['MIT']","['TJ Holowaychuk <tj@vision-media.ca>']"
-"common-ancestor-path","common-ancestor-path","['ISC']","['Isaac Z. Schlueter']"
-"compare-func","compare-func","['MIT']","['Steve Mao', 'Steve Mao (https://github.com/stevemao)']"
-"concat-map","concat-map","['MIT']","[]"
-"concat-stream","concat-stream","['MIT']","['Max Ogden']"
-"console-control-strings","console-control-strings","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"conventional-changelog-angular","conventional-changelog-angular","['ISC']","['conventional-changelog team (https://github.com/conventional-changelog)']"
-"conventional-changelog-core","conventional-changelog-core","['MIT']","['conventional-changelog team (https://github.com/conventional-changelog)']"
-"conventional-changelog-preset-loader","conventional-changelog-preset-loader","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"conventional-changelog-writer","conventional-changelog-writer","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"conventional-commits-filter","conventional-commits-filter","['MIT']","['Steve Mao', 'Steve Mao <maochenyan@gmail.com> (https://github.com/stevemao)']"
-"conventional-commits-parser","conventional-commits-parser","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"conventional-recommended-bump","conventional-recommended-bump","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"convert-source-map","convert-source-map","['MIT']","['Thorsten Lorenz']"
-"core-util-is","core-util-is","['MIT']","['Joyent, Inc. and other Node contributors']"
-"cosmiconfig","cosmiconfig","['MIT']","['David Clark']"
-"create-require","create-require","['MIT']","['Mael Nison <nison.mael@gmail.com>']"
-"cross-spawn","cross-spawn","['MIT']","['Made With MOXY Lda']"
-"cssesc","cssesc","['MIT']","['Mathias Bynens <https://mathiasbynens.be/>']"
-"cssstyle","cssstyle","['MIT']","['Chad Walker']"
-"dargs","dargs","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"data-urls","data-urls","['MIT']","['Domenic Denicola <d@domenic.me>']"
-"data-view-buffer","data-view-buffer","['MIT']","['Jordan Harband']"
-"data-view-byte-length","data-view-byte-length","['MIT']","['Jordan Harband']"
-"data-view-byte-offset","data-view-byte-offset","['MIT']","['Jordan Harband']"
-"dateformat","dateformat","['MIT']","['Steven Levithan', 'Steven Levithan stevenlevithan.com']"
-"debug","debug","['MIT']","['Josh Junon', 'TJ Holowaychuk <tj@vision-media.ca>']"
-"decamelize","decamelize","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"decamelize-keys","decamelize-keys","['MIT']","['Dmirty Sobolev (https://github.com/dsblv)', 'Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com>']"
-"decimal.js","decimal.js","['MIT']","['Michael Mclaughlin', 'Michael Mclaughlin <M8ch88l@gmail.com>']"
-"decompress-response","decompress-response","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"dedent","dedent","['MIT']","[]"
-"deep-extend","deep-extend","['MIT']","['Viacheslav Lotsmanov']"
-"deepmerge","deepmerge","['MIT']","['James Halliday', 'Josh Duff', 'and other contributors']"
-"defaults","defaults","['MIT']","['Elijah Insua', 'Sindre Sorhus']"
-"defer-to-connect","defer-to-connect","['MIT']","['Szymon Marczak']"
-"define-data-property","define-data-property","['MIT']","['Jordan Harband']"
-"define-lazy-prop","define-lazy-prop","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"define-properties","define-properties","['MIT']","['Jordan Harband']"
-"delayed-stream","delayed-stream","['MIT']","['Debuggable Limited <felix@debuggable.com>']"
-"deprecation","deprecation","['ISC']","['Gregor Martynus and contributors']"
-"detect-indent","detect-indent","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"detect-newline","detect-newline","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"diff","diff","['BSD-3-Clause']","['Kevin Decker <kpdecker@gmail.com>']"
-"diff-sequences","diff-sequences","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"dot-prop","dot-prop","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"dotenv","dotenv","['BSD-2-Clause']","['Scott Motte']"
-"dotenv-expand","dotenv-expand","['BSD-2-Clause']","['Scott Motte']"
-"dunder-proto","dunder-proto","['MIT']","['ECMAScript Shims']"
-"eastasianwidth","eastasianwidth","['MIT']","[]"
-"ejs","ejs","['Apache-2.0']","['Joyent, Inc. and other Node contributors']"
-"electron-to-chromium","electron-to-chromium","['ISC']","['Kilian Valkhof']"
-"emittery","emittery","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"emoji-name-map","emoji-name-map","['MIT']","['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"emoji-regex","emoji-regex","['MIT']","['Mathias Bynens <https://mathiasbynens.be/>']"
-"encoding","encoding","['MIT']","['Andris Reinman']"
-"end-of-stream","end-of-stream","['MIT']","['Mathias Buus']"
-"enhanced-resolve","enhanced-resolve","['MIT']","['JS Foundation and other contributors']"
-"enquirer","enquirer","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"entities","entities","['BSD-2-Clause']","['Felix Bohm']"
-"env-paths","env-paths","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"envinfo","envinfo","['MIT']","['Denis Pushkarev', 'Trevor Brindle']"
-"eol","eol","['MIT']","[]"
-"err-code","err-code","['MIT']","[]"
-"error-ex","error-ex","['MIT']","['JD Ballard']"
-"es-abstract","es-abstract","['MIT']","['Jordan Harband']"
-"es-define-property","es-define-property","['MIT']","['Jordan Harband']"
-"es-errors","es-errors","['MIT']","['Jordan Harband']"
-"es-module-lexer","es-module-lexer","['MIT']","['Guy Bedford', 'by various contributors']"
-"es-object-atoms","es-object-atoms","['MIT']","['Jordan Harband']"
-"es-set-tostringtag","es-set-tostringtag","['MIT']","['ECMAScript Shims']"
-"es-to-primitive","es-to-primitive","['MIT']","['Jordan Harband']"
-"escalade","escalade","['MIT']","['Luke Edwards (https://lukeed.com)', 'Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)']"
-"escape-string-regexp","escape-string-regexp","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"eslint-scope","eslint-scope","['BSD-2-Clause']","['Alex Seville <hi@alexanderseville.com>', 'JS Foundation and other contributors', 'Thiago de Arruda <tpadilha84@gmail.com>', 'Yusuke Suzuki (twitter Constellation) and other contributors', 'Yusuke Suzuki (twitter Constellation) and other contributors.', 'Yusuke Suzuki <utatane.tea@gmail.com>', 'https://js.foundation']"
-"esprima","esprima","['BSD-2-Clause AND BSD-3-Clause']","['JS Foundation and other contributors', 'https://js.foundation']"
-"esrecurse","esrecurse","['BSD-2-Clause']","['Yusuke Suzuki (https://github.com/Constellation) (twitter Constellation (https://twitter.com/Constellation)) and other contributors', 'Yusuke Suzuki <utatane.tea@gmail.com>']"
-"estraverse","estraverse","['BSD-2-Clause']","['Ariya Hidayat <ariya.hidayat@gmail.com>', 'Yusuke Suzuki (http://github.com/Constellation) (twitter Constellation (http://twitter.com/Constellation)) and other contributors', 'Yusuke Suzuki <utatane.tea@gmail.com>']"
-"eventemitter3","eventemitter3","['MIT']","['Arnout Kazemier']"
-"events","events","['MIT']","['Joyent, Inc. and other Node contributors']"
-"execa","execa","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"exit-x","exit-x","['MIT']","['Cowboy Ben Alman']"
-"expect","expect","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"exponential-backoff","exponential-backoff","['Apache-2.0']","['Coveo Solutions Inc.']"
-"external-editor","external-editor","['MIT']","['Kevin Gravier']"
-"fast-deep-equal","fast-deep-equal","['MIT']","['Evgeny Poberezkin']"
-"fast-json-stable-stringify","fast-json-stable-stringify","['MIT']","['Evgeny Poberezkin', 'James Halliday']"
-"fast-uri","fast-uri","['BSD-3-Clause']","['Gary Court', 'Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae', 'The Fastify Team']"
-"fb-watchman","fb-watchman","['Apache-2.0']","['Meta Platforms, Inc. and affiliates']"
-"fdir","fdir","['MIT']","['Abdullah Atta']"
-"figures","figures","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"filelist","filelist","['Apache-2.0']","[]"
-"fill-range","fill-range","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"find-up","find-up","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"find-up-simple","find-up-simple","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"flat","flat","['BSD-3-Clause']","['Hugh Kennedy']"
-"follow-redirects","follow-redirects","['MIT']","['James Talmage <james@talmage.io>', 'Olivier Lalonde <olalonde@gmail.com>', 'Ruben Verborgh']"
-"for-each","for-each","['MIT']","['Raynos']"
-"foreground-child","foreground-child","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"form-data","form-data","['MIT']","['Felix Geisendorfer (felix@debuggable.com) and contributors']"
-"form-data-encoder","form-data-encoder","['MIT']","['Nick K.']"
-"front-matter","front-matter","['MIT']","['Jason Campbell']"
-"fs-constants","fs-constants","['MIT']","['Mathias Buus']"
-"fs-extra","fs-extra","['MIT']","['JP Richardson', 'JP Richardson (https://github.com/jprichardson)', 'Jonathan Ong me@jongleberry.com and Contributors', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"fs-minipass","fs-minipass","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"fs.realpath","fs.realpath","['ISC']","['Isaac Z. Schlueter and Contributors', 'Joyent, Inc. and other Node contributors', 'Joyent, Inc. and other Node contributors.']"
-"fsevents","fsevents","['MIT']","['Ben Noordhuis', 'Elan Shankar', 'Paul Miller', 'by Philipp Dunkel']"
-"function-bind","function-bind","['MIT']","['Raynos']"
-"function.prototype.name","function.prototype.name","['MIT']","['Jordan Harband']"
-"functions-have-names","functions-have-names","['MIT']","['Jordan Harband']"
-"gensync","gensync","['MIT']","['Logan Smyth <loganfsmyth@gmail.com>']"
-"get-caller-file","get-caller-file","['ISC']","['Stefan Penner']"
-"get-intrinsic","get-intrinsic","['MIT']","['Jordan Harband']"
-"get-package-type","get-package-type","['MIT']","['CFWare, LLC']"
-"get-pkg-repo","get-pkg-repo","['MIT']","['Steve Mao (https://github.com/stevemao)']"
-"get-port","get-port","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"get-proto","get-proto","['MIT']","['Jordan Harband']"
-"get-stdin","get-stdin","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"get-stream","get-stream","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"get-symbol-description","get-symbol-description","['MIT']","['Inspect JS']"
-"git-raw-commits","git-raw-commits","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"git-remote-origin-url","git-remote-origin-url","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"git-semver-tags","git-semver-tags","['MIT']","['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
-"git-up","git-up","['MIT']","['-22 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"git-url-parse","git-url-parse","['MIT']","['-24 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"gitconfiglocal","gitconfiglocal","['BSD-3-Clause']","[]"
-"glob","glob","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"glob-parent","glob-parent","['ISC']","['Blaine Bublitz <blaine.bublitz@gmail.com>', 'Elan Shanker', 'Eric Schoffstall <yo@contra.io> and other contributors']"
-"glob-to-regexp","glob-to-regexp","['BSD-2-Clause']","['Nick Fitzgerald']"
-"globalthis","globalthis","['MIT']","['Jordan Harband']"
-"gopd","gopd","['MIT']","['Jordan Harband']"
-"got","got","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"graceful-fs","graceful-fs","['ISC']","['Ben Noordhuis', 'Isaac Z. Schlueter', 'and Contributors']"
-"handlebars","handlebars","['MIT']","['by Yehuda Katz']"
-"hard-rejection","hard-rejection","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"has-bigints","has-bigints","['MIT']","['Jordan Harband']"
-"has-flag","has-flag","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"has-property-descriptors","has-property-descriptors","['MIT']","['Inspect JS']"
-"has-proto","has-proto","['MIT']","['Inspect JS']"
-"has-symbols","has-symbols","['MIT']","['Jordan Harband']"
-"has-tostringtag","has-tostringtag","['MIT']","['Inspect JS']"
-"has-unicode","has-unicode","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"hasown","hasown","['MIT']","['Jordan Harband and contributors']"
-"hosted-git-info","hosted-git-info","['ISC']","['Rebecca Turner']"
-"html-encoding-sniffer","html-encoding-sniffer","['MIT']","['Domenic Denicola <d@domenic.me>']"
-"html-escaper","html-escaper","['MIT']","['by Andrea Giammarchi']"
-"http-cache-semantics","http-cache-semantics","['BSD-2-Clause']","['Kornel Lesinski']"
-"http-proxy-agent","http-proxy-agent","['MIT']","['Nathan Rajlich <nathan@tootallnate.net>']"
-"http2-wrapper","http2-wrapper","['MIT']","['Szymon Marczak']"
-"https-proxy-agent","https-proxy-agent","['MIT']","['Nathan Rajlich <nathan@tootallnate.net>']"
-"human-signals","human-signals","['Apache-2.0']","['ehmicky <ehmicky@gmail.com>']"
-"iconv-lite","iconv-lite","['MIT']","['Alexander Shtuchkin', 'Microsoft Corporation']"
-"ieee754","ieee754","['BSD-3-Clause']","['Fair Oaks Labs, Inc.']"
-"ignore","ignore","['MIT']","['Kael Zhang <i@kael.me>', 'contributors http://kael.me']"
-"ignore-walk","ignore-walk","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"import-fresh","import-fresh","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"import-local","import-local","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"imurmurhash","imurmurhash","['MIT']","['Gary Court', 'Jens Taylor']"
-"indent-string","indent-string","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"inflight","inflight","['ISC']","['Isaac Z. Schlueter']"
-"inherits","inherits","['ISC']","['Isaac Z. Schlueter']"
-"ini","ini","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"init-package-json","init-package-json","['ISC']","['npm, Inc.']"
-"inquirer","inquirer","['MIT']","['Simon Boudrias', 'Simon Boudrias (twitter vaxilart (https://twitter.com/Vaxilart))']"
-"internal-slot","internal-slot","['MIT']","['Jordan Harband']"
-"ip-address","ip-address","['MIT']","['by Beau Gunderson']"
-"is-array-buffer","is-array-buffer","['MIT']","['Chen Gengyuan', 'Inspect JS']"
-"is-arrayish","is-arrayish","['MIT']","['JD Ballard']"
-"is-async-function","is-async-function","['MIT']","['Jordan Harband']"
-"is-bigint","is-bigint","['MIT']","['Jordan Harband']"
-"is-boolean-object","is-boolean-object","['MIT']","['Jordan Harband']"
-"is-callable","is-callable","['MIT']","['Jordan Harband']"
-"is-ci","is-ci","['MIT']","['Thomas Watson Steen']"
-"is-core-module","is-core-module","['MIT']","['Dave Justice']"
-"is-data-view","is-data-view","['MIT']","['Inspect JS']"
-"is-date-object","is-date-object","['MIT']","['Jordan Harband']"
-"is-docker","is-docker","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"is-extglob","is-extglob","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"is-finalizationregistry","is-finalizationregistry","['MIT']","['Inspect JS']"
-"is-fullwidth-code-point","is-fullwidth-code-point","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-generator-fn","is-generator-fn","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-generator-function","is-generator-function","['MIT']","['Jordan Harband']"
-"is-glob","is-glob","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"is-interactive","is-interactive","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-lambda","is-lambda","['MIT']","['Thomas Watson Steen']"
-"is-map","is-map","['MIT']","['Inspect JS']"
-"is-negative-zero","is-negative-zero","['MIT']","['Jordan Harband']"
-"is-number","is-number","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"is-number-object","is-number-object","['MIT']","['Jordan Harband']"
-"is-obj","is-obj","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-plain-obj","is-plain-obj","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-plain-object","is-plain-object","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"is-potential-custom-element-name","is-potential-custom-element-name","['MIT']","['Mathias Bynens <https://mathiasbynens.be/>']"
-"is-regex","is-regex","['MIT']","['Jordan Harband']"
-"is-set","is-set","['MIT']","['Inspect JS']"
-"is-shared-array-buffer","is-shared-array-buffer","['MIT']","[]"
-"is-ssh","is-ssh","['MIT']","['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"is-stream","is-stream","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"is-string","is-string","['MIT']","['Jordan Harband']"
-"is-symbol","is-symbol","['MIT']","['Jordan Harband']"
-"is-text-path","is-text-path","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"is-typed-array","is-typed-array","['MIT']","['Jordan Harband']"
-"is-unicode-supported","is-unicode-supported","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"is-weakmap","is-weakmap","['MIT']","['Inspect JS']"
-"is-weakref","is-weakref","['MIT']","['Inspect JS']"
-"is-weakset","is-weakset","['MIT']","['Inspect JS']"
-"is-wsl","is-wsl","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"isarray","isarray","['MIT']","['Julian Gruber <julian@juliangruber.com>']"
-"isexe","isexe","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"isobject","isobject","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"istanbul-lib-coverage","istanbul-lib-coverage","['BSD-3-Clause']","['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
-"istanbul-lib-instrument","istanbul-lib-instrument","['BSD-3-Clause']","['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
-"istanbul-lib-report","istanbul-lib-report","['BSD-3-Clause']","['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
-"istanbul-lib-source-maps","istanbul-lib-source-maps","['BSD-3-Clause']","['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
-"istanbul-reports","istanbul-reports","['BSD-3-Clause']","['Facebook, Inc. and its affiliates', 'Sindre Sorhus', 'Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
-"jackspeak","jackspeak","['BlueOak-1.0.0']","[]"
-"jake","jake","['Apache-2.0']","[]"
-"jest","jest","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-changed-files","jest-changed-files","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-circus","jest-circus","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-cli","jest-cli","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-config","jest-config","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-diff","jest-diff","['MIT']","['Meta Platforms, Inc. and affiliates', 'The diff-match-patch']"
-"jest-docblock","jest-docblock","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-each","jest-each","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-environment-jsdom","jest-environment-jsdom","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-environment-node","jest-environment-node","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-get-type","jest-get-type","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-haste-map","jest-haste-map","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-leak-detector","jest-leak-detector","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-matcher-utils","jest-matcher-utils","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-message-util","jest-message-util","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-mock","jest-mock","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-pnp-resolver","jest-pnp-resolver","['MIT']","['Mael Nison']"
-"jest-regex-util","jest-regex-util","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-resolve","jest-resolve","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-resolve-dependencies","jest-resolve-dependencies","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-runner","jest-runner","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-runtime","jest-runtime","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-snapshot","jest-snapshot","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-util","jest-util","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-validate","jest-validate","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-watcher","jest-watcher","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"jest-worker","jest-worker","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"js-tokens","js-tokens","['MIT']","['Simon Lydell']"
-"js-yaml","js-yaml","['MIT']","['by Vitaly Puzrin']"
-"jsbn","jsbn","['MIT']","['Tom Wu']"
-"jsdom","jsdom","['MIT']","['Apple Inc.', 'Elijah Insua', 'Lars Knoll (knoll@kde.org)']"
-"jsesc","jsesc","['MIT']","['Mathias Bynens <https://mathiasbynens.be/>']"
-"json-parse-better-errors","json-parse-better-errors","['MIT']","['Kat Marchan']"
-"json-parse-even-better-errors","json-parse-even-better-errors","['MIT']","['Kat Marchan', 'npm, Inc.']"
-"json-schema-traverse","json-schema-traverse","['MIT']","['Evgeny Poberezkin']"
-"json-stringify-nice","json-stringify-nice","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"json-stringify-safe","json-stringify-safe","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"json5","json5","['MIT']","['Aseem Kishore', 'Denis Pushkarev', 'and others']"
-"jsonc-parser","jsonc-parser","['MIT']","['Microsoft', 'Microsoft Corporation']"
-"jsonfile","jsonfile","['MIT']","['JP Richardson <jprichardson@gmail.com>']"
-"jsonparse","jsonparse","['MIT']","['Tim Caswell']"
-"just-diff","just-diff","['MIT']","['angus croll']"
-"just-diff-apply","just-diff-apply","['MIT']","['angus croll']"
-"keyv","keyv","['MIT']","['Jared Wray', 'Jared Wray (LICENSE)', 'Luke Childs']"
-"kind-of","kind-of","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"lerna","lerna","['MIT']","['Lerna Contributors']"
-"leven","leven","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"libnpmaccess","libnpmaccess","['ISC']","['npm, Inc']"
-"libnpmpublish","libnpmpublish","['ISC']","['npm, Inc']"
-"license-report","license-report","['JSON AND MIT']","[]"
-"lines-and-columns","lines-and-columns","['MIT']","['Brian Donovan']"
-"load-json-file","load-json-file","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"loader-runner","loader-runner","['MIT']","['Tobias Koppers']"
-"locate-path","locate-path","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"lodash","lodash","['CC0-1.0 AND MIT']","['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'OpenJS Foundation and other contributors <https://openjsf.org/>']"
-"lodash.ismatch","lodash.ismatch","['MIT']","['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'jQuery Foundation and other contributors <https://jquery.org/>']"
-"lodash.memoize","lodash.memoize","['MIT']","['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'jQuery Foundation and other contributors <https://jquery.org/>']"
-"log-symbols","log-symbols","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"lower-case","lower-case","['MIT']","['Blake Embrey (hello@blakeembrey.com)']"
-"lowercase-keys","lowercase-keys","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"lru-cache","lru-cache","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"make-dir","make-dir","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"make-error","make-error","['ISC']","['Julien Fontanet', 'Julien Fontanet (http://julien.isonoe.net)']"
-"make-fetch-happen","make-fetch-happen","['ISC']","['Mikeal Rogers', 'npm, Inc.']"
-"makeerror","makeerror","['BSD-3-Clause']","['Naitik Shah', 'Naitik Shah.']"
-"map-obj","map-obj","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"math-intrinsics","math-intrinsics","['MIT']","['ECMAScript Shims']"
-"memorystream","memorystream","['MIT']","['Dmitry Nizovtsev']"
-"meow","meow","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"merge-stream","merge-stream","['MIT']","['Stephen Sugden <me@stephensugden.com> (stephensugden.com)']"
-"micromatch","micromatch","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"mime-db","mime-db","['MIT']","['Douglas Christopher Wilson', 'Douglas Christopher Wilson <doug@somethingdoug.com>', 'Jonathan Ong', 'Jonathan Ong <me@jongleberry.com>']"
-"mime-types","mime-types","['MIT']","['Douglas Christopher Wilson', 'Douglas Christopher Wilson <doug@somethingdoug.com>', 'Jonathan Ong', 'Jonathan Ong <me@jongleberry.com>']"
-"mimic-fn","mimic-fn","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"mimic-response","mimic-response","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"min-indent","min-indent","['MIT']","['James Kyle (https://thejameskyle.com)', 'Sindre Sorhus <sindresorhus@gmail.com>']"
-"minimatch","minimatch","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"minimist","minimist","['MIT']","[]"
-"minimist-options","minimist-options","['MIT']","['Vadim Demedes (https://vadimdemedes.com)', 'Vadim Demedes <vdemedes@gmail.com> (vadimdemedes.com)']"
-"minipass","minipass","['ISC']","['Isaac Z. Schlueter', 'and Contributors', 'npm, Inc.']"
-"minipass-collect","minipass-collect","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"minipass-fetch","minipass-fetch","['MIT']","['David Frank', 'Isaac Z. Schlueter and Contributors']"
-"minipass-flush","minipass-flush","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"minipass-pipeline","minipass-pipeline","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"minipass-sized","minipass-sized","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"minizlib","minizlib","['MIT']","['Isaac Z. Schlueter and Contributors', 'Joyent, Inc. and other Node contributors']"
-"mkdirp","mkdirp","['MIT']","['James Halliday (mail@substack.net) and Isaac Z. Schlueter (i@izs.me)']"
-"modify-values","modify-values","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"ms","ms","['MIT']","['Vercel, Inc.']"
-"multimatch","multimatch","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"mute-stream","mute-stream","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"napi-postinstall","napi-postinstall","['MIT']","['UnTS']"
-"natural-compare","natural-compare","['MIT']","['Lauri Rooden <lauri@rooden.ee>']"
-"negotiator","negotiator","['MIT']","['Douglas Christopher Wilson', 'Federico Romero', 'Isaac Z. Schlueter']"
-"neo-async","neo-async","['MIT']","['Caolan McMahon', 'Suguru Motegi']"
-"nice-try","nice-try","['MIT']","['Tobias Reich']"
-"no-case","no-case","['MIT']","['Blake Embrey (hello@blakeembrey.com)']"
-"node-fetch","node-fetch","['MIT']","['David Frank']"
-"node-gyp","node-gyp","['MIT']","['- Refael Ackermann Distributed', 'Ben Noordhuis <info@bnoordhuis.nl>', 'Donald Stufft and individual contributors', 'Google Inc.', 'Microsoft Corporation', 'Nathan Rajlich <nathan@tootallnate.net>', 'Node.js contributors', 'The Chromium Authors']"
-"node-int64","node-int64","['MIT']","['Robert Kieffer']"
-"node-machine-id","node-machine-id","['MIT']","['Aleksandr Komlev']"
-"node-releases","node-releases","['MIT']","['Sergey Rubanov (https://github.com/chicoxyzzy)']"
-"nopt","nopt","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"normalize-package-data","normalize-package-data","['BSD-2-Clause']","['Meryn Stol', ""Meryn Stol 'Author""]"
-"normalize-path","normalize-path","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"normalize-url","normalize-url","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"npm-bundled","npm-bundled","['ISC']","['npm, Inc. and Contributors']"
-"npm-install-checks","npm-install-checks","['BSD-2-Clause']","[""Robert Kowalski and Isaac Z. Schlueter 'Authors""]"
-"npm-normalize-package-bin","npm-normalize-package-bin","['ISC']","['npm, Inc.']"
-"npm-package-arg","npm-package-arg","['ISC']","['npm, Inc.']"
-"npm-packlist","npm-packlist","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"npm-pick-manifest","npm-pick-manifest","['ISC']","['npm, Inc.']"
-"npm-registry-fetch","npm-registry-fetch","['ISC']","['npm, Inc.']"
-"npm-run-all","npm-run-all","['MIT']","['Toru Nagashima', 'Toru Nagashima.']"
-"npm-run-path","npm-run-path","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"nwsapi","nwsapi","['MIT']","['Diego Perini', 'Diego Perini (http://www.iport.it/)']"
-"nx","nx","['MIT']","[]"
-"object-inspect","object-inspect","['MIT']","['James Halliday']"
-"object-keys","object-keys","['MIT']","['Jordan Harband']"
-"object.assign","object.assign","['MIT']","['Jordan Harband']"
-"once","once","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"onetime","onetime","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"open","open","['MIT']","['Fathi Boudra <fabo@freedesktop.org>', 'Jeremy White <jwhite@codeweavers.com>', 'Kevin Krammer <kevin.krammer@gmx.at>', 'Rex Dieter <rdieter@fedoraproject.org>', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"ora","ora","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"os-tmpdir","os-tmpdir","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"own-keys","own-keys","['MIT']","['Jordan Harband']"
-"p-cancelable","p-cancelable","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"p-finally","p-finally","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-limit","p-limit","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-locate","p-locate","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-map","p-map","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"p-map-series","p-map-series","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-pipe","p-pipe","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"p-queue","p-queue","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"p-reduce","p-reduce","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-timeout","p-timeout","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-try","p-try","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"p-waterfall","p-waterfall","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"package-json-from-dist","package-json-from-dist","['BlueOak-1.0.0']","[]"
-"pacote","pacote","['ISC']","['Isaac Z. Schlueter', 'Kat Marchan', 'and Contributors', 'npm, Inc.']"
-"parent-module","parent-module","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"parse-conflict-json","parse-conflict-json","['ISC']","['npm, Inc.']"
-"parse-json","parse-json","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"parse-path","parse-path","['MIT']","['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"parse-url","parse-url","['MIT']","['-22 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"parse5","parse5","['MIT']","['Ivan Nikulin (ifaaan@gmail.com', 'https://github.com/inikulin)']"
-"path-exists","path-exists","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"path-is-absolute","path-is-absolute","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"path-key","path-key","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"path-parse","path-parse","['MIT']","['Javier Blanco', 'Javier Blanco (http://jbgutierrez.info)']"
-"path-scurry","path-scurry","['BlueOak-1.0.0']","[]"
-"path-type","path-type","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"picocolors","picocolors","['ISC']","['Anton Verinov', 'Kostiantyn Denysov', 'Oleksii Raspopov']"
-"picomatch","picomatch","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"pidtree","pidtree","['MIT']","['Simone Primarosa']"
-"pify","pify","['MIT']","['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"pirates","pirates","['MIT']","['Ari Porad', 'Ari Porad (@ariporad) <http://ariporad.com>']"
-"pkg-dir","pkg-dir","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"possible-typed-array-names","possible-typed-array-names","['MIT']","['Jordan Harband']"
-"postcss-selector-parser","postcss-selector-parser","['MIT']","['Ben Briggs <beneb.info@gmail.com> (http://beneb.info)']"
-"prettier","prettier","['MIT']","['Alex Bell', 'Andrea Giammarchi', 'Andrew Powell <andrew@shellscape.org>', 'Andrey Sitnik <andrey@sitnik.ru>', 'Anton Verinov', 'Aseem Kishore', 'Ben Briggs <beneb.info@gmail.com> (http://beneb.info)', 'Denis Malinochkin', 'Denys Kniazevych <webschik@gmail.com>', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Dominic Tarr', 'EditorConfig Team', 'Eemeli Aro <eemeli@gmail.com>', 'Elan Shanker', 'Evgeny Poberezkin', 'Fabio Spampinato', 'Feross Aboukhadijeh', 'Google LLC. https://angular.dev/license', 'GraphQL Contributors', 'Ika <ikatyang@gmail.com> (https://github.com/ikatyang)', 'Isaac Z. Schlueter', 'Isaac Z. Schlueter and Contributors', 'JS Foundation and other contributors <https://js.foundation/>', 'James Halliday', 'James Long and contributors', 'James Talmage <james@talmage.io> (https://github.com/jamestalmage)', 'Jared Wray', 'Jeremy Ashkenas', 'Jon Schlinkert', 'Joshua Holbrook', 'Joyent, Inc. and other Node contributors', 'KFlash and others', 'Kael Zhang <i@kael.me>', 'Kevin Decker <kpdecker@gmail.com>', 'Kostiantyn Denysov', 'Liucw', 'Luke Childs', 'Mark Wubben', 'Mathias Bynens <https://mathiasbynens.be/>', 'Matteo Collina', 'Matteo Collina <matteo.collina@gmail.com>', 'Meta Platforms, Inc. and affiliates', 'Mikola Lysenko', 'Node.js contributors', 'Oleksii Raspopov', 'Open JS Foundation', 'Pat Sissons <patricksissons@gmail.com>', 'Paul Miller (https://paulmillr.com)', 'Permission', 'Petka Antonov Benjamin Gruenbaum', 'Raynos', 'Sebastian McKenzie and other contributors', 'Simon Lydell', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)', 'Squirrel Chat et al', 'Stefan Thomas', 'Teambition', 'Thomas Watson Steen', 'Tilde, Inc.', 'Titus Wormer', 'Titus Wormer <tituswormer@gmail.com>', 'Yehuda Katz and contributors', 'and others', 'by Ingvar Stepanyan', 'by Vitaly Puzrin', 'by Woong Jun and Tim Oxley', 'by various contributors', 'contributors http://kael.me', 'typescript-eslint and other contributors']"
-"pretty-format","pretty-format","['MIT']","['Meta Platforms, Inc. and affiliates']"
-"proc-log","proc-log","['ISC']","['GitHub, Inc.']"
-"process-nextick-args","process-nextick-args","['MIT']","['Calvin Metcalf']"
-"proggy","proggy","['ISC']","['GitHub, Inc.']"
-"promise-all-reject-late","promise-all-reject-late","['ISC']","['Isaac Z. Schlueter']"
-"promise-call-limit","promise-call-limit","['ISC']","['Isaac Z. Schlueter']"
-"promise-inflight","promise-inflight","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"promise-retry","promise-retry","['MIT']","['IndigoUnited']"
-"promzard","promzard","['ISC']","['Isaac Z. Schlueter']"
-"protocols","protocols","['MIT']","['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
-"proxy-from-env","proxy-from-env","['MIT']","['Rob Wu <rob@robwu.nl>']"
-"psl","psl","['MIT']","['Lupo Montero <lupomontero@gmail.com>', 'Lupo Montero lupomontero@gmail.com']"
-"punycode","punycode","['MIT']","['Mathias Bynens <https://mathiasbynens.be/>']"
-"pure-rand","pure-rand","['MIT']","['Nicolas DUBIEN']"
-"querystringify","querystringify","['MIT']","['Arnout Kazemier', 'Unshift.io']"
-"quick-lru","quick-lru","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"randombytes","randombytes","['MIT']","['crypto-browserify']"
-"rc","rc","['Apache-2.0 OR BSD-2-Clause OR MIT OR (Apache-2.0 AND BSD-2-Clause) OR (Apache-2.0 AND MIT) OR (BSD-2-Clause AND MIT)']","['Dominic Tarr']"
-"react-is","react-is","['MIT']","['Facebook, Inc. and its affiliates']"
-"read","read","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"read-cmd-shim","read-cmd-shim","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"read-package-json-fast","read-package-json-fast","['ISC']","['npm, Inc. and Contributors']"
-"read-pkg","read-pkg","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"read-pkg-up","read-pkg-up","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"readable-stream","readable-stream","['MIT']","['Joyent, Inc. and other Node contributors', 'Node.js contributors']"
-"redent","redent","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"reflect.getprototypeof","reflect.getprototypeof","['MIT']","['ECMAScript Shims']"
-"regexp.prototype.flags","regexp.prototype.flags","['MIT']","['Jordan Harband']"
-"require-directory","require-directory","['MIT']","['Troy Goode <troygoode@gmail.com>']"
-"require-from-string","require-from-string","['MIT']","['Vsevolod Strukchinsky (http://github.com/floatdrop)', 'Vsevolod Strukchinsky <floatdrop@gmail.com>']"
-"requires-port","requires-port","['MIT']","['Arnout Kazemier', 'Unshift.io']"
-"resolve","resolve","['MIT']","['James Halliday']"
-"resolve-alpn","resolve-alpn","['MIT']","['Szymon Marczak']"
-"resolve-cwd","resolve-cwd","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"resolve-from","resolve-from","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"resolve.exports","resolve.exports","['MIT']","['Luke Edwards (https://lukeed.com)', 'Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)']"
-"responselike","responselike","['MIT']","['Luke Childs <lukechilds123@gmail.com> (https://lukechilds.co.uk)', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"restore-cursor","restore-cursor","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"retry","retry","['MIT']","['Tim Koschutzki (tim@debuggable.com) Felix Geisendorfer (felix@debuggable.com)']"
-"rimraf","rimraf","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"rrweb-cssom","rrweb-cssom","['MIT']","['Nikita Vasilyev']"
-"run-async","run-async","['MIT']","['Simon Boudrias']"
-"rxjs","rxjs","['Apache-2.0']","['Google, Inc.', 'Microsoft Corp. and contributors', 'Microsoft Corporation', 'Netflix, Inc.']"
-"safe-array-concat","safe-array-concat","['MIT']","['Jordan Harband']"
-"safe-buffer","safe-buffer","['MIT']","['Feross Aboukhadijeh', 'Feross Aboukhadijeh (http://feross.org)']"
-"safe-push-apply","safe-push-apply","['MIT']","['Jordan Harband']"
-"safe-regex-test","safe-regex-test","['MIT']","['Jordan Harband']"
-"safer-buffer","safer-buffer","['MIT']","['Nikita Skovoroda <chalkerx@gmail.com>']"
-"saxes","saxes","['ISC']","[]"
-"schema-utils","schema-utils","['MIT']","['JS Foundation and other contributors']"
-"semver","semver","['ISC']","['Isaac Z.', 'Isaac Z. Schlueter', 'Isaac Z. Schlueter and Contributors']"
-"sentence-case","sentence-case","['MIT']","['Blake Embrey (hello@blakeembrey.com)']"
-"serialize-javascript","serialize-javascript","['BSD-3-Clause']","['Yahoo! Inc.']"
-"set-blocking","set-blocking","['ISC']","['Contributors']"
-"set-function-length","set-function-length","['MIT']","['Jordan Harband and contributors']"
-"set-function-name","set-function-name","['MIT']","['Jordan Harband and contributors']"
-"set-proto","set-proto","['MIT']","['Jordan Harband']"
-"shallow-clone","shallow-clone","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
-"shebang-command","shebang-command","['MIT']","['Kevin Martensson (http://github.com/kevva)', 'Kevin Martensson <kevinmartensson@gmail.com>']"
-"shebang-regex","shebang-regex","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"shell-quote","shell-quote","['MIT']","['James Halliday (mail@substack.net)']"
-"side-channel","side-channel","['MIT']","['Jordan Harband']"
-"side-channel-list","side-channel-list","['MIT']","['Jordan Harband']"
-"side-channel-map","side-channel-map","['MIT']","['Jordan Harband']"
-"side-channel-weakmap","side-channel-weakmap","['MIT']","['Jordan Harband']"
-"signal-exit","signal-exit","['ISC']","['Benjamin Coe', 'Isaac Z. Schlueter', 'and Contributors']"
-"sigstore","sigstore","['Apache-2.0']","[]"
-"slash","slash","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"smart-buffer","smart-buffer","['MIT']","['Josh Glazebrook']"
-"socks","socks","['MIT']","['Josh Glazebrook']"
-"socks-proxy-agent","socks-proxy-agent","['MIT']","['Nathan Rajlich <nathan@tootallnate.net>']"
-"sort-keys","sort-keys","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"source-map","source-map","['BSD-3-Clause']","['Mozilla Foundation and contributors', 'The Closure Compiler Authors']"
-"source-map-support","source-map-support","['MIT']","['Evan Wallace']"
-"spark-md5","spark-md5","['WTFPL OR (MIT AND WTFPL)']","['Andre Cruz <amdfcruz@gmail.com>']"
-"spdx-correct","spdx-correct","['Apache-2.0']","[]"
-"spdx-exceptions","spdx-exceptions","['CC-BY-3.0']","['Linux Foundation and its Contributors']"
-"spdx-expression-parse","spdx-expression-parse","['MIT']","['Kyle E. Mitchell']"
-"spdx-license-ids","spdx-license-ids","['CC0-1.0']","[]"
-"split","split","['MIT']","['Dominic Tarr']"
-"split-text-to-chunks","split-text-to-chunks","['MIT']","[]"
-"split2","split2","['ISC']","['Matteo Collina <hello@matteocollina.com>']"
-"sprintf-js","sprintf-js","['BSD-3-Clause']","['Alexandru Marasteanu']"
-"ssri","ssri","['ISC']","['npm, Inc.']"
-"stack-utils","stack-utils","['MIT']","['Isaac Z. Schlueter (http://github.com/isaacs)', 'Isaac Z. Schlueter <i@izs.me>', 'James Talmage (http://github.com/jamestalmage)', 'James Talmage <james@talmage.io> (github.com/jamestalmage)', 'and Contributors']"
-"stop-iteration-iterator","stop-iteration-iterator","['MIT']","['Jordan Harband']"
-"string-length","string-length","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"string-width","string-width","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"string-width-cjs","string-width-cjs","[]","[]"
-"string.prototype.padend","string.prototype.padend","['MIT']","['EcmaScript Shims']"
-"string.prototype.trim","string.prototype.trim","['MIT']","['Jordan Harband']"
-"string.prototype.trimend","string.prototype.trimend","['MIT']","['Khaled Al-Ansari']"
-"string.prototype.trimstart","string.prototype.trimstart","['MIT']","['Khaled Al-Ansari']"
-"string_decoder","string_decoder","['MIT']","['Joyent, Inc. and other Node contributors', 'Node.js contributors']"
-"strip-ansi","strip-ansi","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"strip-ansi-cjs","strip-ansi-cjs","[]","[]"
-"strip-bom","strip-bom","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"strip-final-newline","strip-final-newline","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"strip-indent","strip-indent","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"strip-json-comments","strip-json-comments","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"supports-color","supports-color","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"supports-preserve-symlinks-flag","supports-preserve-symlinks-flag","['MIT']","['Inspect JS']"
-"symbol-tree","symbol-tree","['MIT']","['Joris van der Wel']"
-"synckit","synckit","['MIT']","['UnTS']"
-"tablemark","tablemark","['MIT']","['Bo Lingen', 'Bo Lingen <bo@haltcase.dev> (https://github.com/haltcase)']"
-"tapable","tapable","['MIT']","['JS Foundation and other contributors']"
-"tar","tar","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"tar-stream","tar-stream","['MIT']","['Mathias Buus']"
-"temp-dir","temp-dir","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"terser","terser","['BSD-2-Clause']","['Mihai Bazon <mihai.bazon@gmail.com>']"
-"terser-webpack-plugin","terser-webpack-plugin","['MIT']","['JS Foundation and other contributors']"
-"test-exclude","test-exclude","['ISC']","['Contributors']"
-"text-extensions","text-extensions","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"text-table","text-table","['MIT']","[]"
-"through","through","['Apache-2.0 AND MIT']","['Dominic Tarr']"
-"through2","through2","['MIT']","['Rod Vagg', 'Rod Vagg rvagg (https://twitter.com/rvagg) and additional contributors']"
-"tinyglobby","tinyglobby","['MIT']","['Madeline Gurriaran']"
-"tldts","tldts","['MIT']","['Remi Berson', 'Thomas Parisot']"
-"tldts-core","tldts-core","['MIT']","['Remi Berson', 'Thomas Parisot']"
-"tmp","tmp","['MIT']","['KARASZI Istvan', 'KARASZI Istvan <github@spam.raszi.hu>']"
-"tmpl","tmpl","['BSD-3-Clause']","['Naitik Shah']"
-"to-regex-range","to-regex-range","['MIT']","['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)', 'Jon Schlinkert (https://github.com/jonschlinkert).', 'Jon Schlinkert.']"
-"tough-cookie","tough-cookie","['BSD-3-Clause']","['Phil Booth', 'Salesforce.com, Inc.']"
-"tr46","tr46","['MIT']","['Sebastian Mayr']"
-"treeverse","treeverse","['ISC']","['npm, Inc. and Contributors']"
-"trim-newlines","trim-newlines","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"ts-jest","ts-jest","['MIT']","['Permission']"
-"ts-loader","ts-loader","['MIT']","['TypeStrong']"
-"ts-node","ts-node","['MIT']","['Blake Embrey (hello@blakeembrey.com)', 'Joyent, Inc. and other Node contributors']"
-"tsconfig-paths","tsconfig-paths","['MIT']","['Jonas Kello']"
-"tsconfig-paths-webpack-plugin","tsconfig-paths-webpack-plugin","['MIT']","['Jonas Kello']"
-"tslib","tslib","['0BSD']","['Microsoft Corporation']"
-"tuf-js","tuf-js","['MIT']","['GitHub and the TUF Contributors']"
-"type-detect","type-detect","['MIT']","['Jake Luer <jake@alogicalparadox.com> (http://alogicalparadox.com)', 'jake luer <jake@alogicalparadox.com>']"
-"type-fest","type-fest","['MIT OR (CC0-1.0 AND MIT)']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"typed-array-buffer","typed-array-buffer","['MIT']","['Jordan Harband']"
-"typed-array-byte-length","typed-array-byte-length","['MIT']","['Inspect JS']"
-"typed-array-byte-offset","typed-array-byte-offset","['MIT']","['Inspect JS']"
-"typed-array-length","typed-array-length","['MIT']","['Inspect JS']"
-"typedarray","typedarray","['MIT']","['Joshua Bell', 'Linden Research, Inc.']"
-"typescript","typescript","['Apache-2.0']","['Beihang) Disclaimers', 'ERCIM', 'Keio', 'Microsoft Corporation', 'The Khronos Group Inc.', 'Unicode, Inc.', 'WHATWG', 'YEAR W3C(r) (MIT', 'by W3C']"
-"uglify-js","uglify-js","['BSD-2-Clause AND BSD-3-Clause']","['Mihai Bazon <mihai.bazon@gmail.com>']"
-"unbox-primitive","unbox-primitive","['MIT']","['Jordan Harband']"
-"undici-types","undici-types","['MIT']","['Matteo Collina and Undici contributors']"
-"unique-filename","unique-filename","['ISC']","['npm, Inc']"
-"unique-slug","unique-slug","['ISC']","['npm, Inc']"
-"universal-user-agent","universal-user-agent","['ISC']","['Gregor Martynus (https://github.com/gr2m)']"
-"universalify","universalify","['MIT']","['Ryan Zimmerman <opensrc@ryanzim.com>']"
-"unrs-resolver","unrs-resolver","[]","[]"
-"upath","upath","['MIT']","['Angelos Pikoulas (agelos.pikoulas@gmail.com)', 'Angelos Pikoulas <agelos.pikoulas@gmail.com>']"
-"update-browserslist-db","update-browserslist-db","['MIT']","['Andrey Sitnik <andrey@sitnik.ru> and other contributors']"
-"upper-case-first","upper-case-first","['MIT']","['Blake Embrey (hello@blakeembrey.com)']"
-"url-parse","url-parse","['MIT']","['Arnout Kazemier', 'Unshift.io']"
-"util-deprecate","util-deprecate","['MIT']","['Nathan Rajlich <nathan@tootallnate.net>']"
-"uuid","uuid","['MIT']","['Andrew Kepert', 'Lostinet', 'Paul Johnston Other contributors Greg Holt', 'Robert Kieffer and other contributors', 'Sebastian Tschan https://blueimp.net', 'Ydnar']"
-"v8-compile-cache-lib","v8-compile-cache-lib","['MIT']","['Andres Suarez']"
-"v8-to-istanbul","v8-to-istanbul","['ISC']","['Contributors']"
-"validate-npm-package-license","validate-npm-package-license","['Apache-2.0']","[]"
-"validate-npm-package-name","validate-npm-package-name","['ISC']","['npm, Inc']"
-"visit-values","visit-values","['MIT']","['Yaniv Kessler']"
-"vite","vite","[]","[]"
-"w3c-xmlserializer","w3c-xmlserializer","['MIT']","['Sebastian Mayr']"
-"walk-up-path","walk-up-path","['ISC']","['Isaac Z. Schlueter']"
-"walker","walker","['Apache-2.0']","['Naitik Shah']"
-"watchpack","watchpack","['MIT']","['JS Foundation and other contributors']"
-"wcwidth","wcwidth","['MIT']","['by Jun Woong']"
-"webidl-conversions","webidl-conversions","['BSD-2-Clause']","['Domenic Denicola']"
-"webpack","webpack","['MIT']","['JS Foundation and other contributors']"
-"webpack-sources","webpack-sources","['MIT']","['JS Foundation and other contributors']"
-"whatwg-encoding","whatwg-encoding","['MIT']","['Domenic Denicola <d@domenic.me>']"
-"whatwg-mimetype","whatwg-mimetype","['MIT']","['Domenic Denicola <d@domenic.me>']"
-"whatwg-url","whatwg-url","['MIT']","['Sebastian Mayr']"
-"which","which","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"which-boxed-primitive","which-boxed-primitive","['MIT']","['Jordan Harband']"
-"which-builtin-type","which-builtin-type","['MIT']","['ECMAScript Shims']"
-"which-collection","which-collection","['MIT']","['Inspect JS']"
-"which-typed-array","which-typed-array","['MIT']","['Jordan Harband']"
-"wide-align","wide-align","['ISC']","['Rebecca Turner <me@re-becca.org>']"
-"wordwrap","wordwrap","['MIT']","[]"
-"wrap-ansi","wrap-ansi","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
-"wrap-ansi-cjs","wrap-ansi-cjs","[]","[]"
-"wrappy","wrappy","['ISC']","['Isaac Z. Schlueter and Contributors']"
-"write-file-atomic","write-file-atomic","['ISC']","['Rebecca Turner']"
-"write-json-file","write-json-file","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"write-pkg","write-pkg","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"ws","ws","['MIT']","['Arnout Kazemier and contributors', 'Einar Otto Stangvik <einaros@gmail.com>', 'Luigi Pinca and contributors']"
-"xml-name-validator","xml-name-validator","['Apache-2.0']","[]"
-"xmlchars","xmlchars","['MIT']","['Louis-Dominique Dubeau', 'Louis-Dominique Dubeau and contributors']"
-"xtend","xtend","['MIT']","['Raynos']"
-"y18n","y18n","['ISC']","['Contributors']"
-"yallist","yallist","['BlueOak-1.0.0']","['Isaac Z. Schlueter and Contributors']"
-"yaml","yaml","['ISC']","['Eemeli Aro <eemeli@gmail.com>']"
-"yargs","yargs","['MIT']","['Contributors (ben@npmjs.com)', 'James Halliday (mail@substack.net)']"
-"yargs-parser","yargs-parser","['ISC']","['Contributors']"
-"yn","yn","['MIT']","['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
-"yocto-queue","yocto-queue","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
+component,origin,license,copyright
+@ampproject/remapping,@ampproject/remapping,['Apache-2.0'],['Justin Ridgewell']
+@asamuzakjp/css-color,@asamuzakjp/css-color,['MIT'],"['Beihang)', 'ERCIM', 'Keio', 'W3C(r) (MIT', 'asamuzaK (Kazz)', 'asamuzaK (Kazz) (https://github.com/asamuzaK/)']"
+@babel/code-frame,@babel/code-frame,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/compat-data,@babel/compat-data,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/core,@babel/core,['MIT'],"['Joyent, Inc. and other Node contributors', 'Node.js contributors', 'Sebastian McKenzie and other contributors', 'Titus Wormer']"
+@babel/generator,@babel/generator,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-compilation-targets,@babel/helper-compilation-targets,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-globals,@babel/helper-globals,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-module-imports,@babel/helper-module-imports,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-module-transforms,@babel/helper-module-transforms,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-plugin-utils,@babel/helper-plugin-utils,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-string-parser,@babel/helper-string-parser,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-validator-identifier,@babel/helper-validator-identifier,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helper-validator-option,@babel/helper-validator-option,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/helpers,@babel/helpers,['MIT'],"['Facebook, Inc.', 'Sebastian McKenzie and other contributors']"
+@babel/parser,@babel/parser,['MIT'],['by various contributors']
+@babel/plugin-syntax-async-generators,@babel/plugin-syntax-async-generators,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-bigint,@babel/plugin-syntax-bigint,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-class-properties,@babel/plugin-syntax-class-properties,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-class-static-block,@babel/plugin-syntax-class-static-block,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-import-attributes,@babel/plugin-syntax-import-attributes,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-import-meta,@babel/plugin-syntax-import-meta,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-json-strings,@babel/plugin-syntax-json-strings,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-jsx,@babel/plugin-syntax-jsx,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-logical-assignment-operators,@babel/plugin-syntax-logical-assignment-operators,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-nullish-coalescing-operator,@babel/plugin-syntax-nullish-coalescing-operator,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-numeric-separator,@babel/plugin-syntax-numeric-separator,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-object-rest-spread,@babel/plugin-syntax-object-rest-spread,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-optional-catch-binding,@babel/plugin-syntax-optional-catch-binding,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-optional-chaining,@babel/plugin-syntax-optional-chaining,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-private-property-in-object,@babel/plugin-syntax-private-property-in-object,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-top-level-await,@babel/plugin-syntax-top-level-await,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/plugin-syntax-typescript,@babel/plugin-syntax-typescript,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/template,@babel/template,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/traverse,@babel/traverse,['MIT'],['Sebastian McKenzie and other contributors']
+@babel/types,@babel/types,['MIT'],['Sebastian McKenzie and other contributors']
+@bcoe/v8-coverage,@bcoe/v8-coverage,['ISC AND MIT'],"['Charles Samborski', 'Contributors']"
+@biomejs/biome,@biomejs/biome,['Apache-2.0 AND MIT'],"['Biome Developers and Contributors', 'Rome']"
+@biomejs/cli-darwin-arm64,@biomejs/cli-darwin-arm64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-darwin-x64,@biomejs/cli-darwin-x64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-linux-arm64,@biomejs/cli-linux-arm64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-linux-arm64-musl,@biomejs/cli-linux-arm64-musl,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-linux-x64,@biomejs/cli-linux-x64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-linux-x64-musl,@biomejs/cli-linux-x64-musl,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-win32-arm64,@biomejs/cli-win32-arm64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@biomejs/cli-win32-x64,@biomejs/cli-win32-x64,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Biome Developers and Contributors']
+@cspotcode/source-map-support,@cspotcode/source-map-support,['MIT'],['Evan Wallace']
+@csstools/color-helpers,@csstools/color-helpers,['MIT-0'],"['Beihang)', 'CSSTools Contributors', 'ERCIM', 'Keio', 'W3C(r) (MIT']"
+@csstools/css-calc,@csstools/css-calc,['MIT'],"['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
+@csstools/css-color-parser,@csstools/css-color-parser,['MIT'],"['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
+@csstools/css-parser-algorithms,@csstools/css-parser-algorithms,['MIT'],"['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
+@csstools/css-tokenizer,@csstools/css-tokenizer,['MIT'],"['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
+@datadog/browser-core,@datadog/browser-core,['Apache-2.0'],"['Datadog, Inc.']"
+@datadog/flagging-core,@datadog/flagging-core,['Apache-2.0'],"['Datadog, Inc.']"
+@emnapi/core,@emnapi/core,['MIT'],"['Microsoft Corporation', 'Toyobayashi']"
+@emnapi/runtime,@emnapi/runtime,['MIT'],"['Microsoft Corporation', 'Toyobayashi']"
+@emnapi/wasi-threads,@emnapi/wasi-threads,['MIT'],['Toyobayashi']
+@hutson/parse-repository-url,@hutson/parse-repository-url,['Apache-2.0'],['Hutson Betts']
+@isaacs/balanced-match,@isaacs/balanced-match,['MIT'],"['Isaac Z. Schlueter <i@izs.me>', 'Julian Gruber <julian@juliangruber.com>']"
+@isaacs/brace-expansion,@isaacs/brace-expansion,['MIT'],"['Isaac Z. Schlueter <i@izs.me>', 'Julian Gruber <julian@juliangruber.com>']"
+@isaacs/cliui,@isaacs/cliui,['ISC'],['Contributors']
+@isaacs/fs-minipass,@isaacs/fs-minipass,['ISC'],['Isaac Z. Schlueter and Contributors']
+@isaacs/string-locale-compare,@isaacs/string-locale-compare,['ISC'],['Isaac Z. Schlueter']
+@istanbuljs/load-nyc-config,@istanbuljs/load-nyc-config,['ISC'],['Contributors']
+@istanbuljs/schema,@istanbuljs/schema,['MIT'],"['CFWare, LLC']"
+@jest/console,@jest/console,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/core,@jest/core,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/diff-sequences,@jest/diff-sequences,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/environment,@jest/environment,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/environment-jsdom-abstract,@jest/environment-jsdom-abstract,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/expect,@jest/expect,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/expect-utils,@jest/expect-utils,['MIT'],"['Meta Platforms, Inc. and affiliates', 'Pivotal Labs']"
+@jest/fake-timers,@jest/fake-timers,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/get-type,@jest/get-type,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/globals,@jest/globals,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/pattern,@jest/pattern,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/reporters,@jest/reporters,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/schemas,@jest/schemas,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/snapshot-utils,@jest/snapshot-utils,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/source-map,@jest/source-map,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/test-result,@jest/test-result,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/test-sequencer,@jest/test-sequencer,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/transform,@jest/transform,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jest/types,@jest/types,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+@jridgewell/gen-mapping,@jridgewell/gen-mapping,['MIT'],['Justin Ridgewell <justin@ridgewell.name>']
+@jridgewell/resolve-uri,@jridgewell/resolve-uri,['MIT'],['Justin Ridgewell <jridgewell@google.com>']
+@jridgewell/source-map,@jridgewell/source-map,['MIT'],['Justin Ridgewell <justin@ridgewell.name>']
+@jridgewell/sourcemap-codec,@jridgewell/sourcemap-codec,['MIT'],['Justin Ridgewell <justin@ridgewell.name>']
+@jridgewell/trace-mapping,@jridgewell/trace-mapping,['MIT'],['Justin Ridgewell <justin@ridgewell.name>']
+@kessler/tableify,@kessler/tableify,['MIT'],"['Dan VerWeire', 'Yaniv Kessler']"
+@keyv/serialize,@keyv/serialize,['MIT'],"['Jared Wray', 'Jared Wray (LISCENCE)', 'Luke Childs']"
+@lerna/create,@lerna/create,['MIT'],['Daniel Stockman']
+@napi-rs/wasm-runtime,@napi-rs/wasm-runtime,['MIT'],"['GitHub', 'Joyent, Inc. and other Node contributors', 'LongYinan', 'Microsoft Corporation']"
+@npmcli/agent,@npmcli/agent,['ISC'],['GitHub Inc.']
+@npmcli/arborist,@npmcli/arborist,['ISC'],"['npm, Inc.']"
+@npmcli/fs,@npmcli/fs,['ISC'],"['JP Richardson', 'npm, Inc.']"
+@npmcli/git,@npmcli/git,['ISC'],"['npm, Inc.']"
+@npmcli/installed-package-contents,@npmcli/installed-package-contents,['ISC'],"['npm, Inc.']"
+@npmcli/map-workspaces,@npmcli/map-workspaces,['ISC'],"['npm, Inc.']"
+@npmcli/metavuln-calculator,@npmcli/metavuln-calculator,['ISC'],"['npm, Inc.']"
+@npmcli/name-from-folder,@npmcli/name-from-folder,['ISC'],"['npm, Inc.']"
+@npmcli/node-gyp,@npmcli/node-gyp,['ISC'],['GitHub Inc.']
+@npmcli/package-json,@npmcli/package-json,['ISC'],['GitHub Inc.']
+@npmcli/promise-spawn,@npmcli/promise-spawn,['ISC'],"['npm, Inc.']"
+@npmcli/query,@npmcli/query,['ISC'],"['npm, Inc.']"
+@npmcli/redact,@npmcli/redact,['ISC AND MIT'],['npm']
+@npmcli/run-script,@npmcli/run-script,['ISC'],"['npm, Inc.']"
+@nx/devkit,@nx/devkit,['MIT'],"['Google Inc.', 'Narwhal Technologies Inc.']"
+@nx/nx-darwin-arm64,@nx/nx-darwin-arm64,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-darwin-x64,@nx/nx-darwin-x64,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-freebsd-x64,@nx/nx-freebsd-x64,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-linux-arm-gnueabihf,@nx/nx-linux-arm-gnueabihf,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-linux-arm64-gnu,@nx/nx-linux-arm64-gnu,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-linux-arm64-musl,@nx/nx-linux-arm64-musl,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-linux-x64-gnu,@nx/nx-linux-x64-gnu,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-linux-x64-musl,@nx/nx-linux-x64-musl,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-win32-arm64-msvc,@nx/nx-win32-arm64-msvc,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@nx/nx-win32-x64-msvc,@nx/nx-win32-x64-msvc,['MIT'],"['Entrust', 'Entrust, Inc. - for', 'Entrust.net Limited1301 Entrust.net Certification']"
+@octokit/auth-token,@octokit/auth-token,['MIT'],['Octokit']
+@octokit/core,@octokit/core,['MIT'],['Octokit contributors']
+@octokit/endpoint,@octokit/endpoint,['MIT'],['Octokit contributors']
+@octokit/graphql,@octokit/graphql,['MIT'],['Octokit contributors']
+@octokit/openapi-types,@octokit/openapi-types,['MIT'],"['GitHub.com', 'Gregor Martynus']"
+@octokit/plugin-enterprise-rest,@octokit/plugin-enterprise-rest,['MIT'],['Octokit']
+@octokit/plugin-paginate-rest,@octokit/plugin-paginate-rest,['MIT'],['Octokit contributors']
+@octokit/plugin-request-log,@octokit/plugin-request-log,['MIT'],['Octokit']
+@octokit/plugin-rest-endpoint-methods,@octokit/plugin-rest-endpoint-methods,['MIT'],['Octokit contributors']
+@octokit/request,@octokit/request,['MIT'],['Octokit contributors']
+@octokit/request-error,@octokit/request-error,['MIT'],['Octokit contributors']
+@octokit/rest,@octokit/rest,['MIT'],"['Cloud9 IDE, Inc. (Mike de Boer)', 'Octokit contributors']"
+@octokit/types,@octokit/types,['MIT'],['Octokit contributors']
+@openfeature/core,@openfeature/core,['Apache-2.0'],['OpenFeature contributors']
+@openfeature/server-sdk,@openfeature/server-sdk,['Apache-2.0'],['OpenFeature contributors']
+@openfeature/web-sdk,@openfeature/web-sdk,['Apache-2.0'],['OpenFeature contributors']
+@pkgjs/parseargs,@pkgjs/parseargs,['Apache-2.0 AND MIT'],['Node.js contributors']
+@pkgr/core,@pkgr/core,['MIT'],['JounQin']
+@sec-ant/readable-stream,@sec-ant/readable-stream,['MIT'],['Ze-Zheng Wu']
+@sigstore/bundle,@sigstore/bundle,['Apache-2.0'],['The Sigstore Authors']
+@sigstore/core,@sigstore/core,['Apache-2.0'],['The Sigstore Authors']
+@sigstore/protobuf-specs,@sigstore/protobuf-specs,['Apache-2.0'],['The Sigstore Authors']
+@sigstore/sign,@sigstore/sign,['Apache-2.0'],['The Sigstore Authors']
+@sigstore/tuf,@sigstore/tuf,['Apache-2.0'],['The Sigstore Authors']
+@sigstore/verify,@sigstore/verify,['Apache-2.0'],['The Sigstore Authors']
+@sinclair/typebox,@sinclair/typebox,['MIT'],"['Haydn Paterson', 'Haydn Paterson (sinclair) <haydn.developer@gmail.com>']"
+@sindresorhus/is,@sindresorhus/is,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+@sinonjs/commons,@sinonjs/commons,['BSD-3-Clause'],['Sinon.JS']
+@sinonjs/fake-timers,@sinonjs/fake-timers,['BSD-3-Clause'],"['Christian Johansen', 'christian@cjohansen.no']"
+@szmarczak/http-timer,@szmarczak/http-timer,['MIT'],['Szymon Marczak']
+@tsconfig/node10,@tsconfig/node10,['MIT'],['Microsoft Corporation']
+@tsconfig/node12,@tsconfig/node12,['MIT'],['Microsoft Corporation']
+@tsconfig/node14,@tsconfig/node14,['MIT'],['Microsoft Corporation']
+@tsconfig/node16,@tsconfig/node16,['MIT'],['Microsoft Corporation']
+@tufjs/canonical-json,@tufjs/canonical-json,['MIT'],['GitHub and the TUF Contributors']
+@tufjs/models,@tufjs/models,['MIT'],['GitHub and the TUF Contributors']
+@tybys/wasm-util,@tybys/wasm-util,['MIT'],['toyobayashi']
+@types/babel__core,@types/babel__core,['MIT'],['Microsoft Corporation']
+@types/babel__generator,@types/babel__generator,['MIT'],['Microsoft Corporation']
+@types/babel__template,@types/babel__template,['MIT'],['Microsoft Corporation']
+@types/babel__traverse,@types/babel__traverse,['MIT'],['Microsoft Corporation']
+@types/chrome,@types/chrome,['MIT'],['Microsoft Corporation']
+@types/eslint,@types/eslint,['MIT'],['Microsoft Corporation']
+@types/eslint-scope,@types/eslint-scope,['MIT'],['Microsoft Corporation']
+@types/estree,@types/estree,['MIT'],['Microsoft Corporation']
+@types/filesystem,@types/filesystem,['MIT'],['Microsoft Corporation']
+@types/filewriter,@types/filewriter,['MIT'],['Microsoft Corporation']
+@types/har-format,@types/har-format,['MIT'],['Microsoft Corporation']
+@types/http-cache-semantics,@types/http-cache-semantics,['MIT'],['Microsoft Corporation']
+@types/istanbul-lib-coverage,@types/istanbul-lib-coverage,['MIT'],['Microsoft Corporation']
+@types/istanbul-lib-report,@types/istanbul-lib-report,['MIT'],['Microsoft Corporation']
+@types/istanbul-reports,@types/istanbul-reports,['MIT'],['Microsoft Corporation']
+@types/jest,@types/jest,['MIT'],['Microsoft Corporation']
+@types/jsdom,@types/jsdom,['MIT'],['Microsoft Corporation']
+@types/json-schema,@types/json-schema,['MIT'],['Microsoft Corporation']
+@types/minimatch,@types/minimatch,['MIT'],"['Microsoft Corporation', 'Microsoft Corporation.']"
+@types/minimist,@types/minimist,['MIT'],['Microsoft Corporation']
+@types/node,@types/node,['MIT'],"['Microsoft Corporation', 'Node.js contributors']"
+@types/normalize-package-data,@types/normalize-package-data,['MIT'],['Microsoft Corporation']
+@types/spark-md5,@types/spark-md5,['MIT'],['Microsoft Corporation']
+@types/stack-utils,@types/stack-utils,['MIT'],['Microsoft Corporation']
+@types/tough-cookie,@types/tough-cookie,['MIT'],['Microsoft Corporation']
+@types/yargs,@types/yargs,['MIT'],['Microsoft Corporation']
+@types/yargs-parser,@types/yargs-parser,['MIT'],['Microsoft Corporation']
+@ungap/structured-clone,@ungap/structured-clone,['ISC'],['Andrea Giammarchi']
+@unrs/resolver-binding-android-arm-eabi,@unrs/resolver-binding-android-arm-eabi,['MIT'],['JounQin']
+@unrs/resolver-binding-android-arm64,@unrs/resolver-binding-android-arm64,['MIT'],['JounQin']
+@unrs/resolver-binding-darwin-arm64,@unrs/resolver-binding-darwin-arm64,['MIT'],['JounQin']
+@unrs/resolver-binding-darwin-x64,@unrs/resolver-binding-darwin-x64,['MIT'],['JounQin']
+@unrs/resolver-binding-freebsd-x64,@unrs/resolver-binding-freebsd-x64,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-arm-gnueabihf,@unrs/resolver-binding-linux-arm-gnueabihf,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-arm-musleabihf,@unrs/resolver-binding-linux-arm-musleabihf,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-arm64-gnu,@unrs/resolver-binding-linux-arm64-gnu,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-arm64-musl,@unrs/resolver-binding-linux-arm64-musl,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-ppc64-gnu,@unrs/resolver-binding-linux-ppc64-gnu,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-riscv64-gnu,@unrs/resolver-binding-linux-riscv64-gnu,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-riscv64-musl,@unrs/resolver-binding-linux-riscv64-musl,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-s390x-gnu,@unrs/resolver-binding-linux-s390x-gnu,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-x64-gnu,@unrs/resolver-binding-linux-x64-gnu,['MIT'],['JounQin']
+@unrs/resolver-binding-linux-x64-musl,@unrs/resolver-binding-linux-x64-musl,['MIT'],['JounQin']
+@unrs/resolver-binding-wasm32-wasi,@unrs/resolver-binding-wasm32-wasi,['MIT'],['JounQin']
+@unrs/resolver-binding-win32-arm64-msvc,@unrs/resolver-binding-win32-arm64-msvc,['MIT'],['JounQin']
+@unrs/resolver-binding-win32-ia32-msvc,@unrs/resolver-binding-win32-ia32-msvc,['MIT'],['JounQin']
+@unrs/resolver-binding-win32-x64-msvc,@unrs/resolver-binding-win32-x64-msvc,['MIT'],['JounQin']
+@webassemblyjs/ast,@webassemblyjs/ast,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/floating-point-hex-parser,@webassemblyjs/floating-point-hex-parser,['MIT'],['Mauro Bringolf']
+@webassemblyjs/helper-api-error,@webassemblyjs/helper-api-error,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/helper-buffer,@webassemblyjs/helper-buffer,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/helper-numbers,@webassemblyjs/helper-numbers,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/helper-wasm-bytecode,@webassemblyjs/helper-wasm-bytecode,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/helper-wasm-section,@webassemblyjs/helper-wasm-section,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/ieee754,@webassemblyjs/ieee754,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/leb128,@webassemblyjs/leb128,['Apache-2.0'],"['The Obvious Corporation', 'The Obvious Corporation. http://obvious.com']"
+@webassemblyjs/utf8,@webassemblyjs/utf8,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/wasm-edit,@webassemblyjs/wasm-edit,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/wasm-gen,@webassemblyjs/wasm-gen,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/wasm-opt,@webassemblyjs/wasm-opt,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/wasm-parser,@webassemblyjs/wasm-parser,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@webassemblyjs/wast-printer,@webassemblyjs/wast-printer,['MIT'],['Sven Sauleau <sven@sauleau.com>']
+@xtuc/ieee754,@xtuc/ieee754,['BSD-3-Clause'],"['Fair Oaks Labs, Inc.']"
+@xtuc/long,@xtuc/long,['Apache-2.0'],['Daniel Wirtz']
+@yarnpkg/lockfile,@yarnpkg/lockfile,['BSD-2-Clause'],"['Denis Pushkarev', 'Facebook, Inc.', 'Joyent, Inc. and other Node contributors']"
+@yarnpkg/parsers,@yarnpkg/parsers,['BSD-2-Clause'],['Yarn Contributors']
+@zkochan/js-yaml,@zkochan/js-yaml,['MIT'],['by Vitaly Puzrin']
+JSONStream,JSONStream,['Apache-2.0 OR MIT OR (Apache-2.0 AND MIT)'],['Dominic Tarr']
+abbrev,abbrev,['ISC AND MIT'],['Isaac Z. Schlueter and Contributors']
+acorn,acorn,['MIT'],['by various contributors']
+acorn-walk,acorn-walk,['MIT'],['by various contributors']
+add-stream,add-stream,['MIT'],['Majid Burney']
+agent-base,agent-base,['MIT'],['Nathan Rajlich <nathan@tootallnate.net>']
+aggregate-error,aggregate-error,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+ajv,ajv,['MIT'],['Evgeny Poberezkin']
+ajv-formats,ajv-formats,['MIT'],['Evgeny Poberezkin']
+ajv-keywords,ajv-keywords,['MIT'],['Evgeny Poberezkin']
+ansi-colors,ansi-colors,['MIT'],"['Brian Woodward', 'Brian Woodward (https://github.com/doowb)']"
+ansi-escapes,ansi-escapes,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+ansi-regex,ansi-regex,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+ansi-styles,ansi-styles,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+anymatch,anymatch,['ISC'],"['Elan Shanker', 'Paul Miller (https://paulmillr.com)']"
+aproba,aproba,['ISC'],['Rebecca Turner <me@re-becca.org>']
+arg,arg,['MIT'],"['Zeit, Inc.', 'by ZEIT, Inc.']"
+argparse,argparse,['MIT'],"['Vitaly Puzrin (https://github.com/puzrin)', 'by Vitaly Puzrin']"
+array-buffer-byte-length,array-buffer-byte-length,['MIT'],['Inspect JS']
+array-differ,array-differ,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+array-ify,array-ify,['MIT'],['Steve Mao (https://github.com/stevemao)']
+array-union,array-union,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+arraybuffer.prototype.slice,arraybuffer.prototype.slice,['MIT'],['ECMAScript Shims']
+arrify,arrify,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+async,async,['MIT'],['Caolan McMahon']
+async-function,async-function,['MIT'],['EduardoRFS']
+asynckit,asynckit,['MIT'],['Alex Indigo']
+available-typed-arrays,available-typed-arrays,['MIT'],['Inspect JS']
+axios,axios,['MIT'],"['Matt Zabriskie & Collaborators', 'Matt Zabriskie and contributors']"
+babel-jest,babel-jest,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+babel-plugin-istanbul,babel-plugin-istanbul,['BSD-3-Clause'],['Istanbul Code Coverage']
+babel-plugin-jest-hoist,babel-plugin-jest-hoist,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+babel-preset-current-node-syntax,babel-preset-current-node-syntax,['MIT'],['Nicolo Ribaudo and other contributors']
+babel-preset-jest,babel-preset-jest,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+balanced-match,balanced-match,['MIT'],['Julian Gruber <julian@juliangruber.com>']
+base64-js,base64-js,['MIT'],['Jameson Little']
+before-after-hook,before-after-hook,['Apache-2.0'],['Gregor Martynus and other contributors']
+bin-links,bin-links,['ISC'],"['npm, Inc.']"
+bl,bl,['MIT'],['bl contributors']
+brace-expansion,brace-expansion,['MIT'],['Julian Gruber <julian@juliangruber.com>']
+braces,braces,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+browserslist,browserslist,['MIT'],['Andrey Sitnik <andrey@sitnik.ru> and other contributors']
+bs-logger,bs-logger,['MIT'],['Huafu Gandon']
+bser,bser,['Apache-2.0'],"['Facebook, Inc.']"
+buffer,buffer,['MIT'],"['Feross Aboukhadijeh', 'Feross Aboukhadijeh (http://feross.org)', 'and other contributors']"
+buffer-from,buffer-from,['MIT'],['Linus Unneback']
+byte-size,byte-size,['MIT'],"['-23 Lloyd Brookes (https://github.com/75lb) 75pound@gmail.com', '-23 Lloyd Brookes <75pound@gmail.com>']"
+cacache,cacache,['ISC'],"['npm, Inc.']"
+cacheable-lookup,cacheable-lookup,['MIT'],['Szymon Marczak']
+cacheable-request,cacheable-request,['MIT'],"['Jared Wray', 'Luke Childs and Jared Wray']"
+call-bind,call-bind,['MIT'],['Jordan Harband']
+call-bind-apply-helpers,call-bind-apply-helpers,['MIT'],['Jordan Harband']
+call-bound,call-bound,['MIT'],['Jordan Harband']
+callsites,callsites,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+camelcase,camelcase,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+camelcase-keys,camelcase-keys,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+caniuse-lite,caniuse-lite,['CC-BY-4.0'],['Ben Briggs']
+chalk,chalk,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+char-regex,char-regex,['MIT'],['Richie Bendall']
+chardet,chardet,['MIT'],['Dmitry Shirokov']
+chownr,chownr,['ISC'],['Isaac Z. Schlueter and Contributors']
+chrome-trace-event,chrome-trace-event,['MIT'],['Joyent Inc.']
+ci-info,ci-info,['MIT'],['Thomas Watson Steen']
+cjs-module-lexer,cjs-module-lexer,['MIT'],"['Guy Bedford', 'by various contributors']"
+clean-stack,clean-stack,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+cli-cursor,cli-cursor,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+cli-spinners,cli-spinners,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+cli-width,cli-width,['ISC'],['Ilya Radchenko <ilya@burstcreations.com>']
+cliui,cliui,['ISC'],"['Contributors', 'npm, Inc. and Contributors']"
+clone,clone,['MIT'],"['Paul Vorbach (http://paul.vorba.ch/) and contributors (https://github.com/pvorb/node-clone/graphs/contributors)', 'Paul Vorbach (http://paul.vorba.ch/) and contributors (https://github.com/pvorb/node-clone/graphs/contributors).', 'Paul Vorbach <paul@vorba.ch>']"
+clone-deep,clone-deep,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+cmd-shim,cmd-shim,['ISC'],"['npm, Inc. and Contributors']"
+co,co,['MIT'],['TJ Holowaychuk <tj@vision-media.ca>']
+collect-v8-coverage,collect-v8-coverage,['MIT'],['Simen Bekkhus']
+color-convert,color-convert,['MIT'],"['Heather Arthur <fayearthur@gmail.com>', 'Heather Arthur and Josh Junon', 'Heather Arthur and Josh Junon.']"
+color-name,color-name,['MIT'],['Dmitry Ivanov']
+color-support,color-support,['ISC'],['Isaac Z. Schlueter and Contributors']
+columnify,columnify,['MIT'],['Tim Oxley']
+com.github.DataDog/openfeature-js-client,git+https://github.com/DataDog/openfeature-js-client,['Apache-2.0'],"['Datadog, Inc.']"
+combined-stream,combined-stream,['MIT'],['Debuggable Limited <felix@debuggable.com>']
+commander,commander,['MIT'],['TJ Holowaychuk <tj@vision-media.ca>']
+common-ancestor-path,common-ancestor-path,['ISC'],['Isaac Z. Schlueter']
+compare-func,compare-func,['MIT'],"['Steve Mao', 'Steve Mao (https://github.com/stevemao)']"
+concat-map,concat-map,['MIT'],['James Halliday']
+concat-stream,concat-stream,['MIT'],['Max Ogden']
+console-control-strings,console-control-strings,['ISC'],['Rebecca Turner <me@re-becca.org>']
+conventional-changelog-angular,conventional-changelog-angular,['ISC'],['conventional-changelog team (https://github.com/conventional-changelog)']
+conventional-changelog-core,conventional-changelog-core,['MIT'],['conventional-changelog team (https://github.com/conventional-changelog)']
+conventional-changelog-preset-loader,conventional-changelog-preset-loader,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+conventional-changelog-writer,conventional-changelog-writer,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+conventional-commits-filter,conventional-commits-filter,['MIT'],"['Steve Mao', 'Steve Mao <maochenyan@gmail.com> (https://github.com/stevemao)']"
+conventional-commits-parser,conventional-commits-parser,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+conventional-recommended-bump,conventional-recommended-bump,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+convert-source-map,convert-source-map,['MIT'],['Thorsten Lorenz']
+core-util-is,core-util-is,['MIT'],"['Joyent, Inc. and other Node contributors']"
+cosmiconfig,cosmiconfig,['MIT'],['David Clark']
+create-require,create-require,['MIT'],['Mael Nison <nison.mael@gmail.com>']
+cross-spawn,cross-spawn,['MIT'],['Made With MOXY Lda']
+cssesc,cssesc,['MIT'],['Mathias Bynens <https://mathiasbynens.be/>']
+cssstyle,cssstyle,['MIT'],['Chad Walker']
+dargs,dargs,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+data-urls,data-urls,['MIT'],['Domenic Denicola <d@domenic.me>']
+data-view-buffer,data-view-buffer,['MIT'],['Jordan Harband']
+data-view-byte-length,data-view-byte-length,['MIT'],['Jordan Harband']
+data-view-byte-offset,data-view-byte-offset,['MIT'],['Jordan Harband']
+dateformat,dateformat,['MIT'],"['Steven Levithan', 'Steven Levithan stevenlevithan.com']"
+debug,debug,['MIT'],"['Josh Junon', 'TJ Holowaychuk <tj@vision-media.ca>']"
+decamelize,decamelize,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+decamelize-keys,decamelize-keys,['MIT'],"['Dmirty Sobolev (https://github.com/dsblv)', 'Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com>']"
+decimal.js,decimal.js,['MIT'],"['Michael Mclaughlin', 'Michael Mclaughlin <M8ch88l@gmail.com>']"
+decompress-response,decompress-response,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+dedent,dedent,['MIT'],['Desmond Brand']
+deep-extend,deep-extend,['MIT'],['Viacheslav Lotsmanov']
+deepmerge,deepmerge,['MIT'],"['James Halliday', 'Josh Duff', 'and other contributors']"
+defaults,defaults,['MIT'],"['Elijah Insua', 'Sindre Sorhus']"
+defer-to-connect,defer-to-connect,['MIT'],['Szymon Marczak']
+define-data-property,define-data-property,['MIT'],['Jordan Harband']
+define-lazy-prop,define-lazy-prop,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+define-properties,define-properties,['MIT'],['Jordan Harband']
+delayed-stream,delayed-stream,['MIT'],['Debuggable Limited <felix@debuggable.com>']
+deprecation,deprecation,['ISC'],['Gregor Martynus and contributors']
+detect-indent,detect-indent,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+detect-newline,detect-newline,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+diff,diff,['BSD-3-Clause'],['Kevin Decker <kpdecker@gmail.com>']
+diff-sequences,diff-sequences,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+dot-prop,dot-prop,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+dotenv,dotenv,['BSD-2-Clause'],['Scott Motte']
+dotenv-expand,dotenv-expand,['BSD-2-Clause'],['Scott Motte']
+dunder-proto,dunder-proto,['MIT'],['ECMAScript Shims']
+eastasianwidth,eastasianwidth,['MIT'],['Masaki Komagata']
+ejs,ejs,['Apache-2.0'],"['Joyent, Inc. and other Node contributors']"
+electron-to-chromium,electron-to-chromium,['ISC'],['Kilian Valkhof']
+emittery,emittery,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+emoji-name-map,emoji-name-map,['MIT'],"['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+emoji-regex,emoji-regex,['MIT'],['Mathias Bynens <https://mathiasbynens.be/>']
+encoding,encoding,['MIT'],['Andris Reinman']
+end-of-stream,end-of-stream,['MIT'],['Mathias Buus']
+enhanced-resolve,enhanced-resolve,['MIT'],['JS Foundation and other contributors']
+enquirer,enquirer,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+entities,entities,['BSD-2-Clause'],['Felix Bohm']
+env-paths,env-paths,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+envinfo,envinfo,['MIT'],"['Denis Pushkarev', 'Trevor Brindle']"
+eol,eol,['MIT'],['Ryan Van Etten']
+err-code,err-code,['MIT'],['IndigoUnited']
+error-ex,error-ex,['MIT'],['JD Ballard']
+es-abstract,es-abstract,['MIT'],['Jordan Harband']
+es-define-property,es-define-property,['MIT'],['Jordan Harband']
+es-errors,es-errors,['MIT'],['Jordan Harband']
+es-module-lexer,es-module-lexer,['MIT'],"['Guy Bedford', 'by various contributors']"
+es-object-atoms,es-object-atoms,['MIT'],['Jordan Harband']
+es-set-tostringtag,es-set-tostringtag,['MIT'],['ECMAScript Shims']
+es-to-primitive,es-to-primitive,['MIT'],['Jordan Harband']
+escalade,escalade,['MIT'],"['Luke Edwards (https://lukeed.com)', 'Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)']"
+escape-string-regexp,escape-string-regexp,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+eslint-scope,eslint-scope,['BSD-2-Clause'],"['Alex Seville <hi@alexanderseville.com>', 'JS Foundation and other contributors', 'Thiago de Arruda <tpadilha84@gmail.com>', 'Yusuke Suzuki (twitter Constellation) and other contributors', 'Yusuke Suzuki (twitter Constellation) and other contributors.', 'Yusuke Suzuki <utatane.tea@gmail.com>', 'https://js.foundation']"
+esprima,esprima,['BSD-2-Clause AND BSD-3-Clause'],"['JS Foundation and other contributors', 'https://js.foundation']"
+esrecurse,esrecurse,['BSD-2-Clause'],"['Yusuke Suzuki (https://github.com/Constellation) (twitter Constellation (https://twitter.com/Constellation)) and other contributors', 'Yusuke Suzuki <utatane.tea@gmail.com>']"
+estraverse,estraverse,['BSD-2-Clause'],"['Ariya Hidayat <ariya.hidayat@gmail.com>', 'Yusuke Suzuki (http://github.com/Constellation) (twitter Constellation (http://twitter.com/Constellation)) and other contributors', 'Yusuke Suzuki <utatane.tea@gmail.com>']"
+eventemitter3,eventemitter3,['MIT'],['Arnout Kazemier']
+events,events,['MIT'],"['Joyent, Inc. and other Node contributors']"
+execa,execa,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+exit-x,exit-x,['MIT'],['Cowboy Ben Alman']
+expect,expect,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+exponential-backoff,exponential-backoff,['Apache-2.0'],['Coveo Solutions Inc.']
+external-editor,external-editor,['MIT'],['Kevin Gravier']
+fast-deep-equal,fast-deep-equal,['MIT'],['Evgeny Poberezkin']
+fast-json-stable-stringify,fast-json-stable-stringify,['MIT'],"['Evgeny Poberezkin', 'James Halliday']"
+fast-uri,fast-uri,['BSD-3-Clause'],"['Gary Court', 'Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae', 'The Fastify Team']"
+fb-watchman,fb-watchman,['Apache-2.0'],"['Meta Platforms, Inc. and affiliates']"
+fdir,fdir,['MIT'],['Abdullah Atta']
+figures,figures,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+filelist,filelist,['Apache-2.0'],['Matthew Eernisse']
+fill-range,fill-range,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+find-up,find-up,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+find-up-simple,find-up-simple,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+flat,flat,['BSD-3-Clause'],['Hugh Kennedy']
+follow-redirects,follow-redirects,['MIT'],"['James Talmage <james@talmage.io>', 'Olivier Lalonde <olalonde@gmail.com>', 'Ruben Verborgh']"
+for-each,for-each,['MIT'],['Raynos']
+foreground-child,foreground-child,['ISC'],['Isaac Z. Schlueter and Contributors']
+form-data,form-data,['MIT'],['Felix Geisendorfer (felix@debuggable.com) and contributors']
+form-data-encoder,form-data-encoder,['MIT'],['Nick K.']
+front-matter,front-matter,['MIT'],['Jason Campbell']
+fs-constants,fs-constants,['MIT'],['Mathias Buus']
+fs-extra,fs-extra,['MIT'],"['JP Richardson', 'JP Richardson (https://github.com/jprichardson)', 'Jonathan Ong me@jongleberry.com and Contributors', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+fs-minipass,fs-minipass,['ISC'],['Isaac Z. Schlueter and Contributors']
+fs.realpath,fs.realpath,['ISC'],"['Isaac Z. Schlueter and Contributors', 'Joyent, Inc. and other Node contributors', 'Joyent, Inc. and other Node contributors.']"
+fsevents,fsevents,['MIT'],"['Ben Noordhuis', 'Elan Shankar', 'Paul Miller', 'by Philipp Dunkel']"
+function-bind,function-bind,['MIT'],['Raynos']
+function.prototype.name,function.prototype.name,['MIT'],['Jordan Harband']
+functions-have-names,functions-have-names,['MIT'],['Jordan Harband']
+gensync,gensync,['MIT'],['Logan Smyth <loganfsmyth@gmail.com>']
+get-caller-file,get-caller-file,['ISC'],['Stefan Penner']
+get-intrinsic,get-intrinsic,['MIT'],['Jordan Harband']
+get-package-type,get-package-type,['MIT'],"['CFWare, LLC']"
+get-pkg-repo,get-pkg-repo,['MIT'],['Steve Mao (https://github.com/stevemao)']
+get-port,get-port,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+get-proto,get-proto,['MIT'],['Jordan Harband']
+get-stdin,get-stdin,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+get-stream,get-stream,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+get-symbol-description,get-symbol-description,['MIT'],['Inspect JS']
+git-raw-commits,git-raw-commits,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+git-remote-origin-url,git-remote-origin-url,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+git-semver-tags,git-semver-tags,['MIT'],"['Steve Mao (https://github.com/stevemao)', 'conventional-changelog team (https://github.com/conventional-changelog)']"
+git-up,git-up,['MIT'],"['-22 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+git-url-parse,git-url-parse,['MIT'],"['-24 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+gitconfiglocal,gitconfiglocal,['BSD-3-Clause'],['Ryan Day']
+glob,glob,['ISC'],['Isaac Z. Schlueter and Contributors']
+glob-parent,glob-parent,['ISC'],"['Blaine Bublitz <blaine.bublitz@gmail.com>', 'Elan Shanker', 'Eric Schoffstall <yo@contra.io> and other contributors']"
+glob-to-regexp,glob-to-regexp,['BSD-2-Clause'],['Nick Fitzgerald']
+globalthis,globalthis,['MIT'],['Jordan Harband']
+gopd,gopd,['MIT'],['Jordan Harband']
+got,got,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+graceful-fs,graceful-fs,['ISC'],"['Ben Noordhuis', 'Isaac Z. Schlueter', 'and Contributors']"
+handlebars,handlebars,['MIT'],['by Yehuda Katz']
+hard-rejection,hard-rejection,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+has-bigints,has-bigints,['MIT'],['Jordan Harband']
+has-flag,has-flag,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+has-property-descriptors,has-property-descriptors,['MIT'],['Inspect JS']
+has-proto,has-proto,['MIT'],['Inspect JS']
+has-symbols,has-symbols,['MIT'],['Jordan Harband']
+has-tostringtag,has-tostringtag,['MIT'],['Inspect JS']
+has-unicode,has-unicode,['ISC'],['Rebecca Turner <me@re-becca.org>']
+hasown,hasown,['MIT'],['Jordan Harband and contributors']
+hosted-git-info,hosted-git-info,['ISC'],['Rebecca Turner']
+html-encoding-sniffer,html-encoding-sniffer,['MIT'],['Domenic Denicola <d@domenic.me>']
+html-escaper,html-escaper,['MIT'],['by Andrea Giammarchi']
+http-cache-semantics,http-cache-semantics,['BSD-2-Clause'],['Kornel Lesinski']
+http-proxy-agent,http-proxy-agent,['MIT'],['Nathan Rajlich <nathan@tootallnate.net>']
+http2-wrapper,http2-wrapper,['MIT'],['Szymon Marczak']
+https-proxy-agent,https-proxy-agent,['MIT'],['Nathan Rajlich <nathan@tootallnate.net>']
+human-signals,human-signals,['Apache-2.0'],['ehmicky <ehmicky@gmail.com>']
+iconv-lite,iconv-lite,['MIT'],"['Alexander Shtuchkin', 'Microsoft Corporation']"
+ieee754,ieee754,['BSD-3-Clause'],"['Fair Oaks Labs, Inc.']"
+ignore,ignore,['MIT'],"['Kael Zhang <i@kael.me>', 'contributors http://kael.me']"
+ignore-walk,ignore-walk,['ISC'],['Isaac Z. Schlueter and Contributors']
+import-fresh,import-fresh,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+import-local,import-local,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+imurmurhash,imurmurhash,['MIT'],"['Gary Court', 'Jens Taylor']"
+indent-string,indent-string,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+inflight,inflight,['ISC'],['Isaac Z. Schlueter']
+inherits,inherits,['ISC'],['Isaac Z. Schlueter']
+ini,ini,['ISC'],['Isaac Z. Schlueter and Contributors']
+init-package-json,init-package-json,['ISC'],"['npm, Inc.']"
+inquirer,inquirer,['MIT'],"['Simon Boudrias', 'Simon Boudrias (twitter vaxilart (https://twitter.com/Vaxilart))']"
+internal-slot,internal-slot,['MIT'],['Jordan Harband']
+ip-address,ip-address,['MIT'],['by Beau Gunderson']
+is-array-buffer,is-array-buffer,['MIT'],"['Chen Gengyuan', 'Inspect JS']"
+is-arrayish,is-arrayish,['MIT'],['JD Ballard']
+is-async-function,is-async-function,['MIT'],['Jordan Harband']
+is-bigint,is-bigint,['MIT'],['Jordan Harband']
+is-boolean-object,is-boolean-object,['MIT'],['Jordan Harband']
+is-callable,is-callable,['MIT'],['Jordan Harband']
+is-ci,is-ci,['MIT'],['Thomas Watson Steen']
+is-core-module,is-core-module,['MIT'],['Dave Justice']
+is-data-view,is-data-view,['MIT'],['Inspect JS']
+is-date-object,is-date-object,['MIT'],['Jordan Harband']
+is-docker,is-docker,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+is-extglob,is-extglob,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+is-finalizationregistry,is-finalizationregistry,['MIT'],['Inspect JS']
+is-fullwidth-code-point,is-fullwidth-code-point,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+is-generator-fn,is-generator-fn,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+is-generator-function,is-generator-function,['MIT'],['Jordan Harband']
+is-glob,is-glob,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+is-interactive,is-interactive,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+is-lambda,is-lambda,['MIT'],['Thomas Watson Steen']
+is-map,is-map,['MIT'],['Inspect JS']
+is-negative-zero,is-negative-zero,['MIT'],['Jordan Harband']
+is-number,is-number,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+is-number-object,is-number-object,['MIT'],['Jordan Harband']
+is-obj,is-obj,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+is-plain-obj,is-plain-obj,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+is-plain-object,is-plain-object,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+is-potential-custom-element-name,is-potential-custom-element-name,['MIT'],['Mathias Bynens <https://mathiasbynens.be/>']
+is-regex,is-regex,['MIT'],['Jordan Harband']
+is-set,is-set,['MIT'],['Inspect JS']
+is-shared-array-buffer,is-shared-array-buffer,['MIT'],['Jordan Harband']
+is-ssh,is-ssh,['MIT'],"['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+is-stream,is-stream,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+is-string,is-string,['MIT'],['Jordan Harband']
+is-symbol,is-symbol,['MIT'],['Jordan Harband']
+is-text-path,is-text-path,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+is-typed-array,is-typed-array,['MIT'],['Jordan Harband']
+is-unicode-supported,is-unicode-supported,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+is-weakmap,is-weakmap,['MIT'],['Inspect JS']
+is-weakref,is-weakref,['MIT'],['Inspect JS']
+is-weakset,is-weakset,['MIT'],['Inspect JS']
+is-wsl,is-wsl,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+isarray,isarray,['MIT'],['Julian Gruber <julian@juliangruber.com>']
+isexe,isexe,['ISC'],['Isaac Z. Schlueter and Contributors']
+isobject,isobject,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+istanbul-lib-coverage,istanbul-lib-coverage,['BSD-3-Clause'],"['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
+istanbul-lib-instrument,istanbul-lib-instrument,['BSD-3-Clause'],"['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
+istanbul-lib-report,istanbul-lib-report,['BSD-3-Clause'],"['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
+istanbul-lib-source-maps,istanbul-lib-source-maps,['BSD-3-Clause'],"['Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
+istanbul-reports,istanbul-reports,['BSD-3-Clause'],"['Facebook, Inc. and its affiliates', 'Sindre Sorhus', 'Yahoo Inc.', 'Yahoo Inc. s', 'Yahoo! Inc.']"
+jackspeak,jackspeak,['BlueOak-1.0.0'],['Isaac Z. Schlueter']
+jake,jake,['Apache-2.0'],['Matthew Eernisse']
+jest,jest,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-changed-files,jest-changed-files,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-circus,jest-circus,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-cli,jest-cli,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-config,jest-config,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-diff,jest-diff,['MIT'],"['Meta Platforms, Inc. and affiliates', 'The diff-match-patch']"
+jest-docblock,jest-docblock,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-each,jest-each,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-environment-jsdom,jest-environment-jsdom,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-environment-node,jest-environment-node,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-get-type,jest-get-type,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-haste-map,jest-haste-map,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-leak-detector,jest-leak-detector,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-matcher-utils,jest-matcher-utils,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-message-util,jest-message-util,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-mock,jest-mock,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-pnp-resolver,jest-pnp-resolver,['MIT'],['Mael Nison']
+jest-regex-util,jest-regex-util,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-resolve,jest-resolve,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-resolve-dependencies,jest-resolve-dependencies,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-runner,jest-runner,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-runtime,jest-runtime,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-snapshot,jest-snapshot,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-util,jest-util,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-validate,jest-validate,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-watcher,jest-watcher,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+jest-worker,jest-worker,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+js-tokens,js-tokens,['MIT'],['Simon Lydell']
+js-yaml,js-yaml,['MIT'],['by Vitaly Puzrin']
+jsbn,jsbn,['MIT'],['Tom Wu']
+jsdom,jsdom,['MIT'],"['Apple Inc.', 'Elijah Insua', 'Lars Knoll (knoll@kde.org)']"
+jsesc,jsesc,['MIT'],['Mathias Bynens <https://mathiasbynens.be/>']
+json-parse-better-errors,json-parse-better-errors,['MIT'],['Kat Marchan']
+json-parse-even-better-errors,json-parse-even-better-errors,['MIT'],"['Kat Marchan', 'npm, Inc.']"
+json-schema-traverse,json-schema-traverse,['MIT'],['Evgeny Poberezkin']
+json-stringify-nice,json-stringify-nice,['ISC'],['Isaac Z. Schlueter and Contributors']
+json-stringify-safe,json-stringify-safe,['ISC'],['Isaac Z. Schlueter and Contributors']
+json5,json5,['MIT'],"['Aseem Kishore', 'Denis Pushkarev', 'and others']"
+jsonc-parser,jsonc-parser,['MIT'],"['Microsoft', 'Microsoft Corporation']"
+jsonfile,jsonfile,['MIT'],['JP Richardson <jprichardson@gmail.com>']
+jsonparse,jsonparse,['MIT'],['Tim Caswell']
+just-diff,just-diff,['MIT'],['angus croll']
+just-diff-apply,just-diff-apply,['MIT'],['angus croll']
+keyv,keyv,['MIT'],"['Jared Wray', 'Jared Wray (LICENSE)', 'Luke Childs']"
+kind-of,kind-of,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+lerna,lerna,['MIT'],['Lerna Contributors']
+leven,leven,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+libnpmaccess,libnpmaccess,['ISC'],"['npm, Inc']"
+libnpmpublish,libnpmpublish,['ISC'],"['npm, Inc']"
+license-report,license-report,['JSON AND MIT'],['Yaniv Kessler']
+lines-and-columns,lines-and-columns,['MIT'],['Brian Donovan']
+load-json-file,load-json-file,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+loader-runner,loader-runner,['MIT'],['Tobias Koppers']
+locate-path,locate-path,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+lodash,lodash,['CC0-1.0 AND MIT'],"['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'OpenJS Foundation and other contributors <https://openjsf.org/>']"
+lodash.ismatch,lodash.ismatch,['MIT'],"['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'jQuery Foundation and other contributors <https://jquery.org/>']"
+lodash.memoize,lodash.memoize,['MIT'],"['DocumentCloud and Investigative Reporters & Editors', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Jeremy Ashkenas', 'jQuery Foundation and other contributors <https://jquery.org/>']"
+log-symbols,log-symbols,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+lower-case,lower-case,['MIT'],['Blake Embrey (hello@blakeembrey.com)']
+lowercase-keys,lowercase-keys,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+lru-cache,lru-cache,['ISC'],['Isaac Z. Schlueter and Contributors']
+make-dir,make-dir,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+make-error,make-error,['ISC'],"['Julien Fontanet', 'Julien Fontanet (http://julien.isonoe.net)']"
+make-fetch-happen,make-fetch-happen,['ISC'],"['Mikeal Rogers', 'npm, Inc.']"
+makeerror,makeerror,['BSD-3-Clause'],"['Naitik Shah', 'Naitik Shah.']"
+map-obj,map-obj,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+math-intrinsics,math-intrinsics,['MIT'],['ECMAScript Shims']
+memorystream,memorystream,['MIT'],['Dmitry Nizovtsev']
+meow,meow,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+merge-stream,merge-stream,['MIT'],['Stephen Sugden <me@stephensugden.com> (stephensugden.com)']
+micromatch,micromatch,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+mime-db,mime-db,['MIT'],"['Douglas Christopher Wilson', 'Douglas Christopher Wilson <doug@somethingdoug.com>', 'Jonathan Ong', 'Jonathan Ong <me@jongleberry.com>']"
+mime-types,mime-types,['MIT'],"['Douglas Christopher Wilson', 'Douglas Christopher Wilson <doug@somethingdoug.com>', 'Jonathan Ong', 'Jonathan Ong <me@jongleberry.com>']"
+mimic-fn,mimic-fn,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+mimic-response,mimic-response,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+min-indent,min-indent,['MIT'],"['James Kyle (https://thejameskyle.com)', 'Sindre Sorhus <sindresorhus@gmail.com>']"
+minimatch,minimatch,['ISC'],['Isaac Z. Schlueter and Contributors']
+minimist,minimist,['MIT'],['James Halliday']
+minimist-options,minimist-options,['MIT'],"['Vadim Demedes (https://vadimdemedes.com)', 'Vadim Demedes <vdemedes@gmail.com> (vadimdemedes.com)']"
+minipass,minipass,['ISC'],"['Isaac Z. Schlueter', 'and Contributors', 'npm, Inc.']"
+minipass-collect,minipass-collect,['ISC'],['Isaac Z. Schlueter and Contributors']
+minipass-fetch,minipass-fetch,['MIT'],"['David Frank', 'Isaac Z. Schlueter and Contributors']"
+minipass-flush,minipass-flush,['ISC'],['Isaac Z. Schlueter and Contributors']
+minipass-pipeline,minipass-pipeline,['ISC'],['Isaac Z. Schlueter and Contributors']
+minipass-sized,minipass-sized,['ISC'],['Isaac Z. Schlueter and Contributors']
+minizlib,minizlib,['MIT'],"['Isaac Z. Schlueter and Contributors', 'Joyent, Inc. and other Node contributors']"
+mkdirp,mkdirp,['MIT'],['James Halliday (mail@substack.net) and Isaac Z. Schlueter (i@izs.me)']
+modify-values,modify-values,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+ms,ms,['MIT'],"['Vercel, Inc.']"
+multimatch,multimatch,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+mute-stream,mute-stream,['ISC'],['Isaac Z. Schlueter and Contributors']
+napi-postinstall,napi-postinstall,['MIT'],['UnTS']
+natural-compare,natural-compare,['MIT'],['Lauri Rooden <lauri@rooden.ee>']
+negotiator,negotiator,['MIT'],"['Douglas Christopher Wilson', 'Federico Romero', 'Isaac Z. Schlueter']"
+neo-async,neo-async,['MIT'],"['Caolan McMahon', 'Suguru Motegi']"
+nice-try,nice-try,['MIT'],['Tobias Reich']
+no-case,no-case,['MIT'],['Blake Embrey (hello@blakeembrey.com)']
+node-fetch,node-fetch,['MIT'],['David Frank']
+node-gyp,node-gyp,['MIT'],"['- Refael Ackermann Distributed', 'Ben Noordhuis <info@bnoordhuis.nl>', 'Donald Stufft and individual contributors', 'Google Inc.', 'Microsoft Corporation', 'Nathan Rajlich <nathan@tootallnate.net>', 'Node.js contributors', 'The Chromium Authors']"
+node-int64,node-int64,['MIT'],['Robert Kieffer']
+node-machine-id,node-machine-id,['MIT'],['Aleksandr Komlev']
+node-releases,node-releases,['MIT'],['Sergey Rubanov (https://github.com/chicoxyzzy)']
+nopt,nopt,['ISC'],['Isaac Z. Schlueter and Contributors']
+normalize-package-data,normalize-package-data,['BSD-2-Clause'],"['Meryn Stol', ""Meryn Stol 'Author""]"
+normalize-path,normalize-path,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+normalize-url,normalize-url,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+npm-bundled,npm-bundled,['ISC'],"['npm, Inc. and Contributors']"
+npm-install-checks,npm-install-checks,['BSD-2-Clause'],"[""Robert Kowalski and Isaac Z. Schlueter 'Authors""]"
+npm-normalize-package-bin,npm-normalize-package-bin,['ISC'],"['npm, Inc.']"
+npm-package-arg,npm-package-arg,['ISC'],"['npm, Inc.']"
+npm-packlist,npm-packlist,['ISC'],['Isaac Z. Schlueter and Contributors']
+npm-pick-manifest,npm-pick-manifest,['ISC'],"['npm, Inc.']"
+npm-registry-fetch,npm-registry-fetch,['ISC'],"['npm, Inc.']"
+npm-run-all,npm-run-all,['MIT'],"['Toru Nagashima', 'Toru Nagashima.']"
+npm-run-path,npm-run-path,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+nwsapi,nwsapi,['MIT'],"['Diego Perini', 'Diego Perini (http://www.iport.it/)']"
+nx,nx,['MIT'],['Victor Savkin']
+object-inspect,object-inspect,['MIT'],['James Halliday']
+object-keys,object-keys,['MIT'],['Jordan Harband']
+object.assign,object.assign,['MIT'],['Jordan Harband']
+once,once,['ISC'],['Isaac Z. Schlueter and Contributors']
+onetime,onetime,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+open,open,['MIT'],"['Fathi Boudra <fabo@freedesktop.org>', 'Jeremy White <jwhite@codeweavers.com>', 'Kevin Krammer <kevin.krammer@gmx.at>', 'Rex Dieter <rdieter@fedoraproject.org>', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
+ora,ora,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+os-tmpdir,os-tmpdir,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+own-keys,own-keys,['MIT'],['Jordan Harband']
+p-cancelable,p-cancelable,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+p-finally,p-finally,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+p-limit,p-limit,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+p-locate,p-locate,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+p-map,p-map,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+p-map-series,p-map-series,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+p-pipe,p-pipe,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+p-queue,p-queue,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+p-reduce,p-reduce,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+p-timeout,p-timeout,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+p-try,p-try,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+p-waterfall,p-waterfall,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+package-json-from-dist,package-json-from-dist,['BlueOak-1.0.0'],['Isaac Z. Schlueter']
+pacote,pacote,['ISC'],"['Isaac Z. Schlueter', 'Kat Marchan', 'and Contributors', 'npm, Inc.']"
+parent-module,parent-module,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+parse-conflict-json,parse-conflict-json,['ISC'],"['npm, Inc.']"
+parse-json,parse-json,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+parse-path,parse-path,['MIT'],"['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+parse-url,parse-url,['MIT'],"['-22 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+parse5,parse5,['MIT'],"['Ivan Nikulin (ifaaan@gmail.com', 'https://github.com/inikulin)']"
+path-exists,path-exists,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+path-is-absolute,path-is-absolute,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+path-key,path-key,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+path-parse,path-parse,['MIT'],"['Javier Blanco', 'Javier Blanco (http://jbgutierrez.info)']"
+path-scurry,path-scurry,['BlueOak-1.0.0'],['Isaac Z. Schlueter']
+path-type,path-type,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+picocolors,picocolors,['ISC'],"['Anton Verinov', 'Kostiantyn Denysov', 'Oleksii Raspopov']"
+picomatch,picomatch,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+pidtree,pidtree,['MIT'],['Simone Primarosa']
+pify,pify,['MIT'],"['Sindre Sorhus (http://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+pirates,pirates,['MIT'],"['Ari Porad', 'Ari Porad (@ariporad) <http://ariporad.com>']"
+pkg-dir,pkg-dir,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+possible-typed-array-names,possible-typed-array-names,['MIT'],['Jordan Harband']
+postcss-selector-parser,postcss-selector-parser,['MIT'],['Ben Briggs <beneb.info@gmail.com> (http://beneb.info)']
+prettier,prettier,['MIT'],"['Alex Bell', 'Andrea Giammarchi', 'Andrew Powell <andrew@shellscape.org>', 'Andrey Sitnik <andrey@sitnik.ru>', 'Anton Verinov', 'Aseem Kishore', 'Ben Briggs <beneb.info@gmail.com> (http://beneb.info)', 'Denis Malinochkin', 'Denys Kniazevych <webschik@gmail.com>', 'DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>', 'Dominic Tarr', 'EditorConfig Team', 'Eemeli Aro <eemeli@gmail.com>', 'Elan Shanker', 'Evgeny Poberezkin', 'Fabio Spampinato', 'Feross Aboukhadijeh', 'Google LLC. https://angular.dev/license', 'GraphQL Contributors', 'Ika <ikatyang@gmail.com> (https://github.com/ikatyang)', 'Isaac Z. Schlueter', 'Isaac Z. Schlueter and Contributors', 'JS Foundation and other contributors <https://js.foundation/>', 'James Halliday', 'James Long and contributors', 'James Talmage <james@talmage.io> (https://github.com/jamestalmage)', 'Jared Wray', 'Jeremy Ashkenas', 'Jon Schlinkert', 'Joshua Holbrook', 'Joyent, Inc. and other Node contributors', 'KFlash and others', 'Kael Zhang <i@kael.me>', 'Kevin Decker <kpdecker@gmail.com>', 'Kostiantyn Denysov', 'Liucw', 'Luke Childs', 'Mark Wubben', 'Mathias Bynens <https://mathiasbynens.be/>', 'Matteo Collina', 'Matteo Collina <matteo.collina@gmail.com>', 'Meta Platforms, Inc. and affiliates', 'Mikola Lysenko', 'Node.js contributors', 'Oleksii Raspopov', 'Open JS Foundation', 'Pat Sissons <patricksissons@gmail.com>', 'Paul Miller (https://paulmillr.com)', 'Permission', 'Petka Antonov Benjamin Gruenbaum', 'Raynos', 'Sebastian McKenzie and other contributors', 'Simon Lydell', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)', 'Squirrel Chat et al', 'Stefan Thomas', 'Teambition', 'Thomas Watson Steen', 'Tilde, Inc.', 'Titus Wormer', 'Titus Wormer <tituswormer@gmail.com>', 'Yehuda Katz and contributors', 'and others', 'by Ingvar Stepanyan', 'by Vitaly Puzrin', 'by Woong Jun and Tim Oxley', 'by various contributors', 'contributors http://kael.me', 'typescript-eslint and other contributors']"
+pretty-format,pretty-format,['MIT'],"['Meta Platforms, Inc. and affiliates']"
+proc-log,proc-log,['ISC'],"['GitHub, Inc.']"
+process-nextick-args,process-nextick-args,['MIT'],['Calvin Metcalf']
+proggy,proggy,['ISC'],"['GitHub, Inc.']"
+promise-all-reject-late,promise-all-reject-late,['ISC'],['Isaac Z. Schlueter']
+promise-call-limit,promise-call-limit,['ISC'],['Isaac Z. Schlueter']
+promise-inflight,promise-inflight,['ISC'],['Rebecca Turner <me@re-becca.org>']
+promise-retry,promise-retry,['MIT'],['IndigoUnited']
+promzard,promzard,['ISC'],['Isaac Z. Schlueter']
+protocols,protocols,['MIT'],"['-25 Ionica Bizau <bizauionica@gmail.com> (https://ionicabizau.net)', 'Ionica Bizau']"
+proxy-from-env,proxy-from-env,['MIT'],['Rob Wu <rob@robwu.nl>']
+psl,psl,['MIT'],"['Lupo Montero <lupomontero@gmail.com>', 'Lupo Montero lupomontero@gmail.com']"
+punycode,punycode,['MIT'],['Mathias Bynens <https://mathiasbynens.be/>']
+pure-rand,pure-rand,['MIT'],['Nicolas DUBIEN']
+querystringify,querystringify,['MIT'],"['Arnout Kazemier', 'Unshift.io']"
+quick-lru,quick-lru,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+randombytes,randombytes,['MIT'],['crypto-browserify']
+rc,rc,['Apache-2.0 OR BSD-2-Clause OR MIT OR (Apache-2.0 AND BSD-2-Clause) OR (Apache-2.0 AND MIT) OR (BSD-2-Clause AND MIT)'],['Dominic Tarr']
+react-is,react-is,['MIT'],"['Facebook, Inc. and its affiliates']"
+read,read,['ISC'],['Isaac Z. Schlueter and Contributors']
+read-cmd-shim,read-cmd-shim,['ISC'],['Rebecca Turner <me@re-becca.org>']
+read-package-json-fast,read-package-json-fast,['ISC'],"['npm, Inc. and Contributors']"
+read-pkg,read-pkg,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+read-pkg-up,read-pkg-up,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+readable-stream,readable-stream,['MIT'],"['Joyent, Inc. and other Node contributors', 'Node.js contributors']"
+redent,redent,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+reflect.getprototypeof,reflect.getprototypeof,['MIT'],['ECMAScript Shims']
+regexp.prototype.flags,regexp.prototype.flags,['MIT'],['Jordan Harband']
+require-directory,require-directory,['MIT'],['Troy Goode <troygoode@gmail.com>']
+require-from-string,require-from-string,['MIT'],"['Vsevolod Strukchinsky (http://github.com/floatdrop)', 'Vsevolod Strukchinsky <floatdrop@gmail.com>']"
+requires-port,requires-port,['MIT'],"['Arnout Kazemier', 'Unshift.io']"
+resolve,resolve,['MIT'],['James Halliday']
+resolve-alpn,resolve-alpn,['MIT'],['Szymon Marczak']
+resolve-cwd,resolve-cwd,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+resolve-from,resolve-from,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+resolve.exports,resolve.exports,['MIT'],"['Luke Edwards (https://lukeed.com)', 'Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)']"
+responselike,responselike,['MIT'],"['Luke Childs <lukechilds123@gmail.com> (https://lukechilds.co.uk)', 'Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
+restore-cursor,restore-cursor,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+retry,retry,['MIT'],['Tim Koschutzki (tim@debuggable.com) Felix Geisendorfer (felix@debuggable.com)']
+rimraf,rimraf,['ISC'],['Isaac Z. Schlueter and Contributors']
+rrweb-cssom,rrweb-cssom,['MIT'],['Nikita Vasilyev']
+run-async,run-async,['MIT'],['Simon Boudrias']
+rxjs,rxjs,['Apache-2.0'],"['Google, Inc.', 'Microsoft Corp. and contributors', 'Microsoft Corporation', 'Netflix, Inc.']"
+safe-array-concat,safe-array-concat,['MIT'],['Jordan Harband']
+safe-buffer,safe-buffer,['MIT'],"['Feross Aboukhadijeh', 'Feross Aboukhadijeh (http://feross.org)']"
+safe-push-apply,safe-push-apply,['MIT'],['Jordan Harband']
+safe-regex-test,safe-regex-test,['MIT'],['Jordan Harband']
+safer-buffer,safer-buffer,['MIT'],['Nikita Skovoroda <chalkerx@gmail.com>']
+saxes,saxes,['ISC'],['Louis-Dominique Dubeau']
+schema-utils,schema-utils,['MIT'],['JS Foundation and other contributors']
+semver,semver,['ISC'],"['Isaac Z.', 'Isaac Z. Schlueter', 'Isaac Z. Schlueter and Contributors']"
+sentence-case,sentence-case,['MIT'],['Blake Embrey (hello@blakeembrey.com)']
+serialize-javascript,serialize-javascript,['BSD-3-Clause'],['Yahoo! Inc.']
+set-blocking,set-blocking,['ISC'],['Contributors']
+set-function-length,set-function-length,['MIT'],['Jordan Harband and contributors']
+set-function-name,set-function-name,['MIT'],['Jordan Harband and contributors']
+set-proto,set-proto,['MIT'],['Jordan Harband']
+shallow-clone,shallow-clone,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)']"
+shebang-command,shebang-command,['MIT'],"['Kevin Martensson (http://github.com/kevva)', 'Kevin Martensson <kevinmartensson@gmail.com>']"
+shebang-regex,shebang-regex,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+shell-quote,shell-quote,['MIT'],['James Halliday (mail@substack.net)']
+side-channel,side-channel,['MIT'],['Jordan Harband']
+side-channel-list,side-channel-list,['MIT'],['Jordan Harband']
+side-channel-map,side-channel-map,['MIT'],['Jordan Harband']
+side-channel-weakmap,side-channel-weakmap,['MIT'],['Jordan Harband']
+signal-exit,signal-exit,['ISC'],"['Benjamin Coe', 'Isaac Z. Schlueter', 'and Contributors']"
+sigstore,sigstore,['Apache-2.0'],['bdehamer@github.com']
+slash,slash,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+smart-buffer,smart-buffer,['MIT'],['Josh Glazebrook']
+socks,socks,['MIT'],['Josh Glazebrook']
+socks-proxy-agent,socks-proxy-agent,['MIT'],['Nathan Rajlich <nathan@tootallnate.net>']
+sort-keys,sort-keys,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+source-map,source-map,['BSD-3-Clause'],"['Mozilla Foundation and contributors', 'The Closure Compiler Authors']"
+source-map-support,source-map-support,['MIT'],['Evan Wallace']
+spark-md5,spark-md5,['WTFPL OR (MIT AND WTFPL)'],['Andre Cruz <amdfcruz@gmail.com>']
+spdx-correct,spdx-correct,['Apache-2.0'],['Kyle E. Mitchell']
+spdx-exceptions,spdx-exceptions,['CC-BY-3.0'],['Linux Foundation and its Contributors']
+spdx-expression-parse,spdx-expression-parse,['MIT'],['Kyle E. Mitchell']
+spdx-license-ids,spdx-license-ids,['CC0-1.0'],['Shinnosuke Watanabe']
+split,split,['MIT'],['Dominic Tarr']
+split-text-to-chunks,split-text-to-chunks,['MIT'],['thomas-jensen']
+split2,split2,['ISC'],['Matteo Collina <hello@matteocollina.com>']
+sprintf-js,sprintf-js,['BSD-3-Clause'],['Alexandru Marasteanu']
+ssri,ssri,['ISC'],"['npm, Inc.']"
+stack-utils,stack-utils,['MIT'],"['Isaac Z. Schlueter (http://github.com/isaacs)', 'Isaac Z. Schlueter <i@izs.me>', 'James Talmage (http://github.com/jamestalmage)', 'James Talmage <james@talmage.io> (github.com/jamestalmage)', 'and Contributors']"
+stop-iteration-iterator,stop-iteration-iterator,['MIT'],['Jordan Harband']
+string-length,string-length,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+string-width,string-width,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+string-width-cjs,string-width-cjs,['MIT'],['Sindre Sorhus']
+string.prototype.padend,string.prototype.padend,['MIT'],['EcmaScript Shims']
+string.prototype.trim,string.prototype.trim,['MIT'],['Jordan Harband']
+string.prototype.trimend,string.prototype.trimend,['MIT'],['Khaled Al-Ansari']
+string.prototype.trimstart,string.prototype.trimstart,['MIT'],['Khaled Al-Ansari']
+string_decoder,string_decoder,['MIT'],"['Joyent, Inc. and other Node contributors', 'Node.js contributors']"
+strip-ansi,strip-ansi,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+strip-ansi-cjs,strip-ansi-cjs,['MIT'],['Sindre Sorhus']
+strip-bom,strip-bom,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+strip-final-newline,strip-final-newline,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+strip-indent,strip-indent,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+strip-json-comments,strip-json-comments,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+supports-color,supports-color,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+supports-preserve-symlinks-flag,supports-preserve-symlinks-flag,['MIT'],['Inspect JS']
+symbol-tree,symbol-tree,['MIT'],['Joris van der Wel']
+synckit,synckit,['MIT'],['UnTS']
+tablemark,tablemark,['MIT'],"['Bo Lingen', 'Bo Lingen <bo@haltcase.dev> (https://github.com/haltcase)']"
+tapable,tapable,['MIT'],['JS Foundation and other contributors']
+tar,tar,['ISC'],['Isaac Z. Schlueter and Contributors']
+tar-stream,tar-stream,['MIT'],['Mathias Buus']
+temp-dir,temp-dir,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+terser,terser,['BSD-2-Clause'],['Mihai Bazon <mihai.bazon@gmail.com>']
+terser-webpack-plugin,terser-webpack-plugin,['MIT'],['JS Foundation and other contributors']
+test-exclude,test-exclude,['ISC'],['Contributors']
+text-extensions,text-extensions,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+text-table,text-table,['MIT'],['James Halliday']
+through,through,['Apache-2.0 AND MIT'],['Dominic Tarr']
+through2,through2,['MIT'],"['Rod Vagg', 'Rod Vagg rvagg (https://twitter.com/rvagg) and additional contributors']"
+tinyglobby,tinyglobby,['MIT'],['Madeline Gurriaran']
+tldts,tldts,['MIT'],"['Remi Berson', 'Thomas Parisot']"
+tldts-core,tldts-core,['MIT'],"['Remi Berson', 'Thomas Parisot']"
+tmp,tmp,['MIT'],"['KARASZI Istvan', 'KARASZI Istvan <github@spam.raszi.hu>']"
+tmpl,tmpl,['BSD-3-Clause'],['Naitik Shah']
+to-regex-range,to-regex-range,['MIT'],"['Jon Schlinkert', 'Jon Schlinkert (https://github.com/jonschlinkert)', 'Jon Schlinkert (https://github.com/jonschlinkert).', 'Jon Schlinkert.']"
+tough-cookie,tough-cookie,['BSD-3-Clause'],"['Phil Booth', 'Salesforce.com, Inc.']"
+tr46,tr46,['MIT'],['Sebastian Mayr']
+treeverse,treeverse,['ISC'],"['npm, Inc. and Contributors']"
+trim-newlines,trim-newlines,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+ts-jest,ts-jest,['MIT'],['Permission']
+ts-loader,ts-loader,['MIT'],['TypeStrong']
+ts-node,ts-node,['MIT'],"['Blake Embrey (hello@blakeembrey.com)', 'Joyent, Inc. and other Node contributors']"
+tsconfig-paths,tsconfig-paths,['MIT'],['Jonas Kello']
+tsconfig-paths-webpack-plugin,tsconfig-paths-webpack-plugin,['MIT'],['Jonas Kello']
+tslib,tslib,['0BSD'],['Microsoft Corporation']
+tuf-js,tuf-js,['MIT'],['GitHub and the TUF Contributors']
+type-detect,type-detect,['MIT'],"['Jake Luer <jake@alogicalparadox.com> (http://alogicalparadox.com)', 'jake luer <jake@alogicalparadox.com>']"
+type-fest,type-fest,['MIT OR (CC0-1.0 AND MIT)'],['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']
+typed-array-buffer,typed-array-buffer,['MIT'],['Jordan Harband']
+typed-array-byte-length,typed-array-byte-length,['MIT'],['Inspect JS']
+typed-array-byte-offset,typed-array-byte-offset,['MIT'],['Inspect JS']
+typed-array-length,typed-array-length,['MIT'],['Inspect JS']
+typedarray,typedarray,['MIT'],"['Joshua Bell', 'Linden Research, Inc.']"
+typescript,typescript,['Apache-2.0'],"['Beihang) Disclaimers', 'ERCIM', 'Keio', 'Microsoft Corporation', 'The Khronos Group Inc.', 'Unicode, Inc.', 'WHATWG', 'YEAR W3C(r) (MIT', 'by W3C']"
+uglify-js,uglify-js,['BSD-2-Clause AND BSD-3-Clause'],['Mihai Bazon <mihai.bazon@gmail.com>']
+unbox-primitive,unbox-primitive,['MIT'],['Jordan Harband']
+undici-types,undici-types,['MIT'],['Matteo Collina and Undici contributors']
+unique-filename,unique-filename,['ISC'],"['npm, Inc']"
+unique-slug,unique-slug,['ISC'],"['npm, Inc']"
+universal-user-agent,universal-user-agent,['ISC'],['Gregor Martynus (https://github.com/gr2m)']
+universalify,universalify,['MIT'],['Ryan Zimmerman <opensrc@ryanzim.com>']
+unrs-resolver,unrs-resolver,['MIT'],['JounQin']
+upath,upath,['MIT'],"['Angelos Pikoulas (agelos.pikoulas@gmail.com)', 'Angelos Pikoulas <agelos.pikoulas@gmail.com>']"
+update-browserslist-db,update-browserslist-db,['MIT'],['Andrey Sitnik <andrey@sitnik.ru> and other contributors']
+upper-case-first,upper-case-first,['MIT'],['Blake Embrey (hello@blakeembrey.com)']
+url-parse,url-parse,['MIT'],"['Arnout Kazemier', 'Unshift.io']"
+util-deprecate,util-deprecate,['MIT'],['Nathan Rajlich <nathan@tootallnate.net>']
+uuid,uuid,['MIT'],"['Andrew Kepert', 'Lostinet', 'Paul Johnston Other contributors Greg Holt', 'Robert Kieffer and other contributors', 'Sebastian Tschan https://blueimp.net', 'Ydnar']"
+v8-compile-cache-lib,v8-compile-cache-lib,['MIT'],['Andres Suarez']
+v8-to-istanbul,v8-to-istanbul,['ISC'],['Contributors']
+validate-npm-package-license,validate-npm-package-license,['Apache-2.0'],['Kyle E. Mitchell']
+validate-npm-package-name,validate-npm-package-name,['ISC'],"['npm, Inc']"
+visit-values,visit-values,['MIT'],['Yaniv Kessler']
+vite,vite,['MIT'],['VoidZero Inc. and Vite contributors']
+w3c-xmlserializer,w3c-xmlserializer,['MIT'],['Sebastian Mayr']
+walk-up-path,walk-up-path,['ISC'],['Isaac Z. Schlueter']
+walker,walker,['Apache-2.0'],['Naitik Shah']
+watchpack,watchpack,['MIT'],['JS Foundation and other contributors']
+wcwidth,wcwidth,['MIT'],['by Jun Woong']
+webidl-conversions,webidl-conversions,['BSD-2-Clause'],['Domenic Denicola']
+webpack,webpack,['MIT'],['JS Foundation and other contributors']
+webpack-sources,webpack-sources,['MIT'],['JS Foundation and other contributors']
+whatwg-encoding,whatwg-encoding,['MIT'],['Domenic Denicola <d@domenic.me>']
+whatwg-mimetype,whatwg-mimetype,['MIT'],['Domenic Denicola <d@domenic.me>']
+whatwg-url,whatwg-url,['MIT'],['Sebastian Mayr']
+which,which,['ISC'],['Isaac Z. Schlueter and Contributors']
+which-boxed-primitive,which-boxed-primitive,['MIT'],['Jordan Harband']
+which-builtin-type,which-builtin-type,['MIT'],['ECMAScript Shims']
+which-collection,which-collection,['MIT'],['Inspect JS']
+which-typed-array,which-typed-array,['MIT'],['Jordan Harband']
+wide-align,wide-align,['ISC'],['Rebecca Turner <me@re-becca.org>']
+wordwrap,wordwrap,['MIT'],['James Halliday']
+wrap-ansi,wrap-ansi,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
+wrap-ansi-cjs,wrap-ansi-cjs,['MIT'],['Sindre Sorhus']
+wrappy,wrappy,['ISC'],['Isaac Z. Schlueter and Contributors']
+write-file-atomic,write-file-atomic,['ISC'],['Rebecca Turner']
+write-json-file,write-json-file,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+write-pkg,write-pkg,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+ws,ws,['MIT'],"['Arnout Kazemier and contributors', 'Einar Otto Stangvik <einaros@gmail.com>', 'Luigi Pinca and contributors']"
+xml-name-validator,xml-name-validator,['Apache-2.0'],['Domenic Denicola']
+xmlchars,xmlchars,['MIT'],"['Louis-Dominique Dubeau', 'Louis-Dominique Dubeau and contributors']"
+xtend,xtend,['MIT'],['Raynos']
+y18n,y18n,['ISC'],['Contributors']
+yallist,yallist,['BlueOak-1.0.0'],['Isaac Z. Schlueter and Contributors']
+yaml,yaml,['ISC'],['Eemeli Aro <eemeli@gmail.com>']
+yargs,yargs,['MIT'],"['Contributors (ben@npmjs.com)', 'James Halliday (mail@substack.net)']"
+yargs-parser,yargs-parser,['ISC'],['Contributors']
+yn,yn,['MIT'],"['Sindre Sorhus (https://sindresorhus.com)', 'Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
+yocto-queue,yocto-queue,['MIT'],['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']
 
