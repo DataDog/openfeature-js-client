@@ -13,7 +13,7 @@ export class LocalStorageAssignmentCache
 
   setEntries(entries: [string, string][]): void {
     entries.forEach(([key, value]) => {
-      if (key != null && value != null) {
+      if (key && value) {
         this.delegate.set(key, value)
       }
     })
