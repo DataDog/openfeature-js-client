@@ -63,6 +63,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 }
 
 export interface FlaggingConfiguration extends Configuration {
+  applicationId?: string
   fetchFlagsConfiguration: (context: EvaluationContext) => Promise<FlagsConfiguration>
 }
 
@@ -80,6 +81,7 @@ export function validateAndBuildFlaggingConfiguration(
   }
 
   return {
+    applicationId: initConfiguration.applicationId,
     fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,
   }

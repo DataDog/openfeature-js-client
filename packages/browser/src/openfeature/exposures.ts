@@ -25,6 +25,8 @@ export function createRumTrackingHook(rum: DDRum): Hook {
 export function createRumExposureHook(rum: DDRum): Hook {
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      const rumInternalContext = (window as any)?.DD_RUM?.getInternalContext?.() || {}
+
       rum.addAction('__dd_exposure', {
         timestamp: dateNow(),
         flag_key: details.flagKey,
@@ -33,6 +35,13 @@ export function createRumExposureHook(rum: DDRum): Hook {
         subject_key: hookContext.context.targetingKey,
         subject_attributes: hookContext.context,
         variant_key: details.variant,
+        application: {
+          id: rumInternalContext.application?.id,
+        },
+        view: {
+          url: rumInternalContext.view?.url,
+        },
+        service: rumInternalContext.service,
       })
     },
   }
@@ -65,8 +74,12 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
       }
 
       try {
+        const url = window?.location?.href
         const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
           ...exposureEvent,
+          ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+          ...(url && { view: { url } }),
+          ...(configuration.service ? { service: configuration.service } : {}),
           timestamp,
         }
         exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)

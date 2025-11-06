@@ -14,6 +14,13 @@ export interface ExposureEvent {
     id: string
     attributes: EvaluationContext
   }
+  application?: {
+    id?: string
+  }
+  view?: {
+    url?: string
+  }
+  service?: string
 }
 
 export interface ExposureEventWithTimestamp extends ExposureEvent {
