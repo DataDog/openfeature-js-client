@@ -35,13 +35,15 @@ export function createRumExposureHook(rum: DDRum): Hook {
         subject_key: hookContext.context.targetingKey,
         subject_attributes: hookContext.context,
         variant_key: details.variant,
-        application: {
-          id: rumInternalContext.application?.id,
+        rum: {
+          application: {
+            id: rumInternalContext.application?.id,
+          },
+          view: {
+            url: rumInternalContext.view?.url,
+          },
+          service: rumInternalContext.service,
         },
-        view: {
-          url: rumInternalContext.view?.url,
-        },
-        service: rumInternalContext.service,
       })
     },
   }
@@ -77,9 +79,11 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
         const url = window?.location?.href
         const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
           ...exposureEvent,
-          ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
-          ...(url && { view: { url } }),
-          ...(configuration.service ? { service: configuration.service } : {}),
+          rum: {
+            ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+            ...(url && { view: { url } }),
+            ...(configuration.service ? { service: configuration.service } : {}),
+          },
           timestamp,
         }
         exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
