@@ -75,7 +75,7 @@ export function evaluateForSubject<T extends FlagValueType>(
     const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
     if (selectedSplit) {
       const variant = flag.variations[selectedSplit.variationKey]
-      if (variant) {
+      if (variant != null) {
         logger.debug(`evaluated a flag`, {
           flagKey: flag.key,
           subjectKey,
