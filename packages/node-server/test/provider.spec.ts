@@ -144,6 +144,55 @@ describe('DatadogNodeServerProvider', () => {
     expect(eventHandler).toHaveBeenCalled()
   }, 1000)
 
+  it('should timeout if configuration is not set within 30 seconds (default)', async () => {
+    jest.useFakeTimers()
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+    })
+    const promise = OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+    const eventHandler = jest.fn()
+    client.addHandler(ProviderEvents.Error, () => {
+      eventHandler()
+    })
+
+    // Fast-forward time by 30 seconds
+    jest.advanceTimersByTime(30000)
+
+    expect.assertions(2)
+    return promise.catch((error) => {
+      expect(error.message).toContain('Initialization timeout after 30000ms')
+      expect(eventHandler).toHaveBeenCalled()
+    }).finally(() => {
+      jest.useRealTimers()
+    })
+  }, 1000)
+
+  it('should timeout with custom timeout value', async () => {
+    jest.useFakeTimers()
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+      initializationTimeoutMs: 5000,
+    })
+    const promise = OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+    const eventHandler = jest.fn()
+    client.addHandler(ProviderEvents.Error, () => {
+      eventHandler()
+    })
+
+    // Fast-forward time by 5 seconds
+    jest.advanceTimersByTime(5000)
+
+    expect.assertions(2)
+    return promise.catch((error) => {
+      expect(error.message).toContain('Initialization timeout after 5000ms')
+      expect(eventHandler).toHaveBeenCalled()
+    }).finally(() => {
+      jest.useRealTimers()
+    })
+  }, 1000)
+
   it('should emit error event if an error was encountered on initialization', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,

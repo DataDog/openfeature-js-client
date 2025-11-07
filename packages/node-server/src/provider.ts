@@ -22,11 +22,22 @@ import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 
+/**
+ * Default timeout in milliseconds for provider initialization.
+ */
+const DEFAULT_INITIALIZATION_TIMEOUT_MS = 30000
+
 export interface DatadogNodeServerProviderOptions {
   /**
    * Log experiment exposures
    */
   exposureChannel: Channel<ExposureEvent>
+  /**
+   * Timeout in milliseconds for provider initialization.
+   * If the configuration is not set within this time, initialization will fail.
+   * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
+   */
+  initializationTimeoutMs?: number
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -104,10 +115,18 @@ export class DatadogNodeServerProvider implements Provider {
     if (this.configuration) {
       return
     }
-    await new Promise((resolve, reject) => {
-      this.resolveInitialization = resolve
-      this.rejectInitialization = reject
-    })
+    const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        this.resolveInitialization = resolve
+        this.rejectInitialization = reject
+      }),
+      new Promise<void>(() => {
+        setTimeout(() => {
+          this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
+        }, timeoutMs)
+      }),
+    ])
     await this.exposureCache?.init()
   }
 
