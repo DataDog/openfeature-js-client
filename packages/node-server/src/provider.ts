@@ -26,7 +26,7 @@ import { InitializationController } from './initialization-controller'
 /**
  * Default timeout in milliseconds for provider initialization.
  */
-const DEFAULT_INITIALIZATION_TIMEOUT_MS = 30000
+const DEFAULT_INITIALIZATION_TIMEOUT_MS = 30_000
 
 export interface DatadogNodeServerProviderOptions {
   /**
