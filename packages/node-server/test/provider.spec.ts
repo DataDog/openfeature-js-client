@@ -193,6 +193,41 @@ describe('DatadogNodeServerProvider', () => {
     })
   }, 1000)
 
+  it('should emit ready event when config is set after timeout (recovery from error)', async () => {
+    jest.useFakeTimers()
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+      initializationTimeoutMs: 5000,
+    })
+    const promise = OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+
+    const errorHandler = jest.fn()
+    const readyHandler = jest.fn()
+
+    client.addHandler(ProviderEvents.Error, () => {
+      errorHandler()
+    })
+    client.addHandler(ProviderEvents.Ready, () => {
+      readyHandler()
+    })
+
+    // Fast-forward time by 5 seconds to trigger timeout
+    jest.advanceTimersByTime(5000)
+
+    await promise.catch(() => {
+      // Initialization failed due to timeout
+      expect(errorHandler).toHaveBeenCalledTimes(1)
+    })
+
+    // Now set configuration after timeout - should emit PROVIDER_READY to signal recovery
+    provider.setConfiguration(configuration)
+
+    // Should emit Ready event (recovery from error state)
+    expect(readyHandler).toHaveBeenCalledTimes(1)
+    jest.useRealTimers()
+  }, 1000)
+
   it('should emit error event if an error was encountered on initialization', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,

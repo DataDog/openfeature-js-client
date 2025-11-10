@@ -72,7 +72,10 @@ export class DatadogNodeServerProvider implements Provider {
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
     const prevCreatedAt = this.configuration?.createdAt
-    if (this.configuration && this.configuration !== configuration) {
+    const hadConfiguration = !!this.configuration
+    const isInitializing = !!this.resolveInitialization
+
+    if (hadConfiguration && this.configuration !== configuration) {
       this.events.emit(ProviderEvents.ConfigurationChanged)
       const newCreatedAt = configuration?.createdAt
       if (prevCreatedAt !== newCreatedAt) {
@@ -81,11 +84,19 @@ export class DatadogNodeServerProvider implements Provider {
       this.configuration = configuration
       return
     }
+
     this.configuration = configuration
-    if (this.resolveInitialization) {
-      this.resolveInitialization()
+
+    if (isInitializing) {
+      // First configuration during initialization - resolve the initialization promise
+      // This will cause OpenFeature SDK to emit PROVIDER_READY
+      this.resolveInitialization!()
       this.resolveInitialization = undefined
       this.rejectInitialization = undefined
+    } else if (!hadConfiguration) {
+      // Configuration is being set after initialization completed/failed (e.g., after timeout)
+      // Emit PROVIDER_READY to signal recovery from error state
+      this.events.emit(ProviderEvents.Ready)
     }
   }
 
@@ -116,17 +127,31 @@ export class DatadogNodeServerProvider implements Provider {
       return
     }
     const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
-    await Promise.race([
-      new Promise<void>((resolve, reject) => {
-        this.resolveInitialization = resolve
-        this.rejectInitialization = reject
-      }),
-      new Promise<void>(() => {
-        setTimeout(() => {
-          this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
-        }, timeoutMs)
-      }),
-    ])
+
+    let timeoutId: NodeJS.Timeout | undefined
+
+    try {
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          this.resolveInitialization = () => {
+            if (timeoutId) clearTimeout(timeoutId)
+            resolve()
+          }
+          this.rejectInitialization = (reason) => {
+            if (timeoutId) clearTimeout(timeoutId)
+            reject(reason)
+          }
+        }),
+        new Promise<void>(() => {
+          timeoutId = setTimeout(() => {
+            this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
+          }, timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+
     await this.exposureCache?.init()
   }
 
