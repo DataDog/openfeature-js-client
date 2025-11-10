@@ -123,9 +123,8 @@ export class DatadogNodeServerProvider implements Provider {
     }
 
     const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
-    this.initController = new InitializationController(
-      timeoutMs,
-      () => this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
+    this.initController = new InitializationController(timeoutMs, () =>
+      this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
     )
 
     await this.initController.wait()

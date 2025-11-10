@@ -160,12 +160,14 @@ describe('DatadogNodeServerProvider', () => {
     jest.advanceTimersByTime(30000)
 
     expect.assertions(2)
-    return promise.catch((error) => {
-      expect(error.message).toContain('Initialization timeout after 30000ms')
-      expect(eventHandler).toHaveBeenCalled()
-    }).finally(() => {
-      jest.useRealTimers()
-    })
+    return promise
+      .catch((error) => {
+        expect(error.message).toContain('Initialization timeout after 30000ms')
+        expect(eventHandler).toHaveBeenCalled()
+      })
+      .finally(() => {
+        jest.useRealTimers()
+      })
   }, 1000)
 
   it('should timeout with custom timeout value', async () => {
@@ -185,12 +187,14 @@ describe('DatadogNodeServerProvider', () => {
     jest.advanceTimersByTime(5000)
 
     expect.assertions(2)
-    return promise.catch((error) => {
-      expect(error.message).toContain('Initialization timeout after 5000ms')
-      expect(eventHandler).toHaveBeenCalled()
-    }).finally(() => {
-      jest.useRealTimers()
-    })
+    return promise
+      .catch((error) => {
+        expect(error.message).toContain('Initialization timeout after 5000ms')
+        expect(eventHandler).toHaveBeenCalled()
+      })
+      .finally(() => {
+        jest.useRealTimers()
+      })
   }, 1000)
 
   it('should emit ready event when config is set after timeout (recovery from error)', async () => {
