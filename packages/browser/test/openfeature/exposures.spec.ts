@@ -136,9 +136,9 @@ describe('Exposures End-to-End', () => {
           id: 'test-user-123',
           attributes: { customAttribute: 'test-value' },
         },
+        service: 'test-service',
         rum: {
           application: { id: 'test-app-id' },
-          service: 'test-service',
           view: { url: 'http://localhost/' },
         },
       },
@@ -151,9 +151,9 @@ describe('Exposures End-to-End', () => {
           id: 'test-user-123',
           attributes: { customAttribute: 'test-value' },
         },
+        service: 'test-service',
         rum: {
           application: { id: 'test-app-id' },
-          service: 'test-service',
           view: { url: 'http://localhost/' },
         },
       },

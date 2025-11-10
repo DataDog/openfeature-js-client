@@ -14,6 +14,7 @@ export interface ExposureEvent {
     id: string
     attributes: EvaluationContext
   }
+  service?: string
   rum?: {
     application?: {
       id?: string
@@ -21,7 +22,6 @@ export interface ExposureEvent {
     view?: {
       url?: string
     }
-    service?: string
   }
 }
 

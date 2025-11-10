@@ -79,10 +79,10 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
         const url = window?.location?.href
         const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
           ...exposureEvent,
+          ...(configuration.service ? { service: configuration.service } : {}),
           rum: {
             ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
             ...(url && { view: { url } }),
-            ...(configuration.service ? { service: configuration.service } : {}),
           },
           timestamp,
         }
