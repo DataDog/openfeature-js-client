@@ -42,9 +42,6 @@ jobs:
       - name: Format
         run: yarn format
 
-      - name: Format
-        run: yarn format
-
       - name: Build packages
         run: yarn build
 
