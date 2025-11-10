@@ -39,6 +39,11 @@ export interface DatadogNodeServerProviderOptions {
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+  /**
+   * Optional logger for provider diagnostics.
+   * If not provided, will fall back to console for error logging.
+   */
+  logger?: Logger
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -123,9 +128,12 @@ export class DatadogNodeServerProvider implements Provider {
     }
 
     const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
-    this.initController = new InitializationController(timeoutMs, () =>
-      this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
-    )
+    this.initController = new InitializationController(timeoutMs, () => {
+      const error = new Error(`Initialization timeout after ${timeoutMs}ms`)
+      const logger = this.options.logger ?? console
+      logger.error('Provider initialization timeout after %dms', timeoutMs, error)
+      this.setError(error)
+    })
 
     await this.initController.wait()
     await this.exposureCache?.init()

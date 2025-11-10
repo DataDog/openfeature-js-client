@@ -232,6 +232,73 @@ describe('DatadogNodeServerProvider', () => {
     jest.useRealTimers()
   }, 1000)
 
+  it('should log timeout error with custom logger when provided', async () => {
+    jest.useFakeTimers()
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+    }
+
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+      initializationTimeoutMs: 5000,
+      logger: mockLogger,
+    })
+
+    const promise = OpenFeature.setProviderAndWait(provider)
+
+    // Fast-forward time by 5 seconds to trigger timeout
+    jest.advanceTimersByTime(5000)
+
+    await promise.catch(() => {
+      // Expected to fail
+    })
+
+    // Verify logger.error was called with the timeout message
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Provider initialization timeout after %dms',
+      5000,
+      expect.objectContaining({
+        message: 'Initialization timeout after 5000ms',
+      })
+    )
+
+    jest.useRealTimers()
+  }, 1000)
+
+  it('should log timeout error to console when no logger provided', async () => {
+    jest.useFakeTimers()
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+      initializationTimeoutMs: 5000,
+    })
+
+    const promise = OpenFeature.setProviderAndWait(provider)
+
+    // Fast-forward time by 5 seconds to trigger timeout
+    jest.advanceTimersByTime(5000)
+
+    await promise.catch(() => {
+      // Expected to fail
+    })
+
+    // Verify console.error was called
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Provider initialization timeout after %dms',
+      5000,
+      expect.objectContaining({
+        message: 'Initialization timeout after 5000ms',
+      })
+    )
+
+    consoleSpy.mockRestore()
+    jest.useRealTimers()
+  }, 1000)
+
   it('should emit error event if an error was encountered on initialization', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
