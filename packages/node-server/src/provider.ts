@@ -21,6 +21,7 @@ import type {
 import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+import { InitializationController } from './initialization-controller'
 
 /**
  * Default timeout in milliseconds for provider initialization.
@@ -47,8 +48,7 @@ export class DatadogNodeServerProvider implements Provider {
   readonly runsOn: Paradigm = 'server'
   readonly hooks?: Hook[]
 
-  private resolveInitialization?: (value?: void | PromiseLike<void>) => void
-  private rejectInitialization?: (reason?: unknown) => void
+  private initController?: InitializationController
   readonly events: ProviderEventEmitter<ProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
 
@@ -73,7 +73,6 @@ export class DatadogNodeServerProvider implements Provider {
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
-    const isInitializing = !!this.resolveInitialization
 
     if (hadConfiguration && this.configuration !== configuration) {
       this.events.emit(ProviderEvents.ConfigurationChanged)
@@ -87,12 +86,10 @@ export class DatadogNodeServerProvider implements Provider {
 
     this.configuration = configuration
 
-    if (isInitializing) {
+    if (this.initController?.isInitializing()) {
       // First configuration during initialization - resolve the initialization promise
       // This will cause OpenFeature SDK to emit PROVIDER_READY
-      this.resolveInitialization!()
-      this.resolveInitialization = undefined
-      this.rejectInitialization = undefined
+      this.initController.complete()
     } else if (!hadConfiguration) {
       // Configuration is being set after initialization completed/failed (e.g., after timeout)
       // Emit PROVIDER_READY to signal recovery from error state
@@ -104,10 +101,8 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setError(error: unknown) {
-    if (this.rejectInitialization) {
-      this.rejectInitialization(error)
-      this.resolveInitialization = undefined
-      this.rejectInitialization = undefined
+    if (this.initController?.isInitializing()) {
+      this.initController.fail(error)
     } else {
       this.events.emit(ProviderEvents.Error, { error })
     }
@@ -119,39 +114,21 @@ export class DatadogNodeServerProvider implements Provider {
    * Status of 'PROVIDER_ERROR' is emitted with a rejected promise.
    *
    * Since we aren't loading the configuration in this Provider, we will simulate
-   * loading functionality via resolveInitialization and rejectInitialization.
+   * loading functionality via InitializationController.
    * See setConfiguration and setError for more details.
    */
   async initialize(): Promise<void> {
     if (this.configuration) {
       return
     }
+
     const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
+    this.initController = new InitializationController(
+      timeoutMs,
+      () => this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
+    )
 
-    let timeoutId: NodeJS.Timeout | undefined
-
-    try {
-      await Promise.race([
-        new Promise<void>((resolve, reject) => {
-          this.resolveInitialization = () => {
-            if (timeoutId) clearTimeout(timeoutId)
-            resolve()
-          }
-          this.rejectInitialization = (reason) => {
-            if (timeoutId) clearTimeout(timeoutId)
-            reject(reason)
-          }
-        }),
-        new Promise<void>(() => {
-          timeoutId = setTimeout(() => {
-            this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
-          }, timeoutMs)
-        }),
-      ])
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-
+    await this.initController.wait()
     await this.exposureCache?.init()
   }
 
