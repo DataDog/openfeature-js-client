@@ -1,4 +1,9 @@
-import type { FlagsConfiguration, FlagTypeToValue, PrecomputedConfiguration, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import type {
+  FlagsConfiguration,
+  FlagTypeToValue,
+  PrecomputedConfiguration,
+  PrecomputedFlagMetadata,
+} from '@datadog/flagging-core'
 import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/web-sdk'
 
 export function evaluate<T extends FlagValueType>(
