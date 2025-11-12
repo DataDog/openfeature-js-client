@@ -6,6 +6,13 @@
 
 ---
 
+## v0.1.0-preview.16
+
+**Internal Changes:**
+
+- feat: initialization timeout in node OF provider ([#79](https://github.com/DataDog/openfeature-js-client/pull/79)) [NODE-SERVER]
+- fix: run prettier and add it to CI ([#80](https://github.com/DataDog/openfeature-js-client/pull/80)) [BROWSER] [NODE-SERVER]
+
 ## v0.1.0-preview.15
 
 - Internal updates

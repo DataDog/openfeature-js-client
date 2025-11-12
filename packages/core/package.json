@@ -1,6 +1,6 @@
 {
   "name": "@datadog/flagging-core",
-  "version": "0.1.0-preview.15",
+  "version": "0.1.0-preview.16",
   "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
   "license": "Apache-2.0",
   "repository": {
