@@ -40,7 +40,7 @@ jobs:
         run: yarn lint
 
       - name: Format
-        run: yarn format
+        run: yarn format:check
 
       - name: Build packages
         run: yarn build
