@@ -21,12 +21,24 @@ import type {
 import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+import { InitializationController } from './initialization-controller'
+
+/**
+ * Default timeout in milliseconds for provider initialization.
+ */
+const DEFAULT_INITIALIZATION_TIMEOUT_MS = 30_000
 
 export interface DatadogNodeServerProviderOptions {
   /**
    * Log experiment exposures
    */
   exposureChannel: Channel<ExposureEvent>
+  /**
+   * Timeout in milliseconds for provider initialization.
+   * If the configuration is not set within this time, initialization will fail.
+   * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
+   */
+  initializationTimeoutMs?: number
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -36,8 +48,7 @@ export class DatadogNodeServerProvider implements Provider {
   readonly runsOn: Paradigm = 'server'
   readonly hooks?: Hook[]
 
-  private resolveInitialization?: (value?: void | PromiseLike<void>) => void
-  private rejectInitialization?: (reason?: unknown) => void
+  private initController?: InitializationController
   readonly events: ProviderEventEmitter<ProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
 
@@ -61,7 +72,9 @@ export class DatadogNodeServerProvider implements Provider {
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
     const prevCreatedAt = this.configuration?.createdAt
-    if (this.configuration && this.configuration !== configuration) {
+    const hadConfiguration = !!this.configuration
+
+    if (hadConfiguration && this.configuration !== configuration) {
       this.events.emit(ProviderEvents.ConfigurationChanged)
       const newCreatedAt = configuration?.createdAt
       if (prevCreatedAt !== newCreatedAt) {
@@ -70,11 +83,17 @@ export class DatadogNodeServerProvider implements Provider {
       this.configuration = configuration
       return
     }
+
     this.configuration = configuration
-    if (this.resolveInitialization) {
-      this.resolveInitialization()
-      this.resolveInitialization = undefined
-      this.rejectInitialization = undefined
+
+    if (this.initController?.isInitializing()) {
+      // First configuration during initialization - resolve the initialization promise
+      // This will cause OpenFeature SDK to emit PROVIDER_READY
+      this.initController.complete()
+    } else if (!hadConfiguration) {
+      // Configuration is being set after initialization completed/failed (e.g., after timeout)
+      // Emit PROVIDER_READY to signal recovery from error state
+      this.events.emit(ProviderEvents.Ready)
     }
   }
 
@@ -82,10 +101,8 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setError(error: unknown) {
-    if (this.rejectInitialization) {
-      this.rejectInitialization(error)
-      this.resolveInitialization = undefined
-      this.rejectInitialization = undefined
+    if (this.initController?.isInitializing()) {
+      this.initController.fail(error)
     } else {
       this.events.emit(ProviderEvents.Error, { error })
     }
@@ -97,17 +114,20 @@ export class DatadogNodeServerProvider implements Provider {
    * Status of 'PROVIDER_ERROR' is emitted with a rejected promise.
    *
    * Since we aren't loading the configuration in this Provider, we will simulate
-   * loading functionality via resolveInitialization and rejectInitialization.
+   * loading functionality via InitializationController.
    * See setConfiguration and setError for more details.
    */
   async initialize(): Promise<void> {
     if (this.configuration) {
       return
     }
-    await new Promise((resolve, reject) => {
-      this.resolveInitialization = resolve
-      this.rejectInitialization = reject
-    })
+
+    const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
+    this.initController = new InitializationController(timeoutMs, () =>
+      this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
+    )
+
+    await this.initController.wait()
     await this.exposureCache?.init()
   }
 

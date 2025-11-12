@@ -21,7 +21,7 @@
     "clean": "lerna run clean --stream",
     "release": "scripts/cli release",
     "version": "scripts/cli version",
-    "format": "prettier --check .",
+    "format:check": "prettier --check .",
     "format:fix": "prettier --write ."
   },
   "devDependencies": {
