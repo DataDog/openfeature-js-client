@@ -6,6 +6,13 @@
 
 ---
 
+## v0.2.0
+
+**Internal Changes:**
+
+- chore(deps): bump axios from 1.10.0 to 1.13.2 ([#85](https://github.com/DataDog/openfeature-js-client/pull/85))
+- Add application.id, view.url, and service properties to browser exposure events. ([#78](https://github.com/DataDog/openfeature-js-client/pull/78)) [BROWSER] [NODE-SERVER]
+
 ## v0.1.0
 
 ## v0.1.0-preview.16
