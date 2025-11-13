@@ -629,7 +629,7 @@ __metadata:
   dependencies:
     "@datadog/flagging-core": "npm:0.2.0"
     "@openfeature/core": "npm:^1.9.0"
-    "@openfeature/server-sdk": "npm:~1.18.0"
+    "@openfeature/server-sdk": "npm:~1.20.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^18.0.0"
     jest: "npm:^30.0.4"
@@ -638,7 +638,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/server-sdk": ~1.18.0
+    "@openfeature/server-sdk": ~1.20.0
   languageName: unknown
   linkType: soft
 
@@ -1742,12 +1742,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/server-sdk@npm:~1.18.0":
-  version: 1.18.0
-  resolution: "@openfeature/server-sdk@npm:1.18.0"
+"@openfeature/server-sdk@npm:~1.20.0":
+  version: 1.20.0
+  resolution: "@openfeature/server-sdk@npm:1.20.0"
   peerDependencies:
-    "@openfeature/core": ^1.7.0
-  checksum: 10c0/5c3aa8fee5ec4ad9ec40ee74094fe0377b28cadfcc6f71414fa1762035cb994891184cc491a59dbaade71afe0139cd39c193e3897b05df8fa21f0e7b84b67c53
+    "@openfeature/core": ^1.9.0
+  checksum: 10c0/2c8667ee6ff11869e71ce63d3ad83349c36bf9be0367e499433bb38bf3b8084210c120792ddba710e4175073450ff750569b80de2a591962810787e82bcae35a
   languageName: node
   linkType: hard
 
