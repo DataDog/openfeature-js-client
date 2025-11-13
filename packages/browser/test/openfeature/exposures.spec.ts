@@ -136,6 +136,11 @@ describe('Exposures End-to-End', () => {
           id: 'test-user-123',
           attributes: { customAttribute: 'test-value' },
         },
+        service: 'test-service',
+        rum: {
+          application: { id: 'test-app-id' },
+          view: { url: 'http://localhost/' },
+        },
       },
       {
         timestamp: new Date('2025-08-04T17:00:00.000Z').getTime(),
@@ -145,6 +150,11 @@ describe('Exposures End-to-End', () => {
         subject: {
           id: 'test-user-123',
           attributes: { customAttribute: 'test-value' },
+        },
+        service: 'test-service',
+        rum: {
+          application: { id: 'test-app-id' },
+          view: { url: 'http://localhost/' },
         },
       },
     ]
@@ -254,6 +264,10 @@ describe('Exposures End-to-End', () => {
           subject: {
             id: 'test-user-123',
             attributes: {},
+          },
+          rum: {
+            application: { id: 'test-app-id' },
+            view: { url: 'http://localhost/' },
           },
         },
       ]
