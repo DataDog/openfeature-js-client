@@ -1,0 +1,54 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+        tags:
+            - "v*"
+    pull_request:
+    release:
+        types: [created]
+
+permissions:
+    contents: read
+    packages: read
+
+jobs:
+    validate-licenses:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out the repository
+              uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+            - name: Set up Python
+              uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+              with:
+                  python-version: "3.11.12"
+
+            - name: Set up Node.js
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v5.0.0
+              with:
+                  node-version: "18"
+                  cache: "yarn"
+
+            - name: Set up Golang
+              uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # 6.0.0
+              with:
+                  go-version: "1.23"
+
+            - name: Clone dd-license-attribution
+              run: |
+                  git clone https://github.com/DataDog/dd-license-attribution.git /tmp/dd-license-attribution
+
+            - name: Install dd-license-attribution
+              run: |
+                  python -m pip install --upgrade pip
+                  python -m pip install /tmp/dd-license-attribution
+
+            - name: Install project dependencies
+              run: yarn install --frozen-lockfile
+
+            - name: Validate licenses
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: ./scripts/licenses-validate.sh
