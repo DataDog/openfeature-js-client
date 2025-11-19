@@ -6,7 +6,17 @@ package_json_files=$(find . -type f | grep package.json | grep -Ev '(\.git|node_
 
 echo "Validating package versions..."
 
-reference_version=""
+# Set reference version from lerna.json
+reference_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' lerna.json | grep -o '"[0-9][^"]*"' | tr -d '"')
+
+if [ -z "$reference_version" ]; then
+  echo "ERROR: Could not read version from lerna.json"
+  exit 1
+fi
+
+echo "Reference version: $reference_version (from lerna.json)"
+echo ""
+
 mismatches=()
 
 for file in $package_json_files; do
@@ -15,13 +25,6 @@ for file in $package_json_files; do
 
   # Skip files without a version field (like the root monorepo package.json)
   if [ -z "$version" ]; then
-    continue
-  fi
-
-  # Set the reference version from the first file with a version
-  if [ -z "$reference_version" ]; then
-    reference_version="$version"
-    echo "Reference version: $version (from $file)"
     continue
   fi
 
