@@ -33,17 +33,8 @@ jobs:
           # Uncomment for monorepo Yarn v1
           # cache-dependency-path: "**/yarn.lock"
 
-      ## Needed to validate licenses with dd-license-attribution
-      - name: Set up Python 3.11.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.11.12
-
       - name: Install dependencies
         run: yarn install --frozen-lockfile
-
-      - name: Lint
-        run: yarn lint
 
       - name: Lint
         run: yarn lint
