@@ -1,29 +1,18 @@
 # Datadog OpenFeature JavaScript Clients
 
-This repository hosts Browser and React Native clients for Datadog's OpenFeature implementation.
+This repository hosts Browser and React Native clients, as well as the
+NodeJS flag evaluator, for Datadog's OpenFeature implementation.
 
-**Note: This project is currently in development; expect breaking API changes.**
+**Note: This project is currently in Preview; expect breaking API changes.**
+
+## Documentation
+
+Please see the full documentation site: [Getting Started with Feature Flags](https://docs.datadoghq.com/getting_started/feature_flags/)
 
 ## Installation
 
-### For Customers (Recommended)
-
-**We do not recommend pinning to an exact _preview_ version:**
-
-Use the `preview` tag for the latest preview version:
-
 ```bash
-npm install @datadog/openfeature-browser@preview
-```
-
-This will install the latest _preview_ version.
-
-### Specific Version
-
-You can also install a specific _preview_ version:
-
-```bash
-npm install @datadog/openfeature-browser@0.1.0-preview.x
+npm install @datadog/openfeature-browser
 ```
 
 ## Quick Start
