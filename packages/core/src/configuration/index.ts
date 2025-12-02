@@ -1,4 +1,7 @@
 export * from './configuration'
 export * from './exposureEvent'
 export * from './exposureEvent.types'
+export * from './flagEvaluationAggregator'
+export * from './flagEvaluationEvent'
+export * from './flagEvaluationEvent.types'
 export * from './wire'

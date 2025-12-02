@@ -24,6 +24,7 @@ import {
 } from '../domain/configuration'
 import { evaluate } from '../evaluation'
 import { createExposureLoggingHook, createRumTrackingHook } from './exposures'
+import { createFlagEvaluationTrackingHook } from './flagEvaluations'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -56,6 +57,12 @@ export class DatadogProvider implements Provider {
     // Add RUM flag tracking hook (DEPRECATED)
     if (options.rum?.ddFlaggingTracking) {
       this.hooks.push(createRumTrackingHook(options.rum.sdk))
+    }
+
+    // Add flag evaluation tracking hook
+    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
+    if (isEvaluationTrackingEnabled && this.configuration) {
+      this.hooks.push(createFlagEvaluationTrackingHook(this.configuration))
     }
 
     // Add proper exposure logging hook (creates batch internally)
