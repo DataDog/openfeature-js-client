@@ -47,5 +47,12 @@ export function createFlagEvaluationEvent(data: FlagEvaluationAggregationData, t
     event.targeting_rule = { key: data.targetingRuleKey }
   }
 
+  // Add context data if targeting context exists
+  if (data.targetingContext && Object.keys(data.targetingContext).length > 0) {
+    event.context = {
+      evaluation: data.targetingContext
+    }
+  }
+
   return event
 }

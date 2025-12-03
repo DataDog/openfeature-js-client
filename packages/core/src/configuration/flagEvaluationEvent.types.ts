@@ -22,13 +22,18 @@ export interface FlagEvaluationEvent {
   targeting_rule?: {
     key: string
   }
-  service?: string
-  rum?: {
-    application?: {
-      id?: string
-    }
-    view?: {
-      url?: string
+  context?: {
+    evaluation?: Record<string, EvaluationContextValue>
+    dd?: {
+      service?: string
+      rum?: {
+        application?: {
+          id?: string
+        }
+        view?: {
+          url?: string
+        }
+      }
     }
   }
 }

@@ -23,10 +23,15 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
           const url = window?.location?.href
           const eventWithMetadata: FlagEvaluationEvent = {
             ...event,
-            ...(configuration.service ? { service: configuration.service } : {}),
-            rum: {
-              ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
-              ...(url && { view: { url } }),
+            context: {
+              ...event.context,
+              dd: {
+                ...(configuration.service && { service: configuration.service }),
+                rum: {
+                  ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+                  ...(url && { view: { url } }),
+                },
+              },
             },
           }
           flagEvaluationBatch.add(eventWithMetadata as unknown as Context)
