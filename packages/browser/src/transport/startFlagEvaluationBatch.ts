@@ -5,7 +5,6 @@ import {
   createHttpRequest,
   createIdentityEncoder,
   Observable,
-  Duration,
 } from '@datadog/browser-core'
 import type { FlaggingConfiguration } from '../domain/configuration'
 

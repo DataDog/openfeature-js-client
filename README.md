@@ -55,7 +55,7 @@ const provider = new DatadogProvider({
 
   // Enable exposure logging
   enableExposureLogging: true,
-  
+
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
 })

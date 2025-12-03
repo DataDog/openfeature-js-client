@@ -1,7 +1,7 @@
-import type { EvaluationContext, EvaluationDetails, FlagValue, EvaluationContextValue } from '@openfeature/core'
-import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
-import { createFlagEvaluationEvent } from './flagEvaluationEvent'
+import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
+import { createFlagEvaluationEvent } from './flagEvaluationEvent'
+import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 interface FlagEvaluationAggregationData {
   flagKey: string

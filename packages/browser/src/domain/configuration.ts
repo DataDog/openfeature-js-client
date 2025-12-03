@@ -1,10 +1,10 @@
-import type { Configuration, Duration, InitConfiguration } from '@datadog/browser-core'
+import type { Configuration, InitConfiguration } from '@datadog/browser-core'
 import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
+import { createEndpointBuilder } from '@datadog/browser-core/cjs/domain/configuration'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
-import { createEndpointBuilder } from '@datadog/browser-core/cjs/domain/configuration'
 
 /**
  * Init Configuration for the Flagging SDK.

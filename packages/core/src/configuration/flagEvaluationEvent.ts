@@ -1,5 +1,5 @@
-import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 import type { EvaluationContextValue } from '@openfeature/core'
+import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 interface FlagEvaluationAggregationData {
   flagKey: string
@@ -50,7 +50,7 @@ export function createFlagEvaluationEvent(data: FlagEvaluationAggregationData, t
   // Add context data if targeting context exists
   if (data.targetingContext && Object.keys(data.targetingContext).length > 0) {
     event.context = {
-      evaluation: data.targetingContext
+      evaluation: data.targetingContext,
     }
   }
 

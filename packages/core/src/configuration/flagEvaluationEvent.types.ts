@@ -1,4 +1,4 @@
-import { EvaluationContextValue } from '@openfeature/core'
+import type { EvaluationContextValue } from '@openfeature/core'
 
 export interface FlagEvaluationEvent {
   flag: {
