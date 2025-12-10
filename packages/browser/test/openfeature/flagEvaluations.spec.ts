@@ -3,7 +3,6 @@ import type { FlaggingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvaluationTrackingHook } from '../../src/openfeature/flagEvaluations'
 
 const mockConfiguration: FlaggingConfiguration = {
-  flagEvaluationEndpointBuilder: jest.fn(),
   flagEvaluationTrackingInterval: 1000,
   applicationId: 'test-app-id',
   fetchFlagsConfiguration: jest.fn(),
@@ -13,6 +12,7 @@ const mockConfiguration: FlaggingConfiguration = {
   messageBytesLimit: 256 * 1024,
   flushTimeout: 30000 as any,
   exposuresEndpointBuilder: jest.fn() as any,
+  flagEvaluationEndpointBuilder: jest.fn() as any,
   // Add required Configuration properties
   site: 'datadoghq.com',
   version: '1.0.0',
