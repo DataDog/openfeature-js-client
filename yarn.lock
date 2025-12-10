@@ -557,17 +557,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/flagging-core@file:../core/package.tgz::locator=%40datadog%2Fopenfeature-browser%40workspace%3Apackages%2Fbrowser":
-  version: 0.2.0
-  resolution: "@datadog/flagging-core@file:../core/package.tgz#../core/package.tgz::hash=0278ac&locator=%40datadog%2Fopenfeature-browser%40workspace%3Apackages%2Fbrowser"
-  dependencies:
-    spark-md5: "npm:^3.0.2"
-  peerDependencies:
-    "@openfeature/core": ^1.8.1
-  checksum: 10c0/5676accc1eab3a52ff6035704d6c675dee7f7e2c96ff93e2b153322b1ff63b4205d4db888a57aa3665cb787839725f027dcf1aff19b7b4ee1fcf54f1ba0817f5
-  languageName: node
-  linkType: hard
-
 "@datadog/flagging-core@npm:0.2.0, @datadog/flagging-core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
@@ -592,7 +581,7 @@ __metadata:
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:^6.25.0"
-    "@datadog/flagging-core": "file:../core/package.tgz"
+    "@datadog/flagging-core": "npm:0.2.0"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"

@@ -137,7 +137,7 @@ describe('FlagEvaluationAggregator', () => {
         targeting_key: 'user123',
         first_evaluation: firstEvalTime,
         last_evaluation: secondEvalTime,
-        timestamp: flushTime,
+        timestamp: firstEvalTime,
       }),
     ])
 
@@ -145,6 +145,7 @@ describe('FlagEvaluationAggregator', () => {
     const flushedEvent = onFlushSpy.mock.calls[0][0][0]
     expect(flushedEvent.first_evaluation).not.toEqual(flushedEvent.last_evaluation)
     expect(flushedEvent.last_evaluation).toBeGreaterThan(flushedEvent.first_evaluation)
+    expect(flushedEvent.timestamp).toEqual(flushedEvent.first_evaluation)
   })
 
   it('should fire multiple events when targeting context changes but flag variant stays same', () => {
