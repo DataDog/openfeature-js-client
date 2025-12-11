@@ -223,6 +223,24 @@
   {
     "override_type": "replace",
     "target": {
+      "component": "@kessler/tableify",
+      "origin": "@kessler/tableify"
+    },
+    "replacement": {
+      "name": "@kessler/tableify",
+      "origin": "@kessler/tableify",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Dan VerWeire",
+        "Yaniv Kessler"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
       "component": "@lerna/create",
       "origin": "@lerna/create"
     },
@@ -852,6 +870,23 @@
   {
     "override_type": "replace",
     "target": {
+      "component": "eol",
+      "origin": "eol"
+    },
+    "replacement": {
+      "name": "eol",
+      "origin": "eol",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "Ryan Van Etten"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
       "component": "err-code",
       "origin": "err-code"
     },
@@ -948,6 +983,23 @@
       ],
       "copyright": [
         "Matthew Eernisse"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "license-report",
+      "origin": "license-report"
+    },
+    "replacement": {
+      "name": "license-report",
+      "origin": "license-report",
+      "license": [
+        "JSON AND MIT"
+      ],
+      "copyright": [
+        "Yaniv Kessler"
       ]
     }
   },
@@ -1090,6 +1142,23 @@
   {
     "override_type": "replace",
     "target": {
+      "component": "split-text-to-chunks",
+      "origin": "split-text-to-chunks"
+    },
+    "replacement": {
+      "name": "split-text-to-chunks",
+      "origin": "split-text-to-chunks",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "thomas-jensen"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
       "component": "string-width-cjs",
       "origin": "string-width-cjs"
     },
@@ -1118,6 +1187,23 @@
       ],
       "copyright": [
         "Sindre Sorhus"
+      ]
+    }
+  },
+  {
+    "override_type": "replace",
+    "target": {
+      "component": "text-table",
+      "origin": "text-table"
+    },
+    "replacement": {
+      "name": "text-table",
+      "origin": "text-table",
+      "license": [
+        "MIT"
+      ],
+      "copyright": [
+        "James Halliday"
       ]
     }
   },
