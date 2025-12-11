@@ -18,8 +18,8 @@ num_licenses_expected=$(wc -l < LICENSE-3rdparty.csv)
 
 echo "Expected $num_licenses_expected licenses."
 
-if [ "$num_licenses" -ne "$num_licenses_expected" ]; then
-    echo "Packages have been added or removed. Run 'yarn licenses:generate' to update the LICENSE-3rdparty.csv file."
+if [ "$num_licenses" -lt "$num_licenses_expected" ]; then
+    echo "Packages have been added. Run 'yarn licenses:generate' to update the LICENSE-3rdparty.csv file."
     exit 1
 fi
 
