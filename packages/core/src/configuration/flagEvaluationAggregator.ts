@@ -85,7 +85,9 @@ export class FlagEvaluationAggregator {
       return
     }
 
-    const events = Array.from(this.aggregatedData.values()).map((data) => createFlagEvaluationEvent(data, data.firstEvaluation))
+    const events = Array.from(this.aggregatedData.values()).map((data) =>
+      createFlagEvaluationEvent(data, data.firstEvaluation)
+    )
     this.aggregatedData.clear()
     this.onFlush(events)
   }

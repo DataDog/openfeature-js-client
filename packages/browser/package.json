@@ -44,7 +44,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/browser-core": "^6.25.0",
+    "@datadog/browser-core": "^6.19.0",
     "@datadog/flagging-core": "0.2.0",
     "@types/chrome": "^0.1.18"
   },
