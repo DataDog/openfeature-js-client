@@ -34,11 +34,6 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
      * @deprecated Use enableExposureLogging instead
      */
     ddFlaggingTracking?: boolean
-    /**
-     * Whether to log exposures in RUM
-     * @deprecated Use enableExposureLogging instead. This legacy approach logs exposures as RUM actions.
-     */
-    ddExposureLogging?: boolean
   }
 
   /**
