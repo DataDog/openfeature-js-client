@@ -357,6 +357,10 @@ If the automated workflow fails and you need to publish manually:
 
 Ensure license information for newly added third party packages are included in LICENSE-3rdparty.csv. For Datadog employees, this can be done automatically with `yarn licenses:generate`.
 
+### Getting `yarn licenses:generate` working
+
+This script requires `dd-license-attribution`. For internal Datadog employees, follow [this guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights) to set this up.
+
 ## Code Style
 
 - Use TypeScript for all new code
