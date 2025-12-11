@@ -2,13 +2,19 @@
 
 set -euo pipefail
 
-### Requires python 3.11.12 and dd-license-attribution 
+PYTHON_VERSION="3.11.12"
+
+### Requires python 3.11.12 and dd-license-attribution
 # see https://github.com/DataDog/dd-license-attribution for installation details
 
-### Make sure python version is 3.11.12
-if ! python --version | grep -q "3.11.12"; then
-    echo "Python version is not 3.11.12"
-    echo "Please install python 3.11.12"
+### Check Python version
+if ! python --version 2>&1 | grep -q "${PYTHON_VERSION}"; then
+    echo "ERROR: Python version ${PYTHON_VERSION} is required"
+    echo "Current version: $(python --version 2>&1)"
+    echo "Please install Python ${PYTHON_VERSION}"
+    if command -v pyenv &> /dev/null; then
+        echo "  Using pyenv: pyenv install ${PYTHON_VERSION} && pyenv local ${PYTHON_VERSION}"
+    fi
     exit 1
 fi
 
