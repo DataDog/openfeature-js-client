@@ -1,0 +1,180 @@
+# Dependabot configuration for openfeature-js-client monorepo
+# Documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Strategy: Dependabot handles both security and version updates with grouped PRs
+# to reduce noise while maintaining security awareness.
+
+version: 2
+updates:
+  # Root workspace dependencies
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'root'
+    commit-message:
+      prefix: '👷 chore'
+      prefix-development: '👷 chore'
+      include: 'scope'
+    reviewers:
+      - 'CODEOWNERS'
+    groups:
+      # Group all non-major updates together
+      development-dependencies:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+      production-dependencies:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      # Let major updates come through individually for review
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      # Add specific ignores here with issue tracking, e.g.:
+      # - dependency-name: 'package-name'  # Issue: PROJ-1234
+
+  # Browser package
+  - package-ecosystem: 'npm'
+    directory: '/packages/browser'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'browser'
+    commit-message:
+      prefix: '👷 chore(browser)'
+      prefix-development: '👷 chore(browser)'
+      include: 'scope'
+    reviewers:
+      - 'CODEOWNERS'
+    groups:
+      browser-dependencies:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Core package
+  - package-ecosystem: 'npm'
+    directory: '/packages/core'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'core'
+    commit-message:
+      prefix: '👷 chore(core)'
+      prefix-development: '👷 chore(core)'
+      include: 'scope'
+    reviewers:
+      - 'CODEOWNERS'
+    groups:
+      core-dependencies:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Node server package
+  - package-ecosystem: 'npm'
+    directory: '/packages/node-server'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'node-server'
+    commit-message:
+      prefix: '👷 chore(node-server)'
+      prefix-development: '👷 chore(node-server)'
+      include: 'scope'
+    reviewers:
+      - 'CODEOWNERS'
+    groups:
+      node-server-dependencies:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Test app
+  - package-ecosystem: 'npm'
+    directory: '/test-app'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 3
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'test-app'
+    commit-message:
+      prefix: '👷 chore(test-app)'
+      prefix-development: '👷 chore(test-app)'
+      include: 'scope'
+    groups:
+      test-app-dependencies:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  # GitHub Actions dependencies
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+    commit-message:
+      prefix: '👷 ci'
+      include: 'scope'
+    groups:
+      github-actions:
+        patterns:
+          - '*'
