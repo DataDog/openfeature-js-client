@@ -1,5 +1,8 @@
 # Dependabot configuration for openfeature-js-client monorepo
 # Documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Strategy: Dependabot handles both security and version updates with grouped PRs
+# to reduce noise while maintaining security awareness.
 
 version: 2
 updates:
@@ -17,8 +20,8 @@ updates:
       - "npm"
       - "root"
     commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
+      prefix: "👷 chore"
+      prefix-development: "👷 chore"
       include: "scope"
     reviewers:
       - "CODEOWNERS"
@@ -38,6 +41,8 @@ updates:
       # Let major updates come through individually for review
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Add specific ignores here with issue tracking, e.g.:
+      # - dependency-name: 'package-name'  # Issue: PROJ-1234
         
   # Browser package
   - package-ecosystem: "npm"
@@ -53,8 +58,8 @@ updates:
       - "npm"
       - "browser"
     commit-message:
-      prefix: "chore(browser)"
-      prefix-development: "chore(browser)"
+      prefix: "👷 chore(browser)"
+      prefix-development: "👷 chore(browser)"
       include: "scope"
     reviewers:
       - "CODEOWNERS"
@@ -83,8 +88,8 @@ updates:
       - "npm"
       - "core"
     commit-message:
-      prefix: "chore(core)"
-      prefix-development: "chore(core)"
+      prefix: "👷 chore(core)"
+      prefix-development: "👷 chore(core)"
       include: "scope"
     reviewers:
       - "CODEOWNERS"
@@ -113,8 +118,8 @@ updates:
       - "npm"
       - "node-server"
     commit-message:
-      prefix: "chore(node-server)"
-      prefix-development: "chore(node-server)"
+      prefix: "👷 chore(node-server)"
+      prefix-development: "👷 chore(node-server)"
       include: "scope"
     reviewers:
       - "CODEOWNERS"
@@ -143,8 +148,8 @@ updates:
       - "npm"
       - "test-app"
     commit-message:
-      prefix: "chore(test-app)"
-      prefix-development: "chore(test-app)"
+      prefix: "👷 chore(test-app)"
+      prefix-development: "👷 chore(test-app)"
       include: "scope"
     groups:
       test-app-dependencies:
@@ -167,7 +172,7 @@ updates:
       - "dependencies"
       - "github-actions"
     commit-message:
-      prefix: "ci"
+      prefix: "👷 ci"
       include: "scope"
     groups:
       github-actions:
