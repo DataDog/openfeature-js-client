@@ -17,18 +17,13 @@ interface FlagEvaluationAggregationData {
   error?: string
 }
 
-const DEFAULT_FLAG_EVALUATION_TRACKING_INTERVAL = 10000
-
 export class FlagEvaluationAggregator {
   private aggregatedData = new Map<string, FlagEvaluationAggregationData>()
   private intervalId?: NodeJS.Timeout
   private readonly flushInterval: number
   private readonly onFlush: (events: FlagEvaluationEvent[]) => void
 
-  constructor(
-    flushInterval: number = DEFAULT_FLAG_EVALUATION_TRACKING_INTERVAL,
-    onFlush: (events: FlagEvaluationEvent[]) => void
-  ) {
+  constructor(flushInterval: number, onFlush: (events: FlagEvaluationEvent[]) => void) {
     this.flushInterval = flushInterval
     this.onFlush = onFlush
   }
@@ -48,7 +43,7 @@ export class FlagEvaluationAggregator {
   }
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
-    const keyString = this.createAggregationKeyString(context, details)
+    const keyString = this.createAggregationKeyString(context, details, error)
     const timestamp = Date.now()
 
     const existingData = this.aggregatedData.get(keyString)
@@ -94,7 +89,8 @@ export class FlagEvaluationAggregator {
 
   private createAggregationKeyString<T extends FlagValue>(
     context: EvaluationContext,
-    details: EvaluationDetails<T>
+    details: EvaluationDetails<T>,
+    error?: string
   ): string {
     const allocationKey = details.flagMetadata?.allocationKey as string
     const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
@@ -109,6 +105,7 @@ export class FlagEvaluationAggregator {
         targetingRuleKey: targetingRuleKey || '',
         targetingKey: targetingKey || '',
         targetingContext,
+        error: error || '',
       })
     )
   }

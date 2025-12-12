@@ -70,7 +70,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 
 export interface FlaggingConfiguration extends Configuration {
   applicationId?: string
-  flagEvaluationTrackingInterval?: number
+  flagEvaluationTrackingInterval: number
   fetchFlagsConfiguration: (context: EvaluationContext) => Promise<FlagsConfiguration>
 
   // [FlagEval] TODO: Remove this once we have a proper endpoint builder from browser core SDK.
@@ -92,7 +92,7 @@ export function validateAndBuildFlaggingConfiguration(
 
   return {
     applicationId: initConfiguration.applicationId,
-    flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval,
+    flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
     // [FlagEval] TODO: Don't set this once we have a proper endpoint builder from browser core SDK
     flagEvaluationEndpointBuilder: createEndpointBuilder(initConfiguration, 'flagevaluation' as TrackType),
     fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),

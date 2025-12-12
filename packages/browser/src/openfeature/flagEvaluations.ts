@@ -1,19 +1,37 @@
 import type { Context, RawError } from '@datadog/browser-core'
-import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
+import {
+  addTelemetryDebug,
+  createBatch,
+  createFlushController,
+  createHttpRequest,
+  createIdentityEncoder,
+  createPageMayExitObservable,
+  Observable,
+} from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
-import { startFlagEvaluationBatch } from '../transport/startFlagEvaluationBatch'
 
 export function createFlagEvaluationTrackingHook(configuration: FlaggingConfiguration): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const flagEvaluationBatch = startFlagEvaluationBatch(
-    configuration,
-    (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    },
-    pageMayExitObservable
-  )
+  const flagEvaluationBatch = createBatch({
+    encoder: createIdentityEncoder(),
+    request: createHttpRequest(
+      [configuration.flagEvaluationEndpointBuilder],
+      configuration.batchBytesLimit,
+      (error: RawError) => {
+        addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
+      }
+    ),
+    flushController: createFlushController({
+      messagesLimit: configuration.batchMessagesLimit,
+      bytesLimit: configuration.batchBytesLimit,
+      durationLimit: configuration.flushTimeout,
+      pageMayExitObservable,
+      sessionExpireObservable: new Observable(),
+    }),
+    messageBytesLimit: configuration.messageBytesLimit,
+  })
 
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,

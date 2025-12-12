@@ -24,17 +24,19 @@ const mockConfiguration: FlaggingConfiguration = {
 
 jest.mock('@datadog/browser-core', () => ({
   addTelemetryDebug: jest.fn(),
+  createBatch: jest.fn(() => ({
+    add: jest.fn(),
+  })),
+  createFlushController: jest.fn(),
+  createHttpRequest: jest.fn(),
+  createIdentityEncoder: jest.fn(),
   createPageMayExitObservable: jest.fn(() => ({
     subscribe: jest.fn(),
   })),
+  Observable: jest.fn().mockImplementation(() => ({})),
   dateNow: jest.fn(() => 1234567890),
 }))
 
-jest.mock('../../src/transport/startFlagEvaluationBatch', () => ({
-  startFlagEvaluationBatch: jest.fn(() => ({
-    add: jest.fn(),
-  })),
-}))
 
 describe('createFlagEvaluationTrackingHook', () => {
   it('should create a hook that tracks flag evaluations', () => {
