@@ -1743,11 +1743,11 @@ __metadata:
   linkType: hard
 
 "@openfeature/server-sdk@npm:~1.20.0":
-  version: 1.20.0
-  resolution: "@openfeature/server-sdk@npm:1.20.0"
+  version: 1.20.1
+  resolution: "@openfeature/server-sdk@npm:1.20.1"
   peerDependencies:
     "@openfeature/core": ^1.9.0
-  checksum: 10c0/2c8667ee6ff11869e71ce63d3ad83349c36bf9be0367e499433bb38bf3b8084210c120792ddba710e4175073450ff750569b80de2a591962810787e82bcae35a
+  checksum: 10c0/8e2cba4e234ac2a05dd53a21a1efbf9aca61ef1cbb2dd6ee067f4e01089a470dc90f6fc6aaca6d4917711117ba5a0c1cc78d22c454b4f1e415b937e481d9d944
   languageName: node
   linkType: hard
 
