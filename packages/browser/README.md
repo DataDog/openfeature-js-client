@@ -34,6 +34,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 const provider = new DatadogProvider({
   clientToken: 'your-datadog-client-token',
   enableExposureLogging: true,
+  enableFlagEvaluationTracking: true,
   site: 'datadoghq.com',
 })
 
@@ -61,6 +62,9 @@ const provider = new DatadogProvider({
 
   // Enable exposure logging
   enableExposureLogging: true,
+
+  // Enable flag evaluation tracking
+  enableFlagEvaluationTracking: true,
 })
 ```
 

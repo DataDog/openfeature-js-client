@@ -1,5 +1,6 @@
-import type { Configuration, InitConfiguration } from '@datadog/browser-core'
+import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
 import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
+import { createEndpointBuilder, type TrackType } from '@datadog/browser-core/cjs/domain/configuration'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
@@ -42,6 +43,16 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   enableExposureLogging?: boolean
 
   /**
+   * Whether to enable flag evaluation tracking via the flag evaluation intake
+   */
+  enableFlagEvaluationTracking?: boolean
+
+  /**
+   * Flag evaluation tracking interval in milliseconds (default: 10000ms)
+   */
+  flagEvaluationTrackingInterval?: number
+
+  /**
    * Custom headers to add to the request to the Datadog API.
    */
   customHeaders?: Record<string, string>
@@ -59,7 +70,11 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 
 export interface FlaggingConfiguration extends Configuration {
   applicationId?: string
+  flagEvaluationTrackingInterval: number
   fetchFlagsConfiguration: (context: EvaluationContext) => Promise<FlagsConfiguration>
+
+  // [FlagEval] TODO: Remove this once we have a proper endpoint builder from browser core SDK.
+  flagEvaluationEndpointBuilder: EndpointBuilder
 }
 
 export function validateAndBuildFlaggingConfiguration(
@@ -77,6 +92,9 @@ export function validateAndBuildFlaggingConfiguration(
 
   return {
     applicationId: initConfiguration.applicationId,
+    flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
+    // [FlagEval] TODO: Don't set this once we have a proper endpoint builder from browser core SDK
+    flagEvaluationEndpointBuilder: createEndpointBuilder(initConfiguration, 'flagevaluation' as TrackType),
     fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,
   }
