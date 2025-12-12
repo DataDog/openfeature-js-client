@@ -6,6 +6,22 @@
 
 ---
 
+## v0.3.0
+
+**Internal Changes:**
+
+- chore:add dependabot ([#97](https://github.com/DataDog/openfeature-js-client/pull/97))
+- [EX-1234] Add flagevaluation tracking event emission. ([#94](https://github.com/DataDog/openfeature-js-client/pull/94)) [BROWSER] [NODE-SERVER]
+- drop support for RUM custom actions exposure logging ([#95](https://github.com/DataDog/openfeature-js-client/pull/95)) [BROWSER]
+- chore: validate license name, script python requirements ([#93](https://github.com/DataDog/openfeature-js-client/pull/93))
+- docs: update contributing with guide to install dd-license-attribution ([#96](https://github.com/DataDog/openfeature-js-client/pull/96))
+- Update copyright notice to 2025-present ([#92](https://github.com/DataDog/openfeature-js-client/pull/92)) [BROWSER] [NODE-SERVER]
+- remove preview tag from docs ([#91](https://github.com/DataDog/openfeature-js-client/pull/91))
+- chore: validate version consistency in CI ([#90](https://github.com/DataDog/openfeature-js-client/pull/90))
+- chore(deps-dev): bump glob from 11.0.3 to 11.1.0 ([#88](https://github.com/DataDog/openfeature-js-client/pull/88))
+- chore: CI check to validate licenses are up to date ([#89](https://github.com/DataDog/openfeature-js-client/pull/89))
+- chore: upgrade to latest version of openfeature sdk ([#87](https://github.com/DataDog/openfeature-js-client/pull/87)) [NODE-SERVER]
+
 ## v0.2.0
 
 **Internal Changes:**

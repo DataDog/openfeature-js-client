@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-node-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "React Native bindings for OpenFeature (wraps @datadog/flagging-core)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
@@ -36,7 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "0.2.0",
+    "@datadog/flagging-core": "0.3.0",
     "@openfeature/server-sdk": "~1.20.0"
   },
   "peerDependencies": {
