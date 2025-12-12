@@ -1114,6 +1114,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@jest/types@npm:30.2.0":
+  version: 30.2.0
+  resolution: "@jest/types@npm:30.2.0"
+  dependencies:
+    "@jest/pattern": "npm:30.0.1"
+    "@jest/schemas": "npm:30.0.5"
+    "@types/istanbul-lib-coverage": "npm:^2.0.6"
+    "@types/istanbul-reports": "npm:^3.0.4"
+    "@types/node": "npm:*"
+    "@types/yargs": "npm:^17.0.33"
+    chalk: "npm:^4.1.2"
+  checksum: 10c0/ae121f6963bd9ed1cd9651db7be91bf14c05bff0d0eec4fca9fecf586bea4005e8f1de8cc9b8ef72e424ea96a309d123bef510b55a6a17a3b4b91a39d775e5cd
+  languageName: node
+  linkType: hard
+
 "@jest/types@npm:^29.6.3":
   version: 29.6.3
   resolution: "@jest/types@npm:29.6.3"
@@ -6085,7 +6100,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jest-util@npm:30.0.2, jest-util@npm:^30.0.2":
+"jest-util@npm:30.0.2":
   version: 30.0.2
   resolution: "jest-util@npm:30.0.2"
   dependencies:
@@ -6124,6 +6139,20 @@ __metadata:
     graceful-fs: "npm:^4.2.9"
     picomatch: "npm:^2.2.3"
   checksum: 10c0/bc55a8f49fdbb8f51baf31d2a4f312fb66c9db1483b82f602c9c990e659cdd7ec529c8e916d5a89452ecbcfae4949b21b40a7a59d4ffc0cd813a973ab08c8150
+  languageName: node
+  linkType: hard
+
+"jest-util@npm:^30.0.2":
+  version: 30.2.0
+  resolution: "jest-util@npm:30.2.0"
+  dependencies:
+    "@jest/types": "npm:30.2.0"
+    "@types/node": "npm:*"
+    chalk: "npm:^4.1.2"
+    ci-info: "npm:^4.2.0"
+    graceful-fs: "npm:^4.2.11"
+    picomatch: "npm:^4.0.2"
+  checksum: 10c0/896d663554b35258a87ec1a0a0fdd8741fdf4f3239d09fc52fdd88fa5c411a5ece7903bbbbd7d5194743fcb69f62afc3287e90f57736a91e7df95ad421937936
   languageName: node
   linkType: hard
 
