@@ -37,7 +37,6 @@ jest.mock('@datadog/browser-core', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
-
 describe('createFlagEvaluationTrackingHook', () => {
   it('should create a hook that tracks flag evaluations', () => {
     const hook = createFlagEvaluationTrackingHook(mockConfiguration)
