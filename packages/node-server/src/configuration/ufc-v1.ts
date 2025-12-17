@@ -43,20 +43,13 @@ export interface Flag {
 }
 
 export interface UniversalFlagConfigurationV1 {
+  id: string
   createdAt: string
   format: string
   environment: {
     name: string
   }
   flags: Record<string, Flag>
-}
-
-export interface UniversalFlagConfigurationV1Response {
-  data: {
-    type: 'universal-flag-configuration'
-    id: string
-    attributes: UniversalFlagConfigurationV1
-  }
 }
 
 export function variantTypeToFlagValueType(variantType: VariantType): FlagValueType {

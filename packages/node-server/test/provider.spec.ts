@@ -12,7 +12,7 @@ import {
   OpenFeature,
   ProviderEvents,
 } from '@openfeature/server-sdk'
-import type { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from 'src/configuration/ufc-v1'
+import type { UniversalFlagConfigurationV1 } from 'src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
 
 describe('DatadogNodeServerProvider', () => {
@@ -31,8 +31,8 @@ describe('DatadogNodeServerProvider', () => {
 
   const configuration = ((): UniversalFlagConfigurationV1 => {
     const ufcJson = fs.readFileSync(path.join(__dirname, './data', 'flags-v1.json'), 'utf8')
-    const ufcResponse = JSON.parse(ufcJson) as UniversalFlagConfigurationV1Response
-    return ufcResponse.data.attributes
+    const ufcResponse = JSON.parse(ufcJson) as UniversalFlagConfigurationV1
+    return ufcResponse
   })()
 
   beforeEach(() => {
