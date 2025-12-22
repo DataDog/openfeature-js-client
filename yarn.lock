@@ -563,7 +563,7 @@ __metadata:
   dependencies:
     "@openfeature/core": "npm:^1.8.1"
     "@types/jest": "npm:^29.4.0"
-    "@types/node": "npm:^18.0.0"
+    "@types/node": "npm:^25.0.3"
     "@types/spark-md5": "npm:^3.0.5"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
@@ -586,7 +586,7 @@ __metadata:
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"
     "@types/jest": "npm:^29.4.0"
-    "@types/node": "npm:^18.0.0"
+    "@types/node": "npm:^25.0.3"
     jest: "npm:^30.0.4"
     jest-environment-jsdom: "npm:^30.0.4"
     jest-util: "npm:^30.0.2"
@@ -606,7 +606,7 @@ __metadata:
   resolution: "@datadog/openfeature-client-monorepo@workspace:."
   dependencies:
     "@biomejs/biome": "npm:^2.0.0"
-    "@types/node": "npm:^18.0.0"
+    "@types/node": "npm:^25.0.3"
     emoji-name-map: "npm:^2.0.3"
     glob: "npm:^11.0.3"
     jest: "npm:^30.0.4"
@@ -631,7 +631,7 @@ __metadata:
     "@openfeature/core": "npm:^1.9.0"
     "@openfeature/server-sdk": "npm:~1.20.0"
     "@types/jest": "npm:^30.0.0"
-    "@types/node": "npm:^18.0.0"
+    "@types/node": "npm:^25.0.3"
     jest: "npm:^30.0.4"
     npm-run-all: "npm:^4.1.5"
     ts-jest: "npm:^29.4.0"
@@ -2105,12 +2105,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^18.0.0":
-  version: 18.19.128
-  resolution: "@types/node@npm:18.19.128"
+"@types/node@npm:^25.0.3":
+  version: 25.0.3
+  resolution: "@types/node@npm:25.0.3"
   dependencies:
-    undici-types: "npm:~5.26.4"
-  checksum: 10c0/ff84bfed98a10fcf5761c344ea599ff763859d777f8fd9eed12d81b0ed8c2877afa1befb2dd8b6f2a7f858da87a081afd1f7225df0767d305839d1e3e9b91e0e
+    undici-types: "npm:~7.16.0"
+  checksum: 10c0/b7568f0d765d9469621615e2bb257c7fd1953d95e9acbdb58dffb6627a2c4150d405a4600aa1ad8a40182a94fe5f903cafd3c0a2f5132814debd0e3bfd61f835
   languageName: node
   linkType: hard
 
@@ -9653,10 +9653,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici-types@npm:~5.26.4":
-  version: 5.26.5
-  resolution: "undici-types@npm:5.26.5"
-  checksum: 10c0/bb673d7876c2d411b6eb6c560e0c571eef4a01c1c19925175d16e3a30c4c428181fb8d7ae802a261f283e4166a0ac435e2f505743aa9e45d893f9a3df017b501
+"undici-types@npm:~7.16.0":
+  version: 7.16.0
+  resolution: "undici-types@npm:7.16.0"
+  checksum: 10c0/3033e2f2b5c9f1504bdc5934646cb54e37ecaca0f9249c983f7b1fc2e87c6d18399ebb05dc7fd5419e02b2e915f734d872a65da2e3eeed1813951c427d33cc9a
   languageName: node
   linkType: hard
 
