@@ -6,6 +6,15 @@
 
 ---
 
+## v0.3.1
+
+**Internal Changes:**
+
+- 👷 chore(deps-dev): bump prettier from 3.6.2 to 3.7.4 ([#124](https://github.com/DataDog/openfeature-js-client/pull/124))
+- 👷 chore(deps-dev): bump ts-jest from 29.4.0 to 29.4.6 ([#122](https://github.com/DataDog/openfeature-js-client/pull/122))
+- fix(browser): prevent exposure cache from being cleared on page load ([#136](https://github.com/DataDog/openfeature-js-client/pull/136)) [BROWSER]
+- chore: don't group package updates ([#103](https://github.com/DataDog/openfeature-js-client/pull/103))
+
 ## v0.3.0
 
 **Internal Changes:**
