@@ -551,9 +551,9 @@ __metadata:
   linkType: hard
 
 "@datadog/browser-core@npm:^6.19.0":
-  version: 6.19.0
-  resolution: "@datadog/browser-core@npm:6.19.0"
-  checksum: 10c0/467a1ef719a6f4ead386009ad9410a39ecd4d97c0d20ac7fa7736a78d37940298bc54115c07837319af3d539010d7ee89b13606a6e7766f275a55036aa95b91b
+  version: 6.25.3
+  resolution: "@datadog/browser-core@npm:6.25.3"
+  checksum: 10c0/d89b2b813f361990527b5589180205aada64683a8594837d1952dad0ffefc1de97a1c1ef291a18a154430308e79196fd55fcf053d55845fec60b89575afe4eba
   languageName: node
   linkType: hard
 
