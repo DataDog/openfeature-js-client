@@ -577,6 +577,66 @@ describe('Exposures End-to-End', () => {
       expect(getExposuresCalls()).toHaveLength(2)
     })
 
+    it('should not clear exposure cache on initial page load', async () => {
+      // This test simulates a page reload where the cache already has entries from a previous session
+      const response = {
+        ...precomputedServerResponse,
+        data: {
+          ...precomputedServerResponse.data,
+          attributes: {
+            ...precomputedServerResponse.data.attributes,
+            createdAt: 1731939805123,
+          },
+        },
+      }
+
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('exposures')) {
+          return Promise.resolve({ ok: true, status: 200 })
+        }
+        if (url.includes('precompute-assignments')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(response),
+          })
+        }
+        return Promise.resolve({ ok: true })
+      })
+
+      // Set context before provider initialization
+      await OpenFeature.setContext({
+        targetingKey: 'test-user-123',
+        customAttribute: 'test-value',
+      })
+
+      // Initialize provider and evaluate flag to populate cache
+      const provider1 = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider1)
+      const client1 = OpenFeature.getClient()
+
+      client1.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Verify first exposure was logged
+      expect(getExposuresCalls()).toHaveLength(1)
+
+      // Simulate page reload: clear providers but keep localStorage
+      await OpenFeature.clearProviders()
+      fetchMock.mockClear()
+
+      // Re-initialize provider (simulating page reload)
+      const provider2 = new DatadogProvider(providerConfig)
+      await OpenFeature.setProviderAndWait(provider2)
+      const client2 = OpenFeature.getClient()
+
+      // Evaluate same flag - should NOT log because cache persisted from localStorage
+      client2.getStringValue('string-flag', 'default')
+      triggerBatch()
+
+      // Should have no new exposure calls (cache was loaded from localStorage)
+      expect(getExposuresCalls()).toHaveLength(0)
+    })
+
     it('should not clear exposure cache when configuration createdAt stays the same', async () => {
       // Create two responses with same createdAt
       const firstResponse = {

@@ -155,7 +155,7 @@ export class DatadogProvider implements Provider {
     const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
     const flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
     const newCreatedAt = flagsConfiguration.precomputed?.response.data.attributes.createdAt
-    if (prevCreatedAt !== newCreatedAt) {
+    if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
       await this.exposureCache?.clear()
     }
     return flagsConfiguration
