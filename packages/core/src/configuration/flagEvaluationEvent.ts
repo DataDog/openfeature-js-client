@@ -27,7 +27,9 @@ export function createFlagEvaluationEvent(data: FlagEvaluationAggregationData, t
     timestamp,
   }
 
-  event.targeting_key = data.targetingKey ?? ''
+  if (data.targetingKey != null) {
+    event.targeting_key = data.targetingKey
+  }
 
   if (data.error) {
     event.error = { message: data.error }

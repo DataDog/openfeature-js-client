@@ -34,7 +34,7 @@ describe('createFlagEvaluationEvent', () => {
     expect(event).toHaveProperty('targeting_key')
   })
 
-  it('should convert undefined targeting_key to empty string', () => {
+  it('should not include targeting_key when it is undefined', () => {
     const event = createFlagEvaluationEvent(
       {
         flagKey: 'test-flag',
@@ -47,25 +47,7 @@ describe('createFlagEvaluationEvent', () => {
       2000
     )
 
-    expect(event.targeting_key).toBe('')
-    expect(event).toHaveProperty('targeting_key')
-  })
-
-  it('should convert null targeting_key to empty string', () => {
-    const event = createFlagEvaluationEvent(
-      {
-        flagKey: 'test-flag',
-        targetingKey: null as any,
-        count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
-        runtimeDefaultUsed: false,
-      },
-      2000
-    )
-
-    expect(event.targeting_key).toBe('')
-    expect(event).toHaveProperty('targeting_key')
+    expect(event).not.toHaveProperty('targeting_key')
   })
 
   it('should include all required fields', () => {
