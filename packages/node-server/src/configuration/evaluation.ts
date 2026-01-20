@@ -27,7 +27,7 @@ export function evaluate<T extends FlagValueType>(
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context
-  if (!subjectKey) {
+  if (subjectKey == null) {
     return {
       value: defaultValue,
       reason: 'ERROR',
