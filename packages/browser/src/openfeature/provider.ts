@@ -23,7 +23,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { evaluate } from '../evaluation'
-import { createExposureLoggingHook, createRumTrackingHook } from './exposures'
+import { createExposureLoggingHook, createRumExposureHook, createRumTrackingHook } from './exposures'
 import { createFlagEvaluationTrackingHook } from './flagEvaluations'
 
 /**
@@ -57,6 +57,11 @@ export class DatadogProvider implements Provider {
     // Add RUM flag tracking hook (DEPRECATED)
     if (options.rum?.ddFlaggingTracking) {
       this.hooks.push(createRumTrackingHook(options.rum.sdk))
+    }
+
+    // Add RUM exposure logging hook (DEPRECATED)
+    if (options.rum?.ddExposureLogging) {
+      this.hooks.push(createRumExposureHook(options.rum.sdk))
     }
 
     // Add flag evaluation tracking hook
