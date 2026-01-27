@@ -51,5 +51,11 @@ jobs:
       - name: Run tests
         run: yarn test
 
-      - name: Test package installation
+      - name: Test browser package installation
         run: yarn test:browser-install
+
+      - name: Test node package installation (without OpenFeature)
+        run: yarn test:node-install
+
+      - name: Test node package installation (with OpenFeature)
+        run: yarn test:node-install:with-of
