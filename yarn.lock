@@ -626,8 +626,8 @@ __metadata:
   resolution: "@datadog/openfeature-node-server@workspace:packages/node-server"
   dependencies:
     "@datadog/flagging-core": "npm:0.3.1"
-    "@openfeature/core": "npm:^1.9.0"
-    "@openfeature/server-sdk": "npm:^1.20.0"
+    "@openfeature/core": "npm:0.0.25"
+    "@openfeature/server-sdk": "npm:1.11.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^18.0.0"
     jest: "npm:^30.0.4"
@@ -636,7 +636,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/server-sdk": ">=1.0.0 <2.0.0"
+    "@openfeature/server-sdk": ">=1.11.0 <2.0.0"
   peerDependenciesMeta:
     "@openfeature/server-sdk":
       optional: true
@@ -1729,6 +1729,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openfeature/core@npm:0.0.25":
+  version: 0.0.25
+  resolution: "@openfeature/core@npm:0.0.25"
+  checksum: 10c0/f790f714d5698b0b00aefe66089abd7fa796ad8ddb7ba3e14a8beef51facf5ce42d13a9cc3d3bd084529cd251bba6d663539f281a22989454132349ed96c20bb
+  languageName: node
+  linkType: hard
+
 "@openfeature/core@npm:^1.8.1":
   version: 1.8.1
   resolution: "@openfeature/core@npm:1.8.1"
@@ -1736,19 +1743,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/core@npm:^1.9.0":
-  version: 1.9.0
-  resolution: "@openfeature/core@npm:1.9.0"
-  checksum: 10c0/957ee82fff323850e5255e46eb91222b2ec364fce7e8dd8f1277e0b24c0f9464714f9793a9492ede5b5c4f1457f3bfec885a86122d3ee01bfe678ba6b6ddbc08
-  languageName: node
-  linkType: hard
-
-"@openfeature/server-sdk@npm:^1.20.0":
-  version: 1.20.1
-  resolution: "@openfeature/server-sdk@npm:1.20.1"
+"@openfeature/server-sdk@npm:1.11.0":
+  version: 1.11.0
+  resolution: "@openfeature/server-sdk@npm:1.11.0"
   peerDependencies:
-    "@openfeature/core": ^1.9.0
-  checksum: 10c0/8e2cba4e234ac2a05dd53a21a1efbf9aca61ef1cbb2dd6ee067f4e01089a470dc90f6fc6aaca6d4917711117ba5a0c1cc78d22c454b4f1e415b937e481d9d944
+    "@openfeature/core": 0.0.25
+  checksum: 10c0/d548258c58a00afce3404d5dcc7807c58c8272fd58cf43da9c517bbd29fcddf85c76c5e45e3d149a4cd592bb2c7501ff3edf4672db344dae382227dac88a47e2
   languageName: node
   linkType: hard
 
