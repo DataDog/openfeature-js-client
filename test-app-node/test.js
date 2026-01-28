@@ -97,7 +97,6 @@ async function runTests() {
 }
 
 runTests()
-  .then(() => process.exit(0))
   .catch((e) => {
     console.error('Test runner error:', e)
     process.exit(1)
