@@ -6,11 +6,11 @@ This package supports `@openfeature/server-sdk` versions `>=1.11.0 <2.0.0`.
 
 ### Version Requirements
 
-| @openfeature/server-sdk | @openfeature/core | Notes |
-|-------------------------|-------------------|-------|
-| 1.11.0 - 1.13.x | 0.0.25 - 0.0.27 | Minimum supported version |
-| 1.14.0+ | 1.2.0+ | Core package moved to 1.x |
-| 1.17.0+ | ^1.6.0+ | Current recommended |
+| @openfeature/server-sdk | @openfeature/core | Notes                     |
+| ----------------------- | ----------------- | ------------------------- |
+| 1.11.0 - 1.13.x         | 0.0.25 - 0.0.27   | Minimum supported version |
+| 1.14.0+                 | 1.2.0+            | Core package moved to 1.x |
+| 1.17.0+                 | ^1.6.0+           | Current recommended       |
 
 ### Why 1.11.0 Minimum?
 
