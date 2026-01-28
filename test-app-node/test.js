@@ -15,10 +15,10 @@ function test(name, fn) {
   try {
     fn()
     results.push({ name, status: 'pass' })
-    console.log(`✓ ${name}`)
+    console.log(`PASS: ${name}`)
   } catch (e) {
     results.push({ name, status: 'fail', error: e.message })
-    console.log(`✗ ${name}: ${e.message}`)
+    console.log(`FAIL: ${name}: ${e.message}`)
   }
 }
 
@@ -26,10 +26,10 @@ async function testAsync(name, fn) {
   try {
     await fn()
     results.push({ name, status: 'pass' })
-    console.log(`✓ ${name}`)
+    console.log(`PASS: ${name}`)
   } catch (e) {
     results.push({ name, status: 'fail', error: e.message })
-    console.log(`✗ ${name}: ${e.message}`)
+    console.log(`FAIL: ${name}: ${e.message}`)
   }
 }
 

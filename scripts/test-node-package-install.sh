@@ -133,9 +133,9 @@ yarn test
 
 echo ""
 if [ "$WITH_OPENFEATURE" = true ]; then
-  echo "✓ Tests completed with OpenFeature dependencies installed"
+  echo "Tests completed with OpenFeature dependencies installed"
 else
-  echo "✓ Tests completed without OpenFeature dependencies"
+  echo "Tests completed without OpenFeature dependencies"
   echo ""
   echo "To test with OpenFeature deps:"
   echo "  ./scripts/test-node-package-install.sh --with-openfeature"
