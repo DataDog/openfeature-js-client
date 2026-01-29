@@ -6,6 +6,12 @@
 
 ---
 
+## v0.3.3
+
+**Internal Changes:**
+
+- fix: sdk metadata param names to match backend expectation
+
 ## v0.3.2
 
 **Internal Changes:**
