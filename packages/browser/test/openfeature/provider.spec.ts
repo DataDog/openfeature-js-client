@@ -185,9 +185,9 @@ describe('DatadogProvider', () => {
             env: {
               dd_env: options.env,
             },
-            sdk: {
-              name: 'browser',
-              version: '1.0.0-test',
+            source: {
+              sdk_name: 'browser',
+              sdk_version: '1.0.0-test',
             },
             subject: {
               targeting_key: 'test-user',

@@ -254,7 +254,7 @@ describe('createFlagsConfigurationFetcher', () => {
   })
 
   describe('request body', () => {
-    it('should include SDK payload with browser name and version', async () => {
+    it('should include source payload with browser sdk_name and sdk_version', async () => {
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
       const fetcher = createFlagsConfigurationFetcher(config)
 
@@ -263,7 +263,7 @@ describe('createFlagsConfigurationFetcher', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          body: expect.stringContaining('"sdk":{"name":"browser","version":"1.0.0-test"}'),
+          body: expect.stringContaining('"source":{"sdk_name":"browser","sdk_version":"1.0.0-test"}'),
         })
       )
     })
@@ -281,9 +281,9 @@ describe('createFlagsConfigurationFetcher', () => {
             env: {
               dd_env: 'test',
             },
-            sdk: {
-              name: 'browser',
-              version: '1.0.0-test',
+            source: {
+              sdk_name: 'browser',
+              sdk_version: '1.0.0-test',
             },
             subject: {
               targeting_key: 'user-123',
