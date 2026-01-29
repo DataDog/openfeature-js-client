@@ -4,9 +4,9 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
 
-const sdkPayload = {
-  name: 'browser',
-  version: __BUILD_ENV__SDK_VERSION__,
+const sourcePayload = {
+  sdk_name: 'browser',
+  sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
 
 type JSONAPIError = {
@@ -74,7 +74,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
           type: 'precompute-assignments-request',
           attributes: {
             env: envPayload,
-            sdk: sdkPayload,
+            source: sourcePayload,
             subject: {
               targeting_key: context.targetingKey || '',
               targeting_attributes: stringifiedContext,
