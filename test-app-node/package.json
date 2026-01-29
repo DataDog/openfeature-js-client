@@ -1,0 +1,15 @@
+{
+  "name": "test-app-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test app for validating @datadog/openfeature-node-server installation scenarios",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@datadog/flagging-core": "file:./core.tgz",
+    "@datadog/openfeature-node-server": "file:./node-server.tgz",
+    "@openfeature/core": "1.8.0",
+    "@openfeature/server-sdk": "1.18.0"
+  }
+}
