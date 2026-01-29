@@ -6,6 +6,17 @@
 
 ---
 
+## v0.3.2
+
+**Internal Changes:**
+
+- 👷 ci(deps): bump actions/setup-go from 6.0.0 to 6.1.0 ([#105](https://github.com/DataDog/openfeature-js-client/pull/105))
+- 👷 ci(deps): bump actions/setup-python from 6.0.0 to 6.1.0 ([#107](https://github.com/DataDog/openfeature-js-client/pull/107))
+- 👷 ci(deps): bump actions/setup-node from 4.4.0 to 6.1.0 ([#104](https://github.com/DataDog/openfeature-js-client/pull/104))
+- fix(core): resolve peer dependency errors for dd-trace-js users ([#150](https://github.com/DataDog/openfeature-js-client/pull/150)) [BROWSER] [NODE-SERVER]
+- bug: allow empty string as valid targeting key in evaluation (FFL-1730) ([#142](https://github.com/DataDog/openfeature-js-client/pull/142)) [NODE-SERVER]
+- fix(core): include empty string targeting keys in flag evaluation events ([#141](https://github.com/DataDog/openfeature-js-client/pull/141)) [BROWSER] [NODE-SERVER]
+
 ## v0.3.1
 
 **Internal Changes:**
