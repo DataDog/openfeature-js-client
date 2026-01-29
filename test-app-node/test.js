@@ -96,8 +96,7 @@ async function runTests() {
   console.log(`Failed: ${failed}/${results.length}`)
 }
 
-runTests()
-  .catch((e) => {
-    console.error('Test runner error:', e)
-    process.exit(1)
-  })
+runTests().catch((e) => {
+  console.error('Test runner error:', e)
+  process.exit(1)
+})
