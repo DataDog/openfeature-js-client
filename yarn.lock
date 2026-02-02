@@ -561,7 +561,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
   dependencies:
-    "@openfeature/core": "npm:^1.8.1"
+    "@openfeature/core": "npm:^1.9.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^18.0.0"
     "@types/spark-md5": "npm:^3.0.5"
@@ -580,7 +580,7 @@ __metadata:
   dependencies:
     "@datadog/browser-core": "npm:^6.19.0"
     "@datadog/flagging-core": "npm:1.0.0"
-    "@openfeature/core": "npm:^1.8.1"
+    "@openfeature/core": "npm:^1.9.0"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"
     "@types/jest": "npm:^30.0.0"
@@ -594,7 +594,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/core": ^1.8.0
+    "@openfeature/core": ^1.9.0
     "@openfeature/web-sdk": ^1.5.0
   languageName: unknown
   linkType: soft
@@ -1967,17 +1967,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/core@npm:1.9.1":
+"@openfeature/core@npm:1.9.1, @openfeature/core@npm:^1.9.0":
   version: 1.9.1
   resolution: "@openfeature/core@npm:1.9.1"
   checksum: 10c0/983c651484621e6e5a3b4bf83fce5398a1adc2ace6162ff5a13a8eaf6d285b7c6b15f5c0a477ece9010ca88b28799985d810047ea0c18324d7a51ac4d04e18d6
-  languageName: node
-  linkType: hard
-
-"@openfeature/core@npm:^1.8.1":
-  version: 1.8.1
-  resolution: "@openfeature/core@npm:1.8.1"
-  checksum: 10c0/534396e8890858e8aba4ca73062a657b6078f0c94d6f3a041100026ed005183e617c2b6e7076c06cb55d96c9edb296b40653bbb495cf42d036a6a62364b256ea
   languageName: node
   linkType: hard
 
