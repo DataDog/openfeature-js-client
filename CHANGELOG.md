@@ -6,6 +6,12 @@
 
 ---
 
+## v1.0.0
+
+**Behavior Changes:**
+
+- Default enableExposureLogging to true ([#152](https://github.com/DataDog/openfeature-js-client/pull/152)) [BROWSER]
+
 ## v0.3.3
 
 **Internal Changes:**
