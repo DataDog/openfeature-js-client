@@ -66,7 +66,8 @@ export class DatadogProvider implements Provider {
     }
 
     // Add proper exposure logging hook (creates batch internally)
-    if (options.enableExposureLogging && this.configuration) {
+    const isExposureLoggingEnabled = options.enableExposureLogging ?? true
+    if (isExposureLoggingEnabled && this.configuration) {
       this.exposureCache = assignmentCacheFactory({
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
