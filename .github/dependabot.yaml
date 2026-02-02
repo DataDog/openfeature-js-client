@@ -1,11 +1,14 @@
 # Dependabot configuration for openfeature-js-client monorepo
 # Documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
-# Strategy: Each dependency update creates a separate PR for granular control and review.
+# Strategy:
+# - Single root config leverages yarn workspaces to update all packages together
+# - Grouped updates reduce PR noise (dev deps monthly, prod deps weekly)
+# - Dev dependency minor/patch updates are auto-merged via GitHub Actions
 
 version: 2
 updates:
-  # Root workspace dependencies
+  # NPM dependencies (yarn workspaces handles the monorepo)
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
@@ -13,94 +16,24 @@ updates:
       day: 'monday'
       time: '09:00'
       timezone: 'America/New_York'
-    open-pull-requests-limit: 10
+    groups:
+      # Dev dependencies grouped together, monthly updates
+      dev-dependencies:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+      # Production minor/patch grouped together
+      production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
     labels:
       - 'dependencies'
-      - 'npm'
-      - 'root'
     commit-message:
-      prefix: '👷 chore'
-      prefix-development: '👷 chore'
-      include: 'scope'
-    reviewers:
-      - 'CODEOWNERS'
-
-  # Browser package
-  - package-ecosystem: 'npm'
-    directory: '/packages/browser'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '09:00'
-      timezone: 'America/New_York'
-    open-pull-requests-limit: 10
-    labels:
-      - 'dependencies'
-      - 'npm'
-      - 'browser'
-    commit-message:
-      prefix: '👷 chore(browser)'
-      prefix-development: '👷 chore(browser)'
-      include: 'scope'
-    reviewers:
-      - 'CODEOWNERS'
-
-  # Core package
-  - package-ecosystem: 'npm'
-    directory: '/packages/core'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '09:00'
-      timezone: 'America/New_York'
-    open-pull-requests-limit: 10
-    labels:
-      - 'dependencies'
-      - 'npm'
-      - 'core'
-    commit-message:
-      prefix: '👷 chore(core)'
-      prefix-development: '👷 chore(core)'
-      include: 'scope'
-    reviewers:
-      - 'CODEOWNERS'
-
-  # Node server package
-  - package-ecosystem: 'npm'
-    directory: '/packages/node-server'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '09:00'
-      timezone: 'America/New_York'
-    open-pull-requests-limit: 10
-    labels:
-      - 'dependencies'
-      - 'npm'
-      - 'node-server'
-    commit-message:
-      prefix: '👷 chore(node-server)'
-      prefix-development: '👷 chore(node-server)'
-      include: 'scope'
-    reviewers:
-      - 'CODEOWNERS'
-
-  # Test app
-  - package-ecosystem: 'npm'
-    directory: '/test-app'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '09:00'
-      timezone: 'America/New_York'
-    open-pull-requests-limit: 10
-    labels:
-      - 'dependencies'
-      - 'npm'
-      - 'test-app'
-    commit-message:
-      prefix: '👷 chore(test-app)'
-      prefix-development: '👷 chore(test-app)'
+      prefix: '👷 chore(deps)'
+      prefix-development: '👷 chore(deps-dev)'
       include: 'scope'
 
   # GitHub Actions dependencies
@@ -111,10 +44,14 @@ updates:
       day: 'monday'
       time: '09:00'
       timezone: 'America/New_York'
-    open-pull-requests-limit: 10
+    groups:
+      # Group all GHA updates together
+      github-actions:
+        patterns:
+          - '*'
     labels:
       - 'dependencies'
       - 'github-actions'
     commit-message:
-      prefix: '👷 ci'
+      prefix: '👷 ci(deps)'
       include: 'scope'
