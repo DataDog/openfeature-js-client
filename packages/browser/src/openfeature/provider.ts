@@ -23,8 +23,9 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { evaluate } from '../evaluation'
-import { createExposureLoggingHook, createRumTrackingHook } from './exposures'
+import { createExposureLoggingHook } from './exposures'
 import { createFlagEvaluationTrackingHook } from './flagEvaluations'
+import { createRumTrackingHook } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -54,9 +55,9 @@ export class DatadogProvider implements Provider {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
 
-    // Add RUM flag tracking hook (DEPRECATED)
-    if (options.rum?.ddFlaggingTracking) {
-      this.hooks.push(createRumTrackingHook(options.rum.sdk))
+    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (isRumFeatureFlagTrackingEnabled) {
+      this.hooks.push(createRumTrackingHook())
     }
 
     // Add flag evaluation tracking hook

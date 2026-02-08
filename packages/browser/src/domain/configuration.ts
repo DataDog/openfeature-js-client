@@ -48,6 +48,12 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   enableFlagEvaluationTracking?: boolean
 
   /**
+   * Whether to include feature flag assignment details in RUM events (default: true)
+   * See: https://docs.datadoghq.com/real_user_monitoring/feature_flag_tracking/
+   */
+  enableRumFeatureFlagTracking?: boolean
+
+  /**
    * Flag evaluation tracking interval in milliseconds (default: 10000ms)
    */
   flagEvaluationTrackingInterval?: number
