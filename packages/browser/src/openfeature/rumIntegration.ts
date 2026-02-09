@@ -9,6 +9,9 @@ export interface DDRum {
 export function createRumTrackingHook(): Hook {
   return {
     after: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      if (details.variant == null) {
+        return
+      }
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
     },

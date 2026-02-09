@@ -48,6 +48,17 @@ describe('createRumTrackingHook', () => {
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('flag-2', 'variant-key-b')
   })
 
+  it('should not call addFeatureFlagEvaluation when variant is null', () => {
+    const mockAddFeatureFlagEvaluation = jest.fn()
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    globalObject.DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
+
+    const hook = createRumTrackingHook()
+    hook.after!(mockHookContext, { flagKey: 'test-flag', variant: undefined, value: 'default' } as EvaluationDetails<FlagValue>)
+
+    expect(mockAddFeatureFlagEvaluation).not.toHaveBeenCalled()
+  })
+
   it('should be a no-op when DD_RUM exists but lacks addFeatureFlagEvaluation', () => {
     const globalObject = getGlobalObject<{ DD_RUM?: Partial<DDRum> }>()
     globalObject.DD_RUM = {} as DDRum
