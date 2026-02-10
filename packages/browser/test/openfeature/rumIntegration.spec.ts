@@ -7,7 +7,7 @@ describe('createRumTrackingHook', () => {
   const mockHookContext = {} as HookContext
 
   const makeDetails = (flagKey: string, variantKey: string, variantValue: FlagValue): EvaluationDetails<FlagValue> =>
-    ({ flagKey, variant: variantKey, value: variantValue } as EvaluationDetails<FlagValue>)
+    ({ flagKey, variant: variantKey, value: variantValue }) as EvaluationDetails<FlagValue>
 
   afterEach(() => {
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
@@ -54,7 +54,11 @@ describe('createRumTrackingHook', () => {
     globalObject.DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
 
     const hook = createRumTrackingHook()
-    hook.after!(mockHookContext, { flagKey: 'test-flag', variant: undefined, value: 'default' } as EvaluationDetails<FlagValue>)
+    hook.after!(mockHookContext, {
+      flagKey: 'test-flag',
+      variant: undefined,
+      value: 'default',
+    } as EvaluationDetails<FlagValue>)
 
     expect(mockAddFeatureFlagEvaluation).not.toHaveBeenCalled()
   })
