@@ -4,19 +4,6 @@ import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimest
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
-import type { DDRum } from './rumIntegration'
-
-/**
- * Create hook for RUM flag tracking
- * @deprecated
- */
-export function createRumTrackingHook(rum: DDRum): Hook {
-  return {
-    after: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      rum.addFeatureFlagEvaluation(details.flagKey, details.value)
-    },
-  }
-}
 
 /**
  * Create hook for exposure logging.
