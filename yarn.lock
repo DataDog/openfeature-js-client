@@ -557,6 +557,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@datadog/flagging-core@npm:0.3.3":
+  version: 0.3.3
+  resolution: "@datadog/flagging-core@npm:0.3.3"
+  dependencies:
+    spark-md5: "npm:^3.0.2"
+  checksum: 10c0/fb8500a90ca89c2125f6500a029c7df9ee23c831837aa4771d8898496908c9c250094eb36459c45badb5f1ca49a0da242b09a4f7cb9705b707811f2088cdc9c3
+  languageName: node
+  linkType: hard
+
 "@datadog/flagging-core@npm:1.0.0, @datadog/flagging-core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
@@ -579,7 +588,7 @@ __metadata:
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:^6.19.0"
-    "@datadog/flagging-core": "npm:1.0.0"
+    "@datadog/flagging-core": "npm:0.3.3"
     "@openfeature/core": "npm:^1.8.1"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"
