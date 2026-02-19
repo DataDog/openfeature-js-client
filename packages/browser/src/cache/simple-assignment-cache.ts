@@ -32,7 +32,9 @@ export default class SimpleAssignmentCache implements BulkWriteAssignmentCache, 
     const { store } = this
     // it's important to call store.set() directly here because we want to set the raw entries into the cache, bypassing
     // the AbstractAssignmentCache logic, which takes an AssignmentCacheKey instead.
-    entries.forEach(([key, value]) => store.set(key, value))
+    entries.forEach(([key, value]) => {
+      store.set(key, value)
+    })
   }
 
   getEntries(): Promise<[string, string][]> {

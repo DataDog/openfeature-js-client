@@ -33,7 +33,9 @@ describe('AssignmentCacheFactory', () => {
 
   beforeEach(() => {
     window.localStorage.clear()
-    Object.keys(fakeStore).forEach((key) => delete fakeStore[key])
+    Object.keys(fakeStore).forEach((key) => {
+      delete fakeStore[key]
+    })
   })
 
   it('should create a hybrid cache if chrome storage is available', () => {
