@@ -70,7 +70,7 @@ export abstract class AbstractAssignmentCache<T extends Map<string, string>> imp
    * Returns an array with all {@link AssignmentCacheEntry} entries in the cache as an array of
    * {@link string}s.
    */
-  entries(): IterableIterator<[string, string]> {
+  entries() {
     return this.delegate.entries()
   }
 

@@ -589,7 +589,7 @@ __metadata:
   dependencies:
     "@datadog/browser-core": "npm:^6.19.0"
     "@datadog/flagging-core": "npm:0.3.3"
-    "@openfeature/core": "npm:^1.8.1"
+    "@openfeature/core": "npm:^1.9.2"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"
     "@types/jest": "npm:^30.0.0"
@@ -603,7 +603,7 @@ __metadata:
     ts-loader: "npm:^9.5.2"
     typescript: "npm:^5.5.0"
   peerDependencies:
-    "@openfeature/core": ^1.8.0
+    "@openfeature/core": ^1.9.2
     "@openfeature/web-sdk": ^1.5.0
   languageName: unknown
   linkType: soft
@@ -1962,7 +1962,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/core@npm:1.9.2":
+"@openfeature/core@npm:1.9.2, @openfeature/core@npm:^1.9.2":
   version: 1.9.2
   resolution: "@openfeature/core@npm:1.9.2"
   checksum: 10c0/a0600c16f9c9e8721964643d2b0ccf5501767eee34908eec1a2a4d8fdb47c5f8224bdc254067a18d069bf7d57d9bdbc7b9cdf50cb1cb8d253778c43c11ed760b
