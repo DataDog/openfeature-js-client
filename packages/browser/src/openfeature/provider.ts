@@ -16,7 +16,8 @@ import {
   ProviderStatus,
 } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable } from '../cache/helpers'
+import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
+import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -47,6 +48,7 @@ export class DatadogProvider implements Provider {
   private flagsConfiguration: FlagsConfiguration = {}
   private configuration?: FlaggingConfiguration
   private exposureCache: AssignmentCache | undefined
+  private flagsCache: IndexedDBFlagsCache | undefined
 
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -76,6 +78,10 @@ export class DatadogProvider implements Provider {
       this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
     }
 
+    if (hasIndexedDB()) {
+      this.flagsCache = new IndexedDBFlagsCache()
+    }
+
     if (options.initialFlagsConfiguration) {
       this.flagsConfiguration = options.initialFlagsConfiguration
       this.status = ProviderStatus.READY
@@ -89,8 +95,26 @@ export class DatadogProvider implements Provider {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
+
+    // Load cached flags from IndexedDB so evaluations work during network fetch
+    const cachedConfig = await this.flagsCache?.get()
+    if (cachedConfig?.precomputed) {
+      this.flagsConfiguration = cachedConfig
+    }
+
     await this.exposureCache?.init()
-    this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+
+    try {
+      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+      await this.flagsCache?.set(this.flagsConfiguration)
+    } catch (error) {
+      // If we have cached flags (from IndexedDB or initialFlagsConfiguration), use them
+      if (this.flagsConfiguration?.precomputed) {
+        this.status = ProviderStatus.READY
+        return
+      }
+      throw error
+    }
     this.status = ProviderStatus.READY
   }
 
@@ -101,6 +125,7 @@ export class DatadogProvider implements Provider {
     this.status = ProviderStatus.RECONCILING
     try {
       this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+      await this.flagsCache?.set(this.flagsConfiguration)
       this.status = ProviderStatus.READY
     } catch (error) {
       this.events.emit(ProviderEvents.Error, { error })
