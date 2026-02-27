@@ -52,9 +52,10 @@ export class IndexedDBFlagsCache {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readwrite')
           const store = tx.objectStore(STORE_NAME)
-          const request = store.put(serialized, CONFIG_KEY)
-          request.onsuccess = () => resolve()
-          request.onerror = () => reject(request.error)
+          store.put(serialized, CONFIG_KEY)
+          tx.oncomplete = () => resolve()
+          tx.onerror = () => reject(tx.error)
+          tx.onabort = () => reject(tx.error)
         })
       } finally {
         db.close()
@@ -71,9 +72,10 @@ export class IndexedDBFlagsCache {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readwrite')
           const store = tx.objectStore(STORE_NAME)
-          const request = store.delete(CONFIG_KEY)
-          request.onsuccess = () => resolve()
-          request.onerror = () => reject(request.error)
+          store.delete(CONFIG_KEY)
+          tx.oncomplete = () => resolve()
+          tx.onerror = () => reject(tx.error)
+          tx.onabort = () => reject(tx.error)
         })
       } finally {
         db.close()
