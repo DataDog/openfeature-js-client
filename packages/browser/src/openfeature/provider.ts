@@ -99,34 +99,35 @@ export class DatadogProvider implements Provider {
       throw new Error('Invalid configuration')
     }
 
-    // Load cached flags from IndexedDB so evaluations work during network fetch,
-    // but only when no initialFlagsConfiguration was provided and the cached
-    // targetingKey matches the current context (prevents cross-user leakage on shared computers).
+    // Load cached flags from IndexedDB (keyed by clientToken + context) so
+    // evaluations can work while the network fetch is in flight. Only when
+    // no initialFlagsConfiguration was provided.
     if (!this.hasInitialFlagsConfiguration) {
-      const cachedConfig = await this.flagsCache?.get()
+      const cachedConfig = await this.flagsCache?.get(context)
       if (cachedConfig?.precomputed) {
-        const cachedKey = cachedConfig.precomputed.context?.targetingKey
-        const currentKey = context.targetingKey
-        if (cachedKey === currentKey) {
-          this.flagsConfiguration = cachedConfig
-        }
+        this.flagsConfiguration = cachedConfig
       }
     }
 
-    await this.exposureCache?.init()
+    // Exposure cache init can run concurrently with the fetch
+    const exposureCacheReady = this.exposureCache?.init()
 
     try {
       this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      await this.flagsCache?.set(this.flagsConfiguration)
+      // Fire-and-forget: cache write should not block readiness
+      this.flagsCache?.set(this.flagsConfiguration, context)
     } catch (error) {
       // If we have cached flags (from IndexedDB or initialFlagsConfiguration), use them
       if (this.flagsConfiguration?.precomputed) {
-        this.status = ProviderStatus.READY
+        this.status = ProviderStatus.STALE
+        this.events.emit(ProviderEvents.Stale)
+        await exposureCacheReady
         return
       }
       throw error
     }
     this.status = ProviderStatus.READY
+    await exposureCacheReady
   }
 
   async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -136,7 +137,8 @@ export class DatadogProvider implements Provider {
     this.status = ProviderStatus.RECONCILING
     try {
       this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      await this.flagsCache?.set(this.flagsConfiguration)
+      // Fire-and-forget: cache write should not block readiness
+      this.flagsCache?.set(this.flagsConfiguration, context)
       this.status = ProviderStatus.READY
     } catch (error) {
       this.events.emit(ProviderEvents.Error, { error })

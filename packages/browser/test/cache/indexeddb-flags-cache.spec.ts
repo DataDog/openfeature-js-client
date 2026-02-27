@@ -32,6 +32,8 @@ const testConfig: FlagsConfiguration = {
   },
 }
 
+const context = { targetingKey: 'user-123' }
+
 describe('IndexedDBFlagsCache', () => {
   let cache: IndexedDBFlagsCache
 
@@ -43,7 +45,7 @@ describe('IndexedDBFlagsCache', () => {
 
   describe('get', () => {
     it('should return undefined when DB is empty', async () => {
-      const result = await cache.get()
+      const result = await cache.get(context)
       expect(result).toBeUndefined()
     })
 
@@ -52,45 +54,45 @@ describe('IndexedDBFlagsCache', () => {
       // @ts-expect-error — simulating unavailable IndexedDB
       delete globalThis.indexedDB
       try {
-        const result = await cache.get()
+        const result = await cache.get(context)
         expect(result).toBeUndefined()
       } finally {
         globalThis.indexedDB = originalIndexedDB
       }
     })
 
-    it('should return undefined for corrupt data', async () => {
-      // Write corrupt data directly
+    it('should return undefined for non-object data', async () => {
+      // Write a string directly — not a FlagsConfiguration object
       const db = await openTestDB()
       const tx = db.transaction('configurations', 'readwrite')
-      tx.objectStore('configurations').put('not valid json {{{', 'flags-config')
+      tx.objectStore('configurations').put('not an object', 'flags-config')
       await transactionComplete(tx)
       db.close()
 
-      const result = await cache.get()
+      const result = await cache.get(context)
       expect(result).toBeUndefined()
     })
 
     it('should return undefined for data without precomputed field', async () => {
-      // Write a valid JSON blob that has no precomputed field
+      // Write an object that has no precomputed field
       const db = await openTestDB()
       const tx = db.transaction('configurations', 'readwrite')
-      tx.objectStore('configurations').put(JSON.stringify({ version: 1 }), 'flags-config')
+      tx.objectStore('configurations').put({ version: 1 }, 'flags-config')
       await transactionComplete(tx)
       db.close()
 
-      const result = await cache.get()
+      const result = await cache.get(context)
       expect(result).toBeUndefined()
     })
   })
 
   describe('set', () => {
-    it('should not throw when IndexedDB is unavailable', async () => {
+    it('should not throw when IndexedDB is unavailable', () => {
       const originalIndexedDB = globalThis.indexedDB
       // @ts-expect-error — simulating unavailable IndexedDB
       delete globalThis.indexedDB
       try {
-        await expect(cache.set(testConfig)).resolves.toBeUndefined()
+        expect(() => cache.set(testConfig, context)).not.toThrow()
       } finally {
         globalThis.indexedDB = originalIndexedDB
       }
@@ -99,8 +101,9 @@ describe('IndexedDBFlagsCache', () => {
 
   describe('round-trip', () => {
     it('should persist and retrieve a FlagsConfiguration', async () => {
-      await cache.set(testConfig)
-      const result = await cache.get()
+      cache.set(testConfig, context)
+      await flushAsync()
+      const result = await cache.get(context)
 
       expect(result).toBeDefined()
       expect(result!.precomputed).toBeDefined()
@@ -110,7 +113,8 @@ describe('IndexedDBFlagsCache', () => {
     })
 
     it('should overwrite existing data on second set', async () => {
-      await cache.set(testConfig)
+      cache.set(testConfig, context)
+      await flushAsync()
 
       const updatedConfig: FlagsConfiguration = {
         precomputed: {
@@ -135,36 +139,12 @@ describe('IndexedDBFlagsCache', () => {
           fetchedAt: 9999999999,
         },
       }
-      await cache.set(updatedConfig)
+      cache.set(updatedConfig, context)
+      await flushAsync()
 
-      const result = await cache.get()
+      const result = await cache.get(context)
       expect(result!.precomputed!.response.data.attributes.flags['updated-flag'].variationValue).toBe('hello')
       expect(result!.precomputed!.response.data.attributes.flags['test-flag']).toBeUndefined()
-    })
-  })
-
-  describe('clear', () => {
-    it('should remove stored data', async () => {
-      await cache.set(testConfig)
-      expect(await cache.get()).toBeDefined()
-
-      await cache.clear()
-      expect(await cache.get()).toBeUndefined()
-    })
-
-    it('should not throw when DB is already empty', async () => {
-      await expect(cache.clear()).resolves.toBeUndefined()
-    })
-
-    it('should not throw when IndexedDB is unavailable', async () => {
-      const originalIndexedDB = globalThis.indexedDB
-      // @ts-expect-error — simulating unavailable IndexedDB
-      delete globalThis.indexedDB
-      try {
-        await expect(cache.clear()).resolves.toBeUndefined()
-      } finally {
-        globalThis.indexedDB = originalIndexedDB
-      }
     })
   })
 
@@ -173,17 +153,74 @@ describe('IndexedDBFlagsCache', () => {
       const cacheA = new IndexedDBFlagsCache('token-aaa')
       const cacheB = new IndexedDBFlagsCache('token-bbb')
 
-      await cacheA.set(testConfig)
+      cacheA.set(testConfig, context)
+      await flushAsync()
 
-      const resultA = await cacheA.get()
-      const resultB = await cacheB.get()
+      const resultA = await cacheA.get(context)
+      const resultB = await cacheB.get(context)
 
       expect(resultA).toBeDefined()
       expect(resultA!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
       expect(resultB).toBeUndefined()
     })
   })
+
+  describe('context isolation', () => {
+    it('should not share data between different contexts', async () => {
+      const contextA = { targetingKey: 'user-a' }
+      const contextB = { targetingKey: 'user-b' }
+
+      cache.set(testConfig, contextA)
+      await flushAsync()
+
+      expect(await cache.get(contextA)).toBeDefined()
+      expect(await cache.get(contextB)).toBeUndefined()
+    })
+
+    it('should store separate configs per context', async () => {
+      const contextA = { targetingKey: 'user-a' }
+      const contextB = { targetingKey: 'user-b' }
+
+      const configB: FlagsConfiguration = {
+        precomputed: {
+          response: {
+            data: {
+              attributes: {
+                createdAt: '999',
+                flags: {
+                  'other-flag': {
+                    allocationKey: 'alloc-b',
+                    variationKey: 'var-b',
+                    variationType: 'string',
+                    variationValue: 'b-value',
+                    reason: 'DEFAULT',
+                    doLog: false,
+                    extraLogging: {},
+                  },
+                },
+              },
+            },
+          },
+          fetchedAt: 999,
+        },
+      }
+
+      cache.set(testConfig, contextA)
+      cache.set(configB, contextB)
+      await flushAsync()
+
+      const resultA = await cache.get(contextA)
+      const resultB = await cache.get(contextB)
+
+      expect(resultA!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
+      expect(resultB!.precomputed!.response.data.attributes.flags['other-flag'].variationValue).toBe('b-value')
+    })
+  })
 })
+
+function flushAsync(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50))
+}
 
 // Helpers to directly open the test DB for setup/verification
 function openTestDB(): Promise<IDBDatabase> {
