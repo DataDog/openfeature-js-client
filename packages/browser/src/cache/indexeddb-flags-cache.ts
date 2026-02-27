@@ -22,7 +22,9 @@ function openDB(): Promise<IDBDatabase> {
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
   const tokenSuffix = buildStorageKeySuffix(clientToken)
-  const contextHash = getMD5Hash(JSON.stringify(context)).slice(0, 16)
+  // Sort keys so {a:1, b:2} and {b:2, a:1} produce the same hash
+  const sortedContext = JSON.stringify(context, Object.keys(context).sort())
+  const contextHash = getMD5Hash(sortedContext)
   return `flags-config-${tokenSuffix}-${contextHash}`
 }
 

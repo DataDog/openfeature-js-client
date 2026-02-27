@@ -99,17 +99,10 @@ export class DatadogProvider implements Provider {
       throw new Error('Invalid configuration')
     }
 
-    // Load cached flags from IndexedDB (keyed by clientToken + context) so
-    // evaluations can work while the network fetch is in flight. Only when
-    // no initialFlagsConfiguration was provided.
-    if (!this.hasInitialFlagsConfiguration) {
-      const cachedConfig = await this.flagsCache?.get(context)
-      if (cachedConfig?.precomputed) {
-        this.flagsConfiguration = cachedConfig
-      }
-    }
-
-    // Exposure cache init can run concurrently with the fetch
+    // Start all async work concurrently — cache read should not delay the fetch.
+    const cachedConfigPromise = !this.hasInitialFlagsConfiguration
+      ? this.flagsCache?.get(context)
+      : undefined
     const exposureCacheReady = this.exposureCache?.init()
 
     try {
@@ -117,7 +110,11 @@ export class DatadogProvider implements Provider {
       // Fire-and-forget: cache write should not block readiness
       this.flagsCache?.set(this.flagsConfiguration, context)
     } catch (error) {
-      // If we have cached flags (from IndexedDB or initialFlagsConfiguration), use them
+      // Network failed — try to serve from cache or initialFlagsConfiguration
+      const cachedConfig = await cachedConfigPromise
+      if (cachedConfig?.precomputed) {
+        this.flagsConfiguration = cachedConfig
+      }
       if (this.flagsConfiguration?.precomputed) {
         this.status = ProviderStatus.STALE
         this.events.emit(ProviderEvents.Stale)

@@ -215,6 +215,19 @@ describe('IndexedDBFlagsCache', () => {
       expect(resultA!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
       expect(resultB!.precomputed!.response.data.attributes.flags['other-flag'].variationValue).toBe('b-value')
     })
+
+    it('should treat contexts with reordered keys as the same', async () => {
+      const contextAB = { targetingKey: 'user-1', role: 'admin' }
+      const contextBA = { role: 'admin', targetingKey: 'user-1' }
+
+      cache.set(testConfig, contextAB)
+      await flushAsync()
+
+      // Reading with reordered keys should still hit the same cache entry
+      const result = await cache.get(contextBA)
+      expect(result).toBeDefined()
+      expect(result!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
+    })
   })
 })
 
