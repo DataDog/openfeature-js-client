@@ -100,9 +100,7 @@ export class DatadogProvider implements Provider {
     }
 
     // Start all async work concurrently — cache read should not delay the fetch.
-    const cachedConfigPromise = !this.hasInitialFlagsConfiguration
-      ? this.flagsCache?.get(context)
-      : undefined
+    const cachedConfigPromise = !this.hasInitialFlagsConfiguration ? this.flagsCache?.get(context) : undefined
     const exposureCacheReady = this.exposureCache?.init()
 
     try {
