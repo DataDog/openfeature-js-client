@@ -1,9 +1,9 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { buildStorageKeySuffix } from '@datadog/flagging-core'
 
 const DB_NAME = 'dd-flagging'
 const DB_VERSION = 1
 const STORE_NAME = 'configurations'
-const CONFIG_KEY = 'flags-config'
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -20,6 +20,12 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 export class IndexedDBFlagsCache {
+  private readonly configKey: string
+
+  constructor(clientToken: string) {
+    this.configKey = `flags-config-${buildStorageKeySuffix(clientToken)}`
+  }
+
   async get(): Promise<FlagsConfiguration | undefined> {
     try {
       const db = await openDB()
@@ -27,7 +33,7 @@ export class IndexedDBFlagsCache {
         const value = await new Promise<string | undefined>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readonly')
           const store = tx.objectStore(STORE_NAME)
-          const request = store.get(CONFIG_KEY)
+          const request = store.get(this.configKey)
           request.onsuccess = () => resolve(request.result as string | undefined)
           request.onerror = () => reject(request.error)
         })
@@ -52,7 +58,7 @@ export class IndexedDBFlagsCache {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readwrite')
           const store = tx.objectStore(STORE_NAME)
-          store.put(serialized, CONFIG_KEY)
+          store.put(serialized, this.configKey)
           tx.oncomplete = () => resolve()
           tx.onerror = () => reject(tx.error)
           tx.onabort = () => reject(tx.error)
@@ -72,7 +78,7 @@ export class IndexedDBFlagsCache {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readwrite')
           const store = tx.objectStore(STORE_NAME)
-          store.delete(CONFIG_KEY)
+          store.delete(this.configKey)
           tx.oncomplete = () => resolve()
           tx.onerror = () => reject(tx.error)
           tx.onabort = () => reject(tx.error)

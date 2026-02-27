@@ -38,7 +38,7 @@ describe('IndexedDBFlagsCache', () => {
   beforeEach(() => {
     // Reset IndexedDB between tests
     globalThis.indexedDB = new IDBFactory()
-    cache = new IndexedDBFlagsCache()
+    cache = new IndexedDBFlagsCache('test-client-token')
   })
 
   describe('get', () => {
@@ -165,6 +165,22 @@ describe('IndexedDBFlagsCache', () => {
       } finally {
         globalThis.indexedDB = originalIndexedDB
       }
+    })
+  })
+
+  describe('client token isolation', () => {
+    it('should not share data between caches with different client tokens', async () => {
+      const cacheA = new IndexedDBFlagsCache('token-aaa')
+      const cacheB = new IndexedDBFlagsCache('token-bbb')
+
+      await cacheA.set(testConfig)
+
+      const resultA = await cacheA.get()
+      const resultB = await cacheB.get()
+
+      expect(resultA).toBeDefined()
+      expect(resultA!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
+      expect(resultB).toBeUndefined()
     })
   })
 })

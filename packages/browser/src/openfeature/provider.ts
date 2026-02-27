@@ -49,6 +49,7 @@ export class DatadogProvider implements Provider {
   private configuration?: FlaggingConfiguration
   private exposureCache: AssignmentCache | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
+  private readonly hasInitialFlagsConfiguration: boolean
 
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -79,8 +80,10 @@ export class DatadogProvider implements Provider {
     }
 
     if (hasIndexedDB()) {
-      this.flagsCache = new IndexedDBFlagsCache()
+      this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
+
+    this.hasInitialFlagsConfiguration = !!options.initialFlagsConfiguration
 
     if (options.initialFlagsConfiguration) {
       this.flagsConfiguration = options.initialFlagsConfiguration
@@ -96,10 +99,18 @@ export class DatadogProvider implements Provider {
       throw new Error('Invalid configuration')
     }
 
-    // Load cached flags from IndexedDB so evaluations work during network fetch
-    const cachedConfig = await this.flagsCache?.get()
-    if (cachedConfig?.precomputed) {
-      this.flagsConfiguration = cachedConfig
+    // Load cached flags from IndexedDB so evaluations work during network fetch,
+    // but only when no initialFlagsConfiguration was provided and the cached
+    // targetingKey matches the current context (prevents cross-user leakage on shared computers).
+    if (!this.hasInitialFlagsConfiguration) {
+      const cachedConfig = await this.flagsCache?.get()
+      if (cachedConfig?.precomputed) {
+        const cachedKey = cachedConfig.precomputed.context?.targetingKey
+        const currentKey = context.targetingKey
+        if (cachedKey === currentKey) {
+          this.flagsConfiguration = cachedConfig
+        }
+      }
     }
 
     await this.exposureCache?.init()

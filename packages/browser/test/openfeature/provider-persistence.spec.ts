@@ -59,7 +59,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
       await provider.initialize({ targetingKey: 'user-1' })
 
       // Verify flags were persisted
-      const cache = new IndexedDBFlagsCache()
+      const cache = new IndexedDBFlagsCache(options.clientToken)
       const stored = await cache.get()
       expect(stored).toBeDefined()
       expect(stored!.precomputed!.response.data.attributes.flags['string-flag'].variationValue).toBe('red')
@@ -70,7 +70,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
       await provider.initialize({ targetingKey: 'user-1' })
 
       // Clear the DB to isolate the onContextChange persistence
-      const cache = new IndexedDBFlagsCache()
+      const cache = new IndexedDBFlagsCache(options.clientToken)
       await cache.clear()
       expect(await cache.get()).toBeUndefined()
 
@@ -92,13 +92,13 @@ describe('DatadogProvider IndexedDB persistence', () => {
           fetchedAt: 1731939819456,
         },
       }
-      const cache = new IndexedDBFlagsCache()
+      const cache = new IndexedDBFlagsCache(options.clientToken)
       await cache.set(seedConfig)
 
-      // Now create a provider with a failing fetch
+      // Now create a provider with a failing fetch (matching targetingKey)
       global.fetch = failingFetchMock()
       const provider = new DatadogProvider(options)
-      await provider.initialize({ targetingKey: 'new-user' })
+      await provider.initialize({ targetingKey: 'cached-user' })
 
       // Provider should be READY (not errored) thanks to cached data
       expect(provider.status).toBe(ProviderStatus.READY)
@@ -143,7 +143,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
           fetchedAt: 0,
         },
       }
-      const cache = new IndexedDBFlagsCache()
+      const cache = new IndexedDBFlagsCache(options.clientToken)
       await cache.set(staleConfig)
 
       // Create provider with working network
@@ -154,6 +154,99 @@ describe('DatadogProvider IndexedDB persistence', () => {
       const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
       const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
       expect(result.value).toBe('red') // from network, not 'stale-value'
+    })
+  })
+
+  describe('cache guards', () => {
+    it('should NOT use cached flags when initialFlagsConfiguration is provided', async () => {
+      // Seed IndexedDB with cached data
+      const seedConfig: FlagsConfiguration = {
+        precomputed: {
+          response: {
+            data: {
+              attributes: {
+                createdAt: '0',
+                flags: {
+                  'string-flag': {
+                    allocationKey: 'cached',
+                    variationKey: 'cached',
+                    variationType: 'string',
+                    variationValue: 'cached-value',
+                    reason: 'DEFAULT',
+                    doLog: false,
+                    extraLogging: {},
+                  },
+                },
+              },
+            },
+          },
+          context: { targetingKey: 'user-1' },
+          fetchedAt: 0,
+        },
+      }
+      const cache = new IndexedDBFlagsCache(options.clientToken)
+      await cache.set(seedConfig)
+
+      // Provider with initialFlagsConfiguration should NOT use cached flags
+      global.fetch = failingFetchMock()
+      const initialConfig: FlagsConfiguration = {
+        precomputed: {
+          response: precomputedResponse as any,
+          context: { targetingKey: 'user-1' },
+          fetchedAt: Date.now(),
+        },
+      }
+      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
+      await provider.initialize({ targetingKey: 'user-1' })
+
+      expect(provider.status).toBe(ProviderStatus.READY)
+      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      // Should use initialFlagsConfiguration (has 'red'), not cached ('cached-value')
+      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
+      expect(result.value).toBe('red')
+    })
+
+    it('should NOT use cached flags when targetingKey does not match', async () => {
+      // Seed IndexedDB with cached data for user-1
+      const seedConfig: FlagsConfiguration = {
+        precomputed: {
+          response: precomputedResponse as any,
+          context: { targetingKey: 'user-1' },
+          fetchedAt: 1731939819456,
+        },
+      }
+      const cache = new IndexedDBFlagsCache(options.clientToken)
+      await cache.set(seedConfig)
+
+      // Initialize with a DIFFERENT targetingKey — cache should be skipped
+      global.fetch = failingFetchMock()
+      const provider = new DatadogProvider(options)
+
+      // Should throw because cache is skipped and network fails
+      await expect(provider.initialize({ targetingKey: 'user-2' })).rejects.toThrow('Network error')
+    })
+
+    it('should use cached flags when targetingKey matches and no initialFlagsConfiguration', async () => {
+      // Seed IndexedDB with cached data for user-1
+      const seedConfig: FlagsConfiguration = {
+        precomputed: {
+          response: precomputedResponse as any,
+          context: { targetingKey: 'user-1' },
+          fetchedAt: 1731939819456,
+        },
+      }
+      const cache = new IndexedDBFlagsCache(options.clientToken)
+      await cache.set(seedConfig)
+
+      // Initialize with matching targetingKey — cache should be used
+      global.fetch = failingFetchMock()
+      const provider = new DatadogProvider(options)
+      await provider.initialize({ targetingKey: 'user-1' })
+
+      expect(provider.status).toBe(ProviderStatus.READY)
+      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
+      expect(result.value).toBe('red')
     })
   })
 
