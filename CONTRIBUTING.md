@@ -401,12 +401,12 @@ This overwrites `LICENSE-3rdparty.csv` with the latest data. Commit the result.
 ### Validating licenses locally
 
 ```bash
-export GITHUB_TOKEN=$(gh auth token)
 yarn licenses:validate
 ```
 
-This regenerates the file into a temp copy and diffs it against the committed version.
-If they differ, you need to run `yarn licenses:generate` and commit the output.
+This checks that every npm package in `yarn.lock` has a corresponding entry in the CSV.
+No external tools or tokens are needed — it runs in CI the same way. If it fails, run
+`yarn licenses:generate` and commit the result.
 
 ## Code Style
 
