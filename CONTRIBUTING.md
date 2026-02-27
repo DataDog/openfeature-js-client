@@ -365,12 +365,12 @@ Re-generate the file whenever you add, remove, or update a dependency in any `pa
 
 ### Prerequisites
 
-| Requirement | Details |
-|---|---|
-| **Python 3.11.12** | `pyenv install 3.11.12 && pyenv local 3.11.12` |
-| **Go 1.23+** | Required by `dd-license-attribution` |
+| Requirement                | Details                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Python 3.11.12**         | `pyenv install 3.11.12 && pyenv local 3.11.12`                                                   |
+| **Go 1.23+**               | Required by `dd-license-attribution`                                                             |
 | **dd-license-attribution** | `pip install dd-license-attribution` ([repo](https://github.com/DataDog/dd-license-attribution)) |
-| **GITHUB_TOKEN** | See below |
+| **GITHUB_TOKEN**           | See below                                                                                        |
 
 For Datadog employees, see the internal [dd-license-attribution guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights).
 
