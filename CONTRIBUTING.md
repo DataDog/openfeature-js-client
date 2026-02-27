@@ -370,14 +370,29 @@ Re-generate the file whenever you add, remove, or update a dependency in any `pa
 | **Python 3.11.12** | `pyenv install 3.11.12 && pyenv local 3.11.12` |
 | **Go 1.23+** | Required by `dd-license-attribution` |
 | **dd-license-attribution** | `pip install dd-license-attribution` ([repo](https://github.com/DataDog/dd-license-attribution)) |
-| **GITHUB_TOKEN** | A fine-grained PAT with read access to **Contents** and **Metadata** ([create one](https://github.com/settings/personal-access-tokens)) |
+| **GITHUB_TOKEN** | See below |
 
 For Datadog employees, see the internal [dd-license-attribution guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights).
+
+### Setting GITHUB_TOKEN
+
+If you already use the [GitHub CLI](https://cli.github.com/), the easiest option is:
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+Otherwise, create a fine-grained personal access token with read access to **Contents**
+and **Metadata** at https://github.com/settings/personal-access-tokens and export it:
+
+```bash
+export GITHUB_TOKEN="github_pat_..."
+```
 
 ### Generating / updating licenses
 
 ```bash
-export GITHUB_TOKEN="ghp_..."
+export GITHUB_TOKEN=$(gh auth token)
 yarn licenses:generate
 ```
 
@@ -386,7 +401,7 @@ This overwrites `LICENSE-3rdparty.csv` with the latest data. Commit the result.
 ### Validating licenses locally
 
 ```bash
-export GITHUB_TOKEN="ghp_..."
+export GITHUB_TOKEN=$(gh auth token)
 yarn licenses:validate
 ```
 
