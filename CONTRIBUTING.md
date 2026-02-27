@@ -145,7 +145,7 @@ Both packages (core and browser) will be published with the same npm tag to main
    - Fails fast if validation doesn't pass
 
    **Build and Publish Phase:**
-   - Installs dependencies with `yarn install --frozen-lockfile`
+   - Installs dependencies with `yarn install --immutable`
    - Builds all packages in release mode (`BUILD_MODE=release`)
    - Creates package tarballs with `yarn lerna run pack --stream`
 
@@ -353,13 +353,60 @@ If the automated workflow fails and you need to publish manually:
    npm publish --tag alpha  # or --tag preview (same as core)
    ```
 
-## Licensing
+## Third-Party Licenses
 
-Ensure license information for newly added third party packages are included in LICENSE-3rdparty.csv. For Datadog employees, this can be done automatically with `yarn licenses:generate`.
+All third-party dependency licenses are tracked in `LICENSE-3rdparty.csv`. This file is
+auto-generated and **must be kept up to date** whenever dependencies change. CI will fail
+if it is stale.
 
-### Getting `yarn licenses:generate` working
+### When to update
 
-This script requires `dd-license-attribution`. For internal Datadog employees, follow [this guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights) to set this up.
+Re-generate the file whenever you add, remove, or update a dependency in any `package.json`.
+
+### Prerequisites
+
+| Requirement                | Details                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Python 3.11.12**         | `pyenv install 3.11.12 && pyenv local 3.11.12`                                                   |
+| **Go 1.23+**               | Required by `dd-license-attribution`                                                             |
+| **dd-license-attribution** | `pip install dd-license-attribution` ([repo](https://github.com/DataDog/dd-license-attribution)) |
+| **GITHUB_TOKEN**           | See below                                                                                        |
+
+For Datadog employees, see the internal [dd-license-attribution guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights).
+
+### Setting GITHUB_TOKEN
+
+If you already use the [GitHub CLI](https://cli.github.com/), the easiest option is:
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+Otherwise, create a fine-grained personal access token with read access to **Contents**
+and **Metadata** at https://github.com/settings/personal-access-tokens and export it:
+
+```bash
+export GITHUB_TOKEN="github_pat_..."
+```
+
+### Generating / updating licenses
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+yarn licenses:generate
+```
+
+This overwrites `LICENSE-3rdparty.csv` with the latest data. Commit the result.
+
+### Validating licenses locally
+
+```bash
+yarn licenses:validate
+```
+
+This checks that every npm package in `yarn.lock` has a corresponding entry in the CSV.
+No external tools or tokens are needed — it runs in CI the same way. If it fails, run
+`yarn licenses:generate` and commit the result.
 
 ## Code Style
 
