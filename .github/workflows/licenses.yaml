@@ -46,7 +46,7 @@ jobs:
           python -m pip install /tmp/dd-license-attribution
 
       - name: Install project dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Validate licenses
         env:

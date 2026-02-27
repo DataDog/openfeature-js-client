@@ -145,7 +145,7 @@ Both packages (core and browser) will be published with the same npm tag to main
    - Fails fast if validation doesn't pass
 
    **Build and Publish Phase:**
-   - Installs dependencies with `yarn install --frozen-lockfile`
+   - Installs dependencies with `yarn install --immutable`
    - Builds all packages in release mode (`BUILD_MODE=release`)
    - Creates package tarballs with `yarn lerna run pack --stream`
 
@@ -353,13 +353,45 @@ If the automated workflow fails and you need to publish manually:
    npm publish --tag alpha  # or --tag preview (same as core)
    ```
 
-## Licensing
+## Third-Party Licenses
 
-Ensure license information for newly added third party packages are included in LICENSE-3rdparty.csv. For Datadog employees, this can be done automatically with `yarn licenses:generate`.
+All third-party dependency licenses are tracked in `LICENSE-3rdparty.csv`. This file is
+auto-generated and **must be kept up to date** whenever dependencies change. CI will fail
+if it is stale.
 
-### Getting `yarn licenses:generate` working
+### When to update
 
-This script requires `dd-license-attribution`. For internal Datadog employees, follow [this guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights) to set this up.
+Re-generate the file whenever you add, remove, or update a dependency in any `package.json`.
+
+### Prerequisites
+
+| Requirement | Details |
+|---|---|
+| **Python 3.11.12** | `pyenv install 3.11.12 && pyenv local 3.11.12` |
+| **Go 1.23+** | Required by `dd-license-attribution` |
+| **dd-license-attribution** | `pip install dd-license-attribution` ([repo](https://github.com/DataDog/dd-license-attribution)) |
+| **GITHUB_TOKEN** | A fine-grained PAT with read access to **Contents** and **Metadata** ([create one](https://github.com/settings/personal-access-tokens)) |
+
+For Datadog employees, see the internal [dd-license-attribution guide](https://datadoghq.atlassian.net/wiki/spaces/OS/pages/4486988521/dd-license-attribution+CLI+Tool+to+Track+3rd+Party+Dependencies+Copyrights).
+
+### Generating / updating licenses
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+yarn licenses:generate
+```
+
+This overwrites `LICENSE-3rdparty.csv` with the latest data. Commit the result.
+
+### Validating licenses locally
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+yarn licenses:validate
+```
+
+This regenerates the file into a temp copy and diffs it against the committed version.
+If they differ, you need to run `yarn licenses:generate` and commit the output.
 
 ## Code Style
 
