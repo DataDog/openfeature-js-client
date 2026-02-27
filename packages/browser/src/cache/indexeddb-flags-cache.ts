@@ -1,6 +1,6 @@
-import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
+import type { EvaluationContext } from '@openfeature/web-sdk'
 
 const DB_NAME = 'dd-flagging'
 const DB_VERSION = 1
