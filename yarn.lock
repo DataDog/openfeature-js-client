@@ -594,6 +594,7 @@ __metadata:
     "@types/chrome": "npm:^0.1.18"
     "@types/jest": "npm:^29.4.0"
     "@types/node": "npm:^18.0.0"
+    fake-indexeddb: "npm:^6.2.5"
     jest: "npm:^30.0.4"
     jest-environment-jsdom: "npm:^30.0.4"
     jest-util: "npm:^30.0.2"
@@ -4950,6 +4951,13 @@ __metadata:
   version: 3.1.2
   resolution: "exponential-backoff@npm:3.1.2"
   checksum: 10c0/d9d3e1eafa21b78464297df91f1776f7fbaa3d5e3f7f0995648ca5b89c069d17055033817348d9f4a43d1c20b0eab84f75af6991751e839df53e4dfd6f22e844
+  languageName: node
+  linkType: hard
+
+"fake-indexeddb@npm:^6.2.5":
+  version: 6.2.5
+  resolution: "fake-indexeddb@npm:6.2.5"
+  checksum: 10c0/6c5e2fe84a61daa06d7ad63699d1041fe61847f15f92db12415634b3db94f363a64be9e08a3c3c4434af9c3c0132086b85c4d5dc5e8e06edae1e7daf70ce1f3c
   languageName: node
   linkType: hard
 

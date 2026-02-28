@@ -389,6 +389,7 @@
 "exit-x","exit-x","['MIT']","['Cowboy Ben Alman']"
 "expect","expect","['MIT']","['Meta Platforms, Inc. and affiliates']"
 "exponential-backoff","exponential-backoff","['Apache-2.0']","['Coveo Solutions Inc.']"
+"fake-indexeddb","fake-indexeddb","['Apache-2.0']","['Jeremy Scheff <jdscheff@gmail.com>']"
 "fast-deep-equal","fast-deep-equal","['MIT']","['Evgeny Poberezkin']"
 "fast-json-stable-stringify","fast-json-stable-stringify","['MIT']","['Evgeny Poberezkin', 'James Halliday']"
 "fast-uri","fast-uri","['BSD-3-Clause']","['Gary Court', 'Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae', 'The Fastify Team']"

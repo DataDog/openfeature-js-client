@@ -19,3 +19,12 @@ export function hasWindowLocalStorage(): boolean {
 export function localStorageIfAvailable(): Storage | undefined {
   return hasWindowLocalStorage() ? window.localStorage : undefined
 }
+
+/** Returns whether IndexedDB is available */
+export function hasIndexedDB(): boolean {
+  try {
+    return typeof indexedDB !== 'undefined' && !!indexedDB
+  } catch {
+    return false
+  }
+}
