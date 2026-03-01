@@ -16,7 +16,7 @@ import {
   ProviderStatus,
 } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
+import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
   type FlaggingConfiguration,
@@ -73,8 +73,7 @@ export class DatadogProvider implements Provider {
     const isExposureLoggingEnabled = options.enableExposureLogging ?? true
     if (isExposureLoggingEnabled && this.configuration) {
       this.exposureCache = assignmentCacheFactory({
-        chromeStorage: chromeStorageIfAvailable(),
-        storageKeySuffix: 'dd-of-browser',
+        clientToken: options.clientToken,
       })
       this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
     }

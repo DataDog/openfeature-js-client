@@ -1,3 +1,8 @@
+// structuredClone is required by fake-indexeddb but not available in jsdom
+if (typeof globalThis.structuredClone === 'undefined') {
+  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
+}
+import 'fake-indexeddb/auto'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
@@ -43,8 +48,9 @@ describe('Exposures End-to-End', () => {
     OpenFeature.clearHandlers()
     OpenFeature.clearHooks()
 
-    // Clear localStorage to reset assignment cache between tests
-    localStorage.clear()
+    // Reset IndexedDB to clear assignment cache between tests
+    const { IDBFactory } = require('fake-indexeddb')
+    globalThis.indexedDB = new IDBFactory()
 
     // Mock current time to get deterministic timestamps
     jest.setSystemTime(new Date('2025-08-04T17:00:00.000Z'))
