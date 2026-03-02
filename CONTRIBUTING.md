@@ -86,19 +86,42 @@ The project also supports different SDK setups:
 
 ### Creating a Release
 
-See [AGENTS.md](AGENTS.md) for a step-by-step guide.
-
-**TL;DR:**
+#### 1. Create a release branch from main
 
 ```bash
-git checkout -b release/v<VERSION> main
+git checkout main
+git pull origin main
+git checkout -b release/v<VERSION>
 git push -u origin release/v<VERSION>
-yarn release                              # bumps version, generates changelog, pushes tag
-git push origin release/v<VERSION>
-# Open a PR, merge it, then create a GitHub Release with tag v<VERSION>
 ```
 
-Publishing to npm is fully automated by the `release.yaml` workflow when a GitHub Release is created.
+The branch **must** be pushed to the remote before running lerna (lerna requires the branch to exist on origin).
+
+#### 2. Bump version with Lerna
+
+```bash
+yarn release
+```
+
+This prompts for the new version, updates all `package.json` files and `lerna.json`, generates the CHANGELOG, updates peer dependency versions, and pushes the version tag to origin.
+
+#### 3. Push the release branch and open a PR
+
+```bash
+git push origin release/v<VERSION>
+gh pr create --draft --title "Release v<VERSION>"
+```
+
+#### 4. Publish via GitHub Release
+
+After the PR is merged to main, create a GitHub Release with tag `v<VERSION>` (must match `lerna.json`). The `release.yaml` workflow automatically builds and publishes all packages to npm with the `latest` tag.
+
+#### Troubleshooting
+
+- **"please do not release from main branch"** — create a `release/v*` branch first
+- **"ENOREMOTEBRANCH"** — push the branch to origin before running lerna version
+- **"Release tag doesn't match lerna.json"** — the GitHub Release tag must be exactly `v<VERSION>` matching `lerna.json`
+- **npm propagation timeout** — the workflow retries for 5 min; if it fails, check npm status or re-run the workflow
 
 ## Third-Party Licenses
 
