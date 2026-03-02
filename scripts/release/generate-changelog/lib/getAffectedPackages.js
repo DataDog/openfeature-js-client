@@ -5,6 +5,7 @@ const { commandSync } = require('../../../lib/executionUtils')
 const PACKAGE_NAME_TO_DIRECTORY = {
   '@datadog/openfeature-browser': 'browser',
   '@datadog/flagging-core': 'core',
+  '@datadog/openfeature-node-server': 'node-server',
 }
 
 const PACKAGES_REVERSE_DEPENDENCIES = (() => {

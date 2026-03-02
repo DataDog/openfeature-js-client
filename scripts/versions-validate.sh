@@ -2,44 +2,77 @@
 
 set -euo pipefail
 
-package_json_files=$(find . -type f | grep package.json | grep -Ev '(\.git|node_modules|test-app)')
-
-echo "Validating package versions..."
-
-# Set reference version from lerna.json
-reference_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' lerna.json | grep -o '"[0-9][^"]*"' | tr -d '"')
-
-if [ -z "$reference_version" ]; then
-  echo "ERROR: Could not read version from lerna.json"
-  exit 1
-fi
-
-echo "Reference version: $reference_version (from lerna.json)"
-echo ""
+echo "Validating internal dependency versions..."
 
 mismatches=()
 
-for file in $package_json_files; do
-  # Extract version from package.json if it exists
-  version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$file" | grep -o '"[0-9][^"]*"' | tr -d '"' || echo "")
-
-  # Skip files without a version field (like the root monorepo package.json)
-  if [ -z "$version" ]; then
+# For each package, check that its dependencies on internal packages
+# match the actual version in that dependency's package.json
+for package_dir in packages/*/; do
+  package_json="$package_dir/package.json"
+  if [ ! -f "$package_json" ]; then
     continue
   fi
 
-  # Compare against reference version
-  if [ "$version" != "$reference_version" ]; then
-    mismatches+=("$file has version $version (expected $reference_version)")
-  else
-    echo "✓ $file: $version"
-  fi
+  package_name=$(node -p "require('./$package_json').name")
+
+  # Check dependencies and peerDependencies for internal @datadog/ packages
+  for dep_type in dependencies peerDependencies; do
+    # Get internal deps (packages that exist in our monorepo)
+    internal_deps=$(node -p "
+      const pkg = require('./$package_json');
+      const deps = pkg['$dep_type'] || {};
+      const internal = Object.keys(deps).filter(d => d.startsWith('@datadog/'));
+      internal.join(',')
+    " 2>/dev/null || echo "")
+
+    if [ -z "$internal_deps" ]; then
+      continue
+    fi
+
+    IFS=',' read -ra dep_names <<< "$internal_deps"
+    for dep_name in "${dep_names[@]}"; do
+      if [ -z "$dep_name" ]; then
+        continue
+      fi
+
+      # Find the directory for this internal dep
+      dep_dir=$(node -p "
+        const fs = require('fs');
+        const dirs = fs.readdirSync('packages', { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .map(d => d.name);
+        const match = dirs.find(d => {
+          try {
+            return require('./packages/' + d + '/package.json').name === '$dep_name';
+          } catch { return false; }
+        });
+        match || ''
+      " 2>/dev/null || echo "")
+
+      if [ -z "$dep_dir" ]; then
+        # Not an internal monorepo package, skip
+        continue
+      fi
+
+      # Get the actual version from the dependency's package.json
+      actual_version=$(node -p "require('./packages/$dep_dir/package.json').version")
+      # Get the declared version in the consuming package
+      declared_version=$(node -p "require('./$package_json')['$dep_type']['$dep_name']")
+
+      if [ "$declared_version" != "$actual_version" ]; then
+        mismatches+=("$package_name $dep_type '$dep_name' is '$declared_version' but actual version is '$actual_version'")
+      else
+        echo "✓ $package_name $dep_type '$dep_name': $declared_version"
+      fi
+    done
+  done
 done
 
 # Report results
 if [ ${#mismatches[@]} -gt 0 ]; then
   echo ""
-  echo "ERROR: Version mismatches found:"
+  echo "ERROR: Internal dependency version mismatches found:"
   for mismatch in "${mismatches[@]}"; do
     echo "  - $mismatch"
   done
@@ -47,4 +80,4 @@ if [ ${#mismatches[@]} -gt 0 ]; then
 fi
 
 echo ""
-echo "All package versions match: $reference_version"
+echo "All internal dependency versions are consistent."
