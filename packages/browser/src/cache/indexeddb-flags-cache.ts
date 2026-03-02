@@ -1,24 +1,7 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-
-const DB_NAME = 'dd-flagging'
-const DB_VERSION = 1
-const STORE_NAME = 'configurations'
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
+import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
   const tokenSuffix = buildStorageKeySuffix(clientToken)

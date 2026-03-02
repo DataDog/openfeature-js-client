@@ -6,28 +6,12 @@ import {
 } from '@datadog/flagging-core'
 
 import type { BulkReadAssignmentCache } from './hybrid-assignment-cache'
-
-const DB_NAME = 'dd-flagging'
-const DB_VERSION = 1
-const STORE_NAME = 'configurations'
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
+import { openDB, STORE_NAME } from './indexeddb-store'
 
 export class IndexedDBAssignmentCache implements BulkReadAssignmentCache {
   private readonly storageKey: string
   private readonly mirror: Map<string, string> = new Map()
+  private persistScheduled = false
 
   constructor(clientToken: string) {
     this.storageKey = `assignments-${buildStorageKeySuffix(clientToken)}`
@@ -101,20 +85,30 @@ export class IndexedDBAssignmentCache implements BulkReadAssignmentCache {
     }
   }
 
-  /** Fire-and-forget write to IndexedDB. Resolves on tx.oncomplete; silently swallows errors. */
+  /**
+   * Schedule a fire-and-forget write for the next microtask. Coalesces rapid set() calls
+   * into a single IDB transaction, avoiding O(n^2) write volume and out-of-order races.
+   */
   private persist(): void {
-    const entries = Array.from(this.mirror.entries())
-    openDB()
-      .then((db) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite')
-        const store = tx.objectStore(STORE_NAME)
-        store.put(entries, this.storageKey)
-        tx.oncomplete = () => db.close()
-        tx.onerror = () => db.close()
-        tx.onabort = () => db.close()
-      })
-      .catch(() => {
-        // Silently fail
-      })
+    if (this.persistScheduled) {
+      return
+    }
+    this.persistScheduled = true
+    queueMicrotask(() => {
+      this.persistScheduled = false
+      const entries = Array.from(this.mirror.entries())
+      openDB()
+        .then((db) => {
+          const tx = db.transaction(STORE_NAME, 'readwrite')
+          const store = tx.objectStore(STORE_NAME)
+          store.put(entries, this.storageKey)
+          tx.oncomplete = () => db.close()
+          tx.onerror = () => db.close()
+          tx.onabort = () => db.close()
+        })
+        .catch(() => {
+          // Silently fail — persistence should never break the SDK
+        })
+    })
   }
 }

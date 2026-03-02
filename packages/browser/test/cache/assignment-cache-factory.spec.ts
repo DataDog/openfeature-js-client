@@ -1,9 +1,3 @@
-// structuredClone is required by fake-indexeddb but not available in jsdom
-if (typeof globalThis.structuredClone === 'undefined') {
-  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
-}
-import 'fake-indexeddb/auto'
-
 /**
  * @jest-environment jsdom
  */

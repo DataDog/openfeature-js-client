@@ -1,8 +1,3 @@
-// structuredClone is required by fake-indexeddb but not available in jsdom
-if (typeof globalThis.structuredClone === 'undefined') {
-  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
-}
-import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import type { ExposureEvent } from '../../../core/src/configuration/exposureEvent.types'
 import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'

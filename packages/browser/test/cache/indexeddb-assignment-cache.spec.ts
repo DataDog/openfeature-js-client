@@ -1,8 +1,3 @@
-// structuredClone is required by fake-indexeddb but not available in jsdom
-if (typeof globalThis.structuredClone === 'undefined') {
-  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
-}
-import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import type { ExposureEvent } from '../../../core/src/configuration/exposureEvent.types'
 import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
@@ -112,6 +107,19 @@ describe('IndexedDBAssignmentCache', () => {
   describe('has', () => {
     it('should throw because the serving store handles this', () => {
       expect(() => cache.has(exposureA)).toThrow()
+    })
+  })
+
+  describe('cross-instance persistence (simulates page reload)', () => {
+    it('should read entries written by a previous instance', async () => {
+      cache.set(exposureA)
+      cache.set(exposureB)
+      await flushAsync()
+
+      // New instance with the same token — simulates a fresh page load
+      const freshCache = new IndexedDBAssignmentCache('test-client-token')
+      const entries = await freshCache.getEntries()
+      expect(entries).toHaveLength(2)
     })
   })
 
