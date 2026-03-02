@@ -116,12 +116,89 @@ gh pr create --draft --title "Release v<VERSION>"
 
 After the PR is merged to main, create a GitHub Release with tag `v<VERSION>` (must match `lerna.json`). The `release.yaml` workflow automatically builds and publishes all packages to npm with the `latest` tag.
 
-#### Troubleshooting
+### Package-Specific Build Commands
+
+#### Core Package (`@datadog/flagging-core`)
+
+```bash
+# Build all formats (CommonJS and ESM)
+cd packages/core
+yarn build
+
+# Build CommonJS only
+yarn build:cjs
+
+# Build ESM only
+yarn build:esm
+
+# Create package tarball
+yarn pack
+```
+
+#### Browser Package (`@datadog/openfeature-browser`)
+
+```bash
+# Build all formats (CommonJS, ESM, and bundle)
+cd packages/browser
+yarn build
+
+# Build bundle for CDN
+SDK_SETUP=cdn yarn build:bundle
+
+# Build CommonJS only
+yarn build:cjs
+
+# Build ESM only
+yarn build:esm
+
+# Create package tarball
+yarn pack
+```
+
+### Environment Variables
+
+- **`BUILD_MODE`**: Controls the SDK version format
+  - `dev` (default) - Development version
+  - `release` - Production release version
+  - `canary` - Canary version with commit SHA
+
+- **`SDK_SETUP`**: Controls the SDK setup type
+  - `npm` (default) - For npm distribution
+  - `cdn` - For CDN distribution
+
+### Testing Before Release
+
+```bash
+yarn test           # Run all tests
+yarn typecheck      # Type checking
+yarn lint           # Linting
+yarn clean && yarn build && yarn build:bundle  # Build verification
+```
+
+### Troubleshooting
 
 - **"please do not release from main branch"** — create a `release/v*` branch first
 - **"ENOREMOTEBRANCH"** — push the branch to origin before running lerna version
 - **"Release tag doesn't match lerna.json"** — the GitHub Release tag must be exactly `v<VERSION>` matching `lerna.json`
 - **npm propagation timeout** — the workflow retries for 5 min; if it fails, check npm status or re-run the workflow
+
+#### Manual Publishing (Emergency Only)
+
+If the automated workflow fails and you need to publish manually:
+
+```bash
+BUILD_MODE=release yarn build
+yarn version
+
+cd packages/core
+npm publish --tag latest
+
+# Wait for npm propagation, then:
+cd ../browser
+npm publish --tag latest
+cd ../node-server
+npm publish --tag latest
+```
 
 ## Third-Party Licenses
 
