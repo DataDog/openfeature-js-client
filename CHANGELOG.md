@@ -18,7 +18,7 @@
 - Fix license validation CI and improve developer docs ([#187](https://github.com/DataDog/openfeature-js-client/pull/187))
 - Executing automated changes ([#182](https://github.com/DataDog/openfeature-js-client/pull/182)) [NODE-SERVER]
 - Executing automated changes ([#181](https://github.com/DataDog/openfeature-js-client/pull/181)) [BROWSER]
-- VULN UPGRADE: minor upgrades — 8 packages (minor: 4 · patch: 4)  ([#180](https://github.com/DataDog/openfeature-js-client/pull/180)) [BROWSER]
+- VULN UPGRADE: minor upgrades — 8 packages (minor: 4 · patch: 4) ([#180](https://github.com/DataDog/openfeature-js-client/pull/180)) [BROWSER]
 - Executing automated changes ([#177](https://github.com/DataDog/openfeature-js-client/pull/177))
 - Enable RUM feature flag tracking by default if RUM is available ([#176](https://github.com/DataDog/openfeature-js-client/pull/176)) [BROWSER]
 - Release v1.0.0 - GA ([#166](https://github.com/DataDog/openfeature-js-client/pull/166)) [BROWSER] [NODE-SERVER]
