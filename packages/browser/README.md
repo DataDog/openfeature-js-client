@@ -2,24 +2,8 @@
 
 ## Installation
 
-### For Customers (Recommended)
-
-**We do not recommend pinning to an exact _preview_ version:**
-
-Use the `preview` tag for the latest preview version:
-
 ```bash
-npm install @datadog/openfeature-browser@preview
-```
-
-This will install the latest _preview_ version.
-
-### Specific Version
-
-You can also install a specific _preview_ version:
-
-```bash
-npm install @datadog/openfeature-browser@0.1.0-preview.x
+npm install @datadog/openfeature-browser
 ```
 
 ## Quick Start
