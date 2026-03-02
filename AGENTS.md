@@ -49,8 +49,7 @@ After the PR is merged to main:
 
 1. Go to **GitHub Releases** → **Create a new release**
 2. Set the tag to `v<VERSION>` (must match `lerna.json`)
-3. For prereleases (alpha/preview), check "This is a pre-release"
-4. Click **Publish release**
+3. Click **Publish release**
 
 The `release.yaml` workflow handles everything:
 
@@ -61,22 +60,15 @@ The `release.yaml` workflow handles everything:
 - Publishes `@datadog/openfeature-browser`
 - Publishes `@datadog/openfeature-node-server`
 
-### NPM tag mapping
-
-| Release type     | Example tag        | npm tag   |
-| ---------------- | ------------------ | --------- |
-| Production       | `v1.1.0`           | `latest`  |
-| Preview          | `v2.0.0-preview.1` | `preview` |
-| Other prerelease | `v2.0.0-alpha.1`   | `alpha`   |
+All releases are published with the `latest` npm tag.
 
 ## Version Types
 
-| Type       | Lerna flag                    | Example                           |
-| ---------- | ----------------------------- | --------------------------------- |
-| Patch      | `--patch` or explicit `1.0.1` | Bug fixes only                    |
-| Minor      | `--minor` or explicit `1.1.0` | New features, backward-compatible |
-| Major      | `--major` or explicit `2.0.0` | Breaking changes                  |
-| Prerelease | explicit `2.0.0-alpha.1`      | Pre-production testing            |
+| Type  | Lerna flag                    | Example                           |
+| ----- | ----------------------------- | --------------------------------- |
+| Patch | `--patch` or explicit `1.0.1` | Bug fixes only                    |
+| Minor | `--minor` or explicit `1.1.0` | New features, backward-compatible |
+| Major | `--major` or explicit `2.0.0` | Breaking changes                  |
 
 ## Pre-release Checklist
 
