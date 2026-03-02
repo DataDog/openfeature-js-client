@@ -42,7 +42,7 @@
     "typescript": "^5.9.3",
     "webpack": "5.105.0"
   },
-  "packageManager": "yarn@4.9.2",
+  "packageManager": "yarn@4.10.3",
   "dependencies": {
     "emoji-name-map": "^2.0.3"
   }
