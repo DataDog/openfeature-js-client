@@ -3,8 +3,6 @@
 This repository hosts Browser and React Native clients, as well as the
 NodeJS flag evaluator, for Datadog's OpenFeature implementation.
 
-**Note: This project is currently in Preview; expect breaking API changes.**
-
 ## Documentation
 
 Please see the full documentation site: [Getting Started with Feature Flags](https://docs.datadoghq.com/getting_started/feature_flags/)

@@ -86,19 +86,7 @@ The project also supports different SDK setups:
 
 ### Creating a Release
 
-#### NPM Tag Conventions
-
-The release workflow automatically determines the npm tag based on your release tag name:
-
-- **`alpha` tag**: Used for all prerelease versions that don't contain "preview"
-  - Example release tags: `v0.1.0-alpha.13`, `v0.2.0-beta.1`, `v1.0.0-rc.1`
-  - npm install: `npm install @datadog/flagging-core@alpha`
-
-- **`preview` tag**: Used for prerelease versions that contain "preview" in the tag
-  - Example release tags: `v0.1.0-preview.1`, `v0.2.0-preview.2`
-  - npm install: `npm install @datadog/flagging-core@preview`
-
-Both packages (core and browser) will be published with the same npm tag to maintain consistency.
+All packages are published with the `latest` npm tag.
 
 #### Step 1: Prepare for Release
 
@@ -130,17 +118,15 @@ Both packages (core and browser) will be published with the same npm tag to main
 1. **Create a GitHub Release:**
    - Go to the GitHub repository
    - Click "Releases" → "Create a new release"
-   - Set the tag to match your version (e.g., `v0.1.0-alpha.8`)
-   - **Important:** Mark as "This is a pre-release" for alpha/beta versions
+   - Set the tag to match your version (e.g., `v1.1.0`)
    - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
 
 2. **Automated Publishing Workflow:**
 
-   The `prerelease.yaml` workflow will automatically trigger and:
+   The `release.yaml` workflow will automatically trigger and:
 
    **Validation Phase:**
-   - Validates that the release is marked as a prerelease
    - Checks that the GitHub release tag matches the version in `lerna.json`
    - Fails fast if validation doesn't pass
 
@@ -150,20 +136,13 @@ Both packages (core and browser) will be published with the same npm tag to main
    - Creates package tarballs with `yarn lerna run pack --stream`
 
    **Publishing Sequence:**
-   1. **Determines npm tag** based on release tag:
-      - If release tag contains "preview" → uses `preview` npm tag
-      - Otherwise → uses `alpha` npm tag (default)
-   2. **Publishes core package first** (`@datadog/flagging-core`)
-      - Uses `NPM_PUBLISH_TOKEN_FLAGGING_CORE` secret
-      - Publishes with the determined npm tag (`alpha` or `preview`)
-   3. **Waits for npm registry propagation**
+   1. **Publishes core package first** (`@datadog/flagging-core`)
+   2. **Waits for npm registry propagation**
       - Polls npm registry for up to 5 minutes
       - Ensures core package is available before proceeding
       - Prevents dependency resolution issues
-   4. **Publishes browser package** (`@datadog/openfeature-browser`)
-      - Uses `NPM_PUBLISH_TOKEN` secret
-      - Publishes with the same npm tag as core package
-      - Will have updated dependency on the just-published core package
+   3. **Publishes browser package** (`@datadog/openfeature-browser`)
+   4. **Publishes node-server package** (`@datadog/openfeature-node-server`)
 
 ### Package-Specific Build Commands
 
@@ -227,22 +206,18 @@ Since this project uses **fixed versioning**:
 
 ### Automated Release Workflow Details
 
-The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures:
+The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
-1. **Release Type Validation:**
-   - Only triggers on prerelease GitHub releases
-   - Prevents accidental production releases without proper workflow
-
-2. **Version Consistency Check:**
+1. **Version Consistency Check:**
    - Compares GitHub release tag with `lerna.json` version
    - Ensures tags and versions are synchronized
 
-3. **Dependency Coordination:**
+2. **Dependency Coordination:**
    - Core package is published first
    - Waits for npm registry propagation (up to 5 minutes)
    - Browser package gets updated core dependency automatically
 
-4. **Build Integrity:**
+3. **Build Integrity:**
    - Uses `BUILD_MODE=release` for production builds
    - Replaces build environment variables correctly
    - Creates both npm packages and CDN bundles
@@ -336,21 +311,19 @@ If the automated workflow fails and you need to publish manually:
    yarn version
    ```
 
-2. **Determine npm tag** based on your version:
-   - For versions containing "preview": use `preview` tag
-   - For other prerelease versions: use `alpha` tag
-
-3. **Publish core package:**
+2. **Publish core package:**
 
    ```bash
    cd packages/core
-   npm publish --tag alpha  # or --tag preview
+   npm publish --tag latest
    ```
 
-4. **Wait for propagation, then publish browser package:**
+3. **Wait for propagation, then publish remaining packages:**
    ```bash
    cd packages/browser
-   npm publish --tag alpha  # or --tag preview (same as core)
+   npm publish --tag latest
+   cd ../node-server
+   npm publish --tag latest
    ```
 
 ## Third-Party Licenses

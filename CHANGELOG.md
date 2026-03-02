@@ -6,6 +6,27 @@
 
 ---
 
+## v1.1.0
+
+**Behavior Changes:**
+
+- Add IndexedDB persistence for browser flag configurations ([#186](https://github.com/DataDog/openfeature-js-client/pull/186)) [BROWSER]
+- Enable RUM feature flag tracking by default if RUM is available ([#176](https://github.com/DataDog/openfeature-js-client/pull/176)) [BROWSER]
+
+**Internal Changes:**
+
+- 👷 chore(deps-dev)(deps-dev): Bump lerna from 8.2.3 to 9.0.3 ([#173](https://github.com/DataDog/openfeature-js-client/pull/173))
+- 👷 chore(deps)(deps): Bump lodash from 4.17.21 to 4.17.23 ([#169](https://github.com/DataDog/openfeature-js-client/pull/169))
+- 👷 ci(deps)(deps): Bump the github-actions group with 4 updates ([#168](https://github.com/DataDog/openfeature-js-client/pull/168))
+- 👷 chore(deps)(deps): Bump js-yaml from 3.14.1 to 3.14.2 ([#170](https://github.com/DataDog/openfeature-js-client/pull/170))
+- Fix license validation CI and improve developer docs ([#187](https://github.com/DataDog/openfeature-js-client/pull/187))
+- Executing automated changes ([#182](https://github.com/DataDog/openfeature-js-client/pull/182)) [NODE-SERVER]
+- Executing automated changes ([#181](https://github.com/DataDog/openfeature-js-client/pull/181)) [BROWSER]
+- VULN UPGRADE: minor upgrades — 8 packages (minor: 4 · patch: 4) ([#180](https://github.com/DataDog/openfeature-js-client/pull/180)) [BROWSER]
+- Executing automated changes ([#177](https://github.com/DataDog/openfeature-js-client/pull/177))
+- Release v1.0.0 - GA ([#166](https://github.com/DataDog/openfeature-js-client/pull/166)) [BROWSER] [NODE-SERVER]
+- Simplify Dependabot config with grouping and auto-merge ([#167](https://github.com/DataDog/openfeature-js-client/pull/167))
+
 ## v1.0.0
 
 **Behavior Changes:**
