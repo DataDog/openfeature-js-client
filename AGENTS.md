@@ -26,6 +26,7 @@ yarn lerna version <VERSION> --exact --force-publish --yes
 ```
 
 This does the following:
+
 - Updates `lerna.json` version
 - Updates all `package.json` files to the new version
 - Runs the `version` lifecycle script which:
@@ -52,6 +53,7 @@ After the PR is merged to main:
 4. Click **Publish release**
 
 The `release.yaml` workflow handles everything:
+
 - Validates tag matches `lerna.json`
 - Builds in release mode (`BUILD_MODE=release`)
 - Publishes `@datadog/flagging-core` first
@@ -61,20 +63,20 @@ The `release.yaml` workflow handles everything:
 
 ### NPM tag mapping
 
-| Release type | Example tag | npm tag |
-|---|---|---|
-| Production | `v1.1.0` | `latest` |
-| Preview | `v2.0.0-preview.1` | `preview` |
-| Other prerelease | `v2.0.0-alpha.1` | `alpha` |
+| Release type     | Example tag        | npm tag   |
+| ---------------- | ------------------ | --------- |
+| Production       | `v1.1.0`           | `latest`  |
+| Preview          | `v2.0.0-preview.1` | `preview` |
+| Other prerelease | `v2.0.0-alpha.1`   | `alpha`   |
 
 ## Version Types
 
-| Type | Lerna flag | Example |
-|---|---|---|
-| Patch | `--patch` or explicit `1.0.1` | Bug fixes only |
-| Minor | `--minor` or explicit `1.1.0` | New features, backward-compatible |
-| Major | `--major` or explicit `2.0.0` | Breaking changes |
-| Prerelease | explicit `2.0.0-alpha.1` | Pre-production testing |
+| Type       | Lerna flag                    | Example                           |
+| ---------- | ----------------------------- | --------------------------------- |
+| Patch      | `--patch` or explicit `1.0.1` | Bug fixes only                    |
+| Minor      | `--minor` or explicit `1.1.0` | New features, backward-compatible |
+| Major      | `--major` or explicit `2.0.0` | Breaking changes                  |
+| Prerelease | explicit `2.0.0-alpha.1`      | Pre-production testing            |
 
 ## Pre-release Checklist
 
