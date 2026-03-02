@@ -8,7 +8,7 @@
 
 ## v1.1.0
 
-**Public Changes:**
+**Behavior Changes:**
 
 - Add IndexedDB persistence for browser flag configurations ([#186](https://github.com/DataDog/openfeature-js-client/pull/186)) [BROWSER]
 - Enable RUM feature flag tracking by default if RUM is available ([#176](https://github.com/DataDog/openfeature-js-client/pull/176)) [BROWSER]
