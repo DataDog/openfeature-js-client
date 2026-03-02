@@ -1,22 +1,58 @@
 const { readFile } = require('node:fs/promises')
 const fs = require('node:fs')
+const path = require('node:path')
 
 const emojiNameMap = require('emoji-name-map')
 
-const { openfeatureVersion } = require('../../../lib/openfeatureVersion')
+const { getPackageVersion } = require('../../../lib/openfeatureVersion')
 const { commandSync } = require('../../../lib/executionUtils')
 const { getAffectedPackages } = require('./getAffectedPackages')
 const { CHANGELOG_FILE, CONTRIBUTING_FILE, PUBLIC_EMOJI_PRIORITY, INTERNAL_EMOJI_PRIORITY } = require('./constants')
 
 const FIRST_EMOJI_REGEX = /\p{Extended_Pictographic}/u
 
+// Map directory names to package display names for changelog headers
+const DIR_TO_DISPLAY_NAME = {
+  core: '@datadog/flagging-core',
+  browser: '@datadog/openfeature-browser',
+  'node-server': '@datadog/openfeature-node-server',
+}
+
 /**
+ * Determines which packages have changed since the last release and generates
+ * changelog sections for each.
+ *
  * @param previousContent {string}
  * @returns {Promise<string>}
  */
 exports.addNewChangesToChangelog = async (previousContent) => {
   const emojisLegend = await getEmojisLegend()
-  const changeLists = getChangeLists()
+  const lastTagName = getLastReleaseTagName()
+
+  // Get all changed packages and generate per-package sections
+  const changedPackages = getChangedPackageDirectories(lastTagName)
+  const sections = []
+
+  for (const dirName of changedPackages) {
+    const displayName = DIR_TO_DISPLAY_NAME[dirName] || dirName
+    const version = getPackageVersion(dirName)
+    const changeLists = getChangeLists(lastTagName, dirName)
+
+    if (changeLists) {
+      sections.push(`## ${displayName} v${version}\n\n${changeLists}`)
+    }
+  }
+
+  // If no per-package changes detected, generate an unscoped section with all changes
+  if (sections.length === 0) {
+    const changeLists = getChangeLists(lastTagName, null)
+    if (changeLists) {
+      const highestVersion = getPackageVersion()
+      sections.push(`## v${highestVersion}\n\n${changeLists}`)
+    }
+  }
+
+  const newContent = sections.join('\n\n')
 
   return `\
 # Changelog
@@ -25,9 +61,7 @@ ${emojisLegend}
 
 ---
 
-## v${openfeatureVersion}
-
-${changeLists}
+${newContent}
 ${previousContent.slice(previousContent.indexOf('\n##'))}`
 }
 
@@ -54,8 +88,30 @@ async function getEmojisLegend() {
   return lines.join('\n')
 }
 
-function getChangeLists() {
-  const lastTagName = getLastReleaseTagName()
+/**
+ * Get the list of package directory names that have changes since the last tag.
+ */
+function getChangedPackageDirectories(lastTagName) {
+  const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`.run().split('\n')
+  const packageDirs = new Set()
+
+  commits.forEach((commit) => {
+    const spaceIndex = commit.indexOf(' ')
+    const hash = commit.slice(0, spaceIndex)
+    const message = commit.slice(spaceIndex + 1)
+    if (isVersionMessage(message) || isStagingBumpMessage(message)) {
+      return
+    }
+    const affected = getAffectedPackages(hash)
+    for (const pkg of affected) {
+      packageDirs.add(pkg)
+    }
+  })
+
+  return Array.from(packageDirs).sort()
+}
+
+function getChangeLists(lastTagName, filterPackageDir) {
   const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`.run().split('\n')
 
   const internalChanges = []
@@ -69,6 +125,14 @@ function getChangeLists() {
       return
     }
 
+    // If filtering by package, skip commits that don't affect it
+    if (filterPackageDir) {
+      const affected = getAffectedPackages(hash)
+      if (affected.length > 0 && !affected.includes(filterPackageDir)) {
+        return
+      }
+    }
+
     const change = formatChange(hash, message)
     const emoji = findFirstEmoji(change)
     if (PUBLIC_EMOJI_PRIORITY.includes(emoji)) {
@@ -78,17 +142,20 @@ function getChangeLists() {
     }
   })
 
-  return [
+  const result = [
     formatChangeList('Public Changes', publicChanges, PUBLIC_EMOJI_PRIORITY),
     formatChangeList('Internal Changes', internalChanges, INTERNAL_EMOJI_PRIORITY),
   ]
     .filter(Boolean)
     .join('\n\n')
+
+  return result || ''
 }
 
 function getLastReleaseTagName() {
   const changelog = fs.readFileSync(CHANGELOG_FILE, { encoding: 'utf-8' })
-  const match = changelog.match(/^## (v\d+\.\d+\.\d+.*)/m)
+  // Match both old-style "## v1.2.3" and new-style "## @datadog/package-name v1.2.3"
+  const match = changelog.match(/^## (?:@datadog\/\S+ )?(v\d+\.\d+\.\d+.*)/m)
   if (!match) {
     throw new Error('Could not find the last release version in the changelog')
   }

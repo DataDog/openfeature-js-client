@@ -8,8 +8,9 @@ This is a monorepo managed with Lerna that contains multiple packages:
 
 - **`@datadog/flagging-core`** - Runtime-agnostic flag-evaluation logic
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
+- **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **fixed versioning**, meaning all packages share the same version number and are released together. The version is managed centrally in `lerna.json`.
+The project uses **independent versioning**, meaning each package has its own version number in its `package.json` and can be released independently.
 
 ## Development Setup
 
@@ -92,7 +93,7 @@ All packages are published with the `latest` npm tag.
 
 1. **Switch to a feature branch:**
    ```bash
-   git checkout -b release/v1.2.3
+   git checkout -b release/browser-v1.2.0
    ```
 
 #### Step 2: Prepare Package Dependencies
@@ -105,29 +106,36 @@ All packages are published with the `latest` npm tag.
 
    This command:
    - Validates you're not on the `main` branch
-   - Runs `lerna version --exact --force-publish` to update the version
-   - Prompts for the new version number (applied to all packages)
-   - Creates version commits and tags
-   - Updates all package versions to match
-   - Pushes version tag to Github
+   - Runs `lerna version --exact` to update versions
+   - Prompts for a version bump for each changed package individually
+   - Creates version commits and per-package git tags
+   - Pushes version tags to Github
 
 #### Step 3: Publish via GitHub Release
 
 **Publishing is fully automated via GitHub workflows!**
 
+Each package uses its own tag naming convention:
+
+- `core-v{version}` → publishes `@datadog/flagging-core`
+- `browser-v{version}` → publishes `@datadog/openfeature-browser`
+- `node-server-v{version}` → publishes `@datadog/openfeature-node-server`
+
 1. **Create a GitHub Release:**
    - Go to the GitHub repository
    - Click "Releases" → "Create a new release"
-   - Set the tag to match your version (e.g., `v1.1.0`)
+   - Set the tag to match the package you want to publish (e.g., `browser-v1.2.0`)
    - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
+   - Repeat for each package that needs publishing
 
 2. **Automated Publishing Workflow:**
 
    The `release.yaml` workflow will automatically trigger and:
 
    **Validation Phase:**
-   - Checks that the GitHub release tag matches the version in `lerna.json`
+   - Parses the tag to determine which package to publish (e.g., `browser-v1.2.0` → `packages/browser`)
+   - Validates the tag version matches that package's `package.json` version
    - Fails fast if validation doesn't pass
 
    **Build and Publish Phase:**
@@ -135,14 +143,9 @@ All packages are published with the `latest` npm tag.
    - Builds all packages in release mode (`BUILD_MODE=release`)
    - Creates package tarballs with `yarn lerna run pack --stream`
 
-   **Publishing Sequence:**
-   1. **Publishes core package first** (`@datadog/flagging-core`)
-   2. **Waits for npm registry propagation**
-      - Polls npm registry for up to 5 minutes
-      - Ensures core package is available before proceeding
-      - Prevents dependency resolution issues
-   3. **Publishes browser package** (`@datadog/openfeature-browser`)
-   4. **Publishes node-server package** (`@datadog/openfeature-node-server`)
+   **Publishing:**
+   - If the tagged package depends on `@datadog/flagging-core` and core is not yet on npm at the required version, publishes core first and waits for registry propagation
+   - Publishes the tagged package to npm
 
 ### Package-Specific Build Commands
 
@@ -196,30 +199,29 @@ yarn pack
 
 ### Version Management
 
-Since this project uses **fixed versioning**:
+This project uses **independent versioning**:
 
-- All packages share the same version number (managed in `lerna.json`)
-- When running `yarn release`, Lerna will prompt for a single version update
-- All package versions are automatically synchronized
-- Peer dependencies are automatically updated to match the fixed version
-- A single version commit and tag is created for the entire project
+- Each package has its own version in its `package.json`
+- When running `yarn release`, Lerna prompts for a version bump per changed package
+- Internal dependencies (e.g. `@datadog/flagging-core`) are updated to match actual versions
+- Per-package git tags and version commits are created (e.g., `core-v1.1.0`, `browser-v1.2.0`)
+- Packages can be released independently — only the tagged package is published
 
 ### Automated Release Workflow Details
 
 The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
-1. **Version Consistency Check:**
-   - Compares GitHub release tag with `lerna.json` version
-   - Ensures tags and versions are synchronized
+1. **Tag Parsing and Validation:**
+   - Parses the per-package tag (e.g. `browser-v1.2.0` → `packages/browser`, version `1.2.0`)
+   - Validates the tag version matches the package's `package.json`
 
 2. **Dependency Coordination:**
-   - Core package is published first
-   - Waits for npm registry propagation (up to 5 minutes)
-   - Browser package gets updated core dependency automatically
+   - If the tagged package depends on `@datadog/flagging-core`, checks if the required version is on npm
+   - If not available, publishes core first and waits for registry propagation (up to 5 minutes)
 
 3. **Build Integrity:**
    - Uses `BUILD_MODE=release` for production builds
-   - Replaces build environment variables correctly
+   - Replaces build environment variables correctly per-package
    - Creates both npm packages and CDN bundles
 
 ### Testing Before Release
@@ -264,23 +266,21 @@ The GitHub Actions workflow (`release.yaml`) includes several safety measures:
    - Solution: Create a feature branch for releases
 
 2. **Version mismatch in GitHub workflow:**
-   - Error: "Release tag doesn't match lerna.json version"
-   - Solution: Ensure the GitHub release tag exactly matches `v{version}` format where `{version}` is from `lerna.json`
+   - Error: "Release tag version doesn't match package.json version"
+   - Solution: Ensure the GitHub release tag matches the format `{package}-v{version}` where `{version}` matches the package's `package.json` (e.g., `browser-v1.2.0`)
 
 3. **Build environment issues:**
    - Ensure `BUILD_MODE` and `SDK_SETUP` are set correctly
    - Check that all dependencies are installed
 
 4. **Version synchronization issues:**
-   - Run `yarn version` to update peer dependencies
-   - Check that all package versions match the version in `lerna.json`
+   - Run `yarn version` to update internal dependency versions
+   - Check that internal dependency versions in each package match the actual version in the dependency's `package.json`
 
 5. **GitHub workflow failures:**
    - Check the Actions tab for detailed error logs
-   - Ensure GitHub secrets are properly configured:
-     - `NPM_PUBLISH_TOKEN_FLAGGING_CORE` for core package
-     - `NPM_PUBLISH_TOKEN` for browser package
-   - Verify the release tag matches the version in `lerna.json`
+   - Ensure GitHub secrets are properly configured
+   - Verify the release tag uses the correct format: `core-v{version}`, `browser-v{version}`, or `node-server-v{version}`
 
 6. **npm registry propagation delays:**
    - The workflow waits up to 5 minutes for the core package to be available

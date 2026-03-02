@@ -1,6 +1,6 @@
 # openfeature-js-client
 
-Monorepo using **Lerna** with **fixed versioning** — all packages share the version in `lerna.json`.
+Monorepo using **Lerna** with **independent versioning** — each package has its own version in its `package.json`.
 
 ## Release
 
@@ -9,8 +9,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#creating-a-release) for the full release p
 Key commands:
 
 ```bash
-# Non-interactive version bump (use this instead of interactive `yarn release`)
-yarn lerna version <VERSION> --exact --force-publish --yes
+# Interactive version bump (prompts per changed package)
+yarn release
+
+# Non-interactive version bump for a specific package
+yarn lerna version <VERSION> --exact --yes --scope=@datadog/openfeature-browser
+```
+
+### Tag naming convention
+
+```
+core-v{version}        → publishes @datadog/flagging-core
+browser-v{version}     → publishes @datadog/openfeature-browser
+node-server-v{version} → publishes @datadog/openfeature-node-server
 ```
 
 ## Packages

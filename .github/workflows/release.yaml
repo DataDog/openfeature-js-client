@@ -13,21 +13,54 @@ jobs:
   validate-release:
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      package-dir: ${{ steps.parse-tag.outputs.package-dir }}
+      package-version: ${{ steps.parse-tag.outputs.package-version }}
+      package-prefix: ${{ steps.parse-tag.outputs.package-prefix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Validate release version
+      - name: Parse release tag
+        id: parse-tag
         run: |
-          # Check if the tag matches the version in lerna.json
-          RELEASE_VERSION="${{ github.event.release.tag_name }}"
-          LERNA_VERSION=$(node -p "require('./lerna.json').version")
+          TAG="${{ github.event.release.tag_name }}"
+          echo "Release tag: $TAG"
 
-          if [[ "v$LERNA_VERSION" != "$RELEASE_VERSION" ]]; then
-            echo "❌ Release tag $RELEASE_VERSION doesn't match lerna.json version v$LERNA_VERSION"
+          # Map tag prefix to package directory
+          if [[ "$TAG" =~ ^core-v(.+)$ ]]; then
+            PACKAGE_DIR="packages/core"
+            PACKAGE_VERSION="${BASH_REMATCH[1]}"
+            PACKAGE_PREFIX="core"
+          elif [[ "$TAG" =~ ^browser-v(.+)$ ]]; then
+            PACKAGE_DIR="packages/browser"
+            PACKAGE_VERSION="${BASH_REMATCH[1]}"
+            PACKAGE_PREFIX="browser"
+          elif [[ "$TAG" =~ ^node-server-v(.+)$ ]]; then
+            PACKAGE_DIR="packages/node-server"
+            PACKAGE_VERSION="${BASH_REMATCH[1]}"
+            PACKAGE_PREFIX="node-server"
+          else
+            echo "❌ Unrecognized tag format: $TAG"
+            echo "Expected: core-v{version}, browser-v{version}, or node-server-v{version}"
             exit 1
           fi
 
-          echo "✅ Release validation passed"
+          echo "package-dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
+          echo "package-version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "package-prefix=$PACKAGE_PREFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release version
+        run: |
+          PACKAGE_DIR="${{ steps.parse-tag.outputs.package-dir }}"
+          EXPECTED_VERSION="${{ steps.parse-tag.outputs.package-version }}"
+          ACTUAL_VERSION=$(node -p "require('./$PACKAGE_DIR/package.json').version")
+
+          if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "❌ Release tag version $EXPECTED_VERSION doesn't match $PACKAGE_DIR/package.json version $ACTUAL_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Release validation passed: $PACKAGE_DIR version $ACTUAL_VERSION"
 
   build-and-publish:
     runs-on: ubuntu-latest
@@ -74,8 +107,36 @@ jobs:
             echo "Using 'alpha' npm tag for prerelease $RELEASE_TAG"
           fi
 
-      - name: Publish core package
+      - name: Publish core package first (if needed)
+        if: needs.validate-release.outputs.package-prefix != 'core'
         run: |
+          PACKAGE_DIR="${{ needs.validate-release.outputs.package-dir }}"
+          PACKAGE_PREFIX="${{ needs.validate-release.outputs.package-prefix }}"
+
+          # Check if the tagged package depends on core
+          CORE_DEP_VERSION=$(node -p "
+            try {
+              const pkg = require('./$PACKAGE_DIR/package.json');
+              (pkg.dependencies || {})['@datadog/flagging-core'] || ''
+            } catch { '' }
+          ")
+
+          if [ -z "$CORE_DEP_VERSION" ]; then
+            echo "Package $PACKAGE_PREFIX does not depend on @datadog/flagging-core, skipping core publish"
+            exit 0
+          fi
+
+          CORE_ACTUAL_VERSION=$(node -p "require('./packages/core/package.json').version")
+
+          # Check if the required version of core is already on npm
+          echo "Checking if @datadog/flagging-core@$CORE_ACTUAL_VERSION is already on npm..."
+          if npm view "@datadog/flagging-core@$CORE_ACTUAL_VERSION" --json > /dev/null 2>&1; then
+            echo "✅ @datadog/flagging-core@$CORE_ACTUAL_VERSION is already available on npm"
+            exit 0
+          fi
+
+          echo "⚠️ @datadog/flagging-core@$CORE_ACTUAL_VERSION not found on npm."
+          echo "Publishing core first..."
           echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
           npm config set access public
           cd packages/core
@@ -83,30 +144,38 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
 
-      - name: Wait for core package to be available
+      - name: Wait for core package to be available (if needed)
+        if: needs.validate-release.outputs.package-prefix != 'core'
         run: |
-          # Get the version from lerna.json
-          VERSION=$(node -p "require('./lerna.json').version")
-          PACKAGE_NAME="@datadog/flagging-core"
+          PACKAGE_DIR="${{ needs.validate-release.outputs.package-dir }}"
 
-          echo "Waiting for $PACKAGE_NAME@$VERSION to be available on npm..."
-          echo "This may take a few minutes due to npm registry propagation..."
+          # Check if the tagged package depends on core
+          CORE_DEP_VERSION=$(node -p "
+            try {
+              const pkg = require('./$PACKAGE_DIR/package.json');
+              (pkg.dependencies || {})['@datadog/flagging-core'] || ''
+            } catch { '' }
+          ")
 
-          # Wait up to 5 minutes (300 seconds) with 10-second intervals
+          if [ -z "$CORE_DEP_VERSION" ]; then
+            echo "Package does not depend on @datadog/flagging-core, skipping wait"
+            exit 0
+          fi
+
+          CORE_ACTUAL_VERSION=$(node -p "require('./packages/core/package.json').version")
+
+          echo "Waiting for @datadog/flagging-core@$CORE_ACTUAL_VERSION to be available on npm..."
+
           for i in {1..30}; do
-            echo "Attempt $i/30: Checking if $PACKAGE_NAME@$VERSION is available..."
+            echo "Attempt $i/30: Checking if @datadog/flagging-core@$CORE_ACTUAL_VERSION is available..."
 
-            # Try to fetch the package info from npm
-            if npm view "$PACKAGE_NAME@$VERSION" --json > /dev/null 2>&1; then
-              echo "✅ $PACKAGE_NAME@$VERSION is now available on npm!"
-              echo "Package details:"
-              npm view "$PACKAGE_NAME@$VERSION" --json
-              break
+            if npm view "@datadog/flagging-core@$CORE_ACTUAL_VERSION" --json > /dev/null 2>&1; then
+              echo "✅ @datadog/flagging-core@$CORE_ACTUAL_VERSION is now available on npm!"
+              exit 0
             fi
 
             if [ $i -eq 30 ]; then
-              echo "❌ Timeout: $PACKAGE_NAME@$VERSION is still not available after 5 minutes"
-              echo "This might indicate an issue with the npm publish or registry propagation"
+              echo "❌ Timeout: @datadog/flagging-core@$CORE_ACTUAL_VERSION is still not available after 5 minutes"
               exit 1
             fi
 
@@ -114,20 +183,15 @@ jobs:
             sleep 10
           done
 
-      - name: Publish browser package
+      - name: Publish tagged package
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
-          npm config set access public
-          cd packages/browser
-          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}
+          PACKAGE_DIR="${{ needs.validate-release.outputs.package-dir }}"
+          PACKAGE_PREFIX="${{ needs.validate-release.outputs.package-prefix }}"
 
-      - name: Publish node-server package
-        run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.ENV_NPM_TOKEN }}" > ~/.npmrc
           npm config set access public
-          cd packages/node-server
+          cd "$PACKAGE_DIR"
+          echo "Publishing $(node -p "require('./package.json').name")..."
           npm publish --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ENV_NPM_TOKEN }}

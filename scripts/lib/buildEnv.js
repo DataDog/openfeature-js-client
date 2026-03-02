@@ -77,13 +77,30 @@ function getSdkSetup() {
 }
 
 function getOpenFeatureVersion() {
-  // For fixed versioning, we'll use the version from lerna.json
+  // With independent versioning, find the nearest package.json by walking up
+  // from the current working directory (replace-build-env.js is called from each
+  // package's build script, so cwd is typically the package directory).
   try {
-    const lernaJsonPath = path.join(__dirname, '../../lerna.json')
-    const lernaJson = JSON.parse(readFileSync(lernaJsonPath, 'utf8'))
-    return lernaJson.version
+    let dir = process.cwd()
+    const root = path.join(__dirname, '../..')
+    while (dir.length >= root.length) {
+      const pkgPath = path.join(dir, 'package.json')
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+        if (pkg.version && pkg.name !== '@datadog/openfeature-client-monorepo') {
+          return pkg.version
+        }
+      } catch {
+        // no package.json at this level, keep walking up
+      }
+      const parent = path.dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+    console.warn('Could not find package version, using "0.1.0-alpha.2"')
+    return '0.1.0-alpha.2'
   } catch (error) {
-    console.warn('Could not read lerna.json version, using "0.1.0-alpha.2"', error)
+    console.warn('Could not read package version, using "0.1.0-alpha.2"', error)
     return '0.1.0-alpha.2'
   }
 }
