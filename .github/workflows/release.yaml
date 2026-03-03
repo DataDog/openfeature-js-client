@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: '22.x'
+          node-version: '24.x'
           cache: 'yarn'
 
       - name: Install dependencies
@@ -77,7 +77,7 @@ jobs:
       - name: Publish core package
         run: |
           cd packages/core
-          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+          npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
 
       - name: Wait for core package to be available
         run: |
@@ -113,9 +113,9 @@ jobs:
       - name: Publish browser package
         run: |
           cd packages/browser
-          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+          npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
 
       - name: Publish node-server package
         run: |
           cd packages/node-server
-          npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+          npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
