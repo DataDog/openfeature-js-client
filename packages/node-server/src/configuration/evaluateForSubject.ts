@@ -12,25 +12,13 @@ import { matchesShard } from '../shards/matchesShard'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
-  flag: Flag | undefined,
+  flag: Flag,
   type: T,
   subjectKey: string,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  if (!flag) {
-    logger.debug(`returning default value because flag is not found`, {
-      flagKey: 'undefined',
-      subjectKey,
-    })
-    return {
-      value: defaultValue,
-      reason: StandardResolutionReasons.ERROR,
-      errorCode: ErrorCode.FLAG_NOT_FOUND,
-    }
-  }
-
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
       flagKey: flag.key,

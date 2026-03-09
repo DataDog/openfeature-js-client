@@ -40,9 +40,19 @@ export function evaluate<T extends FlagValueType>(
     id: subjectKey,
     ...remainingContext,
   }
+  const flag = config.flags[flagKey]
+  if (!flag) {
+    logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
+    return {
+      value: defaultValue,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.FLAG_NOT_FOUND,
+    }
+  }
+
   try {
     const resultWithDetails = evaluateForSubject(
-      config.flags[flagKey],
+      flag,
       type,
       subjectKey,
       subjectAttributes,
