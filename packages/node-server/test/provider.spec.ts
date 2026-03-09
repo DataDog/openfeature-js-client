@@ -109,7 +109,7 @@ describe('DatadogNodeServerProvider', () => {
     }
     client.addHooks(testHook)
 
-    await client.getBooleanDetails('test-flag', false)
+    await client.getBooleanDetails('kill-switch', false)
 
     expect(afterHook).toHaveBeenCalled()
   }, 1000)

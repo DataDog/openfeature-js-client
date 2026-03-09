@@ -19,9 +19,21 @@ export function evaluateForSubject<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  if (!flag?.enabled) {
+  if (!flag) {
+    logger.debug(`returning default value because flag is not found`, {
+      flagKey: 'undefined',
+      subjectKey,
+    })
+    return {
+      value: defaultValue,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.FLAG_NOT_FOUND,
+    }
+  }
+
+  if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
-      flagKey: flag ? flag.key : 'undefined',
+      flagKey: flag.key,
       subjectKey,
     })
     return {
