@@ -41,17 +41,12 @@ fi
 REPO_URL="https://github.com/DataDog/openfeature-js-client"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-CURRENT_COMMIT="$(git rev-parse HEAD)"
 
 MIRROR_ARGS=()
 if [ "$CURRENT_BRANCH" != "main" ]; then
-    # Use commit hash for detached HEAD, branch name otherwise
     if [ "$CURRENT_BRANCH" = "HEAD" ]; then
-        MIRROR_REF="commit:$CURRENT_COMMIT"
-        echo "Using local repo at detached HEAD ($CURRENT_COMMIT) instead of remote main"
-    else
-        MIRROR_REF="branch:$CURRENT_BRANCH"
-        echo "Using local repo at branch '$CURRENT_BRANCH' instead of remote main"
+        echo "ERROR: Detached HEAD is not supported. Please check out a branch before running this script."
+        exit 1
     fi
 
     MIRRORS_FILE="$(mktemp)"
@@ -62,12 +57,13 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
         "original_url": "$REPO_URL",
         "mirror_url": "$REPO_ROOT",
         "ref_mapping": {
-            "branch:main": "$MIRROR_REF"
+            "branch:main": "branch:$CURRENT_BRANCH"
         }
     }
 ]
 EOF
     MIRROR_ARGS=(--use-mirrors "$MIRRORS_FILE")
+    echo "Using local repo at branch '$CURRENT_BRANCH' instead of remote main"
 fi
 
 dd-license-attribution generate-sbom-csv "$REPO_URL" --override-spec .ddla-overrides ${MIRROR_ARGS[@]+"${MIRROR_ARGS[@]}"} > LICENSE-3rdparty.csv
