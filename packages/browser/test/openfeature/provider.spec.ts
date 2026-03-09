@@ -1,6 +1,6 @@
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
-import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk'
+import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
@@ -301,6 +301,165 @@ describe('DatadogProvider', () => {
           variationType: 'STRING',
         },
       })
+    })
+  })
+
+  describe('concurrent request ordering', () => {
+    let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
+
+    beforeAll(() => {
+      originalFetch = global.fetch
+    })
+
+    afterAll(() => {
+      global.fetch = originalFetch
+    })
+
+    const makeResponse = (stringFlagValue: string) => ({
+      data: {
+        id: 'test_subject',
+        type: 'precomputed-assignments',
+        attributes: {
+          createdAt: Date.now(),
+          environment: { name: 'prod' },
+          flags: {
+            'string-flag': {
+              allocationKey: 'allocation-123',
+              variationKey: 'variation-123',
+              variationType: 'STRING',
+              variationValue: stringFlagValue,
+              extraLogging: { experiment: true },
+              doLog: true,
+              reason: 'TARGETING_MATCH',
+            },
+          },
+        },
+      },
+    })
+
+    const makeFetchResponse = (body: ReturnType<typeof makeResponse>) => ({
+      ok: true,
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/vnd.api+json' : null),
+      },
+      json: async () => body,
+    })
+
+    /** Installs a fetch mock where each call creates a deferred promise accessible via `calls[n]`. */
+    function mockFetchDeferred() {
+      const calls: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = []
+      const mock = jest.fn().mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            calls.push({ resolve, reject })
+          })
+      )
+      global.fetch = mock
+      return { mock, calls }
+    }
+
+    it('last onContextChange call wins even if earlier call resolves later', async () => {
+      const provider = new DatadogProvider(options)
+      const { calls } = mockFetchDeferred()
+
+      // Fire both concurrently
+      const first = provider.onContextChange({}, { targetingKey: 'user-1' })
+      const second = provider.onContextChange({}, { targetingKey: 'user-2' })
+
+      // Resolve second first, then first
+      calls[1].resolve(makeFetchResponse(makeResponse('second')))
+      calls[0].resolve(makeFetchResponse(makeResponse('first')))
+
+      // With chaining, both settle together
+      await Promise.all([first, second])
+
+      // The second call (last called) should win
+      const result = provider.resolveStringEvaluation(
+        'string-flag',
+        'default',
+        {},
+        { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      )
+      expect(result.value).toBe('second')
+    })
+
+    it('stays in RECONCILING when stale request resolves but latest is still pending', async () => {
+      const provider = new DatadogProvider(options)
+      const { calls } = mockFetchDeferred()
+
+      // Initialize first so provider is in READY state
+      const init = provider.initialize({})
+      calls[0].resolve(makeFetchResponse(makeResponse('init')))
+      await init
+
+      const first = provider.onContextChange({}, { targetingKey: 'user-1' })
+      const second = provider.onContextChange({}, { targetingKey: 'user-2' })
+
+      // Resolve only the stale request — first chains to second, so it won't settle yet
+      calls[1].resolve(makeFetchResponse(makeResponse('first')))
+      // Flush microtask to let the stale check run
+      await Promise.resolve()
+
+      // Status should still be RECONCILING because the latest (second) request is pending
+      expect(provider.status).toBe(ProviderStatus.RECONCILING)
+
+      // Now resolve the latest — both settle
+      calls[2].resolve(makeFetchResponse(makeResponse('second')))
+      await Promise.all([first, second])
+      expect(provider.status).toBe(ProviderStatus.READY)
+    })
+
+    it('ignores error from stale request when a newer request is pending', async () => {
+      const provider = new DatadogProvider(options)
+      const errorHandler = jest.fn()
+      provider.events.addHandler(ProviderEvents.Error, errorHandler)
+      const { calls } = mockFetchDeferred()
+
+      // Initialize first so provider is in READY state
+      const init = provider.initialize({})
+      calls[0].resolve(makeFetchResponse(makeResponse('init')))
+      await init
+
+      const first = provider.onContextChange({}, { targetingKey: 'user-1' })
+      const second = provider.onContextChange({}, { targetingKey: 'user-2' })
+
+      // First request errors — should be ignored since it's stale
+      calls[1].reject(new Error('network failure'))
+      // Flush microtask to let the stale check run
+      await Promise.resolve()
+
+      expect(errorHandler).not.toHaveBeenCalled()
+      expect(provider.status).toBe(ProviderStatus.RECONCILING)
+
+      // Second resolves normally — both settle
+      calls[2].resolve(makeFetchResponse(makeResponse('second')))
+      await Promise.all([first, second])
+      expect(provider.status).toBe(ProviderStatus.READY)
+    })
+
+    it('stale call settles with same status as latest call when latest errors', async () => {
+      const provider = new DatadogProvider(options)
+      const errorHandler = jest.fn()
+      provider.events.addHandler(ProviderEvents.Error, errorHandler)
+      const { calls } = mockFetchDeferred()
+
+      // Initialize first so provider is in READY state
+      const init = provider.initialize({})
+      calls[0].resolve(makeFetchResponse(makeResponse('init')))
+      await init
+
+      const first = provider.onContextChange({}, { targetingKey: 'user-1' })
+      const second = provider.onContextChange({}, { targetingKey: 'user-2' })
+
+      // Resolve stale, reject latest
+      calls[1].resolve(makeFetchResponse(makeResponse('first')))
+      calls[2].reject(new Error('network failure'))
+
+      // Both reject together — stale chains to latest, so both reject with the same error
+      await expect(Promise.all([first, second])).rejects.toThrow('network failure')
+
+      expect(errorHandler).toHaveBeenCalledTimes(1)
+      expect(provider.status).toBe(ProviderStatus.ERROR)
     })
   })
 

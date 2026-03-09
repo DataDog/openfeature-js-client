@@ -59,7 +59,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     dd_env: initConfiguration.env || '',
   }
 
-  return async (context: EvaluationContext): Promise<FlagsConfiguration> => {
+  return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
     // Stringify all context values
     const stringifiedContext: Record<string, string> = {}
     for (const [key, value] of Object.entries(context)) {
@@ -69,6 +69,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     const response = await fetch(url.toString(), {
       method: 'POST',
       headers: defaultHeaders,
+      signal,
       body: JSON.stringify({
         data: {
           type: 'precompute-assignments-request',

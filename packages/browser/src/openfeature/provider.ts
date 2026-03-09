@@ -1,4 +1,4 @@
-import type { AssignmentCache, FlagsConfiguration } from '@datadog/flagging-core'
+import { type AssignmentCache, configMatchesContext, type FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   Hook,
@@ -33,6 +33,23 @@ import { createRumTrackingHook } from './rumIntegration'
  */
 export type DatadogProviderOptions = FlaggingInitConfiguration
 
+/**
+ * Wait for `promise` to resolve but automatically cancel the promise
+ * if `signal` aborts.
+ *
+ * Note: it does not abort the `promise` itself and it will continue
+ * running in the "background." Prefer native signal-aware interfaces
+ * when possible and use `waitWithAbort` as a hacky way to interrupt
+ * otherwise non-interruptible promises.
+ */
+function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Promise<T> {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted()
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    Promise.resolve(promise).then(resolve, reject)
+  })
+}
+
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
@@ -44,12 +61,35 @@ export class DatadogProvider implements Provider {
   hooks?: Hook[]
   readonly events: ProviderEventEmitter<ProviderEvents>
 
+  /** Provider-level configuration */
+  private readonly configuration?: FlaggingConfiguration
+
   status: ProviderStatus
+
   private flagsConfiguration: FlagsConfiguration = {}
-  private configuration?: FlaggingConfiguration
-  private exposureCache: AssignmentCache | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
-  private readonly hasInitialFlagsConfiguration: boolean
+
+  private exposureCache: AssignmentCache | undefined
+  private exposureCacheReady: Promise<void> | undefined
+
+  /**
+   * Concurrency control for initialize/onContextChange:
+   *
+   * Per OpenFeature spec, the SDK determines provider status from the
+   * last onContextChange to TERMINATE (resolve/reject), not the last
+   * to be CALLED. This creates a race condition when multiple calls
+   * overlap.
+   *
+   * Solution:
+   * 1. `contextUpdateAbortController`: allows aborting previous operation.
+   * 2. `latestContextUpdate`: the last-called context update
+   *    operation. When context updates finish, they check if they
+   *    were aborted (meaning there's a newer context update) and
+   *    delegate to it. This makes sure that all concurrent context
+   *    updates resolve to the same result.
+   */
+  private latestContextUpdate: Promise<void> = Promise.resolve()
+  private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -83,61 +123,143 @@ export class DatadogProvider implements Provider {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.hasInitialFlagsConfiguration = !!options.initialFlagsConfiguration
-
-    if (options.initialFlagsConfiguration) {
-      this.flagsConfiguration = options.initialFlagsConfiguration
-      this.status = ProviderStatus.READY
-    } else {
-      this.flagsConfiguration = {}
-      this.status = ProviderStatus.NOT_READY
-    }
+    this.flagsConfiguration = options.initialFlagsConfiguration || {}
+    this.status = ProviderStatus.NOT_READY
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
-    if (!this.configuration) {
-      throw new Error('Invalid configuration')
-    }
-
-    // Start all async work concurrently — cache read should not delay the fetch.
-    const cachedConfigPromise = !this.hasInitialFlagsConfiguration ? this.flagsCache?.get(context) : undefined
-    const exposureCacheReady = this.exposureCache?.init()
-
-    try {
-      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      // Fire-and-forget: cache write should not block readiness
-      this.flagsCache?.set(this.flagsConfiguration, context)
-    } catch (error) {
-      // Network failed — try to serve from cache or initialFlagsConfiguration
-      const cachedConfig = await cachedConfigPromise
-      if (cachedConfig?.precomputed) {
-        this.flagsConfiguration = cachedConfig
-      }
-      if (this.flagsConfiguration?.precomputed) {
-        this.status = ProviderStatus.STALE
-        this.events.emit(ProviderEvents.Stale)
-        await exposureCacheReady
-        return
-      }
-      throw error
-    }
-    this.status = ProviderStatus.READY
-    await exposureCacheReady
+    this.exposureCacheReady = this.exposureCache?.init()
+    return this.setContext(context)
   }
 
-  async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
+  public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
+    return this.setContext(context)
+  }
+
+  private setContext(context: EvaluationContext): Promise<void> {
+    if (this.status === ProviderStatus.NOT_READY) {
+      // we're initializing, no status changes necessary
+    } else {
+      this.status = ProviderStatus.RECONCILING
+      this.events.emit(ProviderEvents.Reconciling)
+    }
+
+    // abort any previous setContext operation
+    this.contextUpdateAbortController.abort()
+    this.contextUpdateAbortController = new AbortController()
+
+    const signal = this.contextUpdateAbortController.signal
+
+    // Important: OF SDK awaits for all onContextChange calls to exit
+    // before marking the provider as ready. Make sure to respect
+    // `signal`, so we don't block OF SDK unnecessarily.
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(context, { signal })
+      .then((result) =>
+        // New configuration might require clearing exposure
+        // cache. One example of this is updating experiment
+        // boundaries: if we previously emitted exposure events for an
+        // experiment and the new configuration bumped experiment
+        // start time, we need to emit at least one new event within
+        // the new experiment timeframe. We do that by clearing our
+        // exposure
+        this.maybeClearExposureCache(result.config, { signal }).then(
+          () => result,
+          // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
+          () => result
+        )
+      )
+      .then(
+        ({ config, fromCache }) => {
+          if (signal.aborted) {
+            // If signal was aborted, another setContext call has updated
+            // this.latestContextUpdate, so we delegate to it.
+            return this.latestContextUpdate
+          }
+
+          // If we get to here, we're the latest context update
+          // call. We should update our state atomically here in a
+          // single microtask (i.e., without any await/promise
+          // scheduling).
+
+          this.flagsConfiguration = config
+          this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.events.emit(ProviderEvents.ConfigurationChanged)
+
+          if (this.status === ProviderStatus.STALE) {
+            // HACK: returning from onContextChange causes the OF SDK
+            // to overwrite its knowledge of provider status to READY
+            // (even if we emit Stale event or set our own status to
+            // STALE). Schedule a macrotask to notify the OF SDK of
+            // the stale status when it's ready.
+            setTimeout(() => {
+              if (this.status === ProviderStatus.STALE) {
+                this.events.emit(ProviderEvents.Stale)
+              }
+            }, 0)
+          }
+        },
+        (error) => {
+          if (signal.aborted) {
+            // If signal was aborted, another setContext call has updated
+            // this.latestContextUpdate, so we delegate to it.
+            return this.latestContextUpdate
+          } else {
+            // Otherwise, this is a legitimate error
+            this.status = ProviderStatus.ERROR
+            this.events.emit(ProviderEvents.Error, { error })
+            throw error
+          }
+        }
+      )
+
+    return this.latestContextUpdate
+  }
+
+  /**
+   * Tries to retrieve flags configuration for the given evaluation
+   * context. Prefers network, falls back to current configuration
+   * (if context matches), then to persistent cache if network request fails.
+   */
+  private async retrieveFlagsConfiguration(
+    context: EvaluationContext,
+    { signal }: { signal: AbortSignal }
+  ): Promise<{ config: FlagsConfiguration; fromCache: boolean }> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
-    this.status = ProviderStatus.RECONCILING
+
+    // Prefer current config over cache if it matches the requested context
+    const cachedConfigPromise = configMatchesContext(this.flagsConfiguration, context)
+      ? Promise.resolve(this.flagsConfiguration)
+      : this.flagsCache?.get(context)
+
     try {
-      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      // Fire-and-forget: cache write should not block readiness
-      this.flagsCache?.set(this.flagsConfiguration, context)
-      this.status = ProviderStatus.READY
-    } catch (error) {
-      this.events.emit(ProviderEvents.Error, { error })
-      this.status = ProviderStatus.ERROR
+      const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
+      this.flagsCache?.set(config, context)
+      return { config, fromCache: false }
+    } catch (err) {
+      // Try to recover with current/cached config
+      try {
+        const config = await waitWithAbort(signal, cachedConfigPromise)
+        if (config) {
+          return { config, fromCache: true }
+        }
+      } catch (err) {}
+
+      throw err
+    }
+  }
+
+  private async maybeClearExposureCache(
+    newFlagsConfiguration: FlagsConfiguration,
+    { signal }: { signal: AbortSignal }
+  ): Promise<void> {
+    await waitWithAbort(signal, this.exposureCacheReady)
+
+    const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
+    const newCreatedAt = newFlagsConfiguration.precomputed?.response.data.attributes.createdAt
+    if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
+      await waitWithAbort(signal, this.exposureCache?.clear())
     }
   }
 
@@ -181,18 +303,5 @@ export class DatadogProvider implements Provider {
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
     return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
-  }
-
-  private async fetchFlagsAndMaybeClearExposureCache(context: EvaluationContext): Promise<FlagsConfiguration> {
-    if (!this.configuration) {
-      throw new Error('Invalid configuration')
-    }
-    const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
-    const flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
-    const newCreatedAt = flagsConfiguration.precomputed?.response.data.attributes.createdAt
-    if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
-      await this.exposureCache?.clear()
-    }
-    return flagsConfiguration
   }
 }
