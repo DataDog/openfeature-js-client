@@ -824,6 +824,7 @@
 "webpack","webpack","['MIT']","['JS Foundation and other contributors']"
 "webpack-sources","webpack-sources","['MIT']","['JS Foundation and other contributors']"
 "whatwg-encoding","whatwg-encoding","['MIT']","['Domenic Denicola <d@domenic.me>']"
+"whatwg-fetch","https://github.com/JakeChampion/fetch","['MIT']","['GitHub, Inc.']"
 "whatwg-mimetype","whatwg-mimetype","['MIT']","['Domenic Denicola <d@domenic.me>']"
 "whatwg-url","whatwg-url","['MIT']","['Sebastian Mayr']"
 "which","which","['ISC']","['Isaac Z. Schlueter and Contributors']"
