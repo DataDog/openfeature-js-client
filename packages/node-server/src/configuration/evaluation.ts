@@ -51,14 +51,7 @@ export function evaluate<T extends FlagValueType>(
   }
 
   try {
-    const resultWithDetails = evaluateForSubject(
-      flag,
-      type,
-      subjectKey,
-      subjectAttributes,
-      defaultValue,
-      logger
-    )
+    const resultWithDetails = evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger)
     return resultWithDetails
   } catch (error) {
     logger.error('Error evaluating flag', { error })
