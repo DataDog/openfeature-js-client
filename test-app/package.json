@@ -11,11 +11,11 @@
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",
     "@datadog/openfeature-browser": "file:./browser.tgz",
-    "@openfeature/core": "^1.9.1",
-    "@openfeature/web-sdk": "^1.7.2"
+    "@openfeature/core": "^1.9.2",
+    "@openfeature/web-sdk": "^1.7.3"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
-    "vite": "^5.0.12"
+    "vite": "^5.4.21"
   }
 }
