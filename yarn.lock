@@ -634,9 +634,14 @@ __metadata:
   linkType: hard
 
 "@csstools/css-syntax-patches-for-csstree@npm:^1.0.28":
-  version: 1.1.0
-  resolution: "@csstools/css-syntax-patches-for-csstree@npm:1.1.0"
-  checksum: 10c0/ef84e09ead31d204e238eb674016b34a54083344348b4e4fd63cb03486dcaa5b53feeff74a6c246763973cca0eb3213a70f49ca8545ce26a3b3d9c97255f4dd1
+  version: 1.1.1
+  resolution: "@csstools/css-syntax-patches-for-csstree@npm:1.1.1"
+  peerDependencies:
+    css-tree: ^3.2.1
+  peerDependenciesMeta:
+    css-tree:
+      optional: true
+  checksum: 10c0/947f82e9e8af0512f1d6600f68da1bbe8d15112fa73435169608a68dcf20262ae517c799202c86a6c3bc889d0e9fab724ad5661a3aa98432390f8f9765b86ddc
   languageName: node
   linkType: hard
 
@@ -741,17 +746,17 @@ __metadata:
   resolution: "@datadog/openfeature-node-server@workspace:packages/node-server"
   dependencies:
     "@datadog/flagging-core": "npm:0.3.3"
-    "@openfeature/core": "npm:1.3.0"
-    "@openfeature/server-sdk": "npm:1.15.0"
+    "@openfeature/core": "npm:1.9.2"
+    "@openfeature/server-sdk": "npm:1.15.1"
     "@types/jest": "npm:^30.0.0"
-    "@types/node": "npm:^18.0.0"
-    jest: "npm:^30.0.4"
+    "@types/node": "npm:^18.19.130"
+    jest: "npm:^30.0.5"
     npm-run-all: "npm:^4.1.5"
     ts-jest: "npm:^29.4.0"
-    ts-loader: "npm:^9.5.2"
-    typescript: "npm:^5.5.0"
+    ts-loader: "npm:^9.5.4"
+    typescript: "npm:^5.9.3"
   peerDependencies:
-    "@openfeature/server-sdk": ">=1.15.0 <2.0.0"
+    "@openfeature/server-sdk": ">=1.15.1"
   peerDependenciesMeta:
     "@openfeature/server-sdk":
       optional: true
@@ -2143,33 +2148,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/core@npm:1.3.0":
-  version: 1.3.0
-  resolution: "@openfeature/core@npm:1.3.0"
-  checksum: 10c0/48760b65d259d73d80ed5b3e03d5f4f604dfbe4a86561c0fb9c1b56d8a659ddead3c60260259ddca50d70c82d5dc181da5499d8a129b7bdcfeec0892e9865a0c
-  languageName: node
-  linkType: hard
-
-"@openfeature/core@npm:^1.8.1":
-  version: 1.8.1
-  resolution: "@openfeature/core@npm:1.8.1"
-  checksum: 10c0/534396e8890858e8aba4ca73062a657b6078f0c94d6f3a041100026ed005183e617c2b6e7076c06cb55d96c9edb296b40653bbb495cf42d036a6a62364b256ea
-  languageName: node
-  linkType: hard
-
-"@openfeature/core@npm:^1.9.2":
+"@openfeature/core@npm:1.9.2, @openfeature/core@npm:^1.8.1, @openfeature/core@npm:^1.9.2":
   version: 1.9.2
   resolution: "@openfeature/core@npm:1.9.2"
   checksum: 10c0/a0600c16f9c9e8721964643d2b0ccf5501767eee34908eec1a2a4d8fdb47c5f8224bdc254067a18d069bf7d57d9bdbc7b9cdf50cb1cb8d253778c43c11ed760b
   languageName: node
   linkType: hard
 
-"@openfeature/server-sdk@npm:1.15.0":
-  version: 1.15.0
-  resolution: "@openfeature/server-sdk@npm:1.15.0"
+"@openfeature/server-sdk@npm:1.15.1":
+  version: 1.15.1
+  resolution: "@openfeature/server-sdk@npm:1.15.1"
   peerDependencies:
-    "@openfeature/core": 1.3.0
-  checksum: 10c0/92743e39e6f5add95b13ac7921841c4958380b4cb69e4f1edd01c11c13b26426d71896846437c6689e994235f29839cc85b7a7f0534c1fc7b3f16a22b3c5ccd1
+    "@openfeature/core": 1.4.0
+  checksum: 10c0/686d55f0e55e34def1c94b99bf4c1be68767a9aeb4d2e7f878b9cdb7d8fa07f2e145666023c1cd8966577ea214df79dda318414e1619641930648e6a50cd7032
   languageName: node
   linkType: hard
 
@@ -7097,10 +7088,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lru-cache@npm:^11.0.0, lru-cache@npm:^11.1.0, lru-cache@npm:^11.2.1, lru-cache@npm:^11.2.6":
-  version: 11.2.6
-  resolution: "lru-cache@npm:11.2.6"
-  checksum: 10c0/73bbffb298760e71b2bfe8ebc16a311c6a60ceddbba919cfedfd8635c2d125fbfb5a39b71818200e67973b11f8d59c5a9e31d6f90722e340e90393663a66e5cd
+"lru-cache@npm:^11.0.0, lru-cache@npm:^11.1.0, lru-cache@npm:^11.2.1":
+  version: 11.2.5
+  resolution: "lru-cache@npm:11.2.5"
+  checksum: 10c0/cc98958d25dddf1c8a8cbdc49588bd3b24450e8dfa78f32168fd188a20d4a0331c7406d0f3250c86a46619ee288056fd7a1195e8df56dc8a9592397f4fbd8e1d
+  languageName: node
+  linkType: hard
+
+"lru-cache@npm:^11.2.6":
+  version: 11.2.7
+  resolution: "lru-cache@npm:11.2.7"
+  checksum: 10c0/549cdb59488baa617135fc12159cafb1a97f91079f35093bb3bcad72e849fc64ace636d244212c181dfdf1a99bbfa90757ff303f98561958ee4d0f885d9bd5f7
   languageName: node
   linkType: hard
 
@@ -9784,10 +9782,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tldts-core@npm:^7.0.25":
-  version: 7.0.25
-  resolution: "tldts-core@npm:7.0.25"
-  checksum: 10c0/fd07a555a27a6f11ed87365845d80bf7755d490cd52adf6cd474cbb9148fdaa97c79f58a8ebbc19ccfec0578e76ced5f5ae3b88e85338529291918f5fe815914
+"tldts-core@npm:^7.0.27":
+  version: 7.0.27
+  resolution: "tldts-core@npm:7.0.27"
+  checksum: 10c0/5f148db83b9e5d51a510bd512dd16e158e70eda41bd8a8b39dadc9bd2d969e5342862eee2231d21ed80a1e1c4af6572aea56fba3e38c184f94708942d5141987
   languageName: node
   linkType: hard
 
@@ -9803,13 +9801,13 @@ __metadata:
   linkType: hard
 
 "tldts@npm:^7.0.5":
-  version: 7.0.25
-  resolution: "tldts@npm:7.0.25"
+  version: 7.0.27
+  resolution: "tldts@npm:7.0.27"
   dependencies:
-    tldts-core: "npm:^7.0.25"
+    tldts-core: "npm:^7.0.27"
   bin:
     tldts: bin/cli.js
-  checksum: 10c0/8affd92849a4b0e290c5b211dce58ddee79d5e6d7079fc592afb97d95decd90028194b844c0b3cfb9254de02fb73e01f89500f3e47073dd96a3266223ca221b9
+  checksum: 10c0/8bd6d2ef27e27560ffca1784067f6ee45ce2eebb0c094126681ed8d42c728904418855dd165c8272039af46a9a8e832990e564c17f5dbff041c5306d50d4cf40
   languageName: node
   linkType: hard
 
@@ -9846,11 +9844,11 @@ __metadata:
   linkType: hard
 
 "tough-cookie@npm:^6.0.0":
-  version: 6.0.0
-  resolution: "tough-cookie@npm:6.0.0"
+  version: 6.0.1
+  resolution: "tough-cookie@npm:6.0.1"
   dependencies:
     tldts: "npm:^7.0.5"
-  checksum: 10c0/7b17a461e9c2ac0d0bea13ab57b93b4346d0b8c00db174c963af1e46e4ea8d04148d2a55f2358fc857db0c0c65208a98e319d0c60693e32e0c559a9d9cf20cb5
+  checksum: 10c0/ec70bd6b1215efe4ed31a158f0be3e4c9088fcbd8620edc23a5860d4f3d85c757b77e274baaa700f7b25e409f4181552ed189603c2b2e1a9f88104da3a61a37d
   languageName: node
   linkType: hard
 
@@ -10195,9 +10193,9 @@ __metadata:
   linkType: hard
 
 "undici@npm:^7.21.0":
-  version: 7.22.0
-  resolution: "undici@npm:7.22.0"
-  checksum: 10c0/09777c06f3f18f761f03e3a4c9c04fd9fcca8ad02ccea43602ee4adf73fcba082806f1afb637f6ea714ef6279c5323c25b16d435814c63db720f63bfc20d316b
+  version: 7.24.5
+  resolution: "undici@npm:7.24.5"
+  checksum: 10c0/2a836f1f6ab078fde3eeb4cc8fd5b34eeaf52cfbdf16a9bab61b7223f43f7847bcd2125d1da7c4e3f5996c528bf9f7940015d39909bab80cfbd71b855470cf21
   languageName: node
   linkType: hard
 
