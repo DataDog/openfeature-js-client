@@ -70,6 +70,13 @@ describe('createFlagEvaluationTrackingHook', () => {
         warn: jest.fn(),
         error: jest.fn(),
       } as any,
+      hookData: {
+        set: jest.fn(),
+        get: jest.fn(),
+        has: jest.fn(),
+        delete: jest.fn(),
+        clear: jest.fn(),
+      } as any,
     }
 
     const mockDetails: EvaluationDetails<boolean> = {
