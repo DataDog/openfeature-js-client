@@ -56,8 +56,8 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         // enableExposureLogging not specified - should default to true
       })
-      // Should have 2 hooks: flag evaluation tracking (default true) + exposure logging (default true)
-      expect(providerWithDefaults.hooks).toHaveLength(2)
+      // Should have 3 hooks: flag evaluation tracking (default true) + exposure logging (default true) + auto RUM tracking
+      expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
     it('should not add exposure logging hook when enableExposureLogging is false', () => {
@@ -68,8 +68,8 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableExposureLogging: false,
       })
-      // Should have 1 hook: flag evaluation tracking only
-      expect(providerWithoutExposures.hooks).toHaveLength(1)
+      // Should have 2 hooks: flag evaluation tracking + auto RUM tracking
+      expect(providerWithoutExposures.hooks).toHaveLength(2)
     })
 
     it('should add flag evaluation tracking hook by default when enableFlagEvaluationTracking is not specified', () => {
@@ -80,8 +80,8 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         // enableFlagEvaluationTracking not specified - should default to true
       })
-      // Should have 2 hooks: flag evaluation tracking (default true) + exposure logging (default true)
-      expect(providerWithDefaults.hooks).toHaveLength(2)
+      // Should have 3 hooks: flag evaluation tracking (default true) + exposure logging (default true) + auto RUM tracking
+      expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
     it('should not add flag evaluation tracking hook when enableFlagEvaluationTracking is false', () => {
@@ -92,11 +92,36 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableFlagEvaluationTracking: false,
       })
-      // Should have 1 hook: exposure logging only
-      expect(providerWithoutEvalTracking.hooks).toHaveLength(1)
+      // Should have 2 hooks: exposure logging + auto RUM tracking
+      expect(providerWithoutEvalTracking.hooks).toHaveLength(2)
     })
 
-    it('should have no hooks when both tracking options are disabled', () => {
+    it('should have auto RUM tracking hook even when both other tracking options are disabled', () => {
+      const providerWithMinHooks = new DatadogProvider({
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+      })
+      // Should have 1 hook: auto RUM tracking only
+      expect(providerWithMinHooks.hooks).toHaveLength(1)
+    })
+
+    it('should not add auto RUM tracking hook when enableRumFeatureFlagTracking is false', () => {
+      const providerWithoutRum = new DatadogProvider({
+        clientToken: 'xxx',
+        applicationId: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableRumFeatureFlagTracking: false,
+      })
+      // Should have 2 hooks: flag evaluation tracking + exposure logging
+      expect(providerWithoutRum.hooks).toHaveLength(2)
+    })
+
+    it('should have no hooks when all tracking options are disabled', () => {
       const providerWithNoHooks = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -104,6 +129,7 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableExposureLogging: false,
         enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
       })
       expect(providerWithNoHooks.hooks).toHaveLength(0)
     })

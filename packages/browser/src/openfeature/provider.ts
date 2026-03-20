@@ -16,15 +16,17 @@ import {
   ProviderStatus,
 } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable } from '../cache/helpers'
+import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
+import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { evaluate } from '../evaluation'
-import { createExposureLoggingHook, createRumTrackingHook } from './exposures'
+import { createExposureLoggingHook } from './exposures'
 import { createFlagEvaluationTrackingHook } from './flagEvaluations'
+import { createRumTrackingHook } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -46,6 +48,8 @@ export class DatadogProvider implements Provider {
   private flagsConfiguration: FlagsConfiguration = {}
   private configuration?: FlaggingConfiguration
   private exposureCache: AssignmentCache | undefined
+  private flagsCache: IndexedDBFlagsCache | undefined
+  private readonly hasInitialFlagsConfiguration: boolean
 
   constructor(options: FlaggingInitConfiguration) {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -54,9 +58,9 @@ export class DatadogProvider implements Provider {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
 
-    // Add RUM flag tracking hook (DEPRECATED)
-    if (options.rum?.ddFlaggingTracking) {
-      this.hooks.push(createRumTrackingHook(options.rum.sdk))
+    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (isRumFeatureFlagTrackingEnabled) {
+      this.hooks.push(createRumTrackingHook())
     }
 
     // Add flag evaluation tracking hook
@@ -75,6 +79,12 @@ export class DatadogProvider implements Provider {
       this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
     }
 
+    if (hasIndexedDB()) {
+      this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
+    }
+
+    this.hasInitialFlagsConfiguration = !!options.initialFlagsConfiguration
+
     if (options.initialFlagsConfiguration) {
       this.flagsConfiguration = options.initialFlagsConfiguration
       this.status = ProviderStatus.READY
@@ -88,9 +98,31 @@ export class DatadogProvider implements Provider {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
-    await this.exposureCache?.init()
-    this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+
+    // Start all async work concurrently — cache read should not delay the fetch.
+    const cachedConfigPromise = !this.hasInitialFlagsConfiguration ? this.flagsCache?.get(context) : undefined
+    const exposureCacheReady = this.exposureCache?.init()
+
+    try {
+      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+      // Fire-and-forget: cache write should not block readiness
+      this.flagsCache?.set(this.flagsConfiguration, context)
+    } catch (error) {
+      // Network failed — try to serve from cache or initialFlagsConfiguration
+      const cachedConfig = await cachedConfigPromise
+      if (cachedConfig?.precomputed) {
+        this.flagsConfiguration = cachedConfig
+      }
+      if (this.flagsConfiguration?.precomputed) {
+        this.status = ProviderStatus.STALE
+        this.events.emit(ProviderEvents.Stale)
+        await exposureCacheReady
+        return
+      }
+      throw error
+    }
     this.status = ProviderStatus.READY
+    await exposureCacheReady
   }
 
   async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -100,6 +132,8 @@ export class DatadogProvider implements Provider {
     this.status = ProviderStatus.RECONCILING
     try {
       this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
+      // Fire-and-forget: cache write should not block readiness
+      this.flagsCache?.set(this.flagsConfiguration, context)
       this.status = ProviderStatus.READY
     } catch (error) {
       this.events.emit(ProviderEvents.Error, { error })

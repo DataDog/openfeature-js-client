@@ -2,25 +2,70 @@
 
 set -euo pipefail
 
-## This file is meant to be run in CI to verify that the licenses are up to date.
+## Validates that every npm package in yarn.lock has a corresponding entry in
+## LICENSE-3rdparty.csv. This is a lightweight check that runs in CI without
+## requiring Python, dd-license-attribution, or a GITHUB_TOKEN.
+##
+## When this check fails, run 'yarn licenses:generate' locally to regenerate
+## the CSV and commit the result. See CONTRIBUTING.md for setup instructions.
 
-num_licenses=$(wc -l < LICENSE-3rdparty.csv)
+LICENSE_FILE="LICENSE-3rdparty.csv"
+LOCKFILE="yarn.lock"
+
+if [ ! -f "$LICENSE_FILE" ]; then
+    echo "ERROR: $LICENSE_FILE not found."
+    echo "Run 'yarn licenses:generate' to create it."
+    exit 1
+fi
+
+if [ ! -f "$LOCKFILE" ]; then
+    echo "ERROR: $LOCKFILE not found."
+    exit 1
+fi
+
+num_licenses=$(wc -l < "$LICENSE_FILE" | tr -d ' ')
 if [ "$num_licenses" -eq 0 ]; then
-    echo "No licenses found. Run 'yarn licenses:generate' to generate the licenses."
+    echo "ERROR: $LICENSE_FILE is empty."
+    echo "Run 'yarn licenses:generate' to populate it."
     exit 1
 fi
 
-echo "Found $num_licenses licenses."
+echo "LICENSE-3rdparty.csv has $num_licenses entries."
 
-yarn licenses:generate
+# Extract workspace package names (our own packages, not third-party).
+workspace_packages=$(grep '@workspace:' "$LOCKFILE" | grep '^"' | sed 's/"//g; s/@workspace:.*//' | sort -u)
 
-num_licenses_expected=$(wc -l < LICENSE-3rdparty.csv)
+# Extract all npm package names from yarn.lock (lines starting with " that contain @npm:).
+lockfile_packages=$(grep '^"' "$LOCKFILE" | grep '@npm:' | sed 's/"//g; s/@npm:.*//' | sort -u)
 
-echo "Expected $num_licenses_expected licenses."
+# Extract component names from LICENSE-3rdparty.csv (first column, skip header).
+csv_components=$(tail -n +2 "$LICENSE_FILE" | cut -d',' -f1 | sed 's/"//g' | sort -u)
 
-if [ "$num_licenses" -lt "$num_licenses_expected" ]; then
-    echo "Packages have been added. Run 'yarn licenses:generate' to update the LICENSE-3rdparty.csv file."
-    exit 1
+# Find packages in yarn.lock that are missing from the CSV (excluding workspaces).
+missing=()
+while IFS= read -r pkg; do
+    # Skip workspace packages.
+    if echo "$workspace_packages" | grep -qxF "$pkg"; then
+        continue
+    fi
+    # Check if the package is in the CSV.
+    if ! echo "$csv_components" | grep -qxF "$pkg"; then
+        missing+=("$pkg")
+    fi
+done <<< "$lockfile_packages"
+
+if [ ${#missing[@]} -eq 0 ]; then
+    echo "All packages in yarn.lock have license entries."
+    exit 0
 fi
 
-echo "Licenses are up to date."
+echo ""
+echo "ERROR: ${#missing[@]} package(s) in yarn.lock are missing from $LICENSE_FILE:"
+echo ""
+for pkg in "${missing[@]}"; do
+    echo "  - $pkg"
+done
+echo ""
+echo "Run 'yarn licenses:generate' locally and commit the updated $LICENSE_FILE."
+echo "See CONTRIBUTING.md for setup instructions."
+exit 1

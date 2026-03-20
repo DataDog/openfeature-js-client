@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-browser",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@datadog/browser-core": "^6.19.0",
-    "@datadog/flagging-core": "1.0.0",
+    "@datadog/flagging-core": "1.1.0",
     "@types/chrome": "^0.1.18"
   },
   "peerDependencies": {
@@ -57,6 +57,7 @@
     "@openfeature/web-sdk": "^1.5.0",
     "@types/jest": "^29.4.0",
     "@types/node": "^18.0.0",
+    "fake-indexeddb": "^6.2.5",
     "jest": "^30.0.4",
     "jest-environment-jsdom": "^30.0.4",
     "jest-util": "^30.0.2",
@@ -64,6 +65,7 @@
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.0",
     "ts-loader": "^9.5.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "whatwg-fetch": "^3.6.20"
   }
 }
