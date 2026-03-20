@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { ExposureEvent } from '@datadog/flagging-core'
 import {
   type BaseHook,
+  ErrorCode,
   type EvaluationDetails,
   type FlagValue,
   type HookContext,
@@ -11,6 +12,7 @@ import {
   type Logger,
   OpenFeature,
   ProviderEvents,
+  StandardResolutionReasons,
 } from '@openfeature/server-sdk'
 import type { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from 'src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
@@ -109,9 +111,44 @@ describe('DatadogNodeServerProvider', () => {
     }
     client.addHooks(testHook)
 
-    await client.getBooleanDetails('test-flag', false)
+    await client.getBooleanDetails('kill-switch', false)
 
     expect(afterHook).toHaveBeenCalled()
+  }, 1000)
+
+  it('should return FLAG_NOT_FOUND error for non-existent flags', async () => {
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+    })
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(provider)
+    OpenFeature.setLogger(logger)
+    OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    const client = OpenFeature.getClient()
+
+    const details = await client.getBooleanDetails('flag-that-does-not-exist', false)
+
+    expect(details.value).toBe(false)
+    expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+    expect(details.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND)
+  }, 1000)
+
+  it('should return TYPE_MISMATCH error when evaluating wrong type', async () => {
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+    })
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(provider)
+    OpenFeature.setLogger(logger)
+    OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    const client = OpenFeature.getClient()
+
+    // kill-switch is a BOOLEAN flag, evaluate it as STRING
+    const details = await client.getStringDetails('kill-switch', 'default')
+
+    expect(details.value).toBe('default')
+    expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+    expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
   }, 1000)
 
   it('should only emit ready event after configuration is set', async () => {
