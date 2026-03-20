@@ -1,18 +1,15 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
-import ChromeStorageAssignmentCache from './chrome-storage-assignment-cache'
-import { hasWindowLocalStorage } from './helpers'
+import { hasIndexedDB } from './helpers'
 import HybridAssignmentCache from './hybrid-assignment-cache'
-import { LocalStorageAssignmentCache } from './local-storage-assignment-cache'
+import { IndexedDBAssignmentCache } from './indexeddb-assignment-cache'
 import SimpleAssignmentCache from './simple-assignment-cache'
 
 export function assignmentCacheFactory({
   forceMemoryOnly = false,
-  chromeStorage,
-  storageKeySuffix,
+  clientToken,
 }: {
   forceMemoryOnly?: boolean
-  storageKeySuffix: string
-  chromeStorage?: chrome.storage.StorageArea
+  clientToken: string
 }): AssignmentCache {
   const simpleCache = new SimpleAssignmentCache()
 
@@ -20,15 +17,10 @@ export function assignmentCacheFactory({
     return simpleCache
   }
 
-  if (chromeStorage) {
-    const chromeStorageCache = new ChromeStorageAssignmentCache(chromeStorage)
-    return new HybridAssignmentCache(simpleCache, chromeStorageCache)
-  } else {
-    if (hasWindowLocalStorage()) {
-      const localStorageCache = new LocalStorageAssignmentCache(storageKeySuffix)
-      return new HybridAssignmentCache(simpleCache, localStorageCache)
-    } else {
-      return simpleCache
-    }
+  if (hasIndexedDB()) {
+    const indexedDBCache = new IndexedDBAssignmentCache(clientToken)
+    return new HybridAssignmentCache(simpleCache, indexedDBCache)
   }
+
+  return simpleCache
 }

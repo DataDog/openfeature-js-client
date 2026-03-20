@@ -1,8 +1,3 @@
-// structuredClone is required by fake-indexeddb but not available in jsdom
-if (typeof globalThis.structuredClone === 'undefined') {
-  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
-}
-import 'fake-indexeddb/auto'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'

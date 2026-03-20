@@ -1,41 +1,19 @@
-/**
- * @jest-environment jsdom
- */
-
+import { IDBFactory } from 'fake-indexeddb'
 import type { ExposureEvent } from '../../../core/src/configuration/exposureEvent.types'
-import ChromeStorageAssignmentCache from '../../src/cache/chrome-storage-assignment-cache'
 import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'
-import { LocalStorageAssignmentCache } from '../../src/cache/local-storage-assignment-cache'
-
-import StorageArea = chrome.storage.StorageArea
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
+import SimpleAssignmentCache from '../../src/cache/simple-assignment-cache'
 
 describe('HybridStorageAssignmentCache', () => {
-  const fakeStore: Record<string, string> = {}
-
-  const get = jest.fn((key?: string) => {
-    return new Promise((resolve) => {
-      if (!key) {
-        resolve(fakeStore)
-      } else {
-        resolve({ [key]: fakeStore[key] })
-      }
-    })
-  }) as jest.Mock
-
-  const set = jest.fn((items: { [key: string]: string }) => {
-    return new Promise((resolve) => {
-      Object.assign(fakeStore, items)
-      resolve(undefined)
-    })
-  }) as jest.Mock
-
-  const mockChromeStorage = { get, set } as unknown as StorageArea
-  const chromeStorageCache = new ChromeStorageAssignmentCache(mockChromeStorage)
-  const localStorageCache = new LocalStorageAssignmentCache('test')
-  const hybridCache = new HybridAssignmentCache(localStorageCache, chromeStorageCache)
+  let servingCache: SimpleAssignmentCache
+  let persistentCache: IndexedDBAssignmentCache
+  let hybridCache: HybridAssignmentCache
 
   beforeEach(() => {
-    window.localStorage.clear()
+    globalThis.indexedDB = new IDBFactory()
+    servingCache = new SimpleAssignmentCache()
+    persistentCache = new IndexedDBAssignmentCache('test-token')
+    hybridCache = new HybridAssignmentCache(servingCache, persistentCache)
   })
 
   it('has should return false if cache is empty', async () => {
@@ -58,13 +36,13 @@ describe('HybridStorageAssignmentCache', () => {
     }
     await hybridCache.init()
     expect(hybridCache.has(exposureEvent)).toBeFalsy()
-    expect(localStorageCache.has(exposureEvent)).toBeFalsy()
+    expect(servingCache.has(exposureEvent)).toBeFalsy()
     hybridCache.set(exposureEvent)
     expect(hybridCache.has(exposureEvent)).toBeTruthy()
-    expect(localStorageCache.has(exposureEvent)).toBeTruthy()
+    expect(servingCache.has(exposureEvent)).toBeTruthy()
   })
 
-  it('should populate localStorageCache from chromeStorageCache', async () => {
+  it('should populate serving cache from persistent cache on init', async () => {
     const exposureEvent1: ExposureEvent = {
       subject: { id: 'subject-1', attributes: {} },
       flag: { key: 'flag-1' },
@@ -83,12 +61,17 @@ describe('HybridStorageAssignmentCache', () => {
       allocation: { key: 'foo' },
       variant: { key: 'control' },
     }
-    expect(localStorageCache.has(exposureEvent1)).toBeFalsy()
-    chromeStorageCache.set(exposureEvent1)
-    chromeStorageCache.set(exposureEvent2)
+
+    // Write entries directly to the persistent store
+    persistentCache.set(exposureEvent1)
+    persistentCache.set(exposureEvent2)
+    // Allow fire-and-forget persist to complete
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Init should hydrate the serving cache from the persistent store
     await hybridCache.init()
-    expect(localStorageCache.has(exposureEvent1)).toBeTruthy()
-    expect(localStorageCache.has(exposureEvent2)).toBeTruthy()
-    expect(localStorageCache.has(exposureEvent3)).toBeFalsy()
+    expect(servingCache.has(exposureEvent1)).toBeTruthy()
+    expect(servingCache.has(exposureEvent2)).toBeTruthy()
+    expect(servingCache.has(exposureEvent3)).toBeFalsy()
   })
 })
