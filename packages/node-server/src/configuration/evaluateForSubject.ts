@@ -82,9 +82,15 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variant.value,
         })
 
+        const reason = allocation.rules?.length
+          ? StandardResolutionReasons.TARGETING_MATCH
+          : selectedSplit.shards.length
+            ? StandardResolutionReasons.SPLIT
+            : StandardResolutionReasons.STATIC
+
         return {
           value: variant.value as FlagTypeToValue<T>,
-          reason: StandardResolutionReasons.TARGETING_MATCH,
+          reason,
           variant: variant.key,
           flagMetadata: {
             allocationKey: allocation.key,
