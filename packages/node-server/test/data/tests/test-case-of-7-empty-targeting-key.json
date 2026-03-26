@@ -6,7 +6,8 @@
     "targetingKey": "",
     "attributes": {},
     "result": {
-      "value": "on-value"
+      "value": "on-value",
+      "reason": "STATIC"
     }
   }
 ]
