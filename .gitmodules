@@ -1,0 +1,4 @@
+[submodule "packages/node-server/test/ffe-system-test-data"]
+	path = packages/node-server/test/ffe-system-test-data
+	url = git@github.com:DataDog/ffe-system-test-data.git
+	branch = main

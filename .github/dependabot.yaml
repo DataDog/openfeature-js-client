@@ -26,6 +26,20 @@ updates:
       include: scope
     cooldown:
       default-days: 14
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/New_York
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "\U0001F477 chore(deps)"
+      include: scope
+    cooldown:
+      default-days: 14
   - package-ecosystem: github-actions
     directory: /
     schedule:
