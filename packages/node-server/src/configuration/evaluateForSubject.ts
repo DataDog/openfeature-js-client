@@ -11,10 +11,17 @@ import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
+class TargetingKeyMissingError extends Error {
+  constructor() {
+    super('Targeting key is required for shard evaluation')
+    this.name = 'TargetingKeyMissingError'
+  }
+}
+
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag,
   type: T,
-  subjectKey: string,
+  subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
@@ -72,7 +79,19 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
+    let selectedSplit: Split | null
+    try {
+      selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
+    } catch (e) {
+      if (e instanceof TargetingKeyMissingError) {
+        return {
+          value: defaultValue,
+          reason: StandardResolutionReasons.ERROR,
+          errorCode: ErrorCode.TARGETING_KEY_MISSING,
+        }
+      }
+      throw e
+    }
     if (selectedSplit) {
       const variant = flag.variations[selectedSplit.variationKey]
       if (variant) {
@@ -145,7 +164,12 @@ export function containsMatchingRule(
   return rules.some((rule) => matchesRule(rule, subjectAttributes))
 }
 
-function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: string, logger: Logger): Split | null {
+function selectSplitUsingSharding(
+  splits: Split[],
+  subjectKey: string | null | undefined,
+  flagKey: string,
+  logger: Logger
+): Split | null {
   if (!splits || splits.length === 0) {
     return null
   }
@@ -158,8 +182,12 @@ function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: 
       shards: split.shards,
     })
 
+    if (split.shards.length > 0 && subjectKey == null) {
+      throw new TargetingKeyMissingError()
+    }
+
     const matches = split.shards.every((shard) => {
-      const shardMatches = matchesShard(shard, subjectKey)
+      const shardMatches = matchesShard(shard, subjectKey as string)
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,

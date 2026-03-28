@@ -27,17 +27,10 @@ export function evaluate<T extends FlagValueType>(
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context
-  if (subjectKey == null) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: ErrorCode.TARGETING_KEY_MISSING,
-    }
-  }
 
-  // Include the subjectKey as an "id" attribute for rule matching
+  // Include the subjectKey as an "id" attribute for rule matching, only when present
   const subjectAttributes = {
-    id: subjectKey,
+    ...(subjectKey != null ? { id: subjectKey } : {}),
     ...remainingContext,
   }
   const flag = config.flags[flagKey]
