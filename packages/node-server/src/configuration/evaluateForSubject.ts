@@ -11,10 +11,17 @@ import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
+class TargetingKeyMissingError extends Error {
+  constructor() {
+    super('Targeting key is required for shard evaluation')
+    this.name = 'TargetingKeyMissingError'
+  }
+}
+
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag,
   type: T,
-  subjectKey: string,
+  subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
@@ -145,12 +152,16 @@ export function containsMatchingRule(
   return rules.some((rule) => matchesRule(rule, subjectAttributes))
 }
 
-function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: string, logger: Logger): Split | null {
+function selectSplitUsingSharding(splits: Split[], subjectKey: string | null | undefined, flagKey: string, logger: Logger): Split | null {
   if (!splits || splits.length === 0) {
     return null
   }
 
   for (const split of splits) {
+    if (split.shards.length > 0 && subjectKey == null) {
+      throw new TargetingKeyMissingError()
+    }
+
     logger.debug(`evaluating split sharding`, {
       flagKey,
       subjectKey,
@@ -159,7 +170,7 @@ function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: 
     })
 
     const matches = split.shards.every((shard) => {
-      const shardMatches = matchesShard(shard, subjectKey)
+      const shardMatches = matchesShard(shard, subjectKey as string)
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,
