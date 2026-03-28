@@ -2982,9 +2982,7 @@
                     {
                       "attribute": "country",
                       "operator": "ONE_OF",
-                      "value": [
-                        "US"
-                      ]
+                      "value": ["US"]
                     }
                   ]
                 }

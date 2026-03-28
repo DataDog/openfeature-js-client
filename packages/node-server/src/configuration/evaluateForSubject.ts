@@ -152,7 +152,12 @@ export function containsMatchingRule(
   return rules.some((rule) => matchesRule(rule, subjectAttributes))
 }
 
-function selectSplitUsingSharding(splits: Split[], subjectKey: string | null | undefined, flagKey: string, logger: Logger): Split | null {
+function selectSplitUsingSharding(
+  splits: Split[],
+  subjectKey: string | null | undefined,
+  flagKey: string,
+  logger: Logger
+): Split | null {
   if (!splits || splits.length === 0) {
     return null
   }
