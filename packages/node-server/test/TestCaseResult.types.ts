@@ -6,7 +6,7 @@ export interface TestCase {
   flag: string
   variationType: VariantType
   defaultValue: FlagValue
-  targetingKey: string
+  targetingKey: string | null
   attributes: Record<string, EvaluationContextValue>
   result: {
     value: FlagValue

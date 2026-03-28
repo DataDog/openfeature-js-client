@@ -2919,6 +2919,85 @@
               "doLog": true
             }
           ]
+        },
+        "sharded-flag": {
+          "key": "sharded-flag",
+          "enabled": true,
+          "variationType": "STRING",
+          "variations": {
+            "on": {
+              "key": "on",
+              "value": "on-value"
+            },
+            "off": {
+              "key": "off",
+              "value": "off-value"
+            }
+          },
+          "allocations": [
+            {
+              "key": "shard-alloc",
+              "rules": [],
+              "splits": [
+                {
+                  "variationKey": "on",
+                  "shards": [
+                    {
+                      "salt": "test-salt",
+                      "ranges": [
+                        {
+                          "start": 0,
+                          "end": 5000
+                        }
+                      ],
+                      "totalShards": 10000
+                    }
+                  ]
+                }
+              ],
+              "doLog": false
+            }
+          ]
+        },
+        "rule-only-flag": {
+          "key": "rule-only-flag",
+          "enabled": true,
+          "variationType": "STRING",
+          "variations": {
+            "match": {
+              "key": "match",
+              "value": "matched-value"
+            },
+            "nomatch": {
+              "key": "nomatch",
+              "value": "no-match-value"
+            }
+          },
+          "allocations": [
+            {
+              "key": "rule-alloc",
+              "rules": [
+                {
+                  "conditions": [
+                    {
+                      "attribute": "country",
+                      "operator": "ONE_OF",
+                      "value": [
+                        "US"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "splits": [
+                {
+                  "variationKey": "match",
+                  "shards": []
+                }
+              ],
+              "doLog": false
+            }
+          ]
         }
       }
     }
