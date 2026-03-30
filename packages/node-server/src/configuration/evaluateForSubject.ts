@@ -6,6 +6,7 @@ import {
   type Logger,
   type ResolutionDetails,
   StandardResolutionReasons,
+  TargetingKeyMissingError,
 } from '@openfeature/server-sdk'
 import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
@@ -14,7 +15,7 @@ import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } f
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag,
   type: T,
-  subjectKey: string,
+  subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger
@@ -145,7 +146,12 @@ export function containsMatchingRule(
   return rules.some((rule) => matchesRule(rule, subjectAttributes))
 }
 
-function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: string, logger: Logger): Split | null {
+function selectSplitUsingSharding(
+  splits: Split[],
+  subjectKey: string | null | undefined,
+  flagKey: string,
+  logger: Logger
+): Split | null {
   if (!splits || splits.length === 0) {
     return null
   }
@@ -159,6 +165,9 @@ function selectSplitUsingSharding(splits: Split[], subjectKey: string, flagKey: 
     })
 
     const matches = split.shards.every((shard) => {
+      if (subjectKey == null) {
+        throw new TargetingKeyMissingError()
+      }
       const shardMatches = matchesShard(shard, subjectKey)
       logger.debug(`shard match result`, {
         flagKey,
