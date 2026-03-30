@@ -6,6 +6,41 @@
 
 ---
 
+## v1.1.1
+
+**Internal Changes:**
+
+- 👷 chore(deps)(deps): Bump picomatch from 2.3.1 to 2.3.2 ([#229](https://github.com/DataDog/openfeature-js-client/pull/229))
+- 👷 chore(deps)(deps): Bump tar from 7.5.7 to 7.5.11 ([#226](https://github.com/DataDog/openfeature-js-client/pull/226))
+- 👷 chore(deps-dev)(deps-dev): Bump the dev-dependencies group with 6 updates ([#214](https://github.com/DataDog/openfeature-js-client/pull/214))
+- 👷 chore(deps-dev)(deps-dev): Bump jsdom from 28.1.0 to 29.0.1 ([#217](https://github.com/DataDog/openfeature-js-client/pull/217)) [BROWSER]
+- 👷 chore(deps-dev)(deps-dev): Bump the dev-dependencies group across 1 directory with 14 updates ([#203](https://github.com/DataDog/openfeature-js-client/pull/203)) [BROWSER] [NODE-SERVER]
+- 👷 chore(deps)(deps): Bump tmp from 0.2.3 to 0.2.5 ([#174](https://github.com/DataDog/openfeature-js-client/pull/174))
+- fix: allow null targeting key for static and rule-only flags ([#232](https://github.com/DataDog/openfeature-js-client/pull/232)) [NODE-SERVER]
+- re-enable dependabot with 14-day cooldown ([#220](https://github.com/DataDog/openfeature-js-client/pull/220))
+- chore: disable automated dependency updater config [incident-51602] ([#219](https://github.com/DataDog/openfeature-js-client/pull/219))
+- Pin GitHub Actions ([#212](https://github.com/DataDog/openfeature-js-client/pull/212))
+- fix: handle concurrent onContextChange calls ([#213](https://github.com/DataDog/openfeature-js-client/pull/213)) [BROWSER] [NODE-SERVER]
+- DEPENDENCY UPGRADE: jsdom (major → 28.1.0) [packages/browser] ([#202](https://github.com/DataDog/openfeature-js-client/pull/202)) [BROWSER]
+- DEPENDENCY UPGRADE: minor upgrades — 6 packages (minor: 2 · patch: 4) [packages/node-server] ([#211](https://github.com/DataDog/openfeature-js-client/pull/211))
+- DEPENDENCY UPGRADE: minor upgrades — 6 packages (minor: 2 · patch: 4) [packages/node-server] ([#198](https://github.com/DataDog/openfeature-js-client/pull/198)) [BROWSER] [NODE-SERVER]
+- DEPENDENCY UPGRADE: minor upgrades — 4 packages (minor: 2 · patch: 2) [packages/core] ([#210](https://github.com/DataDog/openfeature-js-client/pull/210)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#209](https://github.com/DataDog/openfeature-js-client/pull/209))
+- Executing automated changes ([#208](https://github.com/DataDog/openfeature-js-client/pull/208))
+- Executing automated changes ([#201](https://github.com/DataDog/openfeature-js-client/pull/201))
+- Executing automated changes ([#200](https://github.com/DataDog/openfeature-js-client/pull/200))
+- Executing automated changes ([#199](https://github.com/DataDog/openfeature-js-client/pull/199)) [NODE-SERVER]
+- fix: licenses must be run on an attached branch ([#207](https://github.com/DataDog/openfeature-js-client/pull/207))
+- chore: ensure license generation can be run locally ([#206](https://github.com/DataDog/openfeature-js-client/pull/206))
+- test: polyfill fetch in jsdom environment ([#205](https://github.com/DataDog/openfeature-js-client/pull/205)) [BROWSER]
+- Return FLAG_NOT_FOUND error for non-existent flags ([#204](https://github.com/DataDog/openfeature-js-client/pull/204)) [NODE-SERVER]
+- Publish all packages in single step, skip already-published versions ([#196](https://github.com/DataDog/openfeature-js-client/pull/196))
+- Switch to Node 24 and add --provenance for OIDC trusted publishing ([#195](https://github.com/DataDog/openfeature-js-client/pull/195))
+- Remove registry-url from setup-node to fix OIDC publishing ([#194](https://github.com/DataDog/openfeature-js-client/pull/194))
+- Bump node to 22.x across all workflows for npm OIDC support ([#192](https://github.com/DataDog/openfeature-js-client/pull/192))
+- Migrate NPM publishing from token auth to OIDC trusted publishing ([#191](https://github.com/DataDog/openfeature-js-client/pull/191))
+- Release v1.1.0 ([#189](https://github.com/DataDog/openfeature-js-client/pull/189)) [BROWSER] [NODE-SERVER]
+
 ## v1.1.0
 
 **Behavior Changes:**
