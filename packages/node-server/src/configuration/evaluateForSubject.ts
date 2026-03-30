@@ -6,17 +6,11 @@ import {
   type Logger,
   type ResolutionDetails,
   StandardResolutionReasons,
+  TargetingKeyMissingError,
 } from '@openfeature/server-sdk'
 import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
-
-class TargetingKeyMissingError extends Error {
-  constructor() {
-    super('Targeting key is required for shard evaluation')
-    this.name = 'TargetingKeyMissingError'
-  }
-}
 
 export function evaluateForSubject<T extends FlagValueType>(
   flag: Flag,
@@ -163,10 +157,6 @@ function selectSplitUsingSharding(
   }
 
   for (const split of splits) {
-    if (split.shards.length > 0 && subjectKey == null) {
-      throw new TargetingKeyMissingError()
-    }
-
     logger.debug(`evaluating split sharding`, {
       flagKey,
       subjectKey,
@@ -175,7 +165,10 @@ function selectSplitUsingSharding(
     })
 
     const matches = split.shards.every((shard) => {
-      const shardMatches = matchesShard(shard, subjectKey as string)
+      if (subjectKey == null) {
+        throw new TargetingKeyMissingError()
+      }
+      const shardMatches = matchesShard(shard, subjectKey)
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,

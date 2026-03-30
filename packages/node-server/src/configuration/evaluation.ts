@@ -6,6 +6,7 @@ import {
   type Logger,
   type ResolutionDetails,
   StandardResolutionReasons,
+  TargetingKeyMissingError,
 } from '@openfeature/server-sdk'
 import { evaluateForSubject } from './evaluateForSubject'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
@@ -47,7 +48,7 @@ export function evaluate<T extends FlagValueType>(
     const resultWithDetails = evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger)
     return resultWithDetails
   } catch (error) {
-    if (error instanceof Error && error.name === 'TargetingKeyMissingError') {
+    if (error instanceof TargetingKeyMissingError) {
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
