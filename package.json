@@ -15,8 +15,7 @@
     "test:browser-install": "scripts/test-package-install.sh",
     "test:node-install": "scripts/test-node-package-install.sh",
     "test:node-install:with-of": "scripts/test-node-package-install.sh --with-openfeature",
-    "licenses:generate": "scripts/licenses-generate.sh",
-    "licenses:override": "scripts/licenses-override.sh",
+    "licenses:validate": "scripts/licenses-validate.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",
     "typecheck": "lerna run typecheck --stream",
@@ -24,10 +23,13 @@
     "release": "scripts/cli release",
     "version": "scripts/cli version",
     "format:check": "prettier --check .",
-    "format:fix": "prettier --write ."
+    "format:fix": "prettier --write .",
+    "setup": "yarn install && yarn allow-scripts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
+    "@lavamoat/allow-scripts": "^3.4.3",
+    "@lavamoat/preinstall-always-fail": "^2.1.0",
     "@types/node": "^18.19.130",
     "glob": "^11.0.3",
     "jest": "^30.0.5",
@@ -45,5 +47,13 @@
   "packageManager": "yarn@4.10.3",
   "dependencies": {
     "emoji-name-map": "^2.0.3"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "$root$": false,
+      "@lavamoat/preinstall-always-fail": false,
+      "jest>@jest/core>jest-resolve>unrs-resolver": true,
+      "lerna>nx": true
+    }
   }
 }

@@ -42,7 +42,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: yarn install --immutable && yarn allow-scripts
 
       - name: Build packages
         run: |

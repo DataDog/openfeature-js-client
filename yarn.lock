@@ -717,6 +717,8 @@ __metadata:
   resolution: "@datadog/openfeature-client-monorepo@workspace:."
   dependencies:
     "@biomejs/biome": "npm:^2.4.4"
+    "@lavamoat/allow-scripts": "npm:^3.4.3"
+    "@lavamoat/preinstall-always-fail": "npm:^2.1.0"
     "@types/node": "npm:^18.19.130"
     emoji-name-map: "npm:^2.0.3"
     glob: "npm:^11.0.3"
@@ -1483,6 +1485,40 @@ __metadata:
     "@jridgewell/resolve-uri": "npm:^3.1.0"
     "@jridgewell/sourcemap-codec": "npm:^1.4.14"
   checksum: 10c0/fb547ba31658c4d74eb17e7389f4908bf7c44cef47acb4c5baa57289daf68e6fe53c639f41f751b3923aca67010501264f70e7b49978ad1f040294b22c37b333
+  languageName: node
+  linkType: hard
+
+"@lavamoat/aa@npm:^4.3.6":
+  version: 4.3.6
+  resolution: "@lavamoat/aa@npm:4.3.6"
+  dependencies:
+    resolve: "npm:1.22.10"
+  bin:
+    lavamoat-ls: src/cli.js
+  checksum: 10c0/b0f8e078a355c9b1c3831eef9bea0e06e6c941efc0814d16cd2f6ae231eddf9665fa0cea80beed9e00f2d898937b0756b3ccbceb7fa6d31a7ad0460b3b6a7487
+  languageName: node
+  linkType: hard
+
+"@lavamoat/allow-scripts@npm:^3.4.3":
+  version: 3.4.3
+  resolution: "@lavamoat/allow-scripts@npm:3.4.3"
+  dependencies:
+    "@lavamoat/aa": "npm:^4.3.6"
+    "@npmcli/run-script": "npm:10.0.3"
+    bin-links: "npm:4.0.4"
+    npm-normalize-package-bin: "npm:3.0.1"
+    type-fest: "npm:4.41.0"
+    yargs: "npm:17.7.2"
+  bin:
+    allow-scripts: src/cli.js
+  checksum: 10c0/5f10ec3c7f147ae665603c0b09dce1f7b74e4150d11bbd72973f2f2a8b0e2d6a9429fe8bac2ab9c5de7fec582c11d309145401f68634c2ffd12e2e405ea001a7
+  languageName: node
+  linkType: hard
+
+"@lavamoat/preinstall-always-fail@npm:^2.1.0":
+  version: 2.1.1
+  resolution: "@lavamoat/preinstall-always-fail@npm:2.1.1"
+  checksum: 10c0/0871036915cc9014ebf04be59c8cf86e0f79f09381c5b46111b405230de37804824bd0be515330dfa249a9e128274ced26be6efa17ea36d884afd57d04075456
   languageName: node
   linkType: hard
 
@@ -3169,6 +3205,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"bin-links@npm:4.0.4":
+  version: 4.0.4
+  resolution: "bin-links@npm:4.0.4"
+  dependencies:
+    cmd-shim: "npm:^6.0.0"
+    npm-normalize-package-bin: "npm:^3.0.0"
+    read-cmd-shim: "npm:^4.0.0"
+    write-file-atomic: "npm:^5.0.0"
+  checksum: 10c0/feb664e786429289d189c19c193b28d855c2898bc53b8391306cbad2273b59ccecb91fd31a433020019552c3bad3a1e0eeecca1c12e739a12ce2ca94f7553a17
+  languageName: node
+  linkType: hard
+
 "bin-links@npm:^5.0.0":
   version: 5.0.0
   resolution: "bin-links@npm:5.0.0"
@@ -3550,7 +3598,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cmd-shim@npm:6.0.3":
+"cmd-shim@npm:6.0.3, cmd-shim@npm:^6.0.0":
   version: 6.0.3
   resolution: "cmd-shim@npm:6.0.3"
   checksum: 10c0/dc09fe0bf39e86250529456d9a87dd6d5208d053e449101a600e96dc956c100e0bc312cdb413a91266201f3bd8057d4abf63875cafb99039553a1937d8f3da36
@@ -7394,6 +7442,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"npm-normalize-package-bin@npm:3.0.1, npm-normalize-package-bin@npm:^3.0.0":
+  version: 3.0.1
+  resolution: "npm-normalize-package-bin@npm:3.0.1"
+  checksum: 10c0/f1831a7f12622840e1375c785c3dab7b1d82dd521211c17ee5e9610cd1a34d8b232d3fdeebf50c170eddcb321d2c644bf73dbe35545da7d588c6b3fa488db0a5
+  languageName: node
+  linkType: hard
+
 "npm-normalize-package-bin@npm:^4.0.0":
   version: 4.0.0
   resolution: "npm-normalize-package-bin@npm:4.0.0"
@@ -8278,7 +8333,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"read-cmd-shim@npm:4.0.0":
+"read-cmd-shim@npm:4.0.0, read-cmd-shim@npm:^4.0.0":
   version: 4.0.0
   resolution: "read-cmd-shim@npm:4.0.0"
   checksum: 10c0/e62db17ec9708f1e7c6a31f0a46d43df2069d85cf0df3b9d1d99e5ed36e29b1e8b2f8a427fd8bbb9bc40829788df1471794f9b01057e4b95ed062806e4df5ba9
@@ -8455,7 +8510,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"resolve@npm:^1.10.0":
+"resolve@npm:1.22.10, resolve@npm:^1.10.0":
   version: 1.22.10
   resolution: "resolve@npm:1.22.10"
   dependencies:
@@ -8468,7 +8523,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"resolve@patch:resolve@npm%3A^1.10.0#optional!builtin<compat/resolve>":
+"resolve@patch:resolve@npm%3A1.22.10#optional!builtin<compat/resolve>, resolve@patch:resolve@npm%3A^1.10.0#optional!builtin<compat/resolve>":
   version: 1.22.10
   resolution: "resolve@patch:resolve@npm%3A1.22.10#optional!builtin<compat/resolve>::version=1.22.10&hash=c3c19d"
   dependencies:
@@ -9571,6 +9626,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"type-fest@npm:4.41.0, type-fest@npm:^4.41.0":
+  version: 4.41.0
+  resolution: "type-fest@npm:4.41.0"
+  checksum: 10c0/f5ca697797ed5e88d33ac8f1fec21921839871f808dc59345c9cf67345bfb958ce41bd821165dbf3ae591cedec2bf6fe8882098dfdd8dc54320b859711a2c1e4
+  languageName: node
+  linkType: hard
+
 "type-fest@npm:^0.18.0":
   version: 0.18.1
   resolution: "type-fest@npm:0.18.1"
@@ -9596,13 +9658,6 @@ __metadata:
   version: 0.8.1
   resolution: "type-fest@npm:0.8.1"
   checksum: 10c0/dffbb99329da2aa840f506d376c863bd55f5636f4741ad6e65e82f5ce47e6914108f44f340a0b74009b0cb5d09d6752ae83203e53e98b1192cf80ecee5651636
-  languageName: node
-  linkType: hard
-
-"type-fest@npm:^4.41.0":
-  version: 4.41.0
-  resolution: "type-fest@npm:4.41.0"
-  checksum: 10c0/f5ca697797ed5e88d33ac8f1fec21921839871f808dc59345c9cf67345bfb958ce41bd821165dbf3ae591cedec2bf6fe8882098dfdd8dc54320b859711a2c1e4
   languageName: node
   linkType: hard
 
@@ -10230,7 +10285,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"write-file-atomic@npm:5.0.1, write-file-atomic@npm:^5.0.1":
+"write-file-atomic@npm:5.0.1, write-file-atomic@npm:^5.0.0, write-file-atomic@npm:^5.0.1":
   version: 5.0.1
   resolution: "write-file-atomic@npm:5.0.1"
   dependencies:

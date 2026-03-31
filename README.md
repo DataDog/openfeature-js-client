@@ -96,6 +96,29 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+## Contributing
+
+### Setup
+
+This project uses [`@lavamoat/allow-scripts`](https://github.com/LavaMoat/LavaMoat/tree/main/packages/allow-scripts) to protect against supply-chain attacks by blocking all dependency lifecycle scripts by default. Only explicitly allowlisted packages can run postinstall scripts.
+
+To install dependencies:
+
+```bash
+yarn setup
+```
+
+Do **not** use bare `yarn install` for local development — it will skip the postinstall scripts that some dependencies need (e.g. `nx`, `unrs-resolver`).
+
+### Adding new packages
+
+When you add a dependency that includes lifecycle scripts (preinstall/install/postinstall):
+
+1. Inspect the dependency's install scripts to verify they are safe.
+2. Run `yarn allow-scripts auto` to update the allowlist in `package.json`.
+3. Review the generated `lavamoat.allowScripts` entries — set trusted packages to `true` and leave untrusted ones as `false`.
+4. Run `yarn setup` to re-install with the updated allowlist.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula
