@@ -721,7 +721,7 @@ __metadata:
     "@lavamoat/preinstall-always-fail": "npm:^2.1.0"
     "@types/node": "npm:^18.19.130"
     emoji-name-map: "npm:^2.0.3"
-    glob: "npm:^11.0.3"
+    glob: "npm:^13.0.6"
     jest: "npm:^30.0.5"
     lerna: "npm:^9.0.3"
     npm-run-all: "npm:^4.1.5"
@@ -5017,7 +5017,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"glob@npm:^13.0.3":
+"glob@npm:^13.0.3, glob@npm:^13.0.6":
   version: 13.0.6
   resolution: "glob@npm:13.0.6"
   dependencies:
