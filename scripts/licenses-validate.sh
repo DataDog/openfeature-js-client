@@ -6,15 +6,15 @@ set -euo pipefail
 ## LICENSE-3rdparty.csv. This is a lightweight check that runs in CI without
 ## requiring Python, dd-license-attribution, or a GITHUB_TOKEN.
 ##
-## When this check fails, run 'yarn licenses:generate' locally to regenerate
-## the CSV and commit the result. See CONTRIBUTING.md for setup instructions.
+## When this check fails, manually add the missing packages to LICENSE-3rdparty.csv
+## and commit the result. An AI coding agent can help with this.
 
 LICENSE_FILE="LICENSE-3rdparty.csv"
 LOCKFILE="yarn.lock"
 
 if [ ! -f "$LICENSE_FILE" ]; then
     echo "ERROR: $LICENSE_FILE not found."
-    echo "Run 'yarn licenses:generate' to create it."
+    echo "Manually add entries to $LICENSE_FILE. An AI coding agent can help."
     exit 1
 fi
 
@@ -26,7 +26,7 @@ fi
 num_licenses=$(wc -l < "$LICENSE_FILE" | tr -d ' ')
 if [ "$num_licenses" -eq 0 ]; then
     echo "ERROR: $LICENSE_FILE is empty."
-    echo "Run 'yarn licenses:generate' to populate it."
+    echo "Manually add entries to $LICENSE_FILE. An AI coding agent can help."
     exit 1
 fi
 
@@ -66,6 +66,6 @@ for pkg in "${missing[@]}"; do
     echo "  - $pkg"
 done
 echo ""
-echo "Run 'yarn licenses:generate' locally and commit the updated $LICENSE_FILE."
-echo "See CONTRIBUTING.md for setup instructions."
+echo "Manually add the missing packages to $LICENSE_FILE and commit the result."
+echo "An AI coding agent can help with this."
 exit 1
