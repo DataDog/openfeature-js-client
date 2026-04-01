@@ -74,7 +74,7 @@ const config = await client.getObjectValue('feature-config', {})
 
 ### Using Evaluation Context
 
-Context must be set globally before flag evaluation and affects all subsequent evaluations.
+Context must be set globally before flag evaluation and affects all subsequent evaluations:
 
 ```javascript
 // Set global context (async operation)
