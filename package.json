@@ -27,7 +27,7 @@
     "setup": "yarn install && yarn allow-scripts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
+    "@biomejs/biome": "^2.4.10",
     "@lavamoat/allow-scripts": "^3.4.3",
     "@lavamoat/preinstall-always-fail": "^2.1.0",
     "@types/node": "^18.19.130",
