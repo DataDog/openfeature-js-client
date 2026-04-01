@@ -74,13 +74,14 @@ const config = await client.getObjectValue('feature-config', {})
 
 ### Using Evaluation Context
 
-Context must be set globally before flag evaluation and affects all subsequent evaluations:
+Context must be set globally before flag evaluation and affects all subsequent evaluations.
 
 ```javascript
 // Set global context (async operation)
 await OpenFeature.setContext({
   targetingKey: 'user-123',
-  user: { id: 'user-123', email: 'user@example.com' },
+  userId: 'user-123',
+  userEmail: 'user@example.com',
 })
 
 // Now evaluate flags with the context
