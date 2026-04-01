@@ -74,13 +74,16 @@ const config = await client.getObjectValue('feature-config', {})
 
 ### Using Evaluation Context
 
-Context must be set globally before flag evaluation and affects all subsequent evaluations:
+Context must be set globally before flag evaluation and affects all subsequent evaluations.
+
+**Note:** Context attributes must be flat key-value pairs. Nested objects are not supported for targeting rules. For full documentation, see the [Datadog Feature Flags JavaScript SDK docs](https://docs.datadoghq.com/feature_flags/client/javascript/?tab=npm).
 
 ```javascript
 // Set global context (async operation)
 await OpenFeature.setContext({
   targetingKey: 'user-123',
-  user: { id: 'user-123', email: 'user@example.com' },
+  user_id: 'user-123',
+  user_email: 'user@example.com',
 })
 
 // Now evaluate flags with the context
