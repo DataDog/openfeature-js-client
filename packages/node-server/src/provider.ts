@@ -20,6 +20,7 @@ import type {
 } from '@openfeature/server-sdk'
 import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
+import { toResolutionDetails } from './configuration/flagEvaluationDetails'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { InitializationController } from './initialization-controller'
 
@@ -39,6 +40,12 @@ export interface DatadogNodeServerProviderOptions {
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+  /**
+   * When true, serializes the full allocation waterfall trace into
+   * flagMetadata.ddEvaluationTrace on every evaluation.
+   * Defaults to false to avoid JSON serialization overhead in high-throughput contexts.
+   */
+  includeEvaluationTrace?: boolean
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -75,6 +82,10 @@ export class DatadogNodeServerProvider implements Provider {
     const hadConfiguration = !!this.configuration
 
     if (hadConfiguration && this.configuration !== configuration) {
+      // Note: ConfigurationChanged is emitted before this.configuration is updated. Any
+      // synchronous handler that calls getConfiguration() or triggers evaluations will still
+      // see the previous configuration. Fixing this ordering is tracked separately and is
+      // pre-existing behavior not introduced by this change.
       this.events.emit(ProviderEvents.ConfigurationChanged)
       const newCreatedAt = configuration?.createdAt
       if (prevCreatedAt !== newCreatedAt) {
@@ -137,7 +148,8 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const details = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = toResolutionDetails(details, 'boolean', !!this.options.includeEvaluationTrace)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -148,7 +160,8 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const details = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = toResolutionDetails(details, 'string', !!this.options.includeEvaluationTrace)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -159,7 +172,8 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const details = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = toResolutionDetails(details, 'number', !!this.options.includeEvaluationTrace)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -176,14 +190,8 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    const resolutionDetails = evaluate(
-      this.configuration,
-      'object',
-      flagKey,
-      defaultValue,
-      context,
-      _logger
-    ) as ResolutionDetails<T>
+    const details = evaluate(this.configuration, 'object', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = toResolutionDetails(details, 'object', !!this.options.includeEvaluationTrace) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
