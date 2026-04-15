@@ -491,3 +491,123 @@ describe('toResolutionDetails', () => {
     expect(resolution.errorCode).toBe('TARGETING_KEY_MISSING')
   })
 })
+
+// ── ddEvaluationTrace content ─────────────────────────────────────────────────
+
+describe('ddEvaluationTrace content', () => {
+  function parseTrace(resolution: ReturnType<typeof toResolutionDetails>) {
+    return JSON.parse(resolution.flagMetadata!.ddEvaluationTrace as string)
+  }
+
+  it('includes all top-level trace fields for a MATCH', () => {
+    const matchConfig: UniversalFlagConfigurationV1 = {
+      ...baseConfig,
+      flags: { 'test-flag': makeBooleanFlag() },
+    }
+    const details = evaluate(matchConfig, 'boolean', 'test-flag', false, { targetingKey: 'u' }, logger)
+    const trace = parseTrace(toResolutionDetails(details, 'boolean', true))
+
+    expect(trace.flagKey).toBe('test-flag')
+    expect(trace.variationKey).toBe('on')
+    expect(trace.allocationKey).toBe('default-alloc')
+    expect(trace.outcomeCode).toBe(FlagEvaluationOutcomeCode.MATCH)
+    expect(trace.outcomeDescription).toBeDefined()
+    expect(trace.matchedAllocation).toMatchObject({ key: 'default-alloc', orderPosition: 1 })
+    expect(trace.unmatchedAllocations).toHaveLength(0)
+    expect(trace.unevaluatedAllocations).toHaveLength(0)
+    expect(trace.environmentName).toBe('test-env')
+    expect(trace.configFetchedAt).toBe('2026-01-01T00:00:00Z')
+  })
+
+  it('records full waterfall for MATCH after expired, future, and rules-mismatch allocations', () => {
+    const waterfallConfig: UniversalFlagConfigurationV1 = {
+      ...baseConfig,
+      flags: {
+        'wf-flag': makeBooleanFlag({
+          key: 'wf-flag',
+          allocations: [
+            { key: 'expired', endAt: PAST as unknown as Date, splits: [{ variationKey: 'on', shards: [] }] },
+            { key: 'future', startAt: FUTURE as unknown as Date, splits: [{ variationKey: 'on', shards: [] }] },
+            {
+              key: 'us-only',
+              rules: [{ conditions: [{ operator: 'ONE_OF' as never, attribute: 'country', value: ['US'] }] }],
+              splits: [{ variationKey: 'on', shards: [] }],
+            },
+            { key: 'default-off', splits: [{ variationKey: 'off', shards: [] }] },
+          ],
+        }),
+      },
+    }
+    const details = evaluate(waterfallConfig, 'boolean', 'wf-flag', false, { targetingKey: 'u', country: 'GB' }, logger)
+    const trace = parseTrace(toResolutionDetails(details, 'boolean', true))
+
+    expect(trace.outcomeCode).toBe(FlagEvaluationOutcomeCode.MATCH)
+    expect(trace.matchedAllocation).toMatchObject({ key: 'default-off', orderPosition: 4 })
+    expect(trace.unmatchedAllocations).toHaveLength(3)
+    expect(trace.unmatchedAllocations[0]).toMatchObject({ key: 'expired', orderPosition: 1, outcomeCode: AllocationOutcomeCode.AFTER_END_TIME })
+    expect(trace.unmatchedAllocations[1]).toMatchObject({ key: 'future', orderPosition: 2, outcomeCode: AllocationOutcomeCode.BEFORE_START_TIME })
+    expect(trace.unmatchedAllocations[2]).toMatchObject({ key: 'us-only', orderPosition: 3, outcomeCode: AllocationOutcomeCode.RULES_MISMATCH, rulesPresent: true })
+    expect(trace.unevaluatedAllocations).toHaveLength(0)
+  })
+
+  it('records full waterfall for DEFAULT when all allocations are unmatched', () => {
+    const allMissConfig: UniversalFlagConfigurationV1 = {
+      ...baseConfig,
+      flags: {
+        'miss-flag': makeBooleanFlag({
+          key: 'miss-flag',
+          allocations: [
+            {
+              key: 'us-only',
+              rules: [{ conditions: [{ operator: 'ONE_OF' as never, attribute: 'country', value: ['US'] }] }],
+              splits: [{ variationKey: 'on', shards: [] }],
+            },
+          ],
+        }),
+      },
+    }
+    const details = evaluate(allMissConfig, 'boolean', 'miss-flag', false, { targetingKey: 'u', country: 'CA' }, logger)
+    const trace = parseTrace(toResolutionDetails(details, 'boolean', true))
+
+    expect(trace.outcomeCode).toBe(FlagEvaluationOutcomeCode.DEFAULT)
+    expect(trace.matchedAllocation).toBeNull()
+    expect(trace.variationKey).toBeNull()
+    expect(trace.allocationKey).toBeNull()
+    expect(trace.unmatchedAllocations).toHaveLength(1)
+    expect(trace.unmatchedAllocations[0]).toMatchObject({ key: 'us-only', outcomeCode: AllocationOutcomeCode.RULES_MISMATCH })
+    expect(trace.unevaluatedAllocations).toHaveLength(0)
+  })
+
+  it('records empty allocation arrays for FLAG_NOT_FOUND in trace', () => {
+    const details = evaluate(baseConfig, 'boolean', 'no-flag', false, { targetingKey: 'u' }, logger)
+    const trace = parseTrace(toResolutionDetails(details, 'boolean', true))
+
+    expect(trace.outcomeCode).toBe(FlagEvaluationOutcomeCode.FLAG_NOT_FOUND)
+    expect(trace.matchedAllocation).toBeNull()
+    expect(trace.unmatchedAllocations).toHaveLength(0)
+    expect(trace.unevaluatedAllocations).toHaveLength(0)
+  })
+
+  it('records unevaluated allocations for early MATCH', () => {
+    const earlyMatchConfig: UniversalFlagConfigurationV1 = {
+      ...baseConfig,
+      flags: {
+        'test-flag': makeBooleanFlag({
+          allocations: [
+            { key: 'first', splits: [{ variationKey: 'on', shards: [] }] },
+            { key: 'second', splits: [{ variationKey: 'off', shards: [] }] },
+            { key: 'third', splits: [{ variationKey: 'off', shards: [] }] },
+          ],
+        }),
+      },
+    }
+    const details = evaluate(earlyMatchConfig, 'boolean', 'test-flag', false, { targetingKey: 'u' }, logger)
+    const trace = parseTrace(toResolutionDetails(details, 'boolean', true))
+
+    expect(trace.matchedAllocation).toMatchObject({ key: 'first', orderPosition: 1 })
+    expect(trace.unmatchedAllocations).toHaveLength(0)
+    expect(trace.unevaluatedAllocations).toHaveLength(2)
+    expect(trace.unevaluatedAllocations[0]).toMatchObject({ key: 'second', orderPosition: 2, outcomeCode: AllocationOutcomeCode.UNEVALUATED })
+    expect(trace.unevaluatedAllocations[1]).toMatchObject({ key: 'third', orderPosition: 3, outcomeCode: AllocationOutcomeCode.UNEVALUATED })
+  })
+})
