@@ -14,9 +14,14 @@
   "types": "cjs/index.d.ts",
   "exports": {
     ".": {
-      "types": "./cjs/index.d.ts",
-      "import": "./esm/index.js",
-      "require": "./cjs/index.js",
+      "import": {
+        "types": "./esm/index.d.ts",
+        "default": "./esm/index.js"
+      },
+      "require": {
+        "types": "./cjs/index.d.ts",
+        "default": "./cjs/index.js"
+      },
       "default": "./esm/index.js"
     },
     "./package.json": "./package.json"
