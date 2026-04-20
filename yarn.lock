@@ -653,9 +653,9 @@ __metadata:
   linkType: hard
 
 "@datadog/browser-core@npm:^6.19.0":
-  version: 6.19.0
-  resolution: "@datadog/browser-core@npm:6.19.0"
-  checksum: 10c0/467a1ef719a6f4ead386009ad9410a39ecd4d97c0d20ac7fa7736a78d37940298bc54115c07837319af3d539010d7ee89b13606a6e7766f275a55036aa95b91b
+  version: 6.32.0
+  resolution: "@datadog/browser-core@npm:6.32.0"
+  checksum: 10c0/631afa79701f48c3c5d7aa0aa57a61ad1f84a82426a6bdb81032a509cb93925b540aac993fe0da31accdda21b017edfb0a908d0da85162e1982f47bf18c3e4c9
   languageName: node
   linkType: hard
 
@@ -2262,12 +2262,12 @@ __metadata:
   linkType: hard
 
 "@types/chrome@npm:^0.1.18":
-  version: 0.1.18
-  resolution: "@types/chrome@npm:0.1.18"
+  version: 0.1.40
+  resolution: "@types/chrome@npm:0.1.40"
   dependencies:
     "@types/filesystem": "npm:*"
     "@types/har-format": "npm:*"
-  checksum: 10c0/9499b99392ff2dcad0f888ce7a1e4af6bfe8dedcc5008543e64b558ec9685f3249b119a041a80686001add40b79c3366dcc95d417a83259f289a4dc438579022
+  checksum: 10c0/e32b69e967b6e02b3d71935ce12b679b0d443e5418241b27087bb13fc6d35005f3621261ff4abc83a1726463d56a7c07165811a5a6e526204717e22ade5a446c
   languageName: node
   linkType: hard
 
