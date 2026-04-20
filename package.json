@@ -18,6 +18,7 @@
     "licenses:validate": "scripts/licenses-validate.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",
+    "lint:publint": "lerna run lint:publint --stream",
     "typecheck": "lerna run typecheck --stream",
     "clean": "lerna run clean --stream",
     "release": "scripts/cli release",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
+    "publint": "^0.3.18",
     "@lavamoat/allow-scripts": "^3.4.3",
     "@lavamoat/preinstall-always-fail": "^2.1.0",
     "@types/node": "^18.19.130",

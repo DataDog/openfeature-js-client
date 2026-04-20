@@ -1,5 +1,6 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
 import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
+// biome-ignore lint/style/noRestrictedImports: createEndpointBuilder is not exported from the @datadog/browser-core root. The /cjs/ path is required here so Jest (which runs without a bundler in CJS mode) can require() the module directly. The build:esm step rewrites /cjs/ to /esm/ in the compiled output via fix-esm-imports.js.
 import { createEndpointBuilder, type TrackType } from '@datadog/browser-core/cjs/domain/configuration'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'

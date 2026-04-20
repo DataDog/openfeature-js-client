@@ -6,6 +6,19 @@
       "recommended": true,
       "correctness": {
         "noUnusedImports": "error"
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@datadog/*/cjs/**"],
+                "message": "Do not import from /cjs/ subpaths — use the package root or /esm/ path. /cjs/ specifiers are preserved verbatim in the ESM build output, causing bundlers to pull CJS modules into the ESM graph."
+              }
+            ]
+          }
+        }
       }
     }
   },
