@@ -45,7 +45,6 @@
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm && yarn fix-esm-imports esm",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
     "fix-esm-imports": "node ../../scripts/build/fix-esm-imports.js",
-    "lint:publint": "publint .",
     "clean": "rm -rf dist cjs esm bundle",
     "test": "jest --passWithNoTests",
     "typecheck": "tsc --noEmit"

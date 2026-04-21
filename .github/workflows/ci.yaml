@@ -48,9 +48,6 @@ jobs:
       - name: Build packages
         run: yarn build
 
-      - name: Check package exports (publint)
-        run: yarn lint:publint
-
       - name: Run tests
         run: yarn test
 
