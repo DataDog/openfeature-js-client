@@ -41,11 +41,6 @@
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.15.1"
   },
-  "peerDependenciesMeta": {
-    "@openfeature/server-sdk": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@openfeature/core": "1.9.2",
     "@openfeature/server-sdk": "1.20.2",

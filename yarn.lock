@@ -752,9 +752,6 @@ __metadata:
     typescript: "npm:^5.9.3"
   peerDependencies:
     "@openfeature/server-sdk": ">=1.15.1"
-  peerDependenciesMeta:
-    "@openfeature/server-sdk":
-      optional: true
   languageName: unknown
   linkType: soft
 
