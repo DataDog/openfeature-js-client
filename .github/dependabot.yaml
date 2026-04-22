@@ -24,6 +24,10 @@ updates:
       prefix: "\U0001F477 chore(deps)"
       prefix-development: "\U0001F477 chore(deps-dev)"
       include: scope
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     cooldown:
       default-days: 14
   - package-ecosystem: github-actions
@@ -43,5 +47,9 @@ updates:
     commit-message:
       prefix: "\U0001F477 ci(deps)"
       include: scope
+    ignore:
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
     cooldown:
       default-days: 14
