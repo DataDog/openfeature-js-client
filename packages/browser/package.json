@@ -56,7 +56,7 @@
     "@openfeature/web-sdk": "^1.5.0",
     "@types/chrome": "^0.1.18",
     "@types/jest": "^30.0.0",
-    "@types/node": "^18.0.0",
+    "@types/node": "^25.5.2",
     "fake-indexeddb": "^6.2.5",
     "jest": "^30.0.4",
     "jest-environment-jsdom": "^30.0.4",
