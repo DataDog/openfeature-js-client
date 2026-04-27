@@ -66,7 +66,7 @@ fi
 # Check 3: flagEvaluationEndpointBuilder is populated and correct
 # -----------------------------------------------------------------------
 echo "--- Check 3: flagEvaluationEndpointBuilder is populated and returns correct URL ---"
-node --input-type=commonjs << 'EOF'
+if node --input-type=commonjs << 'EOF'
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
 const config = validateAndBuildFlaggingConfiguration({
@@ -86,7 +86,7 @@ if (!builder) {
   process.exit(1)
 }
 
-const url = builder.build('fetch', { retry: undefined, encoding: undefined })
+const url = builder.build('fetch', { data: '', bytesCount: 0, retry: undefined, encoding: undefined })
 if (!url.includes('/api/v2/flagevaluation')) {
   console.error('FAIL: URL does not contain /api/v2/flagevaluation. Got: ' + url)
   process.exit(1)
@@ -99,7 +99,7 @@ if (!url.includes('browser-intake-datadoghq.com')) {
 console.log('PASS: flagEvaluationEndpointBuilder works correctly')
 console.log('      URL: ' + url.split('?')[0])
 EOF
-if [ $? -eq 0 ]; then
+then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
@@ -109,7 +109,7 @@ fi
 # Check 4: flagEvaluationEndpointBuilder tracks the track type correctly
 # -----------------------------------------------------------------------
 echo "--- Check 4: trackType is 'flagevaluation' ---"
-node --input-type=commonjs << 'EOF'
+if node --input-type=commonjs << 'EOF'
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
 const config = validateAndBuildFlaggingConfiguration({
@@ -125,7 +125,7 @@ if (trackType !== 'flagevaluation') {
 }
 console.log('PASS: trackType is "flagevaluation"')
 EOF
-if [ $? -eq 0 ]; then
+then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
