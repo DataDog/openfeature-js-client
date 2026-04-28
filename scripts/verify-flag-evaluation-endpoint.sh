@@ -76,8 +76,10 @@ fi
 # -----------------------------------------------------------------------
 echo "--- Check 3: flagEvaluationEndpointBuilder is populated and returns correct URL ---"
 if node --input-type=commonjs << 'EOF'
-// browser-core accesses document.cookie during session strategy selection;
-// provide a minimal stub so validateAndBuildConfiguration can run in Node.js.
+// browser-core accesses document.cookie during session strategy selection.
+// This stub is enough to prevent a ReferenceError in Node.js; cookies will
+// not be authorized (session store ends up undefined), which is fine here
+// because these checks only verify flagEvaluationEndpointBuilder, not session state.
 global.document = { cookie: '' }
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
@@ -122,6 +124,7 @@ fi
 # -----------------------------------------------------------------------
 echo "--- Check 4: trackType is 'flagevaluation' ---"
 if node --input-type=commonjs << 'EOF'
+// See check 3 comment for why the document stub is needed.
 global.document = { cookie: '' }
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
