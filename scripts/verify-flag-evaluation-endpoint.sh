@@ -75,6 +75,9 @@ fi
 # Check 3: flagEvaluationEndpointBuilder is populated and correct
 # -----------------------------------------------------------------------
 echo "--- Check 3: flagEvaluationEndpointBuilder is populated and returns correct URL ---"
+# Use `if node ...` rather than bare `node ...` so that set -e does not kill the
+# script before FAIL can be incremented — commands inside an `if` condition are
+# exempt from set -e's immediate-exit behaviour.
 if node --input-type=commonjs << 'EOF'
 // browser-core accesses document.cookie during session strategy selection.
 // This stub is enough to prevent a ReferenceError in Node.js; cookies will

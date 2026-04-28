@@ -7,10 +7,6 @@ const mockConfiguration: FlaggingConfiguration = {
   applicationId: 'test-app-id',
   fetchFlagsConfiguration: jest.fn(),
   service: 'test-service',
-  batchBytesLimit: 64 * 1024,
-  batchMessagesLimit: 500,
-  messageBytesLimit: 256 * 1024,
-  flushTimeout: 30000 as any,
   exposuresEndpointBuilder: jest.fn() as any,
   flagEvaluationEndpointBuilder: jest.fn() as any,
   // Add required Configuration properties
@@ -18,8 +14,6 @@ const mockConfiguration: FlaggingConfiguration = {
   version: '1.0.0',
   sessionSampleRate: 100,
   telemetrySampleRate: 20,
-  replica: {} as any,
-  sendToExtensionPredicate: () => false,
 } as unknown as FlaggingConfiguration
 
 jest.mock('@datadog/browser-core', () => ({
