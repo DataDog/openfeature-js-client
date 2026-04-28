@@ -14,6 +14,10 @@ const mockConfiguration: FlaggingConfiguration = {
   version: '1.0.0',
   sessionSampleRate: 100,
   telemetrySampleRate: 20,
+// `as unknown as FlaggingConfiguration` is intentional: Configuration/TransportConfiguration have
+// many required fields (beforeSend, logsEndpointBuilder, sessionStoreStrategyType, etc.) that are
+// not read by createFlagEvaluationTrackingHook. All @datadog/browser-core internals are mocked at
+// the module level below, so missing fields don't cause runtime failures.
 } as unknown as FlaggingConfiguration
 
 jest.mock('@datadog/browser-core', () => ({
