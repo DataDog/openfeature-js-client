@@ -18,19 +18,14 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
     encoder: createIdentityEncoder(),
     request: createHttpRequest(
       [configuration.flagEvaluationEndpointBuilder],
-      configuration.batchBytesLimit,
       (error: RawError) => {
         addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
       }
     ),
     flushController: createFlushController({
-      messagesLimit: configuration.batchMessagesLimit,
-      bytesLimit: configuration.batchBytesLimit,
-      durationLimit: configuration.flushTimeout,
       pageMayExitObservable,
       sessionExpireObservable: new Observable(),
     }),
-    messageBytesLimit: configuration.messageBytesLimit,
   })
 
   const aggregator = new FlagEvaluationAggregator(

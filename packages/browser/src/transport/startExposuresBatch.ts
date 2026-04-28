@@ -15,15 +15,11 @@ export function startExposuresBatch(
 ) {
   const batch = createBatch({
     encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.exposuresEndpointBuilder], configuration.batchBytesLimit, reportError),
+    request: createHttpRequest([configuration.exposuresEndpointBuilder], reportError),
     flushController: createFlushController({
-      messagesLimit: configuration.batchMessagesLimit,
-      bytesLimit: configuration.batchBytesLimit,
-      durationLimit: configuration.flushTimeout,
       pageMayExitObservable,
       sessionExpireObservable: new Observable(),
     }),
-    messageBytesLimit: configuration.messageBytesLimit,
   })
 
   return batch

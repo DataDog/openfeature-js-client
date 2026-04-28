@@ -43,23 +43,32 @@ echo "Build complete."
 echo ""
 
 # -----------------------------------------------------------------------
-# Check 1: No /cjs/ deep subpath references in CJS output
+# Check 1: No /cjs/ deep subpath references in compiled configuration.js (CJS)
 # -----------------------------------------------------------------------
-echo "--- Check 1: CJS output has no @datadog/*/cjs/ references ---"
-if grep -r "@datadog/[^\"']*/cjs/" "$BROWSER_PKG/cjs/" 2>/dev/null | grep -v "^Binary"; then
-  fail "CJS output contains @datadog/*/cjs/ deep subpath references"
+# Regression for: configuration.ts previously imported createEndpointBuilder from
+# @datadog/browser-core/cjs/domain/configuration (a private deep subpath). That
+# import was emitted verbatim into compiled output, breaking ESM bundlers.
+echo "--- Check 1: CJS configuration output has no @datadog/*/cjs/ references ---"
+if grep "@datadog/[^\"']*/cjs/" \
+    "$BROWSER_PKG/cjs/domain/configuration.js" \
+    "$BROWSER_PKG/cjs/domain/configuration.d.ts" \
+    2>/dev/null | grep -v "^Binary"; then
+  fail "CJS configuration output contains @datadog/*/cjs/ deep subpath references"
 else
-  pass "CJS output is clean"
+  pass "CJS configuration output is clean"
 fi
 
 # -----------------------------------------------------------------------
-# Check 2: No /cjs/ deep subpath references in ESM output
+# Check 2: No /cjs/ deep subpath references in compiled configuration.js (ESM)
 # -----------------------------------------------------------------------
-echo "--- Check 2: ESM output has no @datadog/*/cjs/ references ---"
-if grep -r "@datadog/[^\"']*/cjs/" "$BROWSER_PKG/esm/" 2>/dev/null | grep -v "^Binary"; then
-  fail "ESM output contains @datadog/*/cjs/ deep subpath references (bundler breakage)"
+echo "--- Check 2: ESM configuration output has no @datadog/*/cjs/ references ---"
+if grep "@datadog/[^\"']*/cjs/" \
+    "$BROWSER_PKG/esm/domain/configuration.js" \
+    "$BROWSER_PKG/esm/domain/configuration.d.ts" \
+    2>/dev/null | grep -v "^Binary"; then
+  fail "ESM configuration output contains @datadog/*/cjs/ deep subpath references (bundler breakage)"
 else
-  pass "ESM output is clean"
+  pass "ESM configuration output is clean"
 fi
 
 # -----------------------------------------------------------------------
@@ -67,6 +76,9 @@ fi
 # -----------------------------------------------------------------------
 echo "--- Check 3: flagEvaluationEndpointBuilder is populated and returns correct URL ---"
 if node --input-type=commonjs << 'EOF'
+// browser-core accesses document.cookie during session strategy selection;
+// provide a minimal stub so validateAndBuildConfiguration can run in Node.js.
+global.document = { cookie: '' }
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
 const config = validateAndBuildFlaggingConfiguration({
@@ -110,6 +122,7 @@ fi
 # -----------------------------------------------------------------------
 echo "--- Check 4: trackType is 'flagevaluation' ---"
 if node --input-type=commonjs << 'EOF'
+global.document = { cookie: '' }
 const { validateAndBuildFlaggingConfiguration } = require('./cjs/domain/configuration.js')
 
 const config = validateAndBuildFlaggingConfiguration({
