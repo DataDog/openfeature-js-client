@@ -14,7 +14,7 @@
 export class LRUCache implements Map<string, string> {
   protected readonly cache = new Map<string, string>();
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
+  // @ts-expect-error
   [Symbol.toStringTag]: string
 
   constructor(protected readonly capacity: number) {}

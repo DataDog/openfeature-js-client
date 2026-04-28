@@ -14,11 +14,11 @@ const mockConfiguration: FlaggingConfiguration = {
   version: '1.0.0',
   sessionSampleRate: 100,
   telemetrySampleRate: 20,
-// `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
-// fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
-// that createFlagEvaluationTrackingHook never reads. All @datadog/browser-core imports used by
-// createFlagEvaluationTrackingHook are mocked at the module level below, so missing fields don't
-// cause runtime failures.
+  // `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
+  // fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
+  // that createFlagEvaluationTrackingHook never reads. All @datadog/browser-core imports used by
+  // createFlagEvaluationTrackingHook are mocked at the module level below, so missing fields don't
+  // cause runtime failures.
 } as unknown as FlaggingConfiguration
 
 jest.mock('@datadog/browser-core', () => ({
