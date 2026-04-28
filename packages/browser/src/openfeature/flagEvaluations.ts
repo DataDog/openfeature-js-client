@@ -16,12 +16,9 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const flagEvaluationBatch = createBatch({
     encoder: createIdentityEncoder(),
-    request: createHttpRequest(
-      [configuration.flagEvaluationEndpointBuilder],
-      (error: RawError) => {
-        addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-      }
-    ),
+    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
+      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
+    }),
     flushController: createFlushController({
       pageMayExitObservable,
       sessionExpireObservable: new Observable(),
