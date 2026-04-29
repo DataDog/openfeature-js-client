@@ -6,6 +6,32 @@
 
 ---
 
+## v1.1.2
+
+**Internal Changes:**
+
+- 👷 ci(deps)(deps): Bump actions/setup-node in the github-actions group ([#222](https://github.com/DataDog/openfeature-js-client/pull/222))
+- 👷 chore(deps)(deps): Bump follow-redirects from 1.15.11 to 1.16.0 ([#245](https://github.com/DataDog/openfeature-js-client/pull/245))
+- 👷 chore(deps)(deps): Bump tmp from 0.2.3 to 0.2.5 ([#228](https://github.com/DataDog/openfeature-js-client/pull/228))
+- 👷 chore(deps-dev)(deps-dev): Bump glob from 11.1.0 to 13.0.6 ([#216](https://github.com/DataDog/openfeature-js-client/pull/216))
+- 👷 chore(deps): Bump axios from 1.13.4 to 1.15.0 ([#244](https://github.com/DataDog/openfeature-js-client/pull/244))
+- update missed touchpoints on v1.1.1 release
+- fix: replace Map<string, string> constraint with CacheDelegate to avoid MapIterator in declarations ([#263](https://github.com/DataDog/openfeature-js-client/pull/263)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#252](https://github.com/DataDog/openfeature-js-client/pull/252))
+- fix(browser): bump @datadog/browser-core to ^6.33.0 ([#261](https://github.com/DataDog/openfeature-js-client/pull/261)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#254](https://github.com/DataDog/openfeature-js-client/pull/254)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#253](https://github.com/DataDog/openfeature-js-client/pull/253)) [NODE-SERVER]
+- chore(browser): move @types/chrome from dependencies to devDependencies ([#250](https://github.com/DataDog/openfeature-js-client/pull/250)) [BROWSER]
+- fix(node): mark open @openfeature/server-sdk as non-optional ([#248](https://github.com/DataDog/openfeature-js-client/pull/248)) [NODE-SERVER]
+- Remove nested attributes from setContext example ([#234](https://github.com/DataDog/openfeature-js-client/pull/234)) [BROWSER]
+- chore: Harden npm supply chain with @lavamoat/allow-scripts ([#233](https://github.com/DataDog/openfeature-js-client/pull/233))
+
+## v1.1.1
+
+\*_ Bug Fixes_
+
+- fix: allow null targeting key for static and rule-only flags (#232)
+
 ## v1.1.0
 
 **Behavior Changes:**
