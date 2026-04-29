@@ -5,6 +5,10 @@
 > See [Gitmoji](https://gitmoji.dev/) for a guide on the emojis used.
 
 ---
+## v1.1.1
+
+** Bug Fixes*
+ - fix: allow null targeting key for static and rule-only flags (#232)
 
 ## v1.1.0
 
