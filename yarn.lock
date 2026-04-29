@@ -754,8 +754,8 @@ __metadata:
     "@types/node": "npm:^18.19.130"
     jest: "npm:^30.0.5"
     npm-run-all: "npm:^4.1.5"
-    ts-jest: "npm:^29.4.0"
-    ts-loader: "npm:^9.5.4"
+    ts-jest: "npm:^29.4.9"
+    ts-loader: "npm:^9.5.7"
     typescript: "npm:^5.9.3"
   peerDependencies:
     "@openfeature/server-sdk": ">=1.15.1"
