@@ -41,7 +41,22 @@ export interface AssignmentCache {
   clear(): Promise<void> | void
 }
 
-export abstract class AbstractAssignmentCache<T extends Map<string, string>> implements AssignmentCache {
+/**
+ * Minimal interface for the backing store used by {@link AbstractAssignmentCache}.
+ *
+ * Using a narrower constraint instead of `Map<string, string>` avoids emitting
+ * `MapIterator` (introduced in TypeScript 5.6) in declaration files, which would
+ * break consumers on TypeScript < 5.6.
+ */
+export interface CacheDelegate {
+  get(key: string): string | undefined
+  set(key: string, value: string): this
+  has(key: string): boolean
+  clear(): void
+  entries(): IterableIterator<[string, string]>
+}
+
+export abstract class AbstractAssignmentCache<T extends CacheDelegate> implements AssignmentCache {
   // key -> variation value hash
   protected constructor(protected readonly delegate: T) {}
 
@@ -70,7 +85,7 @@ export abstract class AbstractAssignmentCache<T extends Map<string, string>> imp
    * Returns an array with all {@link AssignmentCacheEntry} entries in the cache as an array of
    * {@link string}s.
    */
-  entries() {
+  entries(): IterableIterator<[string, string]> {
     return this.delegate.entries()
   }
 

@@ -11,25 +11,12 @@
  * ```
  * Source: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
  */
-export class LRUCache implements Map<string, string> {
-  protected readonly cache = new Map<string, string>();
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-expect-error
-  [Symbol.toStringTag]: string
+export class LRUCache {
+  protected readonly cache = new Map<string, string>()
 
   constructor(protected readonly capacity: number) {}
 
-  [Symbol.iterator]() {
-    return this.cache[Symbol.iterator]()
-  }
-
-  forEach(callbackFn: (value: string, key: string, map: Map<string, string>) => void): void {
-    this.cache.forEach(callbackFn)
-  }
-
-  readonly size: number = this.cache.size
-
-  entries() {
+  entries(): IterableIterator<[string, string]> {
     return this.cache.entries()
   }
 
@@ -41,11 +28,11 @@ export class LRUCache implements Map<string, string> {
     return this.cache.delete(key)
   }
 
-  keys() {
+  keys(): IterableIterator<string> {
     return this.cache.keys()
   }
 
-  values() {
+  values(): IterableIterator<string> {
     return this.cache.values()
   }
 
