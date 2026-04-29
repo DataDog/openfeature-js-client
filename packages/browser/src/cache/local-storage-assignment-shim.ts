@@ -1,7 +1,7 @@
 // noinspection JSUnusedGlobalSymbols (methods are used by common repository)
 import { hasWindowLocalStorage } from './helpers'
 
-export class LocalStorageAssignmentShim implements Map<string, string> {
+export class LocalStorageAssignmentShim {
   private readonly localStorageKey: string
 
   public constructor(storageKeySuffix: string) {
@@ -28,25 +28,17 @@ export class LocalStorageAssignmentShim implements Map<string, string> {
     this.getCache().forEach(callbackfn, thisArg)
   }
 
-  size: number = this.getCache().size
-
-  entries() {
+  entries(): IterableIterator<[string, string]> {
     return this.getCache().entries()
   }
 
-  keys() {
+  keys(): IterableIterator<string> {
     return this.getCache().keys()
   }
 
-  values() {
+  values(): IterableIterator<string> {
     return this.getCache().values()
   }
-
-  [Symbol.iterator]() {
-    return this.getCache()[Symbol.iterator]()
-  }
-
-  [Symbol.toStringTag]: string = this.getCache()[Symbol.toStringTag]
 
   public has(key: string): boolean {
     return this.getCache().has(key)
