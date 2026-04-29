@@ -7,10 +7,6 @@ const mockConfiguration: FlaggingConfiguration = {
   applicationId: 'test-app-id',
   fetchFlagsConfiguration: jest.fn(),
   service: 'test-service',
-  batchBytesLimit: 64 * 1024,
-  batchMessagesLimit: 500,
-  messageBytesLimit: 256 * 1024,
-  flushTimeout: 30000 as any,
   exposuresEndpointBuilder: jest.fn() as any,
   flagEvaluationEndpointBuilder: jest.fn() as any,
   // Add required Configuration properties
@@ -18,8 +14,11 @@ const mockConfiguration: FlaggingConfiguration = {
   version: '1.0.0',
   sessionSampleRate: 100,
   telemetrySampleRate: 20,
-  replica: {} as any,
-  sendToExtensionPredicate: () => false,
+  // `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
+  // fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
+  // that createFlagEvaluationTrackingHook never reads. All @datadog/browser-core imports used by
+  // createFlagEvaluationTrackingHook are mocked at the module level below, so missing fields don't
+  // cause runtime failures.
 } as unknown as FlaggingConfiguration
 
 jest.mock('@datadog/browser-core', () => ({

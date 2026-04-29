@@ -1,6 +1,5 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
 import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
-import { createEndpointBuilder, type TrackType } from '@datadog/browser-core/cjs/domain/configuration'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
@@ -82,7 +81,8 @@ export interface FlaggingConfiguration extends Configuration {
     options?: { signal?: AbortSignal }
   ) => Promise<FlagsConfiguration>
 
-  // [FlagEval] TODO: Remove this once we have a proper endpoint builder from browser core SDK.
+  // Inherited from Configuration via TransportConfiguration.
+  // Declared explicitly here to make the contract visible to consumers of FlaggingConfiguration.
   flagEvaluationEndpointBuilder: EndpointBuilder
 }
 
@@ -102,8 +102,6 @@ export function validateAndBuildFlaggingConfiguration(
   return {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
-    // [FlagEval] TODO: Don't set this once we have a proper endpoint builder from browser core SDK
-    flagEvaluationEndpointBuilder: createEndpointBuilder(initConfiguration, 'flagevaluation' as TrackType),
     fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,
   }
