@@ -59,7 +59,8 @@
               "splits": [
                 {
                   "variationKey": "pi",
-                  "shards": []
+                  "shards": [],
+                  "serialId": 100
                 }
               ],
               "doLog": true

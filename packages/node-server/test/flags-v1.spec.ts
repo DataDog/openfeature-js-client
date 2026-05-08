@@ -90,6 +90,12 @@ describe('Universal Flag Configuration V1', () => {
       const context = JSON.parse(contextString)
       const details = await evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
+
+      // Verify serialId is passed through to flagMetadata when present
+      if (testCase.result.flagMetadata?.serialId !== undefined) {
+        expect(details.flagMetadata?.serialId).toEqual(testCase.result.flagMetadata.serialId)
+      }
+
       if (testCase.result.flagMetadata?.doLog) {
         expect(exposureChannelMessageHandler).toHaveBeenCalledWith(
           {

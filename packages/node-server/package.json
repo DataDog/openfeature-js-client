@@ -36,7 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "0.3.3"
+    "@datadog/flagging-core": "workspace:^"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.15.1"
