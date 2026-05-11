@@ -33,6 +33,8 @@ describe('evaluate', () => {
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-124',
+        __dd_do_log: true,
         allocationKey: 'allocation-124',
         doLog: true,
         variationType: 'BOOLEAN',
@@ -47,6 +49,8 @@ describe('evaluate', () => {
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-123',
+        __dd_do_log: true,
         allocationKey: 'allocation-123',
         doLog: true,
         variationType: 'STRING',
@@ -61,6 +65,8 @@ describe('evaluate', () => {
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-127',
+        __dd_do_log: true,
         allocationKey: 'allocation-127',
         doLog: true,
         variationType: 'OBJECT',
