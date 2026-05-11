@@ -91,7 +91,7 @@ export function evaluateForSubject<T extends FlagValueType>(
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
-            serialId: selectedSplit.serialId,
+            __dd_split_serial_id: selectedSplit.serialId,
           } as PrecomputedFlagMetadata,
         }
       }

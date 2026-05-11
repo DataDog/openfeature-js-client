@@ -56,7 +56,7 @@ export type PrecomputedFlagMetadata = {
   allocationKey: string
   variationType: FlagValueType
   doLog: boolean
-  serialId?: number
+  __dd_split_serial_id?: number
 }
 
 /**

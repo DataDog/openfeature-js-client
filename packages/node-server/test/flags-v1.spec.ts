@@ -91,9 +91,9 @@ describe('Universal Flag Configuration V1', () => {
       const details = await evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
 
-      // Verify serialId is passed through to flagMetadata when present
-      if (testCase.result.flagMetadata?.serialId !== undefined) {
-        expect(details.flagMetadata?.serialId).toEqual(testCase.result.flagMetadata.serialId)
+      // Verify __dd_split_serial_id is passed through to flagMetadata when present
+      if (testCase.result.flagMetadata?.__dd_split_serial_id !== undefined) {
+        expect(details.flagMetadata?.__dd_split_serial_id).toEqual(testCase.result.flagMetadata.__dd_split_serial_id)
       }
 
       if (testCase.result.flagMetadata?.doLog) {
