@@ -296,8 +296,6 @@ describe('DatadogProvider', () => {
         variant: 'variation-123',
         reason: 'TARGETING_MATCH',
         flagMetadata: {
-          __dd_allocation_key: 'allocation-123',
-          __dd_do_log: true,
           allocationKey: 'allocation-123',
           doLog: true,
           variationType: 'STRING',

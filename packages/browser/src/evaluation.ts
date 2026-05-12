@@ -51,10 +51,6 @@ function evaluatePrecomputed<T extends FlagValueType>(
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
     flagMetadata: {
-      // Standardized keys
-      __dd_allocation_key: flag.allocationKey,
-      __dd_do_log: flag.doLog,
-      // Deprecated keys (for backwards compatibility)
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,
