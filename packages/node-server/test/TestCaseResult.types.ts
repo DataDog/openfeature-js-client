@@ -10,6 +10,7 @@ export interface TestCase {
   attributes: Record<string, EvaluationContextValue>
   result: {
     value: FlagValue
+    reason: string
     variant?: string
     flagMetadata?: PrecomputedFlagMetadata
   }

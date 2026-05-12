@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { ExposureEvent } from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, JsonValue, Logger } from '@openfeature/core'
 import { OpenFeature } from '@openfeature/server-sdk'
-import type { UniversalFlagConfigurationV1, UniversalFlagConfigurationV1Response } from '../src/configuration/ufc-v1'
+import type { UniversalFlagConfigurationV1 } from '../src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
 import type { TestCase } from './TestCaseResult.types'
 
@@ -34,17 +34,20 @@ describe('Universal Flag Configuration V1', () => {
   })
 
   const getUFC = (): UniversalFlagConfigurationV1 => {
-    const ufcJson = fs.readFileSync(path.join(__dirname, './data', 'flags-v1.json'), 'utf8')
-    const ufcResponse = JSON.parse(ufcJson) as UniversalFlagConfigurationV1Response
-    return ufcResponse.data.attributes
+    const ufcJson = fs.readFileSync(path.join(__dirname, './ffe-system-test-data', 'ufc-config.json'), 'utf8')
+    return JSON.parse(ufcJson) as UniversalFlagConfigurationV1
   }
 
   const getTestCaseFileNames = (): string[] => {
-    return fs.readdirSync(path.join(__dirname, './data/tests'))
+    const fixtureFiles = fs.readdirSync(path.join(__dirname, './ffe-system-test-data/evaluation-cases')).sort()
+    if (fixtureFiles.length === 0) {
+      throw new Error('FFE fixture submodule is missing or empty')
+    }
+    return fixtureFiles
   }
 
   const getTestCases = (testCaseFileName: string): TestCase[] => {
-    const testCases = fs.readFileSync(path.join(__dirname, './data/tests', testCaseFileName), 'utf8')
+    const testCases = fs.readFileSync(path.join(__dirname, './ffe-system-test-data/evaluation-cases', testCaseFileName), 'utf8')
     return JSON.parse(testCases) as TestCase[]
   }
 
@@ -90,6 +93,7 @@ describe('Universal Flag Configuration V1', () => {
       const context = JSON.parse(contextString)
       const details = await evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
+      expect(details.reason).toEqual(testCase.result.reason)
       if (testCase.result.flagMetadata?.doLog) {
         expect(exposureChannelMessageHandler).toHaveBeenCalledWith(
           {
