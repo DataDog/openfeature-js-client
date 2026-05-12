@@ -55,8 +55,7 @@ export class FlagEvaluationAggregator {
       }
     } else {
       const runtimeDefaultUsed = details.reason === 'DEFAULT' || details.reason === 'ERROR'
-      // Prefer new key, fallback to deprecated
-      const allocationKey = (details.flagMetadata?.__dd_allocation_key ?? details.flagMetadata?.allocationKey) as string
+      const allocationKey = details.flagMetadata?.__dd_allocation_key as string
       const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
       const { targetingKey, ...targetingContext } = context
 
@@ -93,8 +92,7 @@ export class FlagEvaluationAggregator {
     details: EvaluationDetails<T>,
     error?: string
   ): string {
-    // Prefer new key, fallback to deprecated
-    const allocationKey = (details.flagMetadata?.__dd_allocation_key ?? details.flagMetadata?.allocationKey) as string
+    const allocationKey = details.flagMetadata?.__dd_allocation_key as string
     const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
     const { targetingKey, ...targetingContext } = context
 
