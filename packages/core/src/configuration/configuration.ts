@@ -53,9 +53,15 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 
 /** @internal */
 export type PrecomputedFlagMetadata = {
+  // Primary keys (used by browser and core readers)
   allocationKey: string
   variationType: FlagValueType
   doLog: boolean
+
+  // Server-side tracing keys (consumed by dd-trace-js)
+  __dd_allocation_key?: string
+  __dd_do_log?: boolean
+  __dd_split_serial_id?: number
 }
 
 /**

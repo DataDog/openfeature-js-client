@@ -23,6 +23,7 @@ export interface Split {
   variationKey: string
   shards: Shard[]
   extraLogging?: Record<string, string>
+  serialId?: number
 }
 
 export interface Allocation {
