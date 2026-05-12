@@ -24,7 +24,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
@@ -106,7 +106,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
@@ -155,7 +155,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a', // Same variant
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
@@ -251,7 +251,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
@@ -321,7 +321,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
@@ -365,7 +365,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_allocation_key: 'allocation-123',
+        allocationKey: 'allocation-123',
       },
     }
 
