@@ -82,9 +82,11 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variant.value,
         })
 
+        const reason = allocation.rules?.length ? 'TARGETING_MATCH' : selectedSplit.shards.length ? 'SPLIT' : 'STATIC'
+
         return {
           value: variant.value as FlagTypeToValue<T>,
-          reason: 'TARGETING_MATCH',
+          reason,
           variant: variant.key,
           flagMetadata: {
             ...createEvaluationTimestampMetadata(evaluationTimestampMs),
