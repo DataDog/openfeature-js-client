@@ -14,8 +14,7 @@
       "flagMetadata": {
         "allocationKey": "rollout",
         "variationType": "number",
-        "doLog": true,
-        "__dd_split_serial_id": 100
+        "doLog": true
       }
     }
   },
@@ -34,8 +33,7 @@
       "flagMetadata": {
         "allocationKey": "rollout",
         "variationType": "number",
-        "doLog": true,
-        "__dd_split_serial_id": 100
+        "doLog": true
       }
     }
   },
@@ -53,8 +51,7 @@
       "flagMetadata": {
         "allocationKey": "rollout",
         "variationType": "number",
-        "doLog": true,
-        "__dd_split_serial_id": 100
+        "doLog": true
       }
     }
   }
