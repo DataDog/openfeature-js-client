@@ -6,6 +6,13 @@
 
 ---
 
+## v1.1.3
+
+**Internal Changes:**
+
+- feat(node): expose serialId in flagMetadata for span enrichment ([#269](https://github.com/DataDog/openfeature-js-client/pull/269)) [NODE-SERVER]
+- 👷 ci(deps): Bump dependabot/fetch-metadata ([#267](https://github.com/DataDog/openfeature-js-client/pull/267))
+
 ## v1.1.2
 
 **Internal Changes:**
