@@ -6,12 +6,12 @@ export function createExposureEvent<T extends FlagValue>(
   details: EvaluationDetails<T>
 ): ExposureEvent | undefined {
   // Only log if doLog flag is true
-  if (!details.flagMetadata?.doLog) {
+  if (!details.flagMetadata?.__dd_do_log) {
     return
   }
 
   // Skip logging if allocation key or variant is missing (this should never happen)
-  const allocationKey = details.flagMetadata?.allocationKey as string
+  const allocationKey = details.flagMetadata?.__dd_allocation_key as string
   const variantKey = details.variant
   if (!allocationKey || !variantKey) {
     return

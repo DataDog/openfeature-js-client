@@ -88,10 +88,14 @@ export function evaluateForSubject<T extends FlagValueType>(
           reason: StandardResolutionReasons.TARGETING_MATCH,
           variant: variant.key,
           flagMetadata: {
+            // Standardized keys
+            __dd_allocation_key: allocation.key,
+            __dd_do_log: !!allocation.doLog,
+            __dd_split_serial_id: selectedSplit.serialId,
+            // Deprecated keys (for backwards compatibility)
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
-            __dd_split_serial_id: selectedSplit.serialId,
           } as PrecomputedFlagMetadata,
         }
       }
