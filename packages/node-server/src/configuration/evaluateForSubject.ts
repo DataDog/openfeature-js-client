@@ -88,11 +88,11 @@ export function evaluateForSubject<T extends FlagValueType>(
           reason: StandardResolutionReasons.TARGETING_MATCH,
           variant: variant.key,
           flagMetadata: {
-            // Standardized keys
+            // Keys for dd-trace-js
             __dd_allocation_key: allocation.key,
             __dd_do_log: !!allocation.doLog,
             __dd_split_serial_id: selectedSplit.serialId,
-            // Deprecated keys (for backwards compatibility)
+            // Legacy keys (internal) - to be removed from server-side
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
