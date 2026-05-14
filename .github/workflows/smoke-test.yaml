@@ -6,6 +6,7 @@ on:
       - 'packages/*/package.json'
       - 'yarn.lock'
       - 'lerna.json'
+      - '.github/workflows/smoke-test.yaml'
 
 jobs:
   npm-compatibility:
@@ -84,10 +85,10 @@ jobs:
             console.log('✅ @datadog/openfeature-node-server loads');
 
             // Verify key exports exist
-            if (typeof nodeServer.DatadogProvider !== 'function') {
-              throw new Error('DatadogProvider not exported');
+            if (typeof nodeServer.DatadogNodeServerProvider !== 'function') {
+              throw new Error('DatadogNodeServerProvider not exported');
             }
-            console.log('✅ DatadogProvider export verified');
+            console.log('✅ DatadogNodeServerProvider export verified');
           "
 
           echo ""
