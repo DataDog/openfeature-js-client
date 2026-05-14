@@ -38,8 +38,10 @@ jobs:
             # Pack the package (creates .tgz)
             npm pack --pack-destination /tmp/tarballs
 
-            # Extract and inspect the tarball
-            TARBALL=$(ls /tmp/tarballs/datadog-*.tgz | tail -1)
+            # Extract and inspect the tarball (use package name for deterministic match)
+            PKG_NAME=$(node -p "require('./package.json').name.replace('@datadog/', 'datadog-')")
+            PKG_VERSION=$(node -p "require('./package.json').version")
+            TARBALL="/tmp/tarballs/${PKG_NAME}-${PKG_VERSION}.tgz"
             tar -xzf "$TARBALL" -C /tmp
 
             # Check for any yarn-specific protocols in the packed package.json
