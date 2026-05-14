@@ -1,0 +1,94 @@
+name: Package Smoke Test
+
+on:
+  pull_request:
+    paths:
+      - 'packages/*/package.json'
+      - 'yarn.lock'
+      - 'lerna.json'
+
+jobs:
+  npm-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '24.x'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable && yarn allow-scripts
+
+      - name: Build packages
+        run: yarn build
+
+      - name: Pack and validate packages
+        run: |
+          echo "Packing packages and checking for yarn-specific protocols..."
+          mkdir -p /tmp/tarballs
+
+          for pkg_dir in packages/core packages/browser packages/node-server; do
+            echo ""
+            echo "=== Validating $pkg_dir ==="
+            cd "$pkg_dir"
+
+            # Pack the package (creates .tgz)
+            npm pack --pack-destination /tmp/tarballs
+
+            # Extract and inspect the tarball
+            TARBALL=$(ls /tmp/tarballs/datadog-*.tgz | tail -1)
+            tar -xzf "$TARBALL" -C /tmp
+
+            # Check for any yarn-specific protocols in the packed package.json
+            if grep -E '"(workspace|patch|portal|link):' /tmp/package/package.json; then
+              echo "❌ Found yarn-specific protocol in $pkg_dir"
+              cat /tmp/package/package.json
+              exit 1
+            fi
+
+            echo "✅ No yarn-specific protocols in $pkg_dir"
+            rm -rf /tmp/package
+            cd - > /dev/null
+          done
+
+          echo ""
+          echo "✅ All packages validated"
+          ls -la /tmp/tarballs
+
+      - name: Test npm install from tarballs
+        run: |
+          echo "Testing npm installation from packed tarballs..."
+
+          # Create isolated test environment
+          mkdir -p /tmp/npm-test
+          cd /tmp/npm-test
+          npm init -y
+
+          # Install packages using npm (NOT yarn)
+          echo "Installing @datadog/flagging-core..."
+          npm install /tmp/tarballs/datadog-flagging-core-*.tgz
+
+          echo "Installing @datadog/openfeature-node-server..."
+          npm install /tmp/tarballs/datadog-openfeature-node-server-*.tgz
+
+          # Verify packages load correctly
+          echo ""
+          echo "Verifying packages load..."
+          node -e "
+            const core = require('@datadog/flagging-core');
+            console.log('✅ @datadog/flagging-core loads');
+
+            const nodeServer = require('@datadog/openfeature-node-server');
+            console.log('✅ @datadog/openfeature-node-server loads');
+
+            // Verify key exports exist
+            if (typeof nodeServer.DatadogProvider !== 'function') {
+              throw new Error('DatadogProvider not exported');
+            }
+            console.log('✅ DatadogProvider export verified');
+          "
+
+          echo ""
+          echo "✅ npm install smoke test passed"
