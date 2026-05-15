@@ -29,6 +29,9 @@ jobs:
 
           echo "✅ Release validation passed"
 
+      - name: Validate internal dependencies use exact versions
+        run: bash scripts/internal-deps-validate.sh
+
   build-and-publish:
     runs-on: ubuntu-latest
     environment: production
