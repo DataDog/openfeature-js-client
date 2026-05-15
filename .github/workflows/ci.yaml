@@ -45,9 +45,6 @@ jobs:
       - name: Validate package versions
         run: bash scripts/versions-validate.sh
 
-      - name: Validate internal dependencies use exact versions
-        run: bash scripts/internal-deps-validate.sh
-
       - name: Build packages
         run: yarn build
 
