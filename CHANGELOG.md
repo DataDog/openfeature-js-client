@@ -6,6 +6,19 @@
 
 ---
 
+## v1.2.2
+
+**Internal Changes:**
+
+- chore: pin exact versions for internal dependencies ([#283](https://github.com/DataDog/openfeature-js-client/pull/283))
+- ci: add npm compatibility smoke test ([#282](https://github.com/DataDog/openfeature-js-client/pull/282))
+
+## v1.2.1
+
+**Internal Changes:**
+
+- fix: remove workspace:^ version specifier from node-server package ([#280](https://github.com/DataDog/openfeature-js-client/pull/280)) [NODE-SERVER]
+
 ## v1.2.0
 
 **Internal Changes:**
