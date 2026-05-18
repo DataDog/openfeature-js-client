@@ -51,6 +51,8 @@ function evaluatePrecomputed<T extends FlagValueType>(
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
     flagMetadata: {
+      // Spread backend metadata first so SDK-internal keys win on collision.
+      ...(flag.metadata ?? {}),
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,

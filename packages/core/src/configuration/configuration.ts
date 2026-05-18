@@ -40,6 +40,13 @@ export type PrecomputedConfigurationResponse = {
   }
 }
 
+/** @internal
+ * Generic passthrough metadata from the FFE backend (e.g. version,
+ * lastModified). Values are restricted to the primitive types that
+ * OpenFeature's FlagMetadata spec allows (string | number | boolean).
+ */
+export type FlagMetadata = Record<string, string | number | boolean>
+
 /** @internal */
 export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   allocationKey: string
@@ -49,11 +56,17 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   extraLogging: Record<string, unknown>
+  /** @internal Backend-emitted metadata. Surfaced in flagMetadata. */
+  metadata?: FlagMetadata
 }
 
-/** @internal */
+/** @internal
+ * SDK-internal keys (allocationKey, variationType, doLog) take precedence on
+ * collision with backend metadata. The intersection widens to FlagMetadata so
+ * passthrough keys like `version` survive end-to-end.
+ */
 export type PrecomputedFlagMetadata = {
   allocationKey: string
   variationType: FlagValueType
   doLog: boolean
-}
+} & FlagMetadata
