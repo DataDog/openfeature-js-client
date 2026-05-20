@@ -8,8 +8,9 @@ This is a monorepo managed with Lerna that contains multiple packages:
 
 - **`@datadog/flagging-core`** - Runtime-agnostic flag-evaluation logic
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
+- **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **fixed versioning**, meaning all packages share the same version number and are released together. The version is managed centrally in `lerna.json`.
+The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions to prevent version skew.
 
 ## Development Setup
 
@@ -196,21 +197,20 @@ yarn pack
 
 ### Version Management
 
-Since this project uses **fixed versioning**:
+Since this project uses **independent versioning**:
 
-- All packages share the same version number (managed in `lerna.json`)
-- When running `yarn release`, Lerna will prompt for a single version update
-- All package versions are automatically synchronized
-- Peer dependencies are automatically updated to match the fixed version
-- A single version commit and tag is created for the entire project
+- Each package has its own version number (stored in its `package.json`)
+- When running `yarn release`, Lerna will prompt for version updates per changed package
+- Internal dependencies are pinned to exact versions (configured via `command.version.exact` in `lerna.json`)
+- Version commits and tags are created per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
 
 ### Automated Release Workflow Details
 
 The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
 1. **Version Consistency Check:**
-   - Compares GitHub release tag with `lerna.json` version
-   - Ensures tags and versions are synchronized
+   - Compares GitHub release tag with the corresponding package version
+   - Ensures tags and package versions are synchronized
 
 2. **Dependency Coordination:**
    - Core package is published first
