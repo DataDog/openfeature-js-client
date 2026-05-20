@@ -10,7 +10,7 @@ This is a monorepo managed with Lerna that contains multiple packages:
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
 - **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions to prevent version skew.
+The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions on release (via `command.version.exact` in `lerna.json`) to prevent version skew.
 
 ## Development Setup
 
