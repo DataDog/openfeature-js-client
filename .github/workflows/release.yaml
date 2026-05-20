@@ -127,6 +127,8 @@ jobs:
             cd -
           }
 
+          # Dependent packages need flagging-core available on npm registry before publishing.
+          # This handles both fresh publishes and verifies existing versions are accessible.
           wait_for_core() {
             local core_version=$(node -p "require('./packages/core/package.json').version")
             echo "Waiting for @datadog/flagging-core@$core_version to propagate..."
@@ -157,6 +159,10 @@ jobs:
               "openfeature-node-server")
                 wait_for_core
                 publish_package packages/node-server
+                ;;
+              *)
+                echo "❌ Unknown package: $PKG_NAME"
+                exit 1
                 ;;
             esac
           else
