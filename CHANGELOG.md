@@ -6,6 +6,27 @@
 
 ---
 
+## v2.0.0
+
+**Breaking Changes:**
+
+- chore: pin exact versions for internal dependencies ([#283](https://github.com/DataDog/openfeature-js-client/pull/283))
+
+  The `@datadog/openfeature-node-server` and `@datadog/openfeature-browser` packages now declare **exact versions** for their internal dependency on `@datadog/flagging-core`:
+
+  | Package                            | Before (v1.2.1)                      | After (v2.0.0)                      |
+  | ---------------------------------- | ------------------------------------ | ----------------------------------- |
+  | `@datadog/openfeature-node-server` | `"@datadog/flagging-core": "^1.2.1"` | `"@datadog/flagging-core": "2.0.0"` |
+  | `@datadog/openfeature-browser`     | `"@datadog/flagging-core": "^1.2.1"` | `"@datadog/flagging-core": "2.0.0"` |
+
+  **Why a major bump?**
+
+  Users of `dd-trace-js` v5.89.0 through v5.102.0 have `"@datadog/openfeature-node-server": "^1.1.x"` in their dependency tree, which resolves to v1.2.1 with loose internal versioning. A major version ensures these users must explicitly opt-in to the new versioning scheme.
+
+**Internal Changes:**
+
+- ci: add npm compatibility smoke test ([#282](https://github.com/DataDog/openfeature-js-client/pull/282))
+
 ## v1.2.0
 
 **Internal Changes:**
