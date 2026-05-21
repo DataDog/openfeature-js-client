@@ -22,7 +22,11 @@ runMain(async () => {
   console.log('Package versions:', packageVersions)
 
   // Internal packages that should use exact versions
-  const internalPackages = ['@datadog/openfeature-browser', '@datadog/flagging-core', '@datadog/openfeature-node-server']
+  const internalPackages = [
+    '@datadog/openfeature-browser',
+    '@datadog/flagging-core',
+    '@datadog/openfeature-node-server',
+  ]
 
   // Update internal dependencies in each package
   for (const jsonFile of JSON_FILES) {

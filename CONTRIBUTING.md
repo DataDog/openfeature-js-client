@@ -107,11 +107,13 @@ All packages are published with the `latest` npm tag.
    This script reads each package's current version and updates internal dependencies (like `@datadog/flagging-core`) to use exact versions without the `^` prefix. This prevents version skew between packages.
 
    After running, verify the changes:
+
    ```bash
    git diff packages/*/package.json
    ```
 
    You should see changes like:
+
    ```diff
    -    "@datadog/flagging-core": "^1.2.1"
    +    "@datadog/flagging-core": "1.2.1"
@@ -122,6 +124,7 @@ All packages are published with the `latest` npm tag.
 3. **Update the version using the CLI:**
 
    **For independent releases (recommended):**
+
    ```bash
    yarn release
    ```
@@ -134,6 +137,7 @@ All packages are published with the `latest` npm tag.
    - Pushes version tags to Github
 
    **For unified releases (all packages with same version):**
+
    ```bash
    yarn release:all
    ```
@@ -170,11 +174,11 @@ All packages are published with the `latest` npm tag.
 
    **Publishing Sequence:**
 
-   *For independent releases* (`@datadog/pkg@x.y.z`):
+   _For independent releases_ (`@datadog/pkg@x.y.z`):
    - Publishes only the specified package
    - If publishing `browser` or `node-server`, waits for `flagging-core` to be available on npm first
 
-   *For unified releases* (`vX.Y.Z`):
+   _For unified releases_ (`vX.Y.Z`):
    1. Publishes `@datadog/flagging-core` first
    2. Waits for npm registry propagation (up to 5 minutes)
    3. Publishes `@datadog/openfeature-browser`
