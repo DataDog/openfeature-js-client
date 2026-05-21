@@ -94,10 +94,11 @@ All packages are published with the `latest` npm tag.
 1. **Switch to a feature branch:**
 
    ```bash
-   # For independent releases (single package)
-   git checkout -b release/openfeature-node-server-1.3.0
+   # For independent releases (describe what's being released)
+   git checkout -b release/node-server-1.3.0
+   git checkout -b release/browser-and-node-server-1.3.0
 
-   # For unified releases (all packages)
+   # For unified releases (all packages with same version)
    git checkout -b release/v1.2.3
    ```
 
@@ -163,6 +164,8 @@ All packages are published with the `latest` npm tag.
      - Unified: `v1.2.1` (publishes all packages)
    - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
+
+   **For multiple independent releases:** Create a separate GitHub release for each package tag (e.g., one for `@datadog/openfeature-browser@1.3.0` and one for `@datadog/openfeature-node-server@1.3.0`).
 
 2. **Automated Publishing Workflow:**
 
