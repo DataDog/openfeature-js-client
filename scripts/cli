@@ -33,8 +33,13 @@ cmd_lint () {
 
 cmd_release () {
   [[ `git branch --show-current` != "main" ]] || fail 'please do not release from `main` branch'
-  # We should publish all packages regardless of if there are changes in each.
-  # --force-publish will skip the `lerna changed` check for changed packages
+  # Independent versioning: only prompts for changed packages
+  yarn lerna version --exact
+}
+
+cmd_release_all () {
+  [[ `git branch --show-current` != "main" ]] || fail 'please do not release from `main` branch'
+  # Unified versioning: prompts for all packages (use when releasing all packages with same version)
   yarn lerna version --exact --force-publish
 }
 

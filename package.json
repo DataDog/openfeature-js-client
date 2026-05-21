@@ -21,6 +21,7 @@
     "typecheck": "lerna run typecheck --stream",
     "clean": "lerna run clean --stream",
     "release": "scripts/cli release",
+    "release:all": "scripts/cli release_all",
     "version": "scripts/cli version",
     "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
