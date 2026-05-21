@@ -92,7 +92,12 @@ All packages are published with the `latest` npm tag.
 #### Step 1: Prepare for Release
 
 1. **Switch to a feature branch:**
+
    ```bash
+   # For independent releases (single package)
+   git checkout -b release/openfeature-node-server-1.3.0
+
+   # For unified releases (all packages)
    git checkout -b release/v1.2.3
    ```
 
