@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-node-server",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Node.js server bindings for OpenFeature (wraps @datadog/flagging-core)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
