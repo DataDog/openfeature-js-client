@@ -6,6 +6,14 @@
 
 ---
 
+## v1.3.0
+
+**Bug Fixes:**
+
+- fix: pin @datadog/flagging-core to exact version to prevent version skew ([#292](https://github.com/DataDog/openfeature-js-client/pull/292)) [BROWSER] [NODE-SERVER]
+
+> **Note:** This is the first stable release with the serialId feature. v1.2.0 had yarn syntax issues, v1.2.1 had loose dependency issues.
+
 ## v1.2.0
 
 **Internal Changes:**
