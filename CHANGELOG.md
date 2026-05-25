@@ -6,6 +6,20 @@
 
 ---
 
+## @datadog/openfeature-browser@1.2.2, @datadog/openfeature-node-server@2.0.0
+
+**Bug Fixes:**
+
+- fix: pin @datadog/flagging-core to exact version to prevent version skew [BROWSER] [NODE-SERVER]
+
+**Internal Changes:**
+
+- chore: switch to lerna independent versioning ([#288](https://github.com/DataDog/openfeature-js-client/pull/288))
+- chore: pin exact versions for internal dependencies ([#283](https://github.com/DataDog/openfeature-js-client/pull/283))
+- ci: add npm compatibility smoke test ([#282](https://github.com/DataDog/openfeature-js-client/pull/282))
+
+> **Note:** This is the first stable release with the serialId feature. v1.2.0 had yarn syntax issues, v1.2.1 had loose dependency issues.
+
 ## v1.2.0
 
 **Internal Changes:**
