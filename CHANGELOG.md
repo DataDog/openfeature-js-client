@@ -18,7 +18,7 @@
 - chore: pin exact versions for internal dependencies ([#283](https://github.com/DataDog/openfeature-js-client/pull/283))
 - ci: add npm compatibility smoke test ([#282](https://github.com/DataDog/openfeature-js-client/pull/282))
 
-> **Note:** This is the first stable release with the serialId feature. v1.2.0 had yarn syntax issues, v1.2.1 had loose dependency issues.
+> **Note:** This is the first stable release with the serialId feature. v1.2.0 had yarn syntax issues, v1.2.1 had loose dependency issues. `node-server` is bumped to 2.0.0 to prevent automatic upgrades by older dd-trace versions with unpinned dependencies.
 
 ## v1.2.0
 
