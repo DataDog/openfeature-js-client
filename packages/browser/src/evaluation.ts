@@ -54,6 +54,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,
+      ...holdoutMetadataFromExtraLogging(flag.extraLogging),
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
@@ -76,4 +77,21 @@ function variationTypeToOpenFeature(s: string): FlagValueType {
   }
 
   return typeMap[s] || s.toLowerCase()
+}
+
+function holdoutMetadataFromExtraLogging(extraLogging?: Record<string, unknown>): Partial<PrecomputedFlagMetadata> {
+  if (!extraLogging) {
+    return {}
+  }
+
+  return {
+    __dd_holdout_key: stringValue(extraLogging.holdoutKey),
+    __dd_holdout_experiment_id: stringValue(extraLogging.holdoutAnalysisExperimentId),
+    __dd_holdout_variation: stringValue(extraLogging.holdoutVariation),
+    __dd_holdout_base_allocation_key: stringValue(extraLogging.holdoutBaseAllocationKey),
+  }
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }

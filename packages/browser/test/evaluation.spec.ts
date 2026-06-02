@@ -67,4 +67,48 @@ describe('evaluate', () => {
       },
     })
   })
+
+  it('passes holdout extraLogging through precomputed flag metadata', () => {
+    const result = evaluate(
+      {
+        precomputed: {
+          response: {
+            data: {
+              attributes: {
+                createdAt: '2026-06-02T00:00:00.000Z',
+                flags: {
+                  'checkout-redesign': {
+                    allocationKey: 'allocation-a-holdout-q2-global-holdout',
+                    variationKey: 'control',
+                    variationType: 'boolean',
+                    variationValue: false,
+                    reason: 'TARGETING_MATCH',
+                    doLog: true,
+                    extraLogging: {
+                      holdoutKey: 'q2-global-holdout',
+                      holdoutAnalysisExperimentId: 'holdout-analysis-experiment-id',
+                      holdoutVariation: 'status_quo',
+                      holdoutBaseAllocationKey: 'allocation-a',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      'boolean',
+      'checkout-redesign',
+      true,
+      {}
+    )
+
+    expect(result.flagMetadata).toMatchObject({
+      allocationKey: 'allocation-a-holdout-q2-global-holdout',
+      __dd_holdout_key: 'q2-global-holdout',
+      __dd_holdout_experiment_id: 'holdout-analysis-experiment-id',
+      __dd_holdout_variation: 'status_quo',
+      __dd_holdout_base_allocation_key: 'allocation-a',
+    })
+  })
 })
