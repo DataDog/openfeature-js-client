@@ -1,4 +1,4 @@
-import { dateNow } from '@datadog/browser-core'
+import { dateNow } from '@datadog/js-core/time'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'

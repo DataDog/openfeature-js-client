@@ -2,8 +2,7 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
 
-// Mock dateNow from @datadog/browser-core
-jest.mock('@datadog/browser-core', () => ({
+jest.mock('@datadog/js-core/time', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
