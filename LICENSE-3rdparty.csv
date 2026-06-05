@@ -57,6 +57,7 @@
 "@csstools/css-tokenizer","@csstools/css-tokenizer","['MIT']","['Antonio Laguna <antonio@laguna.es>', 'Romain Menke']"
 "@datadog/browser-core","@datadog/browser-core","['Apache-2.0']","['Datadog, Inc.']"
 "@datadog/flagging-core","@datadog/flagging-core","['Apache-2.0']","['Datadog, Inc.']"
+"@datadog/js-core","@datadog/js-core","['Apache-2.0']","['Datadog, Inc.']"
 "@emnapi/core","@emnapi/core","['MIT']","['Microsoft Corporation', 'Toyobayashi']"
 "@emnapi/runtime","@emnapi/runtime","['MIT']","['Microsoft Corporation', 'Toyobayashi']"
 "@emnapi/wasi-threads","@emnapi/wasi-threads","['MIT']","['Toyobayashi']"
