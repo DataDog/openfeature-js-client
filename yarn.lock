@@ -676,12 +676,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@datadog/js-core@npm:0.0.1":
+  version: 0.0.1
+  resolution: "@datadog/js-core@npm:0.0.1"
+  checksum: 10c0/68d0a421f867cac67b6f785da526ddeb7e7d712b014b379b23533a67e6d43fba464a721e15b0ed623c0048a629edd624ed7d5eceedb6ebf2e293bf982adcd92e
+  languageName: node
+  linkType: hard
+
 "@datadog/openfeature-browser@workspace:packages/browser":
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:^6.33.0"
     "@datadog/flagging-core": "npm:1.2.1"
+    "@datadog/js-core": "npm:0.0.1"
     "@openfeature/core": "npm:^1.9.2"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"

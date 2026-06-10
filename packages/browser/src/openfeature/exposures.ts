@@ -1,6 +1,7 @@
 import type { Context, RawError } from '@datadog/browser-core'
-import { addTelemetryDebug, createPageMayExitObservable, dateNow } from '@datadog/browser-core'
+import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
 import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimestamp } from '@datadog/flagging-core'
+import { dateNow } from '@datadog/js-core/time'
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
