@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
@@ -343,7 +344,7 @@ describe('createFlagsConfigurationFetcher', () => {
         precomputed: {
           response: mockResponse,
           context: mockContext,
-          fetchedAt: 1234567890,
+          fetchedAt: 1234567890 as TimeStamp,
         },
       })
     })
