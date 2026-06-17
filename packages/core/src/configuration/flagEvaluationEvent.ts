@@ -1,5 +1,5 @@
-import type { EvaluationContextValue } from '@openfeature/core'
 import type { TimeStamp } from '@datadog/js-core/time'
+import type { EvaluationContextValue } from '@openfeature/core'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 interface FlagEvaluationAggregationData {

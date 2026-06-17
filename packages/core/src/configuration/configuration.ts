@@ -1,5 +1,5 @@
-import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '@datadog/js-core/time'
+import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 
 
 /**
