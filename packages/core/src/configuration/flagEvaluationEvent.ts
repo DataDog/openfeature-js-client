@@ -16,7 +16,10 @@ interface FlagEvaluationAggregationData {
   error?: string
 }
 
-export function createFlagEvaluationEvent(data: FlagEvaluationAggregationData, timestamp: TimeStamp): FlagEvaluationEvent {
+export function createFlagEvaluationEvent(
+  data: FlagEvaluationAggregationData,
+  timestamp: TimeStamp
+): FlagEvaluationEvent {
   const event: FlagEvaluationEvent = {
     flag: {
       key: data.flagKey,
