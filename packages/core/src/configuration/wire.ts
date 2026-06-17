@@ -1,13 +1,14 @@
 import type { EvaluationContext } from '@openfeature/core'
 
-import type { FlagsConfiguration, UnixTimestamp } from './configuration'
+import type { TimeStamp } from '@datadog/js-core/time'
+import type { FlagsConfiguration } from './configuration'
 
 type ConfigurationWire = {
   version: 1
   precomputed?: {
     context?: EvaluationContext
     response: string
-    fetchedAt?: UnixTimestamp
+    fetchedAt?: TimeStamp
   }
 }
 
