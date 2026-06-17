@@ -21,6 +21,7 @@ export function createExposureEvent<T extends FlagValue>(
   const holdoutKey = details.flagMetadata?.__dd_holdout_key as string | undefined
   const holdoutVariation = details.flagMetadata?.__dd_holdout_variation as string | undefined
 
+
   return {
     allocation: {
       key: allocationKey,
@@ -39,9 +40,7 @@ export function createExposureEvent<T extends FlagValue>(
       holdoutVariation && {
         holdout: {
           key: holdoutKey,
-          experiment_id: details.flagMetadata?.__dd_holdout_experiment_id as string | undefined,
           variation: holdoutVariation,
-          base_allocation_key: details.flagMetadata?.__dd_holdout_base_allocation_key as string | undefined,
         },
       }),
   } satisfies ExposureEvent

@@ -41,6 +41,12 @@ export type PrecomputedConfigurationResponse = {
 }
 
 /** @internal */
+export type HoldoutMetadata = {
+  key: string
+  variation: string
+}
+
+/** @internal */
 export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   allocationKey: string
   variationKey: string
@@ -49,6 +55,7 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   extraLogging: Record<string, unknown>
+  holdout?: HoldoutMetadata
 }
 
 /** @internal */
@@ -58,36 +65,14 @@ export type PrecomputedFlagMetadata = {
   variationType: FlagValueType
   doLog: boolean
 
-  // Holdout metadata copied from UFC split.extraLogging
+  // Holdout metadata from UFC split.holdout (first-class field)
   __dd_holdout_key?: string
-  __dd_holdout_experiment_id?: string
   __dd_holdout_variation?: string
-  __dd_holdout_base_allocation_key?: string
 
   // Server-side tracing keys (consumed by dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
-}
-
-/** @internal */
-export function holdoutMetadataFromExtraLogging(
-  extraLogging?: Record<string, unknown>
-): Partial<PrecomputedFlagMetadata> {
-  if (!extraLogging) {
-    return {}
-  }
-
-  return {
-    __dd_holdout_key: stringValue(extraLogging.holdoutKey),
-    __dd_holdout_experiment_id: stringValue(extraLogging.holdoutAnalysisExperimentId),
-    __dd_holdout_variation: stringValue(extraLogging.holdoutVariation),
-    __dd_holdout_base_allocation_key: stringValue(extraLogging.holdoutBaseAllocationKey),
-  }
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 /**
