@@ -1,4 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
+import { timeStampNow } from '@datadog/js-core/time'
+import type { TimeStamp } from '@datadog/js-core/time'
 import { getMD5Hash } from '../obfuscation'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
@@ -11,8 +13,8 @@ interface FlagEvaluationAggregationData {
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
   count: number
-  firstEvaluation: number
-  lastEvaluation: number
+  firstEvaluation: TimeStamp
+  lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
 }
@@ -44,7 +46,7 @@ export class FlagEvaluationAggregator {
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
     const keyString = this.createAggregationKeyString(context, details, error)
-    const timestamp = Date.now()
+    const timestamp = timeStampNow()
 
     const existingData = this.aggregatedData.get(keyString)
     if (existingData) {

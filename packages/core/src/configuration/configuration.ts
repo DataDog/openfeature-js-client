@@ -1,4 +1,5 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
+import type { TimeStamp as UnixTimestamp } from '@datadog/js-core/time'
 
 /**
  * Internal flags configuration for DatadogProvider.
@@ -24,10 +25,7 @@ export type FlagTypeToValue<T extends FlagValueType> = {
   object: JsonValue
 }[T]
 
-/** @internal
- * Timestamp in milliseconds since Unix Epoch.
- */
-export type UnixTimestamp = number
+export type { UnixTimestamp }
 
 /** @internal */
 export type PrecomputedConfigurationResponse = {

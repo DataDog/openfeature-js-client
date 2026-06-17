@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import { createFlagEvaluationEvent } from '../../src/configuration/flagEvaluationEvent'
 
 describe('createFlagEvaluationEvent', () => {
@@ -7,11 +8,11 @@ describe('createFlagEvaluationEvent', () => {
         flagKey: 'test-flag',
         targetingKey: 'user123',
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event.targeting_key).toBe('user123')
@@ -23,11 +24,11 @@ describe('createFlagEvaluationEvent', () => {
         flagKey: 'test-flag',
         targetingKey: '',
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event.targeting_key).toBe('')
@@ -40,11 +41,11 @@ describe('createFlagEvaluationEvent', () => {
         flagKey: 'test-flag',
         targetingKey: undefined,
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event).not.toHaveProperty('targeting_key')
@@ -59,11 +60,11 @@ describe('createFlagEvaluationEvent', () => {
         targetingRuleKey: 'rule-456',
         targetingKey: 'user123',
         count: 5,
-        firstEvaluation: 1000,
-        lastEvaluation: 5000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 5000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      6000
+      6000 as TimeStamp
     )
 
     expect(event).toEqual({
@@ -86,12 +87,12 @@ describe('createFlagEvaluationEvent', () => {
         flagKey: 'test-flag',
         targetingKey: 'user123',
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: true,
         error: 'Test error message',
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event.error).toEqual({ message: 'Test error message' })
@@ -107,11 +108,11 @@ describe('createFlagEvaluationEvent', () => {
           browser: 'Chrome',
         },
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event.context).toEqual({
@@ -129,11 +130,11 @@ describe('createFlagEvaluationEvent', () => {
         targetingKey: 'user123',
         targetingContext: {},
         count: 1,
-        firstEvaluation: 1000,
-        lastEvaluation: 1000,
+        firstEvaluation: 1000 as TimeStamp,
+        lastEvaluation: 1000 as TimeStamp,
         runtimeDefaultUsed: false,
       },
-      2000
+      2000 as TimeStamp
     )
 
     expect(event).not.toHaveProperty('context')

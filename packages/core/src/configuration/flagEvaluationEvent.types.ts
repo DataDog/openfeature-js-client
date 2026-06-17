@@ -1,14 +1,15 @@
 import type { EvaluationContextValue } from '@openfeature/core'
+import type { TimeStamp } from '@datadog/js-core/time'
 
 export interface FlagEvaluationEvent {
   flag: {
     key: string
   }
-  first_evaluation: number
-  last_evaluation: number
+  first_evaluation: TimeStamp
+  last_evaluation: TimeStamp
   evaluation_count: number
   runtime_default_used: boolean
-  timestamp: number
+  timestamp: TimeStamp
   targeting_key?: string
   error?: {
     message: string
@@ -50,8 +51,8 @@ export interface FlagEvaluationAggregationKey {
 export interface FlagEvaluationAggregationData {
   key: FlagEvaluationAggregationKey
   count: number
-  firstEvaluation: number
-  lastEvaluation: number
+  firstEvaluation: TimeStamp
+  lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
 }
