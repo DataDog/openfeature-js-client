@@ -5,9 +5,7 @@ import {
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
 } from '@datadog/flagging-core'
-import { createMonitor } from '@datadog/js-core/monitor'
 import { timeStampNow } from '@datadog/js-core/time'
-import { createDisplay } from '@datadog/js-core/util'
 import type { EvaluationContext } from '@openfeature/core'
 import type {
   EvaluationDetails,
@@ -25,11 +23,6 @@ import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { InitializationController } from './initialization-controller'
-
-const display = createDisplay('[datadog-node-server]')
-const { callMonitored } = createMonitor(display, (error) => {
-  display.error('Internal error:', error)
-})
 
 /**
  * Default timeout in milliseconds for provider initialization.
@@ -201,25 +194,23 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
-    callMonitored(() => {
-      const timestamp = timeStampNow()
-      const evalutationDetails: EvaluationDetails<T> = {
-        ...resolutionDetails,
-        flagKey: flagKey,
-        flagMetadata: resolutionDetails.flagMetadata ?? {},
-      }
-      const exposureEvent = createExposureEvent(context, evalutationDetails)
-      if (!exposureEvent) {
-        return
-      }
-      const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
-      if (hasLoggedAssignment) {
-        return
-      }
-      if (this.options.exposureChannel.hasSubscribers) {
-        this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
-        this.exposureCache?.set(exposureEvent)
-      }
-    })
+    const timestamp = timeStampNow()
+    const evalutationDetails: EvaluationDetails<T> = {
+      ...resolutionDetails,
+      flagKey: flagKey,
+      flagMetadata: resolutionDetails.flagMetadata ?? {},
+    }
+    const exposureEvent = createExposureEvent(context, evalutationDetails)
+    if (!exposureEvent) {
+      return
+    }
+    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
+    if (hasLoggedAssignment) {
+      return
+    }
+    if (this.options.exposureChannel.hasSubscribers) {
+      this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
+      this.exposureCache?.set(exposureEvent)
+    }
   }
 }
