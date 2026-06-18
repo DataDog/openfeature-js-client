@@ -4,7 +4,7 @@ import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
 
 jest.mock('@datadog/js-core/time', () => ({
-  dateNow: jest.fn(() => 1234567890),
+  timeStampNow: jest.fn(() => 1234567890),
 }))
 
 describe('createFlagsConfigurationFetcher', () => {
