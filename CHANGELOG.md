@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/openfeature-browser@1.2.3
+
+**Features:**
+
+- feat(browser): support uk1.datadoghq.com site ([#309](https://github.com/DataDog/openfeature-js-client/pull/309))
+
+**Internal Changes:**
+
+- refactor(browser): migrate dateNow from browser-core to js-core ([#300](https://github.com/DataDog/openfeature-js-client/pull/300))
+
 ## @datadog/openfeature-browser@1.2.2, @datadog/openfeature-node-server@2.0.0
 
 **Bug Fixes:**
