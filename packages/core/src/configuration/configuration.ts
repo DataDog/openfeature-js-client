@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 
 /**
@@ -12,7 +13,7 @@ export type FlagsConfiguration = {
 export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
-  fetchedAt?: UnixTimestamp
+  fetchedAt?: TimeStamp
 }
 
 // Fancy way to map FlagValueType to expected FlagValue.
@@ -23,11 +24,6 @@ export type FlagTypeToValue<T extends FlagValueType> = {
   number: number
   object: JsonValue
 }[T]
-
-/** @internal
- * Timestamp in milliseconds since Unix Epoch.
- */
-export type UnixTimestamp = number
 
 /** @internal */
 export type PrecomputedConfigurationResponse = {

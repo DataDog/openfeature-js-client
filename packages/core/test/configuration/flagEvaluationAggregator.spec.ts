@@ -112,17 +112,13 @@ describe('FlagEvaluationAggregator', () => {
 
     // Add first evaluation
     const firstEvalTime = Date.now()
-    jest.spyOn(Date, 'now').mockReturnValue(firstEvalTime)
+    jest.setSystemTime(firstEvalTime)
     aggregator.addEvaluation(mockContext, mockDetails)
 
     // Add second evaluation with different timestamp
     const secondEvalTime = firstEvalTime + 5000
-    jest.spyOn(Date, 'now').mockReturnValue(secondEvalTime)
+    jest.setSystemTime(secondEvalTime)
     aggregator.addEvaluation(mockContext, mockDetails)
-
-    // Mock flush timestamp
-    const flushTime = secondEvalTime + 1000
-    jest.spyOn(Date, 'now').mockReturnValue(flushTime)
 
     aggregator.start()
     jest.advanceTimersByTime(100)

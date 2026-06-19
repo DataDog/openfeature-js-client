@@ -52,6 +52,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@datadog/js-core": "0.0.3",
     "spark-md5": "^3.0.2"
   }
 }
