@@ -62,6 +62,7 @@ export type PrecomputedFlagMetadata = {
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
+  'dd.eval.timestamp_ms'?: UnixTimestamp
 }
 
 /**

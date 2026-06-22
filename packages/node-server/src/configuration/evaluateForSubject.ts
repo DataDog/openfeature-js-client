@@ -1,4 +1,4 @@
-import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import type { FlagTypeToValue, PrecomputedFlagMetadata, UnixTimestamp } from '@datadog/flagging-core'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -18,7 +18,8 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
-  logger: Logger
+  logger: Logger,
+  evaluationTimestampMs: UnixTimestamp = Date.now()
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
@@ -28,6 +29,7 @@ export function evaluateForSubject<T extends FlagValueType>(
     return {
       value: defaultValue,
       reason: StandardResolutionReasons.DISABLED,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -43,10 +45,11 @@ export function evaluateForSubject<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.TYPE_MISMATCH,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
-  const now = new Date()
+  const now = new Date(evaluationTimestampMs)
   for (const allocation of flag.allocations) {
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
@@ -88,6 +91,7 @@ export function evaluateForSubject<T extends FlagValueType>(
           reason: StandardResolutionReasons.TARGETING_MATCH,
           variant: variant.key,
           flagMetadata: {
+            ...createEvaluationTimestampMetadata(evaluationTimestampMs),
             // Keys for dd-trace-js
             __dd_allocation_key: allocation.key,
             __dd_do_log: !!allocation.doLog,
@@ -117,7 +121,12 @@ export function evaluateForSubject<T extends FlagValueType>(
   return {
     value: defaultValue,
     reason: StandardResolutionReasons.DEFAULT,
+    flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }
+}
+
+function createEvaluationTimestampMetadata(evaluationTimestampMs: UnixTimestamp): PrecomputedFlagMetadata {
+  return { 'dd.eval.timestamp_ms': evaluationTimestampMs } as PrecomputedFlagMetadata
 }
 
 function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType): boolean {

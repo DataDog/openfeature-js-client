@@ -1,4 +1,4 @@
-import type { FlagTypeToValue } from '@datadog/flagging-core'
+import type { FlagTypeToValue, PrecomputedFlagMetadata, UnixTimestamp } from '@datadog/flagging-core'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -19,11 +19,14 @@ export function evaluate<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const evaluationTimestampMs = Date.now()
+
   if (!config) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: ErrorCode.PROVIDER_NOT_READY,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -41,11 +44,20 @@ export function evaluate<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.FLAG_NOT_FOUND,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
   try {
-    const resultWithDetails = evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger)
+    const resultWithDetails = evaluateForSubject(
+      flag,
+      type,
+      subjectKey,
+      subjectAttributes,
+      defaultValue,
+      logger,
+      evaluationTimestampMs
+    )
     return resultWithDetails
   } catch (error) {
     if (error instanceof TargetingKeyMissingError) {
@@ -53,6 +65,7 @@ export function evaluate<T extends FlagValueType>(
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
         errorCode: ErrorCode.TARGETING_KEY_MISSING,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     logger.error('Error evaluating flag', { error })
@@ -60,6 +73,11 @@ export function evaluate<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
+}
+
+function createEvaluationTimestampMetadata(evaluationTimestampMs: UnixTimestamp): PrecomputedFlagMetadata {
+  return { 'dd.eval.timestamp_ms': evaluationTimestampMs } as PrecomputedFlagMetadata
 }

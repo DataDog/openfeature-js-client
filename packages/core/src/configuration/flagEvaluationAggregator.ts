@@ -3,6 +3,8 @@ import { getMD5Hash } from '../obfuscation'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
+const EVALUATION_TIMESTAMP_METADATA_KEY = 'dd.eval.timestamp_ms'
+
 interface FlagEvaluationAggregationData {
   flagKey: string
   variantKey?: string
@@ -44,7 +46,7 @@ export class FlagEvaluationAggregator {
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
     const keyString = this.createAggregationKeyString(context, details, error)
-    const timestamp = Date.now()
+    const timestamp = getEvaluationTimestamp(details)
 
     const existingData = this.aggregatedData.get(keyString)
     if (existingData) {
@@ -54,7 +56,7 @@ export class FlagEvaluationAggregator {
         existingData.error = error
       }
     } else {
-      const runtimeDefaultUsed = details.reason === 'DEFAULT' || details.reason === 'ERROR'
+      const runtimeDefaultUsed = details.variant == null || details.errorCode === 'TYPE_MISMATCH'
       const allocationKey = details.flagMetadata?.allocationKey as string
       const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
       const { targetingKey, ...targetingContext } = context
@@ -80,8 +82,9 @@ export class FlagEvaluationAggregator {
       return
     }
 
+    const flushTimestamp = Date.now()
     const events = Array.from(this.aggregatedData.values()).map((data) =>
-      createFlagEvaluationEvent(data, data.firstEvaluation)
+      createFlagEvaluationEvent(data, flushTimestamp)
     )
     this.aggregatedData.clear()
     this.onFlush(events)
@@ -109,4 +112,9 @@ export class FlagEvaluationAggregator {
       })
     )
   }
+}
+
+function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): number {
+  const metadataTimestamp = details.flagMetadata?.[EVALUATION_TIMESTAMP_METADATA_KEY]
+  return typeof metadataTimestamp === 'number' ? metadataTimestamp : Date.now()
 }

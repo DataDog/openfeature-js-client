@@ -14,6 +14,48 @@ describe('evaluateForSubject', () => {
     }
   })
 
+  it('should include evaluation entry timestamp in flagMetadata', () => {
+    const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(evaluationTimestampMs)
+
+    try {
+      const flag: Flag = {
+        key: 'timestamped-flag',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: {
+          'on-variation': { key: 'on-variation', value: true },
+        },
+        allocations: [
+          {
+            key: 'timestamped-allocation',
+            doLog: true,
+            splits: [
+              {
+                variationKey: 'on-variation',
+                shards: [
+                  {
+                    salt: 'test-salt',
+                    ranges: [{ start: 0, end: 10000 }],
+                    totalShards: 10000,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      const context: EvaluationContext = { targetingKey: 'user-123' }
+      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
+
+      expect(result.value).toBe(true)
+      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+    } finally {
+      dateNow.mockRestore()
+    }
+  })
+
   describe('__dd_split_serial_id passthrough', () => {
     it('should pass through serialId from split to flagMetadata.__dd_split_serial_id', () => {
       const serialId = 12345
@@ -150,11 +192,14 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger, evaluationTimestampMs)
 
       expect(result.value).toBe(false)
       expect(result.reason).toBe('DISABLED')
-      expect(result.flagMetadata).toBeUndefined()
+      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(result.variant).toBeUndefined()
+      expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
   })
 
@@ -181,11 +226,15 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const result = evaluateForSubject(flag, 'string', 'user-123', context, 'default', logger)
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+      const result = evaluateForSubject(flag, 'string', 'user-123', context, 'default', logger, evaluationTimestampMs)
 
       expect(result.value).toBe('default')
       expect(result.reason).toBe('ERROR')
       expect(result.errorCode).toBe('TYPE_MISMATCH')
+      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(result.variant).toBeUndefined()
+      expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
   })
 })
