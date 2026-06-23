@@ -25,7 +25,7 @@ import {
 } from '../domain/configuration'
 import { evaluate } from '../evaluation'
 import { createExposureLoggingHook } from './exposures'
-import { createFlagEvalEVPHook } from './flagEvaluations'
+import { createFlagEvalLoggingHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
 
 /**
@@ -103,10 +103,10 @@ export class DatadogProvider implements Provider {
       this.hooks.push(createRumTrackingHook())
     }
 
-    // Add EVP flag evaluation hook.
+    // Add flag evaluation logging hook.
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration))
+      this.hooks.push(createFlagEvalLoggingHook(this.configuration))
     }
 
     // Add proper exposure logging hook (creates batch internally)

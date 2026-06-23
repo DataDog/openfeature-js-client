@@ -12,7 +12,7 @@ import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/fla
 import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 
-export function createFlagEvalEVPHook(configuration: FlaggingConfiguration): Hook {
+export function createFlagEvalLoggingHook(configuration: FlaggingConfiguration): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const flagEvaluationBatch = createBatch({
     encoder: createIdentityEncoder(),

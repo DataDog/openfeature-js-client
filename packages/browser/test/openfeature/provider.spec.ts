@@ -72,7 +72,7 @@ describe('DatadogProvider', () => {
       expect(providerWithoutExposures.hooks).toHaveLength(2)
     })
 
-    it('should add EVP flag evaluation hook by default when enableFlagEvaluationTracking is not specified', () => {
+    it('should add flag evaluation logging hook by default when enableFlagEvaluationTracking is not specified', () => {
       const providerWithDefaults = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -84,7 +84,7 @@ describe('DatadogProvider', () => {
       expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
-    it('should not add EVP flag evaluation hook when enableFlagEvaluationTracking is false', () => {
+    it('should not add flag evaluation logging hook when enableFlagEvaluationTracking is false', () => {
       const providerWithoutEvalTracking = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
