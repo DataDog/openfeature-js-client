@@ -274,16 +274,6 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, reasonOnlyErrorDetails)
 
-    const typeMismatchWithVariantDetails: EvaluationDetails<boolean> = {
-      flagKey: 'type-mismatch-flag',
-      value: false,
-      reason: 'ERROR',
-      variant: 'variant-a',
-      errorCode: ErrorCode.TYPE_MISMATCH,
-      flagMetadata: {},
-    }
-    aggregator.addEvaluation(mockContext, typeMismatchWithVariantDetails)
-
     const generalErrorWithVariantDetails: EvaluationDetails<boolean> = {
       flagKey: 'general-error-with-variant-flag',
       value: false,
@@ -317,10 +307,6 @@ describe('FlagEvaluationAggregator', () => {
         }),
         expect.objectContaining({
           flag: { key: 'reason-only-error-flag' },
-          runtime_default_used: false,
-        }),
-        expect.objectContaining({
-          flag: { key: 'type-mismatch-flag' },
           runtime_default_used: false,
         }),
         expect.objectContaining({

@@ -26,6 +26,17 @@ describe('evaluate', () => {
     })
   })
 
+  it('returns default without variant metadata for type mismatch', () => {
+    const result = evaluate(configuration, 'string', 'boolean-flag', 'default', {})
+    expect(result).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'TYPE_MISMATCH' as ErrorCode,
+    })
+    expect(result).not.toHaveProperty('variant')
+    expect(result).not.toHaveProperty('flagMetadata')
+  })
+
   it('resolves boolean flag', () => {
     const result = evaluate(configuration, 'boolean', 'boolean-flag', true, {})
     expect(result).toEqual({
