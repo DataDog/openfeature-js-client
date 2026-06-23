@@ -5,6 +5,7 @@ import {
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
 } from '@datadog/flagging-core'
+import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/core'
 import type {
   EvaluationDetails,
@@ -193,7 +194,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
-    const timestamp = Date.now()
+    const timestamp = timeStampNow()
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,

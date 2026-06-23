@@ -113,18 +113,15 @@ describe('FlagEvaluationAggregator', () => {
 
     // Add first evaluation
     const firstEvalTime = Date.now()
-    jest.spyOn(Date, 'now').mockReturnValue(firstEvalTime)
+    jest.setSystemTime(firstEvalTime)
     aggregator.addEvaluation(mockContext, mockDetails)
 
     // Add second evaluation with different timestamp
     const secondEvalTime = firstEvalTime + 5000
-    jest.spyOn(Date, 'now').mockReturnValue(secondEvalTime)
+    jest.setSystemTime(secondEvalTime)
     aggregator.addEvaluation(mockContext, mockDetails)
 
-    // Mock flush timestamp
-    const flushTime = secondEvalTime + 1000
-    jest.spyOn(Date, 'now').mockReturnValue(flushTime)
-
+    const flushTime = secondEvalTime + 100
     aggregator.start()
     jest.advanceTimersByTime(100)
 
@@ -158,7 +155,7 @@ describe('FlagEvaluationAggregator', () => {
       reason: 'TARGETING_MATCH',
       flagMetadata: {
         allocationKey: 'allocation-123',
-        'dd.eval.timestamp_ms': 1771771771000,
+        __dd_eval_timestamp_ms: 1771771771000,
       },
     }
 
@@ -167,11 +164,12 @@ describe('FlagEvaluationAggregator', () => {
       ...mockDetails,
       flagMetadata: {
         allocationKey: 'allocation-123',
-        'dd.eval.timestamp_ms': 1771771775000,
+        __dd_eval_timestamp_ms: 1771771775000,
       },
     })
 
-    jest.spyOn(Date, 'now').mockReturnValue(1771771779000)
+    const flushTime = 1771771779100
+    jest.setSystemTime(flushTime - 100)
 
     aggregator.start()
     jest.advanceTimersByTime(100)
@@ -181,7 +179,7 @@ describe('FlagEvaluationAggregator', () => {
         flag: { key: 'test-flag' },
         first_evaluation: 1771771771000,
         last_evaluation: 1771771775000,
-        timestamp: 1771771779000,
+        timestamp: flushTime,
       }),
     ])
   })
@@ -230,7 +228,7 @@ describe('FlagEvaluationAggregator', () => {
     expect(onFlushSpy.mock.calls[0][0]).toHaveLength(2)
   })
 
-  it('should populate runtime_default_used from variant absence and type mismatch', () => {
+  it('should populate runtime_default_used from missing variant and type mismatch, not reason alone', () => {
     const mockContext: EvaluationContext = { targetingKey: 'user123' }
 
     const defaultDetails: EvaluationDetails<boolean> = {
@@ -241,7 +239,6 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, defaultDetails)
 
-    // Test ERROR reason
     const errorDetails: EvaluationDetails<boolean> = {
       flagKey: 'error-flag',
       value: false,
@@ -267,6 +264,15 @@ describe('FlagEvaluationAggregator', () => {
       flagMetadata: {},
     }
     aggregator.addEvaluation(mockContext, reasonOnlyDefaultDetails)
+
+    const reasonOnlyErrorDetails: EvaluationDetails<boolean> = {
+      flagKey: 'reason-only-error-flag',
+      value: true,
+      reason: 'ERROR',
+      variant: 'variant-a',
+      flagMetadata: {},
+    }
+    aggregator.addEvaluation(mockContext, reasonOnlyErrorDetails)
 
     const typeMismatchDetails: EvaluationDetails<boolean> = {
       flagKey: 'type-mismatch-flag',
@@ -297,6 +303,10 @@ describe('FlagEvaluationAggregator', () => {
         }),
         expect.objectContaining({
           flag: { key: 'reason-only-default-flag' },
+          runtime_default_used: false,
+        }),
+        expect.objectContaining({
+          flag: { key: 'reason-only-error-flag' },
           runtime_default_used: false,
         }),
         expect.objectContaining({

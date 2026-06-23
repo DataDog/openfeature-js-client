@@ -1,4 +1,6 @@
-import type { FlagTypeToValue, PrecomputedFlagMetadata, UnixTimestamp } from '@datadog/flagging-core'
+import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import type { TimeStamp } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -19,7 +21,7 @@ export function evaluate<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const evaluationTimestampMs = Date.now()
+  const evaluationTimestampMs = timeStampNow()
 
   if (!config) {
     return {
@@ -78,6 +80,6 @@ export function evaluate<T extends FlagValueType>(
   }
 }
 
-function createEvaluationTimestampMetadata(evaluationTimestampMs: UnixTimestamp): PrecomputedFlagMetadata {
-  return { 'dd.eval.timestamp_ms': evaluationTimestampMs } as PrecomputedFlagMetadata
+function createEvaluationTimestampMetadata(evaluationTimestampMs: TimeStamp): PrecomputedFlagMetadata {
+  return { __dd_eval_timestamp_ms: evaluationTimestampMs } as PrecomputedFlagMetadata
 }

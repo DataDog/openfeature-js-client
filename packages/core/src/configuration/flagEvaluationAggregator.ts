@@ -1,9 +1,11 @@
+import type { TimeStamp } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
-const EVALUATION_TIMESTAMP_METADATA_KEY = 'dd.eval.timestamp_ms'
+const EVALUATION_TIMESTAMP_METADATA_KEY = '__dd_eval_timestamp_ms'
 
 interface FlagEvaluationAggregationData {
   flagKey: string
@@ -13,8 +15,8 @@ interface FlagEvaluationAggregationData {
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
   count: number
-  firstEvaluation: number
-  lastEvaluation: number
+  firstEvaluation: TimeStamp
+  lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
 }
@@ -56,7 +58,7 @@ export class FlagEvaluationAggregator {
         existingData.error = error
       }
     } else {
-      const runtimeDefaultUsed = details.variant == null || details.errorCode === 'TYPE_MISMATCH'
+      const runtimeDefaultUsed = isRuntimeDefaultUsed(details)
       const allocationKey = details.flagMetadata?.allocationKey as string
       const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
       const { targetingKey, ...targetingContext } = context
@@ -82,7 +84,7 @@ export class FlagEvaluationAggregator {
       return
     }
 
-    const flushTimestamp = Date.now()
+    const flushTimestamp = timeStampNow()
     const events = Array.from(this.aggregatedData.values()).map((data) =>
       createFlagEvaluationEvent(data, flushTimestamp)
     )
@@ -114,7 +116,11 @@ export class FlagEvaluationAggregator {
   }
 }
 
-function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): number {
+function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): TimeStamp {
   const metadataTimestamp = details.flagMetadata?.[EVALUATION_TIMESTAMP_METADATA_KEY]
-  return typeof metadataTimestamp === 'number' ? metadataTimestamp : Date.now()
+  return typeof metadataTimestamp === 'number' ? (metadataTimestamp as TimeStamp) : timeStampNow()
+}
+
+function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {
+  return details.variant == null || details.errorCode === 'TYPE_MISMATCH'
 }

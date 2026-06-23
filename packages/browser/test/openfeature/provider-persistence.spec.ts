@@ -5,6 +5,8 @@ if (typeof globalThis.structuredClone === 'undefined') {
 import 'fake-indexeddb/auto'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { TimeStamp } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
@@ -94,7 +96,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context,
-          fetchedAt: 1731939819456,
+          fetchedAt: 1731939819456 as TimeStamp,
         },
       }
       const cache = new IndexedDBFlagsCache(options.clientToken)
@@ -147,7 +149,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
               },
             },
           },
-          fetchedAt: 0,
+          fetchedAt: 0 as TimeStamp,
         },
       }
       const cache = new IndexedDBFlagsCache(options.clientToken)
@@ -190,7 +192,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
             },
           },
           context,
-          fetchedAt: 0,
+          fetchedAt: 0 as TimeStamp,
         },
       }
       const cache = new IndexedDBFlagsCache(options.clientToken)
@@ -203,7 +205,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context,
-          fetchedAt: Date.now(),
+          fetchedAt: timeStampNow(),
         },
       }
       const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
@@ -224,7 +226,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context: contextA,
-          fetchedAt: 1731939819456,
+          fetchedAt: 1731939819456 as TimeStamp,
         },
       }
       const cache = new IndexedDBFlagsCache(options.clientToken)
@@ -246,7 +248,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context,
-          fetchedAt: 1731939819456,
+          fetchedAt: 1731939819456 as TimeStamp,
         },
       }
       const cache = new IndexedDBFlagsCache(options.clientToken)
@@ -272,7 +274,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context,
-          fetchedAt: Date.now(),
+          fetchedAt: timeStampNow(),
         },
       }
 
@@ -293,7 +295,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           context: initialContext,
-          fetchedAt: Date.now(),
+          fetchedAt: timeStampNow(),
         },
       }
 
@@ -309,7 +311,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           // No context field = matches any context
-          fetchedAt: Date.now(),
+          fetchedAt: timeStampNow(),
         },
       }
 
@@ -350,7 +352,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
         precomputed: {
           response: precomputedResponse as any,
           // No context = matches any context
-          fetchedAt: Date.now(),
+          fetchedAt: timeStampNow(),
         },
       }
 

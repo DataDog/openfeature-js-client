@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/core'
 
 export interface ExposureEvent {
@@ -27,5 +28,5 @@ export interface ExposureEvent {
 
 export interface ExposureEventWithTimestamp extends ExposureEvent {
   /** Unix timestamp in milliseconds */
-  timestamp: number
+  timestamp: TimeStamp
 }

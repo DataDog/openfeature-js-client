@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContextValue } from '@openfeature/core'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
@@ -9,13 +10,16 @@ interface FlagEvaluationAggregationData {
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
   count: number
-  firstEvaluation: number
-  lastEvaluation: number
+  firstEvaluation: TimeStamp
+  lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
 }
 
-export function createFlagEvaluationEvent(data: FlagEvaluationAggregationData, timestamp: number): FlagEvaluationEvent {
+export function createFlagEvaluationEvent(
+  data: FlagEvaluationAggregationData,
+  timestamp: TimeStamp
+): FlagEvaluationEvent {
   const event: FlagEvaluationEvent = {
     flag: {
       key: data.flagKey,

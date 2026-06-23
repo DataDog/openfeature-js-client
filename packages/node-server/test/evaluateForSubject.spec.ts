@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateForSubject } from '../src/configuration/evaluateForSubject'
 import type { Flag } from '../src/configuration/ufc-v1'
@@ -16,7 +17,8 @@ describe('evaluateForSubject', () => {
 
   it('should include evaluation entry timestamp in flagMetadata', () => {
     const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(evaluationTimestampMs)
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
     try {
       const flag: Flag = {
@@ -50,9 +52,9 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
 
       expect(result.value).toBe(true)
-      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
     } finally {
-      dateNow.mockRestore()
+      jest.useRealTimers()
     }
   })
 
@@ -192,12 +194,12 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime() as TimeStamp
       const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger, evaluationTimestampMs)
 
       expect(result.value).toBe(false)
       expect(result.reason).toBe('DISABLED')
-      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(result.variant).toBeUndefined()
       expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
@@ -226,13 +228,13 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime() as TimeStamp
       const result = evaluateForSubject(flag, 'string', 'user-123', context, 'default', logger, evaluationTimestampMs)
 
       expect(result.value).toBe('default')
       expect(result.reason).toBe('ERROR')
       expect(result.errorCode).toBe('TYPE_MISMATCH')
-      expect(result.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(result.variant).toBeUndefined()
       expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })

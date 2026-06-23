@@ -128,7 +128,8 @@ describe('DatadogNodeServerProvider', () => {
 
   it('should expose evaluation entry timestamp metadata to hooks', async () => {
     const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(evaluationTimestampMs)
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
     try {
       const provider = new DatadogNodeServerProvider({
@@ -146,17 +147,17 @@ describe('DatadogNodeServerProvider', () => {
           evaluationDetails: EvaluationDetails<FlagValue>,
           _hookHints?: HookHints
         ) => {
-          afterHook(evaluationDetails.flagMetadata?.['dd.eval.timestamp_ms'])
+          afterHook(evaluationDetails.flagMetadata?.__dd_eval_timestamp_ms)
         },
       }
       client.addHooks(testHook)
 
       const details = await client.getBooleanDetails('kill-switch', false)
 
-      expect(details.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(afterHook).toHaveBeenCalledWith(evaluationTimestampMs)
     } finally {
-      dateNow.mockRestore()
+      jest.useRealTimers()
     }
   }, 1000)
 
@@ -170,7 +171,8 @@ describe('DatadogNodeServerProvider', () => {
     OpenFeature.setContext({ targetingKey: 'test-user-123' })
     const client = OpenFeature.getClient()
     const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(evaluationTimestampMs)
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
     try {
       const details = await client.getBooleanDetails('flag-that-does-not-exist', false)
@@ -178,10 +180,10 @@ describe('DatadogNodeServerProvider', () => {
       expect(details.value).toBe(false)
       expect(details.reason).toBe(StandardResolutionReasons.ERROR)
       expect(details.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND)
-      expect(details.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(details.variant).toBeUndefined()
     } finally {
-      dateNow.mockRestore()
+      jest.useRealTimers()
     }
   }, 1000)
 
@@ -195,7 +197,8 @@ describe('DatadogNodeServerProvider', () => {
     OpenFeature.setContext({ targetingKey: 'test-user-123' })
     const client = OpenFeature.getClient()
     const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
-    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(evaluationTimestampMs)
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
     try {
       // kill-switch is a BOOLEAN flag, evaluate it as STRING
@@ -204,10 +207,10 @@ describe('DatadogNodeServerProvider', () => {
       expect(details.value).toBe('default')
       expect(details.reason).toBe(StandardResolutionReasons.ERROR)
       expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
-      expect(details.flagMetadata?.['dd.eval.timestamp_ms']).toBe(evaluationTimestampMs)
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(details.variant).toBeUndefined()
     } finally {
-      dateNow.mockRestore()
+      jest.useRealTimers()
     }
   }, 1000)
 

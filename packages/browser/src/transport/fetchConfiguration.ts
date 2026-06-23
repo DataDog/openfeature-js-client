@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
-import { dateNow } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
@@ -93,7 +93,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       precomputed: {
         response: precomputed,
         context,
-        fetchedAt: dateNow(),
+        fetchedAt: timeStampNow(),
       },
     }
   }

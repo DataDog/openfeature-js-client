@@ -1,4 +1,6 @@
-import type { FlagTypeToValue, PrecomputedFlagMetadata, UnixTimestamp } from '@datadog/flagging-core'
+import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import type { TimeStamp } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -19,7 +21,7 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
-  evaluationTimestampMs: UnixTimestamp = Date.now()
+  evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
@@ -125,8 +127,8 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 }
 
-function createEvaluationTimestampMetadata(evaluationTimestampMs: UnixTimestamp): PrecomputedFlagMetadata {
-  return { 'dd.eval.timestamp_ms': evaluationTimestampMs } as PrecomputedFlagMetadata
+function createEvaluationTimestampMetadata(evaluationTimestampMs: TimeStamp): PrecomputedFlagMetadata {
+  return { __dd_eval_timestamp_ms: evaluationTimestampMs } as PrecomputedFlagMetadata
 }
 
 function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType): boolean {

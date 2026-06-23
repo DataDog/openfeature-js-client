@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 
 /**
@@ -12,7 +13,7 @@ export type FlagsConfiguration = {
 export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
-  fetchedAt?: UnixTimestamp
+  fetchedAt?: TimeStamp
 }
 
 // Fancy way to map FlagValueType to expected FlagValue.
@@ -23,11 +24,6 @@ export type FlagTypeToValue<T extends FlagValueType> = {
   number: number
   object: JsonValue
 }[T]
-
-/** @internal
- * Timestamp in milliseconds since Unix Epoch.
- */
-export type UnixTimestamp = number
 
 /** @internal */
 export type PrecomputedConfigurationResponse = {
@@ -54,15 +50,15 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 /** @internal */
 export type PrecomputedFlagMetadata = {
   // Primary keys (used by browser and core readers)
-  allocationKey: string
-  variationType: FlagValueType
-  doLog: boolean
+  allocationKey?: string
+  variationType?: FlagValueType
+  doLog?: boolean
 
   // Server-side tracing keys (consumed by dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
-  'dd.eval.timestamp_ms'?: UnixTimestamp
+  __dd_eval_timestamp_ms?: TimeStamp
 }
 
 /**
