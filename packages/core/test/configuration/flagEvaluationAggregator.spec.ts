@@ -228,7 +228,7 @@ describe('FlagEvaluationAggregator', () => {
     expect(onFlushSpy.mock.calls[0][0]).toHaveLength(2)
   })
 
-  it('should populate runtime_default_used from missing variant and type mismatch, not reason alone', () => {
+  it('should populate runtime_default_used from missing variant, not reason or error code alone', () => {
     const mockContext: EvaluationContext = { targetingKey: 'user123' }
 
     const defaultDetails: EvaluationDetails<boolean> = {
@@ -274,7 +274,7 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, reasonOnlyErrorDetails)
 
-    const typeMismatchDetails: EvaluationDetails<boolean> = {
+    const typeMismatchWithVariantDetails: EvaluationDetails<boolean> = {
       flagKey: 'type-mismatch-flag',
       value: false,
       reason: 'ERROR',
@@ -282,7 +282,7 @@ describe('FlagEvaluationAggregator', () => {
       errorCode: ErrorCode.TYPE_MISMATCH,
       flagMetadata: {},
     }
-    aggregator.addEvaluation(mockContext, typeMismatchDetails)
+    aggregator.addEvaluation(mockContext, typeMismatchWithVariantDetails)
 
     aggregator.start()
     jest.advanceTimersByTime(100)
@@ -311,7 +311,7 @@ describe('FlagEvaluationAggregator', () => {
         }),
         expect.objectContaining({
           flag: { key: 'type-mismatch-flag' },
-          runtime_default_used: true,
+          runtime_default_used: false,
         }),
       ])
     )

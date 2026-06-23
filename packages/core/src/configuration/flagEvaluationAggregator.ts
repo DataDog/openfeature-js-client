@@ -122,5 +122,5 @@ function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<
 }
 
 function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {
-  return details.variant == null || details.errorCode === 'TYPE_MISMATCH'
+  return details.variant == null
 }
