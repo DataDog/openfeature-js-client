@@ -122,5 +122,10 @@ function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<
 }
 
 function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {
+  // Datadog-assigned evaluations attach a platform variation key to OpenFeature
+  // details.variant. Browser precomputed flags model variationKey as a string, and
+  // server UFC variants are keyed by string. Default/error fallback paths omit the
+  // variant, so nullish variant is the SDK-visible signal that the caller's default
+  // value was returned.
   return details.variant == null
 }

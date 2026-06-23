@@ -284,6 +284,16 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, typeMismatchWithVariantDetails)
 
+    const generalErrorWithVariantDetails: EvaluationDetails<boolean> = {
+      flagKey: 'general-error-with-variant-flag',
+      value: false,
+      reason: 'ERROR',
+      variant: 'variant-a',
+      errorCode: ErrorCode.GENERAL,
+      flagMetadata: {},
+    }
+    aggregator.addEvaluation(mockContext, generalErrorWithVariantDetails)
+
     aggregator.start()
     jest.advanceTimersByTime(100)
 
@@ -311,6 +321,10 @@ describe('FlagEvaluationAggregator', () => {
         }),
         expect.objectContaining({
           flag: { key: 'type-mismatch-flag' },
+          runtime_default_used: false,
+        }),
+        expect.objectContaining({
+          flag: { key: 'general-error-with-variant-flag' },
           runtime_default_used: false,
         }),
       ])
