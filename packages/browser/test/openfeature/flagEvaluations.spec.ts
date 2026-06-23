@@ -1,6 +1,6 @@
 import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../../src/domain/configuration'
-import { createFlagEvalLoggingHook } from '../../src/openfeature/flagEvaluations'
+import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
 
 const mockConfiguration: FlaggingConfiguration = {
   flagEvaluationTrackingInterval: 1000,
@@ -16,8 +16,8 @@ const mockConfiguration: FlaggingConfiguration = {
   telemetrySampleRate: 20,
   // `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
   // fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
-  // that createFlagEvalLoggingHook never reads. All @datadog/browser-core imports used by
-  // createFlagEvalLoggingHook are mocked at the module level below, so missing fields don't
+  // that createFlagEvalEVPHook never reads. All @datadog/browser-core imports used by
+  // createFlagEvalEVPHook are mocked at the module level below, so missing fields don't
   // cause runtime failures.
 } as unknown as FlaggingConfiguration
 
@@ -36,16 +36,16 @@ jest.mock('@datadog/browser-core', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
-describe('createFlagEvalLoggingHook', () => {
+describe('createFlagEvalEVPHook', () => {
   it('should create a hook that tracks flag evaluations', () => {
-    const hook = createFlagEvalLoggingHook(mockConfiguration)
+    const hook = createFlagEvalEVPHook(mockConfiguration)
 
     expect(hook).toBeDefined()
     expect(hook.after).toBeDefined()
   })
 
   it('should handle evaluation tracking in after hook', () => {
-    const hook = createFlagEvalLoggingHook(mockConfiguration)
+    const hook = createFlagEvalEVPHook(mockConfiguration)
 
     const mockContext: HookContext = {
       flagKey: 'test-flag',
