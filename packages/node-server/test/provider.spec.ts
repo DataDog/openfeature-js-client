@@ -1,6 +1,7 @@
 import type { Channel } from 'node:diagnostics_channel'
 import fs from 'node:fs'
 import path from 'node:path'
+import { clearTimeout as realClearTimeout, setTimeout as realSetTimeout } from 'node:timers'
 import type { ExposureEvent } from '@datadog/flagging-core'
 import {
   type BaseHook,
@@ -38,12 +39,21 @@ describe('DatadogNodeServerProvider', () => {
   })()
 
   beforeEach(() => {
+    jest.useRealTimers()
+    globalThis.setTimeout = realSetTimeout as typeof globalThis.setTimeout
+    globalThis.clearTimeout = realClearTimeout as typeof globalThis.clearTimeout
     logger = {
       error: console.error,
       warn: console.warn,
       info: console.info,
       debug: jest.fn(),
     }
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+    globalThis.setTimeout = realSetTimeout as typeof globalThis.setTimeout
+    globalThis.clearTimeout = realClearTimeout as typeof globalThis.clearTimeout
   })
 
   function getConfigurationWithDoLogEnabledOrDisabled(
@@ -116,6 +126,41 @@ describe('DatadogNodeServerProvider', () => {
     expect(afterHook).toHaveBeenCalled()
   }, 1000)
 
+  it('should expose evaluation entry timestamp metadata to hooks', async () => {
+    const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
+
+    try {
+      const provider = new DatadogNodeServerProvider({
+        exposureChannel: mockExposureChannel,
+      })
+      provider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait(provider)
+      OpenFeature.setLogger(logger)
+      OpenFeature.setContext({ targetingKey: 'test-user-123' })
+      const client = OpenFeature.getClient()
+      const afterHook = jest.fn()
+      const testHook: BaseHook = {
+        after: (
+          _hookContext: HookContext<FlagValue>,
+          evaluationDetails: EvaluationDetails<FlagValue>,
+          _hookHints?: HookHints
+        ) => {
+          afterHook(evaluationDetails.flagMetadata?.__dd_eval_timestamp_ms)
+        },
+      }
+      client.addHooks(testHook)
+
+      const details = await client.getBooleanDetails('kill-switch', false)
+
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+      expect(afterHook).toHaveBeenCalledWith(evaluationTimestampMs)
+    } finally {
+      jest.useRealTimers()
+    }
+  }, 1000)
+
   it('should return FLAG_NOT_FOUND error for non-existent flags', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
@@ -125,12 +170,21 @@ describe('DatadogNodeServerProvider', () => {
     OpenFeature.setLogger(logger)
     OpenFeature.setContext({ targetingKey: 'test-user-123' })
     const client = OpenFeature.getClient()
+    const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
-    const details = await client.getBooleanDetails('flag-that-does-not-exist', false)
+    try {
+      const details = await client.getBooleanDetails('flag-that-does-not-exist', false)
 
-    expect(details.value).toBe(false)
-    expect(details.reason).toBe(StandardResolutionReasons.ERROR)
-    expect(details.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND)
+      expect(details.value).toBe(false)
+      expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+      expect(details.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND)
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+      expect(details.variant).toBeUndefined()
+    } finally {
+      jest.useRealTimers()
+    }
   }, 1000)
 
   it('should return TYPE_MISMATCH error when evaluating wrong type', async () => {
@@ -142,13 +196,22 @@ describe('DatadogNodeServerProvider', () => {
     OpenFeature.setLogger(logger)
     OpenFeature.setContext({ targetingKey: 'test-user-123' })
     const client = OpenFeature.getClient()
+    const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
 
-    // kill-switch is a BOOLEAN flag, evaluate it as STRING
-    const details = await client.getStringDetails('kill-switch', 'default')
+    try {
+      // kill-switch is a BOOLEAN flag, evaluate it as STRING
+      const details = await client.getStringDetails('kill-switch', 'default')
 
-    expect(details.value).toBe('default')
-    expect(details.reason).toBe(StandardResolutionReasons.ERROR)
-    expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
+      expect(details.value).toBe('default')
+      expect(details.reason).toBe(StandardResolutionReasons.ERROR)
+      expect(details.errorCode).toBe(ErrorCode.TYPE_MISMATCH)
+      expect(details.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+      expect(details.variant).toBeUndefined()
+    } finally {
+      jest.useRealTimers()
+    }
   }, 1000)
 
   it('should only emit ready event after configuration is set', async () => {

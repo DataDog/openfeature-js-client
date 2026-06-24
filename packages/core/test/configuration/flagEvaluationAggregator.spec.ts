@@ -1,4 +1,4 @@
-import type { EvaluationContext, EvaluationDetails } from '@openfeature/core'
+import { ErrorCode, type EvaluationContext, type EvaluationDetails } from '@openfeature/core'
 import { FlagEvaluationAggregator } from '../../src/configuration/flagEvaluationAggregator'
 
 describe('FlagEvaluationAggregator', () => {
@@ -13,6 +13,7 @@ describe('FlagEvaluationAggregator', () => {
 
   afterEach(() => {
     aggregator.stop()
+    jest.restoreAllMocks()
     jest.useRealTimers()
   })
 
@@ -120,6 +121,7 @@ describe('FlagEvaluationAggregator', () => {
     jest.setSystemTime(secondEvalTime)
     aggregator.addEvaluation(mockContext, mockDetails)
 
+    const flushTime = secondEvalTime + 100
     aggregator.start()
     jest.advanceTimersByTime(100)
 
@@ -133,7 +135,7 @@ describe('FlagEvaluationAggregator', () => {
         targeting_key: 'user123',
         first_evaluation: firstEvalTime,
         last_evaluation: secondEvalTime,
-        timestamp: firstEvalTime,
+        timestamp: flushTime,
       }),
     ])
 
@@ -141,7 +143,76 @@ describe('FlagEvaluationAggregator', () => {
     const flushedEvent = onFlushSpy.mock.calls[0][0][0]
     expect(flushedEvent.first_evaluation).not.toEqual(flushedEvent.last_evaluation)
     expect(flushedEvent.last_evaluation).toBeGreaterThan(flushedEvent.first_evaluation)
-    expect(flushedEvent.timestamp).toEqual(flushedEvent.first_evaluation)
+    expect(flushedEvent.timestamp).toEqual(flushTime)
+  })
+
+  it('should use evaluation metadata for first and last evaluation timestamps', () => {
+    const mockContext: EvaluationContext = { targetingKey: 'user123' }
+    const mockDetails: EvaluationDetails<boolean> = {
+      flagKey: 'test-flag',
+      value: true,
+      variant: 'variant-a',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        __dd_eval_timestamp_ms: 1771771771000,
+      },
+    }
+
+    aggregator.addEvaluation(mockContext, mockDetails)
+    aggregator.addEvaluation(mockContext, {
+      ...mockDetails,
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        __dd_eval_timestamp_ms: 1771771775000,
+      },
+    })
+
+    const flushTime = 1771771779100
+    jest.setSystemTime(flushTime - 100)
+
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        flag: { key: 'test-flag' },
+        first_evaluation: 1771771771000,
+        last_evaluation: 1771771775000,
+        timestamp: flushTime,
+      }),
+    ])
+  })
+
+  it('should fall back to current time when evaluation metadata timestamp is NaN', () => {
+    const mockContext: EvaluationContext = { targetingKey: 'user123' }
+    const mockDetails: EvaluationDetails<boolean> = {
+      flagKey: 'test-flag',
+      value: true,
+      variant: 'variant-a',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        __dd_eval_timestamp_ms: Number.NaN,
+      },
+    }
+
+    const evalTime = 1771771779000
+    jest.setSystemTime(evalTime)
+    aggregator.addEvaluation(mockContext, mockDetails)
+
+    const flushTime = evalTime + 100
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        flag: { key: 'test-flag' },
+        first_evaluation: evalTime,
+        last_evaluation: evalTime,
+        timestamp: flushTime,
+      }),
+    ])
   })
 
   it('should fire multiple events when targeting context changes but flag variant stays same', () => {
@@ -188,10 +259,9 @@ describe('FlagEvaluationAggregator', () => {
     expect(onFlushSpy.mock.calls[0][0]).toHaveLength(2)
   })
 
-  it('should populate runtime_default_used correctly for DEFAULT and ERROR reasons', () => {
+  it('should populate runtime_default_used from missing variant, not reason or error code alone', () => {
     const mockContext: EvaluationContext = { targetingKey: 'user123' }
 
-    // Test DEFAULT reason
     const defaultDetails: EvaluationDetails<boolean> = {
       flagKey: 'default-flag',
       value: false,
@@ -200,7 +270,6 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, defaultDetails)
 
-    // Test ERROR reason
     const errorDetails: EvaluationDetails<boolean> = {
       flagKey: 'error-flag',
       value: false,
@@ -209,7 +278,6 @@ describe('FlagEvaluationAggregator', () => {
     }
     aggregator.addEvaluation(mockContext, errorDetails, 'Some error')
 
-    // Test non-default reason
     const targetingDetails: EvaluationDetails<boolean> = {
       flagKey: 'targeting-flag',
       value: true,
@@ -218,6 +286,34 @@ describe('FlagEvaluationAggregator', () => {
       flagMetadata: {},
     }
     aggregator.addEvaluation(mockContext, targetingDetails)
+
+    const reasonOnlyDefaultDetails: EvaluationDetails<boolean> = {
+      flagKey: 'reason-only-default-flag',
+      value: true,
+      reason: 'DEFAULT',
+      variant: 'variant-a',
+      flagMetadata: {},
+    }
+    aggregator.addEvaluation(mockContext, reasonOnlyDefaultDetails)
+
+    const reasonOnlyErrorDetails: EvaluationDetails<boolean> = {
+      flagKey: 'reason-only-error-flag',
+      value: true,
+      reason: 'ERROR',
+      variant: 'variant-a',
+      flagMetadata: {},
+    }
+    aggregator.addEvaluation(mockContext, reasonOnlyErrorDetails)
+
+    const generalErrorWithVariantDetails: EvaluationDetails<boolean> = {
+      flagKey: 'general-error-with-variant-flag',
+      value: false,
+      reason: 'ERROR',
+      variant: 'variant-a',
+      errorCode: ErrorCode.GENERAL,
+      flagMetadata: {},
+    }
+    aggregator.addEvaluation(mockContext, generalErrorWithVariantDetails)
 
     aggregator.start()
     jest.advanceTimersByTime(100)
@@ -234,6 +330,18 @@ describe('FlagEvaluationAggregator', () => {
         }),
         expect.objectContaining({
           flag: { key: 'targeting-flag' },
+          runtime_default_used: false,
+        }),
+        expect.objectContaining({
+          flag: { key: 'reason-only-default-flag' },
+          runtime_default_used: false,
+        }),
+        expect.objectContaining({
+          flag: { key: 'reason-only-error-flag' },
+          runtime_default_used: false,
+        }),
+        expect.objectContaining({
+          flag: { key: 'general-error-with-variant-flag' },
           runtime_default_used: false,
         }),
       ])

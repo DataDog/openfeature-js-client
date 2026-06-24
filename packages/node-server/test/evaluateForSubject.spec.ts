@@ -1,3 +1,4 @@
+import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateForSubject } from '../src/configuration/evaluateForSubject'
 import type { Flag } from '../src/configuration/ufc-v1'
@@ -11,6 +12,49 @@ describe('evaluateForSubject', () => {
       warn: jest.fn(),
       info: jest.fn(),
       debug: jest.fn(),
+    }
+  })
+
+  it('should include evaluation entry timestamp in flagMetadata', () => {
+    const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime()
+    jest.useFakeTimers()
+    jest.setSystemTime(evaluationTimestampMs)
+
+    try {
+      const flag: Flag = {
+        key: 'timestamped-flag',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: {
+          'on-variation': { key: 'on-variation', value: true },
+        },
+        allocations: [
+          {
+            key: 'timestamped-allocation',
+            doLog: true,
+            splits: [
+              {
+                variationKey: 'on-variation',
+                shards: [
+                  {
+                    salt: 'test-salt',
+                    ranges: [{ start: 0, end: 10000 }],
+                    totalShards: 10000,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      const context: EvaluationContext = { targetingKey: 'user-123' }
+      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
+
+      expect(result.value).toBe(true)
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+    } finally {
+      jest.useRealTimers()
     }
   })
 
@@ -150,11 +194,14 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime() as TimeStamp
+      const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger, evaluationTimestampMs)
 
       expect(result.value).toBe(false)
       expect(result.reason).toBe('DISABLED')
-      expect(result.flagMetadata).toBeUndefined()
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+      expect(result.variant).toBeUndefined()
+      expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
   })
 
@@ -181,11 +228,15 @@ describe('evaluateForSubject', () => {
       }
 
       const context: EvaluationContext = { targetingKey: 'user-123' }
-      const result = evaluateForSubject(flag, 'string', 'user-123', context, 'default', logger)
+      const evaluationTimestampMs = new Date('2026-06-22T12:34:56.789Z').getTime() as TimeStamp
+      const result = evaluateForSubject(flag, 'string', 'user-123', context, 'default', logger, evaluationTimestampMs)
 
       expect(result.value).toBe('default')
       expect(result.reason).toBe('ERROR')
       expect(result.errorCode).toBe('TYPE_MISMATCH')
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
+      expect(result.variant).toBeUndefined()
+      expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
   })
 })

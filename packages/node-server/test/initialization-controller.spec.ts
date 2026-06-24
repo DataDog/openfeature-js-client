@@ -1,12 +1,18 @@
+import { clearTimeout as realClearTimeout, setTimeout as realSetTimeout } from 'node:timers'
 import { InitializationController } from '../src/initialization-controller'
 
 describe('InitializationController', () => {
   beforeEach(() => {
+    jest.useRealTimers()
     jest.clearAllTimers()
+    globalThis.setTimeout = realSetTimeout as typeof globalThis.setTimeout
+    globalThis.clearTimeout = realClearTimeout as typeof globalThis.clearTimeout
   })
 
   afterEach(() => {
     jest.useRealTimers()
+    globalThis.setTimeout = realSetTimeout as typeof globalThis.setTimeout
+    globalThis.clearTimeout = realClearTimeout as typeof globalThis.clearTimeout
   })
 
   it('should complete initialization successfully', async () => {

@@ -1,4 +1,5 @@
 import type { FlagTypeToValue } from '@datadog/flagging-core'
+import { timeStampNow } from '@datadog/js-core/time'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -9,6 +10,7 @@ import {
   TargetingKeyMissingError,
 } from '@openfeature/server-sdk'
 import { evaluateForSubject } from './evaluateForSubject'
+import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 export function evaluate<T extends FlagValueType>(
@@ -19,11 +21,14 @@ export function evaluate<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const evaluationTimestampMs = timeStampNow()
+
   if (!config) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: ErrorCode.PROVIDER_NOT_READY,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -41,11 +46,20 @@ export function evaluate<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.FLAG_NOT_FOUND,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
   try {
-    const resultWithDetails = evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger)
+    const resultWithDetails = evaluateForSubject(
+      flag,
+      type,
+      subjectKey,
+      subjectAttributes,
+      defaultValue,
+      logger,
+      evaluationTimestampMs
+    )
     return resultWithDetails
   } catch (error) {
     if (error instanceof TargetingKeyMissingError) {
@@ -53,6 +67,7 @@ export function evaluate<T extends FlagValueType>(
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
         errorCode: ErrorCode.TARGETING_KEY_MISSING,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     logger.error('Error evaluating flag', { error })
@@ -60,6 +75,7 @@ export function evaluate<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 }

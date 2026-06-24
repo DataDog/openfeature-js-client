@@ -1,4 +1,6 @@
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
+import type { TimeStamp } from '@datadog/js-core/time'
+import { timeStampNow } from '@datadog/js-core/time'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -10,6 +12,7 @@ import {
 } from '@openfeature/server-sdk'
 import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
+import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -18,7 +21,8 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
-  logger: Logger
+  logger: Logger,
+  evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
@@ -28,6 +32,7 @@ export function evaluateForSubject<T extends FlagValueType>(
     return {
       value: defaultValue,
       reason: StandardResolutionReasons.DISABLED,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -43,10 +48,11 @@ export function evaluateForSubject<T extends FlagValueType>(
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.TYPE_MISMATCH,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
-  const now = new Date()
+  const now = new Date(evaluationTimestampMs)
   for (const allocation of flag.allocations) {
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
@@ -88,6 +94,7 @@ export function evaluateForSubject<T extends FlagValueType>(
           reason: StandardResolutionReasons.TARGETING_MATCH,
           variant: variant.key,
           flagMetadata: {
+            ...createEvaluationTimestampMetadata(evaluationTimestampMs),
             // Keys for dd-trace-js
             __dd_allocation_key: allocation.key,
             __dd_do_log: !!allocation.doLog,
@@ -117,6 +124,7 @@ export function evaluateForSubject<T extends FlagValueType>(
   return {
     value: defaultValue,
     reason: StandardResolutionReasons.DEFAULT,
+    flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }
 }
 
