@@ -118,7 +118,7 @@ export class FlagEvaluationAggregator {
 
 function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): TimeStamp {
   const metadataTimestamp = details.flagMetadata?.[EVALUATION_TIMESTAMP_METADATA_KEY]
-  return typeof metadataTimestamp === 'number' ? (metadataTimestamp as TimeStamp) : timeStampNow()
+  return Number.isFinite(metadataTimestamp) ? (metadataTimestamp as TimeStamp) : timeStampNow()
 }
 
 function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {

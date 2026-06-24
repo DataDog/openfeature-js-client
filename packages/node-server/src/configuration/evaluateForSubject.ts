@@ -12,6 +12,7 @@ import {
 } from '@openfeature/server-sdk'
 import { matchesRule, type Rule } from '../rules/rules'
 import { matchesShard } from '../shards/matchesShard'
+import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -125,10 +126,6 @@ export function evaluateForSubject<T extends FlagValueType>(
     reason: StandardResolutionReasons.DEFAULT,
     flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }
-}
-
-function createEvaluationTimestampMetadata(evaluationTimestampMs: TimeStamp): PrecomputedFlagMetadata {
-  return { __dd_eval_timestamp_ms: evaluationTimestampMs } as PrecomputedFlagMetadata
 }
 
 function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType): boolean {

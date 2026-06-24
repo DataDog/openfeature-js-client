@@ -49,6 +49,8 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 
 /** @internal */
 export type PrecomputedFlagMetadata = {
+  // Metadata carried on OpenFeature evaluation details. The type name is kept
+  // for package API compatibility; server fallback/error results also use it.
   // Primary keys (used by browser and core readers)
   allocationKey?: string
   variationType?: FlagValueType

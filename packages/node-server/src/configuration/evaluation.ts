@@ -1,5 +1,4 @@
-import type { FlagTypeToValue, PrecomputedFlagMetadata } from '@datadog/flagging-core'
-import type { TimeStamp } from '@datadog/js-core/time'
+import type { FlagTypeToValue } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import {
   ErrorCode,
@@ -11,6 +10,7 @@ import {
   TargetingKeyMissingError,
 } from '@openfeature/server-sdk'
 import { evaluateForSubject } from './evaluateForSubject'
+import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 export function evaluate<T extends FlagValueType>(
@@ -78,8 +78,4 @@ export function evaluate<T extends FlagValueType>(
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
-}
-
-function createEvaluationTimestampMetadata(evaluationTimestampMs: TimeStamp): PrecomputedFlagMetadata {
-  return { __dd_eval_timestamp_ms: evaluationTimestampMs } as PrecomputedFlagMetadata
 }

@@ -184,6 +184,37 @@ describe('FlagEvaluationAggregator', () => {
     ])
   })
 
+  it('should fall back to current time when evaluation metadata timestamp is NaN', () => {
+    const mockContext: EvaluationContext = { targetingKey: 'user123' }
+    const mockDetails: EvaluationDetails<boolean> = {
+      flagKey: 'test-flag',
+      value: true,
+      variant: 'variant-a',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        __dd_eval_timestamp_ms: Number.NaN,
+      },
+    }
+
+    const evalTime = 1771771779000
+    jest.setSystemTime(evalTime)
+    aggregator.addEvaluation(mockContext, mockDetails)
+
+    const flushTime = evalTime + 100
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        flag: { key: 'test-flag' },
+        first_evaluation: evalTime,
+        last_evaluation: evalTime,
+        timestamp: flushTime,
+      }),
+    ])
+  })
+
   it('should fire multiple events when targeting context changes but flag variant stays same', () => {
     const baseDetails: EvaluationDetails<boolean> = {
       flagKey: 'test-flag',
