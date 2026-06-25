@@ -4,6 +4,9 @@ import { DatadogProvider } from './openfeature/provider'
 export { configurationFromString, configurationToString } from '@datadog/flagging-core'
 export type { FlaggingInitConfiguration } from './domain/configuration'
 export { DatadogProvider }
+export { DevToolsProvider } from './openfeature/devtools-provider'
+export { initFeatureFlags } from './init'
+export type { InitFeatureFlagsOptions } from './init'
 
 // Build environment placeholder for testing
 const _SDK_VERSION = __BUILD_ENV__SDK_VERSION__
