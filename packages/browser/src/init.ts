@@ -1,8 +1,8 @@
-import { OpenFeature, MultiProvider } from '@openfeature/web-sdk'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { MultiProvider, OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from './domain/configuration'
-import { DatadogProvider } from './openfeature/provider'
 import { DevToolsProvider } from './openfeature/devtools-provider'
+import { DatadogProvider } from './openfeature/provider'
 
 export interface InitFeatureFlagsOptions extends FlaggingInitConfiguration {
   enableDevTools?: boolean
