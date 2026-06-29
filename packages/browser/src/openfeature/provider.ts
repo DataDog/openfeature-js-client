@@ -145,7 +145,9 @@ export class DatadogProvider implements Provider {
     }
 
     // abort any previous setContext operation
-    this.contextUpdateAbortController.abort()
+    this.contextUpdateAbortController.abort(
+      new DOMException('Flag configuration fetch superseded by a newer context update', 'AbortError')
+    )
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
