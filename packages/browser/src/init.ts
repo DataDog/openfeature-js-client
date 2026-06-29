@@ -6,14 +6,12 @@ import { DatadogProvider } from './openfeature/provider'
 
 export interface InitFeatureFlagsOptions extends FlaggingInitConfiguration {
   enableDevTools?: boolean
-  userContext?: EvaluationContext
-  orgContext?: EvaluationContext
+  contexts?: Record<string, EvaluationContext>
 }
 
 export async function initFeatureFlags({
   enableDevTools = false,
-  userContext = {},
-  orgContext = {},
+  contexts = { user: {} },
   ...ddConfig
 }: InitFeatureFlagsOptions): Promise<void> {
   const makeProvider = () => {
@@ -25,8 +23,9 @@ export async function initFeatureFlags({
     ])
   }
 
-  await Promise.all([
-    OpenFeature.setProviderAndWait('user', makeProvider(), userContext),
-    OpenFeature.setProviderAndWait('org', makeProvider(), orgContext),
-  ])
+  await Promise.all(
+    Object.entries(contexts).map(([name, context]) =>
+      OpenFeature.setProviderAndWait(name, makeProvider(), context)
+    )
+  )
 }
