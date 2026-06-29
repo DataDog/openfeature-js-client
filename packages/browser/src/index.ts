@@ -3,8 +3,6 @@ import { DatadogProvider } from './openfeature/provider'
 
 export { configurationFromString, configurationToString } from '@datadog/flagging-core'
 export type { FlaggingInitConfiguration } from './domain/configuration'
-export type { InitFeatureFlagsOptions } from './init'
-export { initFeatureFlags } from './init'
 export { DevToolsProvider } from './openfeature/devtools-provider'
 export { DatadogProvider }
 
