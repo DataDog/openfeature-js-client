@@ -481,9 +481,7 @@ describe('DatadogProvider', () => {
       expect(supersededSignal.aborted).toBe(true)
       expect(supersededSignal.reason).toBeInstanceOf(DOMException)
       expect(supersededSignal.reason.name).toBe('AbortError')
-      expect(supersededSignal.reason.message).toBe(
-        'Flag configuration fetch superseded by a newer context update'
-      )
+      expect(supersededSignal.reason.message).toBe('Flag configuration fetch superseded by a newer context update')
 
       // Settle both in-flight fetches so the provider doesn't leak
       calls[0].resolve(makeFetchResponse(makeResponse('first')))
