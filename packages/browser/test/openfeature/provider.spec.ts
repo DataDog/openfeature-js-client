@@ -461,6 +461,34 @@ describe('DatadogProvider', () => {
       expect(errorHandler).toHaveBeenCalledTimes(1)
       expect(provider.status).toBe(ProviderStatus.ERROR)
     })
+
+    it('aborts superseded fetch with a descriptive DOMException reason', async () => {
+      const provider = new DatadogProvider(options)
+      const { calls, mock } = mockFetchDeferred()
+
+      // Start first context update — fetch pauses waiting for resolution
+      provider.onContextChange({}, { targetingKey: 'user-1' })
+      // Flush microtasks so the fetch call is actually made
+      await Promise.resolve()
+
+      // Grab the AbortSignal that was passed to the first (now-stale) fetch
+      const [, firstRequestInit] = mock.mock.calls[0]
+      const supersededSignal: AbortSignal = firstRequestInit.signal
+
+      // Fire second context update — this aborts the first signal
+      provider.onContextChange({}, { targetingKey: 'user-2' })
+
+      expect(supersededSignal.aborted).toBe(true)
+      expect(supersededSignal.reason).toBeInstanceOf(DOMException)
+      expect(supersededSignal.reason.name).toBe('AbortError')
+      expect(supersededSignal.reason.message).toBe(
+        'Flag configuration fetch superseded by a newer context update'
+      )
+
+      // Settle both in-flight fetches so the provider doesn't leak
+      calls[0].resolve(makeFetchResponse(makeResponse('first')))
+      calls[1].resolve(makeFetchResponse(makeResponse('second')))
+    })
   })
 
   describe('error handling integration', () => {
