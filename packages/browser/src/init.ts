@@ -24,8 +24,6 @@ export async function initFeatureFlags({
   }
 
   await Promise.all(
-    Object.entries(contexts).map(([name, context]) =>
-      OpenFeature.setProviderAndWait(name, makeProvider(), context)
-    )
+    Object.entries(contexts).map(([name, context]) => OpenFeature.setProviderAndWait(name, makeProvider(), context))
   )
 }

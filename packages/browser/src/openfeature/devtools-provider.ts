@@ -7,7 +7,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { FlagNotFoundError } from '@openfeature/web-sdk'
+import { FlagNotFoundError, TypeMismatchError } from '@openfeature/web-sdk'
 
 const OVERRIDES_KEY = 'dd.dd_flag.overrides'
 const DEVTOOLS_MARKER_KEY = 'dd.dd_flag.devtools'
@@ -28,10 +28,28 @@ function readOverrides(): Record<string, DDFlagOverride> {
   }
 }
 
+const EXPECTED_JS_TYPES: Record<DDFlagOverrideType, string> = {
+  BOOLEAN: 'boolean',
+  STRING: 'string',
+  INTEGER: 'number',
+  NUMERIC: 'number',
+  JSON: 'object',
+}
+
 function resolveOverride<T>(flagKey: string, expectedTypes: DDFlagOverrideType[]): ResolutionDetails<T> {
   const override = readOverrides()[flagKey]
   if (!override || !expectedTypes.includes(override.type)) {
     throw new FlagNotFoundError(`no override for '${flagKey}'`)
+  }
+  if (typeof override.value !== EXPECTED_JS_TYPES[override.type]) {
+    throw new TypeMismatchError(
+      `override for '${flagKey}' declares type ${override.type} but value is ${typeof override.value}`
+    )
+  }
+  if (override.type === 'INTEGER' && !Number.isInteger(override.value)) {
+    throw new TypeMismatchError(
+      `override for '${flagKey}' declares type INTEGER but value ${override.value} is not a whole number`
+    )
   }
   return { value: override.value as T, reason: 'STATIC', flagMetadata: { overridden: true } }
 }
@@ -48,8 +66,8 @@ function resolveOverride<T>(flagKey: string, expectedTypes: DDFlagOverrideType[]
  * On override hit: returns the override value with reason STATIC.
  * On miss: throws FlagNotFoundError so MultiProvider falls through to the next provider.
  *
- * Flag recording (discovery) is handled separately by createEvaluatedFlagsHook(), which
- * is opt-in and captures the actual resolved value via an after hook.
+ * Flag recording (discovery) is handled separately by a dedicated after hook (opt-in,
+ * shipped in a follow-up PR) that captures the actual resolved value for every evaluation.
  */
 export class DevToolsProvider implements Provider {
   readonly metadata: ProviderMetadata = { name: 'DevToolsProvider' }
