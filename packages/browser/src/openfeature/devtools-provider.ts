@@ -113,7 +113,10 @@ export class DatadogDevtools implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<boolean> {
-    return this.resolveOverride<boolean>(flagKey, ['BOOLEAN']) ?? this.inner.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
+    return (
+      this.resolveOverride<boolean>(flagKey, ['BOOLEAN']) ??
+      this.inner.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
+    )
   }
 
   resolveStringEvaluation(
@@ -122,7 +125,10 @@ export class DatadogDevtools implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<string> {
-    return this.resolveOverride<string>(flagKey, ['STRING']) ?? this.inner.resolveStringEvaluation(flagKey, defaultValue, context, logger)
+    return (
+      this.resolveOverride<string>(flagKey, ['STRING']) ??
+      this.inner.resolveStringEvaluation(flagKey, defaultValue, context, logger)
+    )
   }
 
   resolveNumberEvaluation(
@@ -143,6 +149,9 @@ export class DatadogDevtools implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<T> {
-    return this.resolveOverride<T>(flagKey, ['JSON']) ?? this.inner.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
+    return (
+      this.resolveOverride<T>(flagKey, ['JSON']) ??
+      this.inner.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
+    )
   }
 }

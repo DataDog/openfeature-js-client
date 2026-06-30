@@ -1,5 +1,5 @@
-import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails } from '@openfeature/web-sdk'
-import { OpenFeatureEventEmitter, TypeMismatchError } from '@openfeature/web-sdk'
+import type { EvaluationContext, Hook, Logger, Provider } from '@openfeature/web-sdk'
+import { OpenFeatureEventEmitter, ProviderStatus, TypeMismatchError } from '@openfeature/web-sdk'
 import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
 
 const OVERRIDES_KEY = 'dd.dd_flag.overrides'
@@ -125,7 +125,7 @@ describe('DatadogDevtools', () => {
     })
 
     it('exposes inner provider hooks', () => {
-      const hooks = [{ name: 'my-hook' }] as any
+      const hooks: Hook[] = []
       const inner = makeInner({ hooks })
       const wrapper = new DatadogDevtools(inner)
       expect(wrapper.hooks).toBe(hooks)
@@ -139,9 +139,9 @@ describe('DatadogDevtools', () => {
     })
 
     it('exposes inner provider status', () => {
-      const inner = makeInner({ status: 'READY' as any })
+      const inner = makeInner({ status: ProviderStatus.READY })
       const wrapper = new DatadogDevtools(inner)
-      expect(wrapper.status).toBe('READY')
+      expect(wrapper.status).toBe(ProviderStatus.READY)
     })
   })
 
@@ -344,7 +344,9 @@ describe('DatadogDevtools', () => {
       const wrapper = new DatadogDevtools(makeInner())
       await wrapper.initialize(emptyContext)
 
-      expect(() => wrapper.resolveBooleanEvaluation('my-flag', false, emptyContext, noopLogger)).toThrow(TypeMismatchError)
+      expect(() => wrapper.resolveBooleanEvaluation('my-flag', false, emptyContext, noopLogger)).toThrow(
+        TypeMismatchError
+      )
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("'my-flag'"))
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('override ignored'))
     })
@@ -354,7 +356,9 @@ describe('DatadogDevtools', () => {
       const wrapper = new DatadogDevtools(makeInner())
       await wrapper.initialize(emptyContext)
 
-      expect(() => wrapper.resolveStringEvaluation('my-flag', 'default', emptyContext, noopLogger)).toThrow(TypeMismatchError)
+      expect(() => wrapper.resolveStringEvaluation('my-flag', 'default', emptyContext, noopLogger)).toThrow(
+        TypeMismatchError
+      )
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("'my-flag'"))
     })
 
