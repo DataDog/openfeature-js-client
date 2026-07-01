@@ -98,6 +98,20 @@ describe('DatadogDevtools', () => {
       expect(inner.resolveBooleanEvaluation).toHaveBeenCalled()
       expect(result).toEqual({ value: false, reason: 'DEFAULT' })
     })
+
+    it('falls back to empty overrides when localStorage contains valid JSON but not an object', async () => {
+      for (const value of ['null', '"a string"', '[1,2,3]', '42']) {
+        localStorage.setItem(OVERRIDES_KEY, value)
+        const inner = makeInner()
+        const wrapper = new DatadogDevtools(inner)
+        await wrapper.initialize(emptyContext)
+
+        wrapper.resolveBooleanEvaluation('my-flag', false, emptyContext, noopLogger)
+
+        expect(inner.resolveBooleanEvaluation).toHaveBeenCalled()
+        localStorage.clear()
+      }
+    })
   })
 
   describe('lifecycle delegation', () => {

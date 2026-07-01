@@ -21,10 +21,12 @@ interface DDFlagOverride {
 
 function readOverrides(): Record<string, DDFlagOverride> {
   try {
-    return JSON.parse(localStorage.getItem(OVERRIDES_KEY) ?? '{}') as Record<string, DDFlagOverride>
-  } catch {
-    return {}
-  }
+    const parsed = JSON.parse(localStorage.getItem(OVERRIDES_KEY) ?? '{}')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, DDFlagOverride>
+    }
+  } catch {}
+  return {}
 }
 
 const EXPECTED_JS_TYPES: Record<DDFlagOverrideType, string> = {
@@ -94,8 +96,9 @@ export class DatadogDevtools implements Provider {
     if (!override || !expectedTypes.includes(override.type)) {
       return null
     }
-    if (override.value === null || typeof override.value !== EXPECTED_JS_TYPES[override.type]) {
-      const msg = `[DatadogDevtools] override for '${flagKey}' declares type ${override.type} but value is ${typeof override.value} — override ignored`
+    const actualType = override.value === null ? 'null' : typeof override.value
+    if (override.value === null || actualType !== EXPECTED_JS_TYPES[override.type]) {
+      const msg = `[DatadogDevtools] override for '${flagKey}' declares type ${override.type} but value is ${actualType} — override ignored`
       console.warn(msg)
       throw new TypeMismatchError(msg)
     }
