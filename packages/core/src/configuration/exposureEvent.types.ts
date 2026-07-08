@@ -15,6 +15,10 @@ export interface ExposureEvent {
     id: string
     attributes: EvaluationContext
   }
+  holdout?: {
+    key: string
+    variation: string
+  }
   service?: string
   rum?: {
     application?: {

@@ -37,6 +37,12 @@ export type PrecomputedConfigurationResponse = {
 }
 
 /** @internal */
+export type HoldoutMetadata = {
+  key: string
+  variation: string
+}
+
+/** @internal */
 export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   allocationKey: string
   variationKey: string
@@ -45,6 +51,7 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   extraLogging: Record<string, unknown>
+  holdout?: HoldoutMetadata
 }
 
 /** @internal */
@@ -55,6 +62,10 @@ export type PrecomputedFlagMetadata = {
   allocationKey?: string
   variationType?: FlagValueType
   doLog?: boolean
+
+  // Holdout metadata from UFC split.holdout (first-class field)
+  __dd_holdout_key?: string
+  __dd_holdout_variation?: string
 
   // Server-side tracing keys (consumed by dd-trace-js)
   __dd_allocation_key?: string

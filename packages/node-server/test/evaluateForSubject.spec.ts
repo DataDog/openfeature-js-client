@@ -59,6 +59,52 @@ describe('evaluateForSubject', () => {
   })
 
   describe('__dd_split_serial_id passthrough', () => {
+    it('should pass through holdout extraLogging to flagMetadata', () => {
+      const flag: Flag = {
+        key: 'checkout-redesign',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: {
+          control: { key: 'control', value: false },
+        },
+        allocations: [
+          {
+            key: 'allocation-a-holdout-q2-global-holdout',
+            doLog: true,
+            splits: [
+              {
+                variationKey: 'control',
+                extraLogging: {
+                  holdoutKey: 'q2-global-holdout',
+                  holdoutAnalysisExperimentId: 'holdout-analysis-experiment-id',
+                  holdoutVariation: 'status_quo',
+                  holdoutBaseAllocationKey: 'allocation-a',
+                },
+                shards: [
+                  {
+                    salt: 'holdout-salt',
+                    ranges: [{ start: 0, end: 10000 }],
+                    totalShards: 10000,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = evaluateForSubject(flag, 'boolean', 'user-123', { id: 'user-123' }, true, logger)
+
+      expect(result.value).toBe(false)
+      expect(result.flagMetadata).toMatchObject({
+        allocationKey: 'allocation-a-holdout-q2-global-holdout',
+        __dd_holdout_key: 'q2-global-holdout',
+        __dd_holdout_experiment_id: 'holdout-analysis-experiment-id',
+        __dd_holdout_variation: 'status_quo',
+        __dd_holdout_base_allocation_key: 'allocation-a',
+      })
+    })
+
     it('should pass through serialId from split to flagMetadata.__dd_split_serial_id', () => {
       const serialId = 12345
       const flag: Flag = {

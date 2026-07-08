@@ -103,6 +103,7 @@ export function evaluateForSubject<T extends FlagValueType>(
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
+            ...holdoutMetadataFromExtraLogging(selectedSplit.extraLogging),
           } as PrecomputedFlagMetadata,
         }
       }
@@ -142,6 +143,19 @@ function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType
     return variantType === 'JSON'
   }
   throw new Error(`Invalid expected type: ${expectedType}`)
+}
+
+function holdoutMetadataFromExtraLogging(extraLogging?: Record<string, string>): Partial<PrecomputedFlagMetadata> {
+  if (!extraLogging) {
+    return {}
+  }
+
+  return {
+    __dd_holdout_key: extraLogging.holdoutKey,
+    __dd_holdout_experiment_id: extraLogging.holdoutAnalysisExperimentId,
+    __dd_holdout_variation: extraLogging.holdoutVariation,
+    __dd_holdout_base_allocation_key: extraLogging.holdoutBaseAllocationKey,
+  }
 }
 
 export function containsMatchingRule(
