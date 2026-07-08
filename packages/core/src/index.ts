@@ -1,5 +1,6 @@
 export * from './cache'
 export * from './configuration'
+export * from './evaluation'
 export * from './obfuscation'
 
 // Build environment placeholder for testing
