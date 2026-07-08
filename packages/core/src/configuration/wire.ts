@@ -50,7 +50,7 @@ export function configurationToString(configuration: FlagsConfiguration): string
   if (configuration.precomputed) {
     wire.precomputed = {
       ...configuration.precomputed,
-      response: JSON.stringify(configuration.precomputed),
+      response: JSON.stringify(configuration.precomputed.response),
     }
   }
 
