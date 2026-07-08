@@ -15,7 +15,8 @@
         "allocationKey": "allocation-test",
         "variationType": "object",
         "doLog": true
-      }
+      },
+      "reason": "SPLIT"
     }
   },
   {
@@ -34,7 +35,8 @@
         "allocationKey": "allocation-test",
         "variationType": "object",
         "doLog": true
-      }
+      },
+      "reason": "SPLIT"
     }
   },
   {
@@ -53,7 +55,8 @@
         "allocationKey": "allocation-test",
         "variationType": "object",
         "doLog": true
-      }
+      },
+      "reason": "SPLIT"
     }
   },
   {
@@ -72,7 +75,8 @@
         "allocationKey": "allocation-test",
         "variationType": "object",
         "doLog": true
-      }
+      },
+      "reason": "SPLIT"
     }
   }
 ]

@@ -90,6 +90,7 @@ describe('Universal Flag Configuration V1', () => {
       const context = JSON.parse(contextString)
       const details = await evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
+      expect(details.reason).toBe(testCase.result.reason)
       if (testCase.result.flagMetadata?.doLog) {
         expect(exposureChannelMessageHandler).toHaveBeenCalledWith(
           {
