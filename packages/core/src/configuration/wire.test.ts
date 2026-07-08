@@ -35,9 +35,7 @@ describe('configuration wire', () => {
   it('keeps flags readable after a round-trip', () => {
     const restored = configurationFromString(configurationToString(configuration))
 
-    expect(restored.precomputed?.response.data.attributes.flags['my-flag'].variationValue).toBe(
-      true,
-    )
+    expect(restored.precomputed?.response.data.attributes.flags['my-flag'].variationValue).toBe(true)
   })
 
   it('serializes precomputed.response as a stringified response object, not the whole precomputed', () => {
