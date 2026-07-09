@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@datadog/browser-core": "^6.33.0",
-    "@datadog/flagging-core": "1.2.1",
+    "@datadog/flagging-core": "2.0.0",
     "@datadog/js-core": "0.0.3"
   },
   "peerDependencies": {

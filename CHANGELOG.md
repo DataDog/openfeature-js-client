@@ -6,6 +6,25 @@
 
 ---
 
+## @datadog/flagging-core@2.0.0
+
+**Breaking Changes:**
+
+- Major version bump. `@datadog/flagging-core` cannot be safely updated within the 1.x range — existing `^1.2.1` consumers would pull new 1.x versions and risk version skew — so these additions ship as `2.0.0`.
+
+**Features:**
+
+- refactor: extract rules-based UFC evaluator into `@datadog/flagging-core` ([#332](https://github.com/DataDog/openfeature-js-client/pull/332))
+- feat: adopt js-core 0.0.3 (TimeStamp types, monitor, util) ([#308](https://github.com/DataDog/openfeature-js-client/pull/308))
+
+**Bug Fixes:**
+
+- fix(core): serialize precomputed.response in configurationToString ([#331](https://github.com/DataDog/openfeature-js-client/pull/331))
+
+**Internal Changes:**
+
+- Align Node.js flagevaluation EVP metadata ([#317](https://github.com/DataDog/openfeature-js-client/pull/317))
+
 ## @datadog/openfeature-browser@1.2.3
 
 **Features:**
