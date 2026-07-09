@@ -43,8 +43,8 @@
     "@openfeature/server-sdk": ">=1.15.1"
   },
   "devDependencies": {
-    "@openfeature/core": "1.9.2",
-    "@openfeature/server-sdk": "1.20.2",
+    "@openfeature/core": "1.11.0",
+    "@openfeature/server-sdk": "1.22.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.19.130",
     "jest": "^30.0.5",

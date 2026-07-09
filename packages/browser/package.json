@@ -55,7 +55,7 @@
   "devDependencies": {
     "@openfeature/core": "^1.9.2",
     "@openfeature/web-sdk": "^1.5.0",
-    "@types/chrome": "^0.1.18",
+    "@types/chrome": "^0.2.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.0.0",
     "fake-indexeddb": "^6.2.5",
