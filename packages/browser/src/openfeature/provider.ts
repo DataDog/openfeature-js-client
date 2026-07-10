@@ -79,6 +79,7 @@ export class DatadogProvider implements Provider {
   status: ProviderStatus
 
   private flagsConfiguration: FlagsConfiguration = {}
+  private context: EvaluationContext = {}
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined

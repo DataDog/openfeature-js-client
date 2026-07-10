@@ -115,6 +115,7 @@ export function evaluateForSubject<T extends FlagValueType>(
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
             doLog: !!allocation.doLog,
+            extraLogging: selectedSplit.extraLogging,
           } as PrecomputedFlagMetadata,
         }
       }

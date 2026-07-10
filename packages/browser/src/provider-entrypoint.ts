@@ -1,3 +1,5 @@
 export type { FlaggingInitConfiguration } from './domain/configuration'
+export type { CoreProviderOptions } from './openfeature/core-provider'
 export { DatadogDevtools } from './openfeature/devtools-provider'
+export { CoreProvider } from './openfeature/core-provider'
 export { DatadogProvider } from './openfeature/provider'
