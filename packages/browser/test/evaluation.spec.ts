@@ -1,4 +1,5 @@
 import { configurationFromString } from '@datadog/flagging-core/configuration'
+import { type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
@@ -7,6 +8,58 @@ const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
   JSON.stringify(configurationWire)
 )
+const matchingContext = configuration.precomputed?.context ?? {}
+
+const rulesBasedConfiguration: FlagsConfiguration = {
+  rulesBased: {
+    response: {
+      createdAt: '2026-07-06T23:01:56.822Z',
+      format: 'SERVER',
+      environment: {
+        name: 'prod',
+      },
+      flags: {
+        'dynamic-flag': {
+          key: 'dynamic-flag',
+          enabled: true,
+          variationType: 'STRING',
+          variations: {
+            enterprise: { key: 'enterprise', value: 'enabled' },
+            fallback: { key: 'fallback', value: 'disabled' },
+          },
+          allocations: [
+            {
+              key: 'enterprise-allocation',
+              rules: [
+                {
+                  conditions: [{ operator: OperatorType.ONE_OF, attribute: 'plan', value: ['enterprise'] }],
+                },
+              ],
+              doLog: true,
+              splits: [
+                {
+                  variationKey: 'enterprise',
+                  extraLogging: { experiment: 'dynamic-context' },
+                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
+                },
+              ],
+            },
+            {
+              key: 'fallback-allocation',
+              doLog: false,
+              splits: [
+                {
+                  variationKey: 'fallback',
+                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  },
+}
 
 const configurationWithMalformedFlag = configurationFromString(
   JSON.stringify({
@@ -60,7 +113,7 @@ describe('evaluate', () => {
   })
 
   it('returns default for unknown flag', () => {
-    const result = evaluate(configuration, 'string', 'unknown-flag', 'default', {})
+    const result = evaluate(configuration, 'string', 'unknown-flag', 'default', matchingContext)
     expect(result).toEqual({
       value: 'default',
       reason: 'ERROR',
@@ -92,7 +145,7 @@ describe('evaluate', () => {
   })
 
   it('returns default without variant metadata for type mismatch', () => {
-    const result = evaluate(configuration, 'string', 'boolean-flag', 'default', {})
+    const result = evaluate(configuration, 'string', 'boolean-flag', 'default', matchingContext)
     expect(result).toEqual({
       value: 'default',
       reason: 'ERROR',
@@ -103,7 +156,7 @@ describe('evaluate', () => {
   })
 
   it('resolves boolean flag', () => {
-    const result = evaluate(configuration, 'boolean', 'boolean-flag', true, {})
+    const result = evaluate(configuration, 'boolean', 'boolean-flag', true, matchingContext)
     expect(result).toEqual({
       value: true,
       variant: 'variation-124',
@@ -111,13 +164,14 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-124',
         doLog: true,
+        extraLogging: { experiment: true },
         variationType: 'BOOLEAN',
       },
     })
   })
 
   it('resolves string flag', () => {
-    const result = evaluate(configuration, 'string', 'string-flag', 'default', {})
+    const result = evaluate(configuration, 'string', 'string-flag', 'default', matchingContext)
     expect(result).toEqual({
       value: 'red',
       variant: 'variation-123',
@@ -125,13 +179,14 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-123',
         doLog: true,
+        extraLogging: { experiment: true },
         variationType: 'STRING',
       },
     })
   })
 
   it('resolves object flag', () => {
-    const result = evaluate<'object'>(configuration, 'object', 'json-flag', { hello: 'world' }, {})
+    const result = evaluate<'object'>(configuration, 'object', 'json-flag', { hello: 'world' }, matchingContext)
     expect(result).toEqual({
       value: { key: 'value', prop: 123 },
       variant: 'variation-127',
@@ -139,8 +194,56 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-127',
         doLog: true,
+        extraLogging: { experiment: true },
         variationType: 'OBJECT',
       },
+    })
+  })
+
+  it('does not use precomputed configuration when context does not match', () => {
+    const result = evaluate(configuration, 'string', 'string-flag', 'default', { targetingKey: 'other-user' })
+
+    expect(result).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+    })
+  })
+
+  it('evaluates rules-based configuration when present', () => {
+    const result = evaluate(rulesBasedConfiguration, 'string', 'dynamic-flag', 'default', {
+      targetingKey: 'user-1',
+      plan: 'enterprise',
+    })
+
+    expect(result).toMatchObject({
+      value: 'enabled',
+      variant: 'enterprise',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'enterprise-allocation',
+        doLog: true,
+        extraLogging: { experiment: 'dynamic-context' },
+      },
+    })
+  })
+
+  it('falls back to rules-based configuration when precomputed context does not match', () => {
+    const result = evaluate(
+      {
+        ...rulesBasedConfiguration,
+        precomputed: configuration.precomputed,
+      },
+      'string',
+      'dynamic-flag',
+      'default',
+      { targetingKey: 'other-user', plan: 'enterprise' }
+    )
+
+    expect(result).toMatchObject({
+      value: 'enabled',
+      variant: 'enterprise',
+      reason: 'TARGETING_MATCH',
     })
   })
 })

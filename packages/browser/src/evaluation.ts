@@ -4,14 +4,23 @@ import type {
   PrecomputedConfiguration,
   PrecomputedFlagMetadata,
 } from '@datadog/flagging-core'
-import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/web-sdk'
+import { configMatchesContext, evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
+import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/web-sdk'
+
+const NOOP_LOGGER: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+}
 
 export function evaluate<T extends FlagValueType>(
   flagsConfiguration: FlagsConfiguration,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  context: EvaluationContext
+  context: EvaluationContext,
+  logger: Logger = NOOP_LOGGER
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (flagsConfiguration.precomputedError) {
     return {
@@ -22,8 +31,27 @@ export function evaluate<T extends FlagValueType>(
     }
   }
 
-  if (flagsConfiguration.precomputed) {
+  if (flagsConfiguration.precomputed && configMatchesContext(flagsConfiguration, context)) {
     return evaluatePrecomputed(flagsConfiguration.precomputed, type, flagKey, defaultValue, context)
+  }
+
+  if (flagsConfiguration.rules) {
+    return evaluateRulesBasedConfiguration(
+      flagsConfiguration.rules.response,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      logger
+    )
+  }
+
+  if (flagsConfiguration.precomputed) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+    }
   }
 
   return {
@@ -76,6 +104,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,
+      extraLogging: flag.extraLogging,
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>

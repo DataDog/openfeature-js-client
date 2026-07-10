@@ -151,6 +151,7 @@ describe('evaluateForSubject', () => {
               {
                 variationKey: 'treatment',
                 serialId,
+                extraLogging: { campaign: 'summer' },
                 shards: [
                   {
                     salt: 'experiment-salt',
@@ -176,6 +177,7 @@ describe('evaluateForSubject', () => {
         // Also verify deprecated keys are still set for backwards compatibility
         allocationKey: 'experiment-allocation',
         doLog: true,
+        extraLogging: { campaign: 'summer' },
       })
     })
   })
