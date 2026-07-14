@@ -112,14 +112,7 @@ export class CoreProvider implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.getEvaluationContext(context), logger)
-  }
-
-  private getEvaluationContext(context: EvaluationContext): EvaluationContext {
-    if (Object.keys(context).length > 0 || Object.keys(this.context).length === 0) {
-      return context
-    }
-    return this.context
+    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
   }
 
   private canEvaluateCurrentContext(): boolean {
