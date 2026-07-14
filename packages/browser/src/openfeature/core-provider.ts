@@ -1,5 +1,5 @@
 import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import { configMatchesContext } from '@datadog/flagging-core'
+import { configMatchesContext, evaluate } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   FlagValueType,
@@ -15,7 +15,6 @@ import {
   type ProviderEventEmitter,
   ProviderEvents,
 } from '@openfeature/web-sdk'
-import { evaluate } from '../evaluation'
 
 export interface CoreProviderOptions {
   configuration: FlagsConfiguration

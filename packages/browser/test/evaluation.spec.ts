@@ -1,7 +1,6 @@
 import { configurationFromString } from '@datadog/flagging-core/configuration'
-import { type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
+import { evaluate, type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
-import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
 
 const configuration = configurationFromString(

@@ -1,4 +1,4 @@
-import { type AssignmentCache, configMatchesContext, type FlagsConfiguration } from '@datadog/flagging-core'
+import { type AssignmentCache, configMatchesContext, evaluate, type FlagsConfiguration } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   Hook,
@@ -23,7 +23,6 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { evaluate } from '../evaluation'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
