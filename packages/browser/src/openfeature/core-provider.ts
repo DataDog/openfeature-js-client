@@ -1,7 +1,6 @@
 import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
 import { configMatchesContext } from '@datadog/flagging-core'
 import type {
-  ErrorCode,
   EvaluationContext,
   FlagValueType,
   JsonValue,
@@ -113,14 +112,6 @@ export class CoreProvider implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    if (!hasEvaluatableConfiguration(this.flagsConfiguration)) {
-      return {
-        value: defaultValue,
-        reason: 'ERROR',
-        errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
-      }
-    }
-
     return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.getEvaluationContext(context), logger)
   }
 
