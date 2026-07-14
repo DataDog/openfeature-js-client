@@ -62,7 +62,7 @@ export class CoreProvider implements Provider {
     }
   }
 
-  async onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
+  onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     this.context = newContext
     const error = getConfigurationError(this.flagsConfiguration, this.context)
     if (error) {
