@@ -15,7 +15,6 @@ import {
   OpenFeatureEventEmitter,
   type ProviderEventEmitter,
   ProviderEvents,
-  ProviderStatus,
 } from '@openfeature/web-sdk'
 import { evaluate } from '../evaluation'
 
@@ -30,15 +29,12 @@ export class CoreProvider implements Provider {
   readonly runsOn: Paradigm = 'client'
   readonly events: ProviderEventEmitter<ProviderEvents>
 
-  status: ProviderStatus
-
   private flagsConfiguration: FlagsConfiguration
   private context: EvaluationContext = {}
 
   constructor(options: CoreProviderOptions) {
     this.events = new OpenFeatureEventEmitter()
     this.flagsConfiguration = options.configuration
-    this.status = hasEvaluatableConfiguration(options.configuration) ? ProviderStatus.READY : ProviderStatus.ERROR
   }
 
   getConfiguration(): FlagsConfiguration {
@@ -51,12 +47,10 @@ export class CoreProvider implements Provider {
 
     const error = getConfigurationError(configuration, this.context)
     if (error) {
-      this.status = ProviderStatus.ERROR
       this.events.emit(ProviderEvents.Error, { error })
       return
     }
 
-    this.status = ProviderStatus.READY
     this.events.emit(hadEvaluatableConfiguration ? ProviderEvents.ConfigurationChanged : ProviderEvents.Ready)
   }
 
@@ -64,21 +58,17 @@ export class CoreProvider implements Provider {
     this.context = context
     const error = getConfigurationError(this.flagsConfiguration, this.context)
     if (error) {
-      this.status = ProviderStatus.ERROR
       throw error
     }
-    this.status = ProviderStatus.READY
   }
 
   async onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
     this.context = newContext
     const error = getConfigurationError(this.flagsConfiguration, this.context)
     if (error) {
-      this.status = ProviderStatus.ERROR
       this.events.emit(ProviderEvents.Error, { error })
       throw error
     }
-    this.status = ProviderStatus.READY
   }
 
   resolveBooleanEvaluation(

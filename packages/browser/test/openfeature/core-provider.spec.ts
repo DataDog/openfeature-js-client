@@ -1,6 +1,6 @@
 import { type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
 import type { Logger } from '@openfeature/core'
-import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { ProviderEvents } from '@openfeature/web-sdk'
 import { CoreProvider } from '../../src/openfeature/core-provider'
 
 const logger: Logger = {
@@ -92,10 +92,9 @@ describe('CoreProvider', () => {
 
     expect(provider.metadata).toEqual({ name: 'datadog-core' })
     expect(provider.runsOn).toBe('client')
-    expect(provider.status).toBe(ProviderStatus.READY)
   })
 
-  it('stores context changes and evaluates rules locally without changing status', async () => {
+  it('stores context changes and evaluates rules locally', async () => {
     const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
 
     await provider.initialize({ targetingKey: 'user-1', plan: 'free' })
@@ -111,7 +110,6 @@ describe('CoreProvider', () => {
       { targetingKey: 'user-1', plan: 'enterprise' }
     )
 
-    expect(provider.status).toBe(ProviderStatus.READY)
     expect(provider.resolveStringEvaluation('dynamic-flag', 'default', {}, logger)).toMatchObject({
       value: 'enabled',
       variant: 'enterprise',
@@ -152,7 +150,6 @@ describe('CoreProvider', () => {
       )
     ).rejects.toThrow('Precomputed flags configuration does not match the current context')
 
-    expect(provider.status).toBe(ProviderStatus.ERROR)
     expect(errorHandler).toHaveBeenCalledTimes(1)
     expect(
       provider.resolveStringEvaluation('static-flag', 'default', { targetingKey: 'other-user', plan: 'free' }, logger)
@@ -173,7 +170,6 @@ describe('CoreProvider', () => {
 
     await provider.initialize({ targetingKey: 'other-user', plan: 'enterprise' })
 
-    expect(provider.status).toBe(ProviderStatus.READY)
     expect(provider.resolveStringEvaluation('dynamic-flag', 'default', {}, logger)).toMatchObject({
       value: 'enabled',
       variant: 'enterprise',
@@ -188,7 +184,6 @@ describe('CoreProvider', () => {
 
     provider.setConfiguration(rulesBasedConfiguration)
 
-    expect(provider.status).toBe(ProviderStatus.READY)
     expect(readyHandler).toHaveBeenCalledTimes(1)
   })
 
@@ -204,7 +199,6 @@ describe('CoreProvider', () => {
       },
     })
 
-    expect(provider.status).toBe(ProviderStatus.READY)
     expect(changedHandler).toHaveBeenCalledTimes(1)
   })
 
@@ -215,7 +209,6 @@ describe('CoreProvider', () => {
 
     provider.setConfiguration({})
 
-    expect(provider.status).toBe(ProviderStatus.ERROR)
     expect(errorHandler).toHaveBeenCalledTimes(1)
   })
 
