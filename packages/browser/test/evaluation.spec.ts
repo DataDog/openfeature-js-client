@@ -108,7 +108,8 @@ describe('evaluate', () => {
     const result = evaluate({}, 'boolean', 'boolean-flag', true, {})
     expect(result).toEqual({
       value: true,
-      reason: 'DEFAULT',
+      reason: 'ERROR',
+      errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
     })
   })
 

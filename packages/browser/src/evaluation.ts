@@ -56,7 +56,8 @@ export function evaluate<T extends FlagValueType>(
 
   return {
     value: defaultValue,
-    reason: 'DEFAULT',
+    reason: 'ERROR',
+    errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
   }
 }
 
