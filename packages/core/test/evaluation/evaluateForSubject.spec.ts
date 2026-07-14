@@ -177,8 +177,8 @@ describe('evaluateForSubject', () => {
         // Also verify deprecated keys are still set for backwards compatibility
         allocationKey: 'experiment-allocation',
         doLog: true,
-        extraLogging: { campaign: 'summer' },
       })
+      expect(result.flagMetadata).not.toHaveProperty('extraLogging')
     })
   })
 

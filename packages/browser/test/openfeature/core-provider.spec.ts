@@ -126,7 +126,6 @@ describe('CoreProvider', () => {
       flagMetadata: {
         allocationKey: 'enterprise-allocation',
         doLog: true,
-        extraLogging: { experiment: 'dynamic-context' },
       },
     })
   })
