@@ -10,11 +10,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import {
-  OpenFeatureEventEmitter,
-  type ProviderEventEmitter,
-  ProviderEvents,
-} from '@openfeature/web-sdk'
+import { OpenFeatureEventEmitter, type ProviderEventEmitter, ProviderEvents } from '@openfeature/web-sdk'
 
 export interface CoreProviderOptions {
   configuration: FlagsConfiguration
