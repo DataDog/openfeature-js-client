@@ -1,6 +1,13 @@
-import { type AssignmentCache, configMatchesContext, evaluate, type FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  type AssignmentCache,
+  configMatchesContext,
+  evaluate,
+  type FlagsConfiguration,
+  type FlagTypeToValue,
+} from '@datadog/flagging-core'
 import type {
   EvaluationContext,
+  FlagValueType,
   Hook,
   JsonValue,
   Logger,
@@ -286,7 +293,7 @@ export class DatadogProvider implements Provider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, this.evaluationContext)
+    return this.resolve('boolean', flagKey, defaultValue, _context, _logger)
   }
 
   resolveStringEvaluation(
@@ -295,7 +302,7 @@ export class DatadogProvider implements Provider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, this.evaluationContext)
+    return this.resolve('string', flagKey, defaultValue, _context, _logger)
   }
 
   resolveNumberEvaluation(
@@ -304,7 +311,7 @@ export class DatadogProvider implements Provider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, this.evaluationContext)
+    return this.resolve('number', flagKey, defaultValue, _context, _logger)
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
@@ -319,12 +326,23 @@ export class DatadogProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(
-      this.flagsConfiguration,
-      'object',
-      flagKey,
-      defaultValue,
-      this.evaluationContext
-    ) as ResolutionDetails<T>
+    return this.resolve('object', flagKey, defaultValue, _context, _logger) as ResolutionDetails<T>
+  }
+
+  private resolve<T extends FlagValueType>(
+    type: T,
+    flagKey: string,
+    defaultValue: FlagTypeToValue<T>,
+    _context: EvaluationContext,
+    _logger: Logger
+  ): ResolutionDetails<FlagTypeToValue<T>> {
+    if (!this.flagsConfiguration.precomputed && !this.flagsConfiguration.rules) {
+      return {
+        value: defaultValue,
+        reason: 'DEFAULT',
+      }
+    }
+
+    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.evaluationContext)
   }
 }
