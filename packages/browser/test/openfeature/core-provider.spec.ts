@@ -94,12 +94,14 @@ describe('CoreProvider', () => {
     expect(provider.runsOn).toBe('client')
   })
 
-  it('stores context changes and evaluates rules locally', async () => {
+  it('evaluates rules locally with the supplied context', async () => {
     const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
 
     await provider.initialize({ targetingKey: 'user-1', plan: 'free' })
 
-    expect(provider.resolveStringEvaluation('dynamic-flag', 'default', {}, logger)).toMatchObject({
+    expect(
+      provider.resolveStringEvaluation('dynamic-flag', 'default', { targetingKey: 'user-1', plan: 'free' }, logger)
+    ).toMatchObject({
       value: 'disabled',
       variant: 'fallback',
       reason: 'TARGETING_MATCH',
@@ -110,7 +112,14 @@ describe('CoreProvider', () => {
       { targetingKey: 'user-1', plan: 'enterprise' }
     )
 
-    expect(provider.resolveStringEvaluation('dynamic-flag', 'default', {}, logger)).toMatchObject({
+    expect(
+      provider.resolveStringEvaluation(
+        'dynamic-flag',
+        'default',
+        { targetingKey: 'user-1', plan: 'enterprise' },
+        logger
+      )
+    ).toMatchObject({
       value: 'enabled',
       variant: 'enterprise',
       reason: 'TARGETING_MATCH',
@@ -167,7 +176,14 @@ describe('CoreProvider', () => {
 
     await provider.initialize({ targetingKey: 'other-user', plan: 'enterprise' })
 
-    expect(provider.resolveStringEvaluation('dynamic-flag', 'default', {}, logger)).toMatchObject({
+    expect(
+      provider.resolveStringEvaluation(
+        'dynamic-flag',
+        'default',
+        { targetingKey: 'other-user', plan: 'enterprise' },
+        logger
+      )
+    ).toMatchObject({
       value: 'enabled',
       variant: 'enterprise',
       reason: 'TARGETING_MATCH',
