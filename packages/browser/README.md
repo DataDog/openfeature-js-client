@@ -163,7 +163,7 @@ import { CoreProvider } from '@datadog/openfeature-browser'
 import { configurationFromString } from '@datadog/openfeature-browser/configuration'
 import { OpenFeature } from '@openfeature/web-sdk'
 
-const configuration = configurationFromString(window.__DD_FLAGS_CONFIGURATION__)
+const configuration = configurationFromString('...flags configuration string...')
 const provider = new CoreProvider({ configuration })
 
 await OpenFeature.setProviderAndWait(provider)
