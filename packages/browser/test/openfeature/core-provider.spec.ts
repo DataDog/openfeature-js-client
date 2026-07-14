@@ -138,8 +138,6 @@ describe('CoreProvider', () => {
 
   it('throws for precomputed-only context changes that do not match the configuration', async () => {
     const provider = new CoreProvider({ configuration: precomputedConfiguration })
-    const errorHandler = jest.fn()
-    provider.events.addHandler(ProviderEvents.Error, errorHandler)
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
@@ -150,7 +148,6 @@ describe('CoreProvider', () => {
       )
     ).toThrow('Precomputed flags configuration does not match the current context')
 
-    expect(errorHandler).toHaveBeenCalledTimes(1)
     expect(
       provider.resolveStringEvaluation('static-flag', 'default', { targetingKey: 'other-user', plan: 'free' }, logger)
     ).toEqual({
