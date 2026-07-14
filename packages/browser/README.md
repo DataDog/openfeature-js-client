@@ -171,7 +171,7 @@ await OpenFeature.setProviderAndWait(provider)
 await OpenFeature.setContext({ targetingKey: 'user-123', plan: 'enterprise' })
 
 const client = OpenFeature.getClient()
-const enabled = await client.getBooleanValue('new-checkout', false)
+const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
 ## End-user license agreement
