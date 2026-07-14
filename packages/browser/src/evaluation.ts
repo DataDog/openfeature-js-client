@@ -103,7 +103,6 @@ function evaluatePrecomputed<T extends FlagValueType>(
       variationType: flag.variationType,
       doLog: flag.doLog,
       ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
-      extraLogging: flag.extraLogging,
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>

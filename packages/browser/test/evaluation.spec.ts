@@ -173,7 +173,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-124',
         doLog: true,
-        extraLogging: { experiment: true },
         variationType: 'BOOLEAN',
       },
     })
@@ -188,7 +187,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-123',
         doLog: true,
-        extraLogging: { experiment: true },
         variationType: 'STRING',
       },
     })
@@ -203,7 +201,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'allocation-127',
         doLog: true,
-        extraLogging: { experiment: true },
         variationType: 'OBJECT',
       },
     })
@@ -279,7 +276,6 @@ describe('evaluate', () => {
       flagMetadata: {
         allocationKey: 'enterprise-allocation',
         doLog: true,
-        extraLogging: { experiment: 'dynamic-context' },
       },
     })
   })
