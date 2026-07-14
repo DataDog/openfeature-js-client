@@ -66,7 +66,6 @@ export class CoreProvider implements Provider {
     this.context = newContext
     const error = getConfigurationError(this.flagsConfiguration, this.context)
     if (error) {
-      this.events.emit(ProviderEvents.Error, { error })
       throw error
     }
   }
