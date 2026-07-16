@@ -5,7 +5,7 @@ import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { matchesShard } from './matchesShard'
-import { matchesRule, type Rule } from './rules'
+import { isValidRule, matchesRule, type Rule } from './rules'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -25,6 +25,18 @@ export function evaluateForSubject<T extends FlagValueType>(
     return {
       value: defaultValue,
       reason: 'DISABLED',
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+    }
+  }
+
+  if (!isValidFlag(flag)) {
+    logger.debug(`returning default assignment because flag configuration is invalid`, {
+      flagKey: flag.key,
+      subjectKey,
+    })
+    return {
+      value: defaultValue,
+      reason: 'DEFAULT',
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
@@ -137,6 +149,19 @@ function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType
     return variantType === 'JSON'
   }
   throw new Error(`Invalid expected type: ${expectedType}`)
+}
+
+function isValidFlag(flag: Flag): boolean {
+  return (
+    Array.isArray(flag.allocations) &&
+    flag.allocations.every(
+      (allocation) =>
+        Array.isArray(allocation.splits) &&
+        allocation.splits.every((split) => Array.isArray(split.shards)) &&
+        (allocation.rules === undefined ||
+          (Array.isArray(allocation.rules) && allocation.rules.every((rule) => isValidRule(rule))))
+    )
+  )
 }
 
 export function containsMatchingRule(

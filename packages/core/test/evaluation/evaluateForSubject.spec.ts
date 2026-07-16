@@ -1,6 +1,6 @@
 import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, Logger } from '@openfeature/core'
-import { evaluateForSubject, type Flag } from '../../src/evaluation'
+import { evaluateForSubject, type Flag, OperatorType, type Rule, type Shard } from '../../src/evaluation'
 
 describe('evaluateForSubject', () => {
   let logger: Logger
@@ -92,7 +92,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
 
       expect(result.value).toBe(true)
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBe(serialId)
     })
 
@@ -129,7 +129,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'string', 'user-456', context, 'default', logger)
 
       expect(result.value).toBe('value-a')
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBeUndefined()
     })
 
@@ -177,6 +177,51 @@ describe('evaluateForSubject', () => {
         allocationKey: 'experiment-allocation',
         doLog: true,
       })
+    })
+  })
+
+  describe('evaluation reasons', () => {
+    const matchingShard: Shard = {
+      salt: 'test-salt',
+      ranges: [{ start: 0, end: 10000 }],
+      totalShards: 10000,
+    }
+    const matchingRule: Rule = {
+      conditions: [
+        {
+          operator: OperatorType.ONE_OF,
+          attribute: 'plan',
+          value: ['pro'],
+        },
+      ],
+    }
+
+    it.each([
+      { name: 'static allocation', rules: undefined, shards: [], expectedReason: 'STATIC' },
+      { name: 'split allocation', rules: undefined, shards: [matchingShard], expectedReason: 'SPLIT' },
+      { name: 'targeting rule', rules: [matchingRule], shards: [], expectedReason: 'TARGETING_MATCH' },
+    ])('returns $expectedReason for a $name', ({ rules, shards, expectedReason }) => {
+      const flag: Flag = {
+        key: 'reason-flag',
+        enabled: true,
+        variationType: 'INTEGER',
+        variations: {
+          selected: { key: 'selected', value: -5 },
+        },
+        allocations: [
+          {
+            key: 'reason-allocation',
+            rules,
+            splits: [{ variationKey: 'selected', shards }],
+          },
+        ],
+      }
+
+      const context: EvaluationContext = { targetingKey: 'user-123', plan: 'pro' }
+      const result = evaluateForSubject(flag, 'number', 'user-123', context, 0, logger)
+
+      expect(result.value).toBe(-5)
+      expect(result.reason).toBe(expectedReason)
     })
   })
 

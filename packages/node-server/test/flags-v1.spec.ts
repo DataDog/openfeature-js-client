@@ -47,7 +47,10 @@ describe('Universal Flag Configuration V1', () => {
   }
 
   const getTestCases = (testCaseFileName: string): TestCase[] => {
-    const testCases = fs.readFileSync(path.join(__dirname, './ffe-system-test-data/evaluation-cases', testCaseFileName), 'utf8')
+    const testCases = fs.readFileSync(
+      path.join(__dirname, './ffe-system-test-data/evaluation-cases', testCaseFileName),
+      'utf8'
+    )
     return JSON.parse(testCases) as TestCase[]
   }
 
