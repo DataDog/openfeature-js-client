@@ -223,6 +223,38 @@ describe('evaluateForSubject', () => {
       expect(result.value).toBe(-5)
       expect(result.reason).toBe(expectedReason)
     })
+
+    it('returns DEFAULT for a date-gated allocation', () => {
+      const flag: Flag = {
+        key: 'date-gated-flag',
+        enabled: true,
+        variationType: 'STRING',
+        variations: {
+          selected: { key: 'selected', value: 'active' },
+        },
+        allocations: [
+          {
+            key: 'active-window',
+            startAt: new Date('2022-10-31T09:00:00.594Z'),
+            endAt: new Date('2050-10-31T09:00:00.594Z'),
+            splits: [{ variationKey: 'selected', shards: [] }],
+          },
+        ],
+      }
+
+      const result = evaluateForSubject(
+        flag,
+        'string',
+        'user-123',
+        { targetingKey: 'user-123' },
+        'unknown',
+        logger,
+        1_800_000_000_000 as TimeStamp
+      )
+
+      expect(result.value).toBe('active')
+      expect(result.reason).toBe('DEFAULT')
+    })
   })
 
   describe('disabled flag', () => {

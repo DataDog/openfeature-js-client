@@ -94,7 +94,13 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variant.value,
         })
 
-        const reason = allocation.rules?.length ? 'TARGETING_MATCH' : selectedSplit.shards.length ? 'SPLIT' : 'STATIC'
+        const reason = allocation.rules?.length
+          ? 'TARGETING_MATCH'
+          : selectedSplit.shards.length
+            ? 'SPLIT'
+            : allocation.startAt || allocation.endAt
+              ? 'DEFAULT'
+              : 'STATIC'
 
         return {
           value: variant.value as FlagTypeToValue<T>,
