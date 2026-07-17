@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/flagging-core@2.0.1, @datadog/openfeature-browser@1.2.4, @datadog/openfeature-node-server@2.0.1
+
+**Bug Fixes:**
+
+- Align shared UFC evaluation reasons and malformed-configuration isolation with the canonical cross-SDK fixtures ([#275](https://github.com/DataDog/openfeature-js-client/pull/275)) [BROWSER] [NODE-SERVER]
+
+**Internal Changes:**
+
+- Source evaluator regression coverage from `DataDog/ffe-system-test-data` ([#275](https://github.com/DataDog/openfeature-js-client/pull/275)) [BROWSER] [NODE-SERVER]
+
 ## @datadog/flagging-core@2.0.0
 
 **Breaking Changes:**
