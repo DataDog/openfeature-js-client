@@ -1,3 +1,3 @@
-[submodule "packages/node-server/test/ffe-system-test-data"]
-	path = packages/node-server/test/ffe-system-test-data
+[submodule "packages/core/test/ffe-system-test-data"]
+	path = packages/core/test/ffe-system-test-data
 	url = https://github.com/DataDog/ffe-system-test-data.git

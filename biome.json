@@ -38,7 +38,7 @@
       "!**/coverage",
       "!**/*.tgz",
       "!test-app/node_modules",
-      "!packages/node-server/test/ffe-system-test-data"
+      "!packages/core/test/ffe-system-test-data"
     ]
   }
 }

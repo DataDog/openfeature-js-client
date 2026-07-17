@@ -33,7 +33,10 @@ describe('DatadogNodeServerProvider', () => {
   } as jest.Mocked<Channel<ExposureEvent, ExposureEvent>>
 
   const configuration = ((): UniversalFlagConfigurationV1 => {
-    const ufcJson = fs.readFileSync(path.join(__dirname, './ffe-system-test-data', 'ufc-config.json'), 'utf8')
+    const ufcJson = fs.readFileSync(
+      path.join(__dirname, '../../core/test/ffe-system-test-data', 'ufc-config.json'),
+      'utf8'
+    )
     return JSON.parse(ufcJson) as UniversalFlagConfigurationV1
   })()
 
