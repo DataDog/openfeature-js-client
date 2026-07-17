@@ -14,6 +14,8 @@ export enum OperatorType {
   IS_NULL = 'IS_NULL',
 }
 
+const supportedOperators = new Set<string>(Object.values(OperatorType))
+
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT
 
 type MatchesCondition = {
@@ -64,6 +66,27 @@ export interface Rule {
   conditions: Condition[]
 }
 
+export function isValidRule(rule: Rule): boolean {
+  if (!Array.isArray(rule.conditions)) {
+    return false
+  }
+
+  return rule.conditions.every((condition) => {
+    if (!supportedOperators.has(condition.operator)) {
+      return false
+    }
+    if (condition.operator !== OperatorType.MATCHES && condition.operator !== OperatorType.NOT_MATCHES) {
+      return true
+    }
+    try {
+      compileRegex(condition.value)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 export function matchesRule(rule: Rule, subjectAttributes: EvaluationContext): boolean {
   const conditionEvaluations = evaluateRuleConditions(subjectAttributes, rule.conditions)
   // TODO: short-circuit return when false condition is found
@@ -101,10 +124,10 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
       }
       case OperatorType.MATCHES:
         // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
-        return new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
+        return compileRegex(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.NOT_MATCHES:
         // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
-        return !new RegExp(condition.value).test(String(value)) // dd-iac-scan ignore-line
+        return !compileRegex(condition.value).test(String(value)) // dd-iac-scan ignore-line
       case OperatorType.ONE_OF:
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
@@ -112,6 +135,13 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
     }
   }
   return false
+}
+
+function compileRegex(pattern: string): RegExp {
+  const inlineFlags = pattern.match(/^\(\?([imsu]+)\)/)
+  const flags = inlineFlags ? [...new Set(inlineFlags[1])].join('') : ''
+  const source = (inlineFlags ? pattern.slice(inlineFlags[0].length) : pattern).split('[:alnum:]').join('A-Za-z0-9')
+  return new RegExp(source, flags)
 }
 
 function isOneOf(attributeValue: string, conditionValues: string[]) {

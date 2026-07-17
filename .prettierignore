@@ -10,3 +10,4 @@ yarn.lock
 test-app/dist
 test-app/node_modules
 test-app/*.tgz
+packages/core/test/ffe-system-test-data

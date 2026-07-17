@@ -92,7 +92,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
 
       expect(result.value).toBe(true)
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBe(serialId)
     })
 
@@ -129,7 +129,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'string', 'user-456', context, 'default', logger)
 
       expect(result.value).toBe('value-a')
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBeUndefined()
     })
 
