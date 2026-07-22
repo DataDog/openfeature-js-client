@@ -4,8 +4,8 @@ import {
   createExposureEvent,
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
+  timeStampNow,
 } from '@datadog/flagging-core'
-import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/core'
 import type {
   EvaluationDetails,

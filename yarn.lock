@@ -663,7 +663,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
   dependencies:
-    "@datadog/js-core": "npm:0.0.3"
     "@openfeature/core": "npm:^1.9.2"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^18.0.0"
@@ -741,7 +740,6 @@ __metadata:
   resolution: "@datadog/openfeature-node-server@workspace:packages/node-server"
   dependencies:
     "@datadog/flagging-core": "npm:2.0.1"
-    "@datadog/js-core": "npm:0.0.3"
     "@openfeature/core": "npm:1.9.2"
     "@openfeature/server-sdk": "npm:1.20.2"
     "@types/jest": "npm:^30.0.0"

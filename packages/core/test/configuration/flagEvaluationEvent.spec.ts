@@ -1,5 +1,5 @@
-import type { TimeStamp } from '@datadog/js-core/time'
 import { createFlagEvaluationEvent } from '../../src/configuration/flagEvaluationEvent'
+import type { TimeStamp } from '../../src/time'
 
 describe('createFlagEvaluationEvent', () => {
   it('should include targeting_key when it is a non-empty string', () => {

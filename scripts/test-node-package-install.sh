@@ -125,6 +125,8 @@ if [ "$WITH_OPENFEATURE" = true ]; then
   fi
 fi
 
+node "$REPO_ROOT/scripts/assert-node-package-purity.js" node_modules
+
 # Run tests
 echo ""
 echo "Running tests..."

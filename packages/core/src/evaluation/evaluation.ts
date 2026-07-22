@@ -1,6 +1,6 @@
-import { timeStampNow } from '@datadog/js-core/time'
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue } from '../configuration'
+import { timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
