@@ -36,8 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "2.0.1",
-    "@datadog/js-core": "0.0.3"
+    "@datadog/flagging-core": "2.0.1"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.15.1"

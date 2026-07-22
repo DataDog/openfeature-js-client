@@ -1,6 +1,6 @@
-import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateForSubject, type Flag } from '../../src/evaluation'
+import type { TimeStamp } from '../../src/time'
 
 describe('evaluateForSubject', () => {
   let logger: Logger
