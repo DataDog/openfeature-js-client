@@ -1,6 +1,6 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import type { TimeStamp } from '../time'
+import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { matchesShard } from './matchesShard'
@@ -14,7 +14,7 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp = new Date().getTime() as TimeStamp
+  evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {

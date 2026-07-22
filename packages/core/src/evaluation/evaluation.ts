@@ -1,6 +1,6 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue } from '../configuration'
-import type { TimeStamp } from '../time'
+import { timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
@@ -14,7 +14,7 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const evaluationTimestampMs = new Date().getTime() as TimeStamp
+  const evaluationTimestampMs = timeStampNow()
 
   if (!config) {
     return {

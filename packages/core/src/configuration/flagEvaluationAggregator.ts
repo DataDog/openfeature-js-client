@@ -1,6 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
-import type { TimeStamp } from '../time'
+import { type TimeStamp, timeStampNow } from '../time'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
@@ -83,7 +83,7 @@ export class FlagEvaluationAggregator {
       return
     }
 
-    const flushTimestamp = new Date().getTime() as TimeStamp
+    const flushTimestamp = timeStampNow()
     const events = Array.from(this.aggregatedData.values()).map((data) =>
       createFlagEvaluationEvent(data, flushTimestamp)
     )
@@ -117,7 +117,7 @@ export class FlagEvaluationAggregator {
 
 function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): TimeStamp {
   const metadataTimestamp = details.flagMetadata?.[EVALUATION_TIMESTAMP_METADATA_KEY]
-  return Number.isFinite(metadataTimestamp) ? (metadataTimestamp as TimeStamp) : (new Date().getTime() as TimeStamp)
+  return Number.isFinite(metadataTimestamp) ? (metadataTimestamp as TimeStamp) : timeStampNow()
 }
 
 function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {
