@@ -152,7 +152,13 @@ All packages are published with the `latest` npm tag.
    - Same as above, but uses `--force-publish` to prompt for **all** packages
    - Use this when you want to release all packages together with the same version
 
-#### Step 4: Publish via GitHub Release
+#### Step 4: Open and Merge the Release PR
+
+4. **Open a PR from your release branch and merge it with a merge commit — not a squash.**
+
+   `yarn release` pushes the version tag onto your branch commit. Squashing creates a new commit on `main` and orphans that tag, which breaks change detection on the _next_ release (Lerna falls back to an old tag and prompts to version packages that never changed). A merge commit keeps the tag reachable.
+
+#### Step 5: Publish via GitHub Release
 
 **Publishing is fully automated via GitHub workflows!**
 
