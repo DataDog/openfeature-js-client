@@ -1,4 +1,5 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
+import type { UniversalFlagConfigurationV1 } from '../evaluation'
 import type { TimeStamp } from '../time'
 
 /**
@@ -7,6 +8,8 @@ import type { TimeStamp } from '../time'
 export type FlagsConfiguration = {
   /** @internal */
   precomputed?: PrecomputedConfiguration
+  /** @internal */
+  rules?: RulesConfiguration
 }
 
 /** @internal */
@@ -14,6 +17,14 @@ export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
   fetchedAt?: TimeStamp
+  etag?: string
+}
+
+/** @internal */
+export type RulesConfiguration = {
+  response: UniversalFlagConfigurationV1
+  fetchedAt?: TimeStamp
+  etag?: string
 }
 
 // Fancy way to map FlagValueType to expected FlagValue.
