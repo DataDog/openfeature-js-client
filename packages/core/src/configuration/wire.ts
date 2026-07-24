@@ -1,49 +1,77 @@
 import type { EvaluationContext } from '@openfeature/core'
 import type { TimeStamp } from '../time'
-import type { FlagsConfiguration } from './configuration'
+import type { FlagsConfiguration, PrecomputedConfigurationResponse } from './configuration'
+import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
+import { isPrecomputedConfigurationResponse, isPrecomputedWireEntry, isWireEntry } from './wire-validation'
 
-type ConfigurationWire = {
+export type FlagsConfigurationWire = string
+
+type SerializedConfiguration = {
   version: 1
   precomputed?: {
     context?: EvaluationContext
     response: string
     fetchedAt?: TimeStamp
+    etag?: string
+  }
+  rules?: {
+    response: string
+    fetchedAt?: TimeStamp
+    etag?: string
   }
 }
 
 /**
- * Create configuration from a string created with `configurationToString`.
+ * Parse an opaque flags configuration wire value.
  */
-export function configurationFromString(s: string): FlagsConfiguration {
+export function configurationFromString(wire: FlagsConfigurationWire): FlagsConfiguration {
+  let serialized: SerializedConfiguration
   try {
-    const wire: ConfigurationWire = JSON.parse(s)
-
-    if (wire.version !== 1) {
-      // Unknown version
-      return {}
-    }
-
-    const configuration: FlagsConfiguration = {}
-    if (wire.precomputed) {
-      configuration.precomputed = {
-        ...wire.precomputed,
-        response: JSON.parse(wire.precomputed.response),
-      }
-    }
-
-    return configuration
+    serialized = JSON.parse(wire)
   } catch {
     return {}
   }
+  if (typeof serialized !== 'object' || serialized === null || serialized.version !== 1) {
+    return {}
+  }
+
+  const configuration: FlagsConfiguration = {}
+  if (isPrecomputedWireEntry(serialized.precomputed)) {
+    const { precomputed } = serialized
+    const response = decodeSafely(() => JSON.parse(precomputed.response) as PrecomputedConfigurationResponse)
+    if (response && isPrecomputedConfigurationResponse(response)) {
+      configuration.precomputed = {
+        ...precomputed,
+        response,
+      }
+    }
+  }
+  if (isWireEntry(serialized.rules)) {
+    const { rules } = serialized
+    const response = decodeSafely(() => decodeUniversalFlagConfiguration(rules.response))
+    if (response) {
+      configuration.rules = {
+        ...rules,
+        response,
+      }
+    }
+  }
+  return configuration
 }
 
 /**
- * Serialize configuration to string that can be deserialized with
- * `configurationFromString`. The serialized string format is
- * unspecified.
+ * Serialize a precomputed configuration to a string that can be deserialized
+ * with `configurationFromString`. Rules configurations cannot be serialized
+ * because their wire representation is the original protobuf payload.
+ *
+ * @throws If the configuration contains rules.
  */
-export function configurationToString(configuration: FlagsConfiguration): string {
-  const wire: ConfigurationWire = {
+export function configurationToString(configuration: FlagsConfiguration): FlagsConfigurationWire {
+  if (configuration.rules) {
+    throw new Error('Rules configurations cannot be serialized to the wire format')
+  }
+
+  const wire: SerializedConfiguration = {
     version: 1,
   }
 
@@ -53,6 +81,13 @@ export function configurationToString(configuration: FlagsConfiguration): string
       response: JSON.stringify(configuration.precomputed.response),
     }
   }
-
   return JSON.stringify(wire)
+}
+
+function decodeSafely<T>(decode: () => T): T | undefined {
+  try {
+    return decode()
+  } catch {
+    return undefined
+  }
 }

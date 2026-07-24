@@ -1,4 +1,11 @@
-import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
+import type {
+  ErrorCode,
+  EvaluationContext,
+  EvaluationContextValue,
+  FlagValueType,
+  Logger,
+  ResolutionDetails,
+} from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
 import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
@@ -83,7 +90,7 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, flag.key, logger)
+    const selectedSplit = selectSplitUsingSharding(allocation.splits, subjectKey, subjectAttributes, flag.key, logger)
     if (selectedSplit) {
       const variant = flag.variations[selectedSplit.variationKey]
       if (variant) {
@@ -93,13 +100,15 @@ export function evaluateForSubject<T extends FlagValueType>(
           assignment: variant.value,
         })
 
-        const reason = allocation.rules?.length
-          ? 'TARGETING_MATCH'
-          : selectedSplit.shards.length
-            ? 'SPLIT'
-            : allocation.startAt || allocation.endAt
-              ? 'DEFAULT'
-              : 'STATIC'
+        const reason =
+          selectedSplit.reason ??
+          (allocation.rules?.length
+            ? 'TARGETING_MATCH'
+            : selectedSplit.shards.length
+              ? 'SPLIT'
+              : allocation.startAt || allocation.endAt
+                ? 'DEFAULT'
+                : 'STATIC')
 
         return {
           value: variant.value as FlagTypeToValue<T>,
@@ -187,6 +196,7 @@ export function containsMatchingRule(
 function selectSplitUsingSharding(
   splits: Split[],
   subjectKey: string | null | undefined,
+  subjectAttributes: EvaluationContext,
   flagKey: string,
   logger: Logger
 ): Split | null {
@@ -203,10 +213,19 @@ function selectSplitUsingSharding(
     })
 
     const matches = split.shards.every((shard) => {
-      if (subjectKey == null) {
-        throw new TargetingKeyMissingError()
+      let shardValue: EvaluationContextValue
+      if (!shard.attribute || shard.attribute === 'targetingKey') {
+        if (subjectKey == null) {
+          throw new TargetingKeyMissingError()
+        }
+        shardValue = subjectKey
+      } else {
+        shardValue = subjectAttributes[shard.attribute]
+        if (shardValue == null) {
+          return false
+        }
       }
-      const shardMatches = matchesShard(shard, subjectKey)
+      const shardMatches = matchesShard(shard, String(shardValue))
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,

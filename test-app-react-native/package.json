@@ -1,0 +1,11 @@
+{
+  "name": "openfeature-react-native-smoke-test",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@datadog/flagging-core": "file:./core.tgz"
+  },
+  "devDependencies": {
+    "metro": "0.84.3"
+  }
+}

@@ -1,4 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
+import { encodeUtf8 } from '../utf8'
+import { sha256Hex } from './sha256'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
@@ -11,7 +13,15 @@ export enum OperatorType {
   LT = 'LT',
   ONE_OF = 'ONE_OF',
   NOT_ONE_OF = 'NOT_ONE_OF',
+  ONE_OF_SHA256 = 'ONE_OF_SHA256',
+  NOT_ONE_OF_SHA256 = 'NOT_ONE_OF_SHA256',
   IS_NULL = 'IS_NULL',
+  SEMVER_EQUAL = 'SEMVER_EQUAL',
+  SEMVER_NOT_EQUAL = 'SEMVER_NOT_EQUAL',
+  SEMVER_LT = 'SEMVER_LT',
+  SEMVER_LTE = 'SEMVER_LTE',
+  SEMVER_GT = 'SEMVER_GT',
+  SEMVER_GTE = 'SEMVER_GTE',
 }
 
 const supportedOperators = new Set<string>(Object.values(OperatorType))
@@ -54,6 +64,27 @@ type NullCondition = {
   value: boolean
 }
 
+type Sha256Condition = {
+  operator: OperatorType.ONE_OF_SHA256 | OperatorType.NOT_ONE_OF_SHA256
+  attribute: string
+  value: {
+    salt: number[]
+    hashes: string[]
+  }
+}
+
+type SemverCondition = {
+  operator:
+    | OperatorType.SEMVER_EQUAL
+    | OperatorType.SEMVER_NOT_EQUAL
+    | OperatorType.SEMVER_LT
+    | OperatorType.SEMVER_LTE
+    | OperatorType.SEMVER_GT
+    | OperatorType.SEMVER_GTE
+  attribute: string
+  value: string
+}
+
 export type Condition =
   | MatchesCondition
   | NotMatchesCondition
@@ -61,6 +92,8 @@ export type Condition =
   | NotOneOfCondition
   | NumericCondition
   | NullCondition
+  | Sha256Condition
+  | SemverCondition
 
 export interface Rule {
   conditions: Condition[]
@@ -75,15 +108,25 @@ export function isValidRule(rule: Rule): boolean {
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (condition.operator !== OperatorType.MATCHES && condition.operator !== OperatorType.NOT_MATCHES) {
-      return true
+    if (condition.operator === OperatorType.MATCHES || condition.operator === OperatorType.NOT_MATCHES) {
+      try {
+        compileRegex(condition.value)
+        return true
+      } catch {
+        return false
+      }
     }
-    try {
-      compileRegex(condition.value)
-      return true
-    } catch {
-      return false
+    if (condition.operator === OperatorType.ONE_OF_SHA256 || condition.operator === OperatorType.NOT_ONE_OF_SHA256) {
+      return (
+        Array.isArray(condition.value.salt) &&
+        condition.value.salt.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255) &&
+        condition.value.hashes.every((hash) => /^[0-9a-f]{64}$/.test(hash))
+      )
     }
+    if (condition.operator.startsWith('SEMVER_')) {
+      return parseSemver(condition.value as string) !== undefined
+    }
+    return true
   })
 }
 
@@ -132,9 +175,79 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
         return isNotOneOf(value.toString(), condition.value)
+      case OperatorType.ONE_OF_SHA256:
+      case OperatorType.NOT_ONE_OF_SHA256: {
+        const encoded = encodeUtf8(String(value))
+        const input = new Uint8Array(condition.value.salt.length + encoded.length)
+        input.set(condition.value.salt)
+        input.set(encoded, condition.value.salt.length)
+        const included = condition.value.hashes.includes(sha256Hex(input))
+        return condition.operator === OperatorType.ONE_OF_SHA256 ? included : !included
+      }
+      case OperatorType.SEMVER_EQUAL:
+      case OperatorType.SEMVER_NOT_EQUAL:
+      case OperatorType.SEMVER_LT:
+      case OperatorType.SEMVER_LTE:
+      case OperatorType.SEMVER_GT:
+      case OperatorType.SEMVER_GTE: {
+        const comparison = compareSemver(String(value), condition.value)
+        if (comparison === undefined) return false
+        if (condition.operator === OperatorType.SEMVER_EQUAL) return comparison === 0
+        if (condition.operator === OperatorType.SEMVER_NOT_EQUAL) return comparison !== 0
+        if (condition.operator === OperatorType.SEMVER_LT) return comparison < 0
+        if (condition.operator === OperatorType.SEMVER_LTE) return comparison <= 0
+        if (condition.operator === OperatorType.SEMVER_GT) return comparison > 0
+        return comparison >= 0
+      }
     }
   }
   return false
+}
+
+type Semver = { core: [string, string, string]; prerelease: string[] }
+
+function compareSemver(left: string, right: string): number | undefined {
+  const a = parseSemver(left)
+  const b = parseSemver(right)
+  if (!a || !b) return undefined
+  for (let index = 0; index < 3; index++) {
+    const comparison = compareNumericIdentifier(a.core[index], b.core[index])
+    if (comparison !== 0) return comparison
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1
+  }
+  for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index++) {
+    const leftIdentifier = a.prerelease[index]
+    const rightIdentifier = b.prerelease[index]
+    if (leftIdentifier === undefined || rightIdentifier === undefined) {
+      return leftIdentifier === rightIdentifier ? 0 : leftIdentifier === undefined ? -1 : 1
+    }
+    if (leftIdentifier === rightIdentifier) continue
+    const leftNumeric = /^\d+$/.test(leftIdentifier)
+    const rightNumeric = /^\d+$/.test(rightIdentifier)
+    if (leftNumeric && rightNumeric) return compareNumericIdentifier(leftIdentifier, rightIdentifier)
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+    return leftIdentifier < rightIdentifier ? -1 : 1
+  }
+  return 0
+}
+
+function parseSemver(value: string): Semver | undefined {
+  const match = value.match(
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+  )
+  if (!match) return undefined
+  const prerelease = match[4]?.split('.') ?? []
+  if (prerelease.some((identifier) => /^\d+$/.test(identifier) && identifier.length > 1 && identifier[0] === '0')) {
+    return undefined
+  }
+  return { core: [match[1], match[2], match[3]], prerelease }
+}
+
+function compareNumericIdentifier(left: string, right: string): number {
+  if (left.length !== right.length) return left.length < right.length ? -1 : 1
+  return left === right ? 0 : left < right ? -1 : 1
 }
 
 function compileRegex(pattern: string): RegExp {
