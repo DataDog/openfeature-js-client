@@ -10,8 +10,8 @@ const logger: Logger = {
   error: jest.fn(),
 }
 
-const rulesBasedConfiguration: FlagsConfiguration = {
-  rulesBased: {
+const rulesConfiguration: FlagsConfiguration = {
+  rules: {
     response: {
       createdAt: '2026-07-06T23:01:56.822Z',
       format: 'SERVER',
@@ -88,14 +88,14 @@ const precomputedConfiguration: FlagsConfiguration = {
 
 describe('CoreProvider', () => {
   it('has browser provider metadata', () => {
-    const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
+    const provider = new CoreProvider({ configuration: rulesConfiguration })
 
     expect(provider.metadata).toEqual({ name: 'datadog-core' })
     expect(provider.runsOn).toBe('client')
   })
 
   it('evaluates rules locally with the supplied context', async () => {
-    const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
+    const provider = new CoreProvider({ configuration: rulesConfiguration })
 
     await provider.initialize({ targetingKey: 'user-1', plan: 'free' })
 
@@ -168,7 +168,7 @@ describe('CoreProvider', () => {
   it('uses rules-based configuration when precomputed context does not match', async () => {
     const provider = new CoreProvider({
       configuration: {
-        ...rulesBasedConfiguration,
+        ...rulesConfiguration,
         precomputed: precomputedConfiguration.precomputed,
       },
     })
@@ -194,19 +194,19 @@ describe('CoreProvider', () => {
     const readyHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Ready, readyHandler)
 
-    provider.setConfiguration(rulesBasedConfiguration)
+    provider.setConfiguration(rulesConfiguration)
 
     expect(readyHandler).toHaveBeenCalledTimes(1)
   })
 
   it('emits ConfigurationChanged for replacement configuration', () => {
-    const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
+    const provider = new CoreProvider({ configuration: rulesConfiguration })
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
 
     provider.setConfiguration({
-      rulesBased: {
-        ...rulesBasedConfiguration.rulesBased!,
+      rules: {
+        ...rulesConfiguration.rules!,
         etag: 'new-rules-etag',
       },
     })
@@ -215,7 +215,7 @@ describe('CoreProvider', () => {
   })
 
   it('emits Error when setConfiguration receives an invalid configuration', () => {
-    const provider = new CoreProvider({ configuration: rulesBasedConfiguration })
+    const provider = new CoreProvider({ configuration: rulesConfiguration })
     const errorHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
 

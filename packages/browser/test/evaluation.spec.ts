@@ -9,8 +9,8 @@ const configuration = configurationFromString(
 )
 const matchingContext = configuration.precomputed?.context ?? {}
 
-const rulesBasedConfiguration: FlagsConfiguration = {
-  rulesBased: {
+const rulesConfiguration: FlagsConfiguration = {
+  rules: {
     response: {
       createdAt: '2026-07-06T23:01:56.822Z',
       format: 'SERVER',
@@ -263,7 +263,7 @@ describe('evaluate', () => {
   })
 
   it('evaluates rules-based configuration when present', () => {
-    const result = evaluate(rulesBasedConfiguration, 'string', 'dynamic-flag', 'default', {
+    const result = evaluate(rulesConfiguration, 'string', 'dynamic-flag', 'default', {
       targetingKey: 'user-1',
       plan: 'enterprise',
     })
@@ -282,7 +282,7 @@ describe('evaluate', () => {
   it('falls back to rules-based configuration when precomputed context does not match', () => {
     const result = evaluate(
       {
-        ...rulesBasedConfiguration,
+        ...rulesConfiguration,
         precomputed: configuration.precomputed,
       },
       'string',
