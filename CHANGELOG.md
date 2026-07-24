@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/flagging-core@2.0.2, @datadog/openfeature-browser@1.2.5, @datadog/openfeature-node-server@2.0.2
+
+**Bug Fixes:**
+
+- Remove `@datadog/js-core` from `@datadog/flagging-core` and `@datadog/openfeature-node-server` by moving the epoch timestamp primitive into core ([#342](https://github.com/DataDog/openfeature-js-client/pull/342)) [NODE-SERVER]
+
+**Internal Changes:**
+
+- Enforce packed Node.js dependency-tree purity against browser SDK packages ([#342](https://github.com/DataDog/openfeature-js-client/pull/342)) [NODE-SERVER]
+
 ## @datadog/flagging-core@2.0.1, @datadog/openfeature-browser@1.2.4, @datadog/openfeature-node-server@2.0.1
 
 **Bug Fixes:**
