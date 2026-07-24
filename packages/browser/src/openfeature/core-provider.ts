@@ -116,7 +116,7 @@ export class CoreProvider implements Provider {
 }
 
 function hasEvaluatableConfiguration(configuration: FlagsConfiguration): boolean {
-  return !!(configuration.precomputed || configuration.rulesBased)
+  return !!(configuration.precomputed || configuration.rules)
 }
 
 function getConfigurationError(configuration: FlagsConfiguration, context: EvaluationContext): Error | undefined {
@@ -124,7 +124,7 @@ function getConfigurationError(configuration: FlagsConfiguration, context: Evalu
     return new Error('No flags configuration has been set')
   }
 
-  if (!configuration.rulesBased && configuration.precomputed && !configMatchesContext(configuration, context)) {
+  if (!configuration.rules && configuration.precomputed && !configMatchesContext(configuration, context)) {
     return new Error('Precomputed flags configuration does not match the current context')
   }
 
