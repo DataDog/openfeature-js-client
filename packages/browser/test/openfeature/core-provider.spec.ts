@@ -104,7 +104,7 @@ describe('CoreProvider', () => {
     ).toMatchObject({
       value: 'disabled',
       variant: 'fallback',
-      reason: 'TARGETING_MATCH',
+      reason: 'SPLIT',
     })
 
     await provider.onContextChange(
