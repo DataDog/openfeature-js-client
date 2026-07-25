@@ -53,7 +53,7 @@ function isPrecomputedFlag(value: unknown): boolean {
     typeof value.variationType !== 'string' ||
     typeof value.reason !== 'string' ||
     typeof value.doLog !== 'boolean' ||
-    !isJsonRecord(value.extraLogging)
+    !isStringRecord(value.extraLogging)
   ) {
     return false
   }
@@ -71,8 +71,8 @@ function isPrecomputedFlag(value: unknown): boolean {
   return false
 }
 
-function isJsonRecord(value: unknown): boolean {
-  return isRecord(value) && Object.values(value).every(isJsonValue)
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string')
 }
 
 function isJsonValue(value: unknown): boolean {
