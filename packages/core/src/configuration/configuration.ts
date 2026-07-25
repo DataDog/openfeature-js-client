@@ -56,7 +56,7 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
-  extraLogging: Record<string, unknown>
+  extraLogging: Record<string, string>
 }
 
 /** @internal */

@@ -11,7 +11,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp "$FIXTURE_DIR/package.json" "$FIXTURE_DIR/index.js" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/package.json" "$FIXTURE_DIR/index.js" "$FIXTURE_DIR/metro.config.js" "$SMOKE_DIR/"
 
 echo "Packing @datadog/flagging-core..."
 cd "$REPO_ROOT/packages/core"
@@ -21,14 +21,17 @@ echo "Installing the React Native Metro smoke fixture..."
 cd "$SMOKE_DIR"
 npm install --ignore-scripts --no-audit --no-fund
 
-echo "Bundling the packed core package for Android with Metro..."
+echo "Bundling the packed core package with the React Native Metro configuration..."
 mkdir -p dist
-./node_modules/.bin/metro build index.js \
-  --platform android \
-  --dev false \
-  --minify false \
-  --max-workers 2 \
-  --out dist/index.bundle.js
+for platform in android ios; do
+  ./node_modules/.bin/metro build index.js \
+    --config metro.config.js \
+    --platform "$platform" \
+    --dev false \
+    --minify false \
+    --max-workers 2 \
+    --out "dist/index.$platform.bundle.js"
+done
 
 echo "Executing the Metro bundle without TextEncoder, TextDecoder, or BigInt..."
-node dist/index.bundle.js
+node dist/index.android.bundle.js

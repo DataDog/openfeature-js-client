@@ -14,7 +14,7 @@
           "variationType": "STRING",
           "variationValue": "red",
           "extraLogging": {
-            "experiment": true
+            "experiment": "true"
           },
           "doLog": true,
           "reason": "TARGETING_MATCH"
@@ -25,7 +25,7 @@
           "variationType": "BOOLEAN",
           "variationValue": true,
           "extraLogging": {
-            "experiment": true
+            "experiment": "true"
           },
           "doLog": true,
           "reason": "TARGETING_MATCH"
@@ -36,7 +36,7 @@
           "variationType": "NUMBER",
           "variationValue": 42,
           "extraLogging": {
-            "experiment": true
+            "experiment": "true"
           },
           "doLog": true,
           "reason": "TARGETING_MATCH"
@@ -47,7 +47,7 @@
           "variationType": "NUMBER",
           "variationValue": 3.14,
           "extraLogging": {
-            "experiment": true
+            "experiment": "true"
           },
           "doLog": true,
           "reason": "TARGETING_MATCH"
@@ -58,7 +58,7 @@
           "variationType": "OBJECT",
           "variationValue": { "key": "value", "prop": 123 },
           "extraLogging": {
-            "experiment": true
+            "experiment": "true"
           },
           "doLog": true,
           "reason": "TARGETING_MATCH"

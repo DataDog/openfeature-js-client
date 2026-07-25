@@ -6,6 +6,8 @@
     "@datadog/flagging-core": "file:./core.tgz"
   },
   "devDependencies": {
-    "metro": "0.84.3"
+    "@react-native/metro-config": "0.76.9",
+    "metro": "^0.83.1",
+    "react-native": "0.76.9"
   }
 }
