@@ -55,8 +55,6 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   variationValue: FlagTypeToValue<T>
   reason: ResolutionReason
   doLog: boolean
-  /** @deprecated This field is not used by SDKs. */
-  extraLogging: Record<string, string>
 }
 
 /** @internal */
