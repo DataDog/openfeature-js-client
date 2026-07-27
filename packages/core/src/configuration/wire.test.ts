@@ -15,7 +15,6 @@ const configuration: FlagsConfiguration = {
               variationValue: true,
               reason: 'STATIC',
               doLog: true,
-              extraLogging: { experiment: 'true' },
             },
           },
         },
@@ -152,20 +151,11 @@ describe('configuration wire', () => {
               variationValue,
               reason: 'STATIC',
               doLog: false,
-              extraLogging: {},
             },
           },
         },
       },
     }
-    const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
-
-    expect(configurationFromString(JSON.stringify(wire))).toEqual({})
-  })
-
-  it('rejects precomputed flags with non-string extra logging values', () => {
-    const response = JSON.parse(JSON.stringify(configuration.precomputed?.response))
-    response.data.attributes.flags['my-flag'].extraLogging = { experiment: true }
     const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
 
     expect(configurationFromString(JSON.stringify(wire))).toEqual({})

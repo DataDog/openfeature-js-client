@@ -56,8 +56,6 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
-  /** @deprecated This field is not used by SDKs. */
-  extraLogging: Record<string, string>
 }
 
 /** @internal */
