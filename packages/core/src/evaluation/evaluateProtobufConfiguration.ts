@@ -23,6 +23,7 @@ import { encodeUtf8 } from '../utf8'
 import { compareSemver, compileRegex } from './condition-helpers'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { getOwnProperty } from './getOwnProperty'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
 
@@ -40,7 +41,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     ...(subjectKey != null ? { id: subjectKey } : {}),
     ...remainingContext,
   }
-  const flag = configuration.flags[flagKey]
+  const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
     logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
     return {

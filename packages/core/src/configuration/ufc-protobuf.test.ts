@@ -241,6 +241,16 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
+  it.each(['constructor', '__proto__'])('treats inherited protobuf flag key %s as missing', (flagKey) => {
+    expect(
+      evaluateRulesBasedConfiguration(decodeRules(), 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND',
+    })
+  })
+
   it.each([
     [3, 1],
     [4, 1.5],
