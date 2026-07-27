@@ -1,5 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
 import { encodeUtf8 } from '../utf8'
+import { compileRegex } from './condition-helpers'
 import { compareSemver, parseSemver } from './semver'
 import { sha256Hex } from './sha256'
 
@@ -246,13 +247,6 @@ function evaluateSemverCondition(
     case OperatorType.SEMVER_GTE:
       return ordering >= 0
   }
-}
-
-function compileRegex(pattern: string): RegExp {
-  const inlineFlags = pattern.match(/^\(\?([imsu]+)\)/)
-  const flags = inlineFlags ? [...new Set(inlineFlags[1])].join('') : ''
-  const source = (inlineFlags ? pattern.slice(inlineFlags[0].length) : pattern).split('[:alnum:]').join('A-Za-z0-9')
-  return new RegExp(source, flags)
 }
 
 function isOneOf(attributeValue: string, conditionValues: string[]) {

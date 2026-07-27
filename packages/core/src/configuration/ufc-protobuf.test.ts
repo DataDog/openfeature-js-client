@@ -1,3 +1,5 @@
+import type { EvaluationContext, Logger } from '@openfeature/core'
+import { evaluateRulesBasedConfiguration } from '../evaluation'
 import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
 
 function varint(input: number | bigint): number[] {
@@ -62,29 +64,31 @@ function protobufCondition(kind: number, shaHash: string): number[] {
   return protobufMessage(8, [...protobufVarint(1, 0), ...protobufVarint(kind - 13, 0)])
 }
 
-function rulesResponse(
-  options: {
-    conditionKind?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20
-    shardAttribute?: boolean
-    nonFiniteVariation?: boolean
-    integerVariation?: bigint
-    variationType?: number
-    variationValueFields?: number[]
-    timeRanges?: Array<Array<{ from?: number; to?: number }>>
-    conditionMessages?: number[][]
-    targetingConditionIndex?: number
-    includeFallbackAllocation?: boolean
-    minimumFeatureLevel?: number
-    jsonValue?: string
-    observeFullEvaluationData?: boolean
-    futureFlagFeatureLevel?: number
-    unknownTopLevelCondition?: boolean
-    unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8
-    futurePartitionKeyFields?: number[]
-    futureVariationValueFields?: number[]
-    futureTargetingConditionIndex?: number
-  } = {}
-): string {
+type RulesResponseOptions = {
+  conditionKind?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20
+  shardAttribute?: boolean
+  nonFiniteVariation?: boolean
+  integerVariation?: bigint
+  variationType?: number
+  variationValueFields?: number[]
+  timeRanges?: Array<Array<{ from?: number; to?: number }>>
+  conditionMessages?: number[][]
+  targetingConditionIndex?: number
+  includeFallbackAllocation?: boolean
+  minimumFeatureLevel?: number
+  jsonValue?: string
+  observeFullEvaluationData?: boolean
+  futureFlagFeatureLevel?: number
+  unknownTopLevelCondition?: boolean
+  unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8
+  futurePartitionKeyFields?: number[]
+  futureVariationValueFields?: number[]
+  futureTargetingConditionIndex?: number
+  splitReason?: number
+  attributeName?: string
+}
+
+function rulesResponse(options: RulesResponseOptions = {}): string {
   const conditionKind = options.conditionKind ?? 9
   const shaHash = 'b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45'
   const condition = protobufCondition(conditionKind, shaHash)
@@ -117,7 +121,7 @@ function rulesResponse(
     ),
     ...protobufVarint(2, 0),
     ...protobufVarint(3, 7),
-    ...protobufVarint(4, 1),
+    ...protobufVarint(4, options.splitReason ?? 1),
   ])
   const allocation = [
     ...protobufString(1, 'allocation'),
@@ -173,7 +177,7 @@ function rulesResponse(
     ...protobufString(2, 'prod'),
     ...protobufMessage(3, flagEntry),
     ...(options.futureFlagFeatureLevel === undefined ? [] : protobufMessage(3, futureFlagEntry)),
-    ...protobufString(4, 'country'),
+    ...protobufString(4, options.attributeName ?? 'country'),
     ...protobufString(5, 'on'),
     ...protobufString(5, 'off'),
     ...protobufString(5, 'US'),
@@ -189,339 +193,290 @@ function rulesResponse(
   return Buffer.from(configuration).toString('base64')
 }
 
-type RulesResponseOptions = NonNullable<Parameters<typeof rulesResponse>[0]>
-
-function decodeResponse(response: string) {
-  return decodeUniversalFlagConfiguration(response)
+const logger: Logger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
 }
 
 function decodeRules(options: RulesResponseOptions = {}) {
-  return decodeResponse(rulesResponse(options))
+  return decodeUniversalFlagConfiguration(rulesResponse(options))
 }
 
-function decodeTestFlag(options: RulesResponseOptions = {}) {
-  return decodeRules(options).flags['test-flag']
-}
-
-function decodeTestCondition(options: RulesResponseOptions = {}) {
-  return decodeTestFlag(options).allocations[0].rules?.[0].conditions[0]
-}
-
-function decodeFlagKeys(options: RulesResponseOptions = {}) {
-  return Object.keys(decodeRules(options).flags)
+function evaluateBoolean(options: RulesResponseOptions, context: EvaluationContext) {
+  return evaluateRulesBasedConfiguration(decodeRules(options), 'boolean', 'test-flag', false, context, logger)
 }
 
 describe('UFC protobuf decoder', () => {
-  it('decodes a rules protobuf', () => {
-    expect(decodeRules()).toEqual({
-      createdAt: '1970-01-01T00:00:00.000Z',
-      format: 'SERVER',
+  it('returns the generated protobuf type without converting it to the JSON UFC shape', () => {
+    const configuration = decodeRules()
+    const flag = configuration.flags['test-flag']
+
+    expect(configuration).toMatchObject({
+      $typeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
+      environmentName: 'prod',
+      attributeNames: ['country'],
+      strings: ['on', 'off', 'US'],
       observeFullEvaluationData: false,
-      environment: { name: 'prod' },
-      flags: {
-        'test-flag': {
-          key: 'test-flag',
-          enabled: true,
-          variationType: 'BOOLEAN',
-          variations: { on: { key: 'on', value: true } },
-          allocations: [
-            {
-              key: 'allocation',
-              rules: [
-                {
-                  conditions: [{ operator: 'ONE_OF', attribute: 'country', value: ['US'] }],
-                },
-              ],
-              splits: [
-                {
-                  variationKey: 'on',
-                  shards: [
-                    {
-                      salt: 'salt',
-                      totalShards: 100,
-                      hashMode: 'PROTOBUF_V1',
-                      ranges: [{ start: 0, end: 100 }],
-                    },
-                  ],
-                  serialId: 7,
-                  reason: 'TARGETING_MATCH',
-                },
-              ],
-              doLog: true,
-            },
-          ],
-        },
-      },
+    })
+    expect(flag).toMatchObject({ variationType: 4, minimumFeatureLevel: 0 })
+    expect(flag.allocations[0]).toMatchObject({ targetingConditionIndex: 0, logExposureEvent: true })
+    expect(configuration.conditions[0].kind.case).toBe('stringMembership')
+  })
+
+  it.each(['not base64', 'CA=='])('rejects malformed rules response %s', (response) => {
+    expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
+  })
+
+  it.each(['A=', 'AA=', 'AB=='])('rejects rules response with invalid base64 padding %s', (response) => {
+    expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
+  })
+
+  it('evaluates the generated protobuf directly', () => {
+    expect(evaluateBoolean({}, { targetingKey: 'user', country: 'US' })).toMatchObject({
+      value: true,
+      variant: 'on',
+      reason: 'TARGETING_MATCH',
     })
   })
 
-  it.each(['not base64', 'CA=='])('omits malformed rules response %s', (response) => {
-    expect(() => decodeResponse(response)).toThrow()
+  it.each([
+    [3, 1],
+    [4, 1.5],
+    [5, 2],
+    [6, 1.5],
+    [7, 'US'],
+    [8, 'CA'],
+    [9, 'US'],
+    [10, 'CA'],
+    [11, 'US'],
+    [12, 'CA'],
+    [13, undefined],
+    [14, 'US'],
+    [15, '1.2.3'],
+    [16, '2.0.0'],
+    [17, '1.0.0'],
+    [18, '1.2.3'],
+    [19, '2.0.0'],
+    [20, '1.2.3'],
+  ] as const)('evaluates condition kind %s from interned protobuf data', (conditionKind, country) => {
+    expect(
+      evaluateBoolean({ conditionKind }, { targetingKey: 'user', ...(country === undefined ? {} : { country }) }).value
+    ).toBe(true)
   })
 
-  it.each(['A=', 'AA=', 'AB=='])('omits rules response with invalid base64 padding %s', (response) => {
-    expect(() => decodeResponse(response)).toThrow()
+  it('preserves empty ANY semantics without rewriting allocations', () => {
+    const configuration = decodeRules({ conditionKind: 2 })
+
+    expect(configuration.flags['test-flag'].allocations).toHaveLength(1)
+    expect(
+      evaluateRulesBasedConfiguration(configuration, 'boolean', 'test-flag', false, { targetingKey: 'user' }, logger)
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
   })
 
-  it('preserves the rules config but omits an allocation targeted by empty ANY', () => {
-    expect(decodeTestFlag({ conditionKind: 2 }).allocations).toEqual([])
-  })
-
-  it('propagates a false ANY through ALL while preserving another allocation', () => {
+  it('uses a fallback allocation when an ALL contains an empty ANY', () => {
     const emptyAny = protobufMessage(2, [])
     const allContainingFalse = protobufMessage(1, protobufVarint(1, 0))
-    const flag = decodeTestFlag({
-      conditionMessages: [emptyAny, allContainingFalse],
-      targetingConditionIndex: 1,
-      includeFallbackAllocation: true,
-    })
+    const result = evaluateBoolean(
+      {
+        conditionMessages: [emptyAny, allContainingFalse],
+        targetingConditionIndex: 1,
+        includeFallbackAllocation: true,
+      },
+      { targetingKey: 'user' }
+    )
 
-    expect(flag.allocations.map(({ key }) => key)).toEqual(['fallback'])
+    expect(result).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    expect(result.flagMetadata).toMatchObject({ allocationKey: 'fallback' })
   })
 
-  it('omits a protobuf containing a non-finite variation value', () => {
-    const restored = decodeRules({ nonFiniteVariation: true })
+  it('retains direct protobuf variation values and evaluates JSON scalars', () => {
+    const configuration = decodeRules({ jsonValue: '"scalar"' })
+    const variation = configuration.flags['test-flag'].variations[0]
 
-    expect(restored.flags).toEqual({})
+    expect(variation.value).toEqual({ case: 'jsonStringIndex', value: 0 })
+    expect(
+      evaluateRulesBasedConfiguration(
+        configuration,
+        'object',
+        'test-flag',
+        null,
+        { targetingKey: 'user', country: 'US' },
+        logger
+      ).value
+    ).toBe('scalar')
   })
 
-  it('decodes a negative int64 variation without requiring runtime BigInt support', () => {
-    expect(decodeTestFlag({ integerVariation: BigInt(-42) }).variations.on.value).toBe(-42)
+  it('keeps valid flags while dropping unsupported or invalid flags', () => {
+    expect(Object.keys(decodeRules({ minimumFeatureLevel: 1 }).flags)).toEqual([])
+    expect(Object.keys(decodeRules({ nonFiniteVariation: true }).flags)).toEqual([])
+    expect(Object.keys(decodeRules({ jsonValue: '1e400' }).flags)).toEqual([])
+    expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 1 }).flags)).toEqual(['test-flag'])
   })
 
-  it('omits an int64 variation outside the JavaScript safe integer range', () => {
+  it('rejects an int64 variation outside the JavaScript safe integer range', () => {
     expect(() => decodeRules({ integerVariation: BigInt('9007199254740992') })).toThrow(
       'Protobuf int64 is outside the JavaScript safe integer range'
     )
   })
 
-  it.each([
-    [3, 'LT'],
-    [4, 'LTE'],
-    [5, 'GT'],
-    [6, 'GTE'],
-  ] as const)('decodes numeric comparator kind %s', (conditionKind, operator) => {
-    const condition = decodeTestCondition({ conditionKind })
+  it('keeps a negative int64 variation as protobuf and evaluates it as a number', () => {
+    const configuration = decodeRules({ integerVariation: BigInt(-42) })
 
-    expect(condition).toEqual({ operator, attribute: 'country', value: 1.5 })
-  })
-
-  it.each([
-    [7, 'MATCHES'],
-    [8, 'NOT_MATCHES'],
-  ] as const)('decodes regex comparator kind %s', (conditionKind, operator) => {
-    const condition = decodeTestCondition({ conditionKind })
-
-    expect(condition).toEqual({ operator, attribute: 'country', value: '^US$' })
-  })
-
-  it.each([
-    [9, 'ONE_OF'],
-    [10, 'NOT_ONE_OF'],
-  ] as const)('decodes string-membership comparator kind %s', (conditionKind, operator) => {
-    const condition = decodeTestCondition({ conditionKind })
-
-    expect(condition).toEqual({ operator, attribute: 'country', value: ['US'] })
-  })
-
-  it.each([
-    [13, true],
-    [14, false],
-  ] as const)('decodes attribute-presence comparator kind %s', (conditionKind, value) => {
-    const condition = decodeTestCondition({ conditionKind })
-
-    expect(condition).toEqual({ operator: 'IS_NULL', attribute: 'country', value })
-  })
-
-  it.each([
-    [15, 'SEMVER_EQUAL'],
-    [16, 'SEMVER_NOT_EQUAL'],
-    [17, 'SEMVER_LT'],
-    [18, 'SEMVER_LTE'],
-    [19, 'SEMVER_GT'],
-    [20, 'SEMVER_GTE'],
-  ] as const)('decodes SemVer condition kind %s', (conditionKind, operator) => {
-    expect(decodeTestCondition({ conditionKind })).toEqual({
-      operator,
-      attribute: 'country',
-      value: '1.2.3',
+    expect(configuration.flags['test-flag'].variations[0].value).toEqual({
+      case: 'integerValue',
+      value: BigInt(-42),
     })
+    expect(
+      evaluateRulesBasedConfiguration(
+        configuration,
+        'number',
+        'test-flag',
+        0,
+        { targetingKey: 'user', country: 'US' },
+        logger
+      ).value
+    ).toBe(-42)
   })
 
-  it.each([
-    [11, 'ONE_OF_SHA256'],
-    [12, 'NOT_ONE_OF_SHA256'],
-  ] as const)('decodes SHA-256 condition kind %s', (conditionKind, operator) => {
-    expect(decodeTestCondition({ conditionKind })).toMatchObject({
-      operator,
-      attribute: 'country',
-      value: {
-        salt: [1, 2],
-        hashes: ['b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45'],
-      },
-    })
+  it('uses the last protobuf variation oneof field', () => {
+    const variation = decodeRules({
+      variationType: 2,
+      variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
+    }).flags['test-flag'].variations[0]
+
+    expect(variation.value).toEqual({ case: 'integerValue', value: BigInt(-42) })
   })
 
-  it('skips a flag requiring a higher feature level without dropping the configuration', () => {
-    const restored = decodeRules({ minimumFeatureLevel: 1 })
+  it('accepts a finite numeric variation that overwrites an earlier non-finite value', () => {
+    expect(
+      Object.keys(
+        decodeRules({
+          variationType: 3,
+          variationValueFields: [...protobufDouble(4, Number.NaN), ...protobufDouble(4, 2.5)],
+        }).flags
+      )
+    ).toEqual(['test-flag'])
+  })
 
-    expect(restored.environment).toEqual({ name: 'prod' })
-    expect(restored.flags).toEqual({})
+  it('drops a flag whose final numeric variation is non-finite', () => {
+    expect(
+      Object.keys(
+        decodeRules({
+          variationType: 3,
+          variationValueFields: [...protobufDouble(4, 2.5), ...protobufDouble(4, Number.NaN)],
+        }).flags
+      )
+    ).toEqual([])
+  })
+
+  it('drops a flag whose final variation oneof disagrees with its variation type', () => {
+    expect(
+      Object.keys(
+        decodeRules({
+          variationType: 4,
+          variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
+        }).flags
+      )
+    ).toEqual([])
   })
 
   it.each([
     ['{"enabled":true}', { enabled: true }],
     ['"scalar"', 'scalar'],
     ['42', 42],
-  ])('decodes an interned JSON variation %s', (jsonValue, expected) => {
-    expect(decodeTestFlag({ jsonValue }).variations.on.value).toEqual(expected)
-  })
+  ])('evaluates interned JSON variation %s', (jsonValue, expected) => {
+    const configuration = decodeRules({ jsonValue })
 
-  it('rejects a non-finite interned JSON variation', () => {
-    const restored = decodeRules({ jsonValue: '1e400' })
-
-    expect(restored.flags).toEqual({})
-  })
-
-  it('propagates observeFullEvaluationData', () => {
-    const restored = decodeRules({ observeFullEvaluationData: true })
-
-    expect(restored.observeFullEvaluationData).toBe(true)
-  })
-
-  it('uses the last protobuf variation oneof field', () => {
     expect(
-      decodeTestFlag({
-        variationType: 2,
-        variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
-      }).variations.on.value
-    ).toBe(-42)
+      evaluateRulesBasedConfiguration(
+        configuration,
+        'object',
+        'test-flag',
+        null,
+        { targetingKey: 'user', country: 'US' },
+        logger
+      ).value
+    ).toEqual(expected)
   })
 
-  it('accepts a valid numeric variation that overwrites an earlier non-finite value', () => {
+  it.each([
+    { fields: [...protobufMessage(99, []), ...protobufMessage(1, [])] },
+    { fields: [...protobufMessage(1, []), ...protobufMessage(99, [])] },
+  ])('drops a supported flag with an unknown partition-key field', ({ fields }) => {
     expect(
-      decodeTestFlag({
-        variationType: 3,
-        variationValueFields: [...protobufDouble(4, Number.NaN), ...protobufDouble(4, 2.5)],
-      }).variations.on.value
-    ).toBe(2.5)
-  })
-
-  it('omits a flag whose final numeric variation is non-finite', () => {
-    const restored = decodeRules({
-      variationType: 3,
-      variationValueFields: [...protobufDouble(4, 2.5), ...protobufDouble(4, Number.NaN)],
-    })
-
-    expect(restored.flags).toEqual({})
-  })
-
-  it('rejects a last variation oneof field that disagrees with the flag type', () => {
-    const restored = decodeRules({
-      variationType: 4,
-      variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
-    })
-
-    expect(restored.flags).toEqual({})
-  })
-
-  it('skips a higher-level flag referencing an unknown nested comparator', () => {
-    expect(decodeFlagKeys({ futureFlagFeatureLevel: 1 })).toEqual(['test-flag'])
-  })
-
-  it.each([1, 0])(
-    'retains the valid flag when a feature-level %s flag uses a future partition key',
-    (futureFlagFeatureLevel) => {
-      expect(
-        decodeFlagKeys({
-          futureFlagFeatureLevel,
+      Object.keys(
+        decodeRules({
+          futureFlagFeatureLevel: 0,
           futureTargetingConditionIndex: 0,
-          futurePartitionKeyFields: protobufMessage(99, []),
-        })
-      ).toEqual(['test-flag'])
-    }
-  )
-
-  it('omits only a supported flag whose partition key kind is missing', () => {
-    expect(
-      decodeFlagKeys({
-        futureFlagFeatureLevel: 0,
-        futureTargetingConditionIndex: 0,
-        futurePartitionKeyFields: [],
-      })
+          futurePartitionKeyFields: fields,
+        }).flags
+      )
     ).toEqual(['test-flag'])
   })
 
-  it.each([
-    {
-      description: 'unknown then known',
-      fields: [...protobufMessage(99, []), ...protobufMessage(1, [])],
-      expectedFlags: ['test-flag'],
-    },
-    {
-      description: 'known then unknown',
-      fields: [...protobufMessage(1, []), ...protobufMessage(99, [])],
-      expectedFlags: ['test-flag'],
-    },
-  ])('rejects a partition key containing unknown oneof data for $description', ({ fields, expectedFlags }) => {
-    expect(
-      decodeFlagKeys({
-        futureFlagFeatureLevel: 0,
-        futureTargetingConditionIndex: 0,
-        futurePartitionKeyFields: fields,
-      })
-    ).toEqual(expectedFlags)
-  })
+  it.each([3, 4, 5, 6, 7, 8] as const)(
+    'drops a supported flag referencing an unknown condition comparator in group %s',
+    (unknownConditionGroup) => {
+      expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 0, unknownConditionGroup }).flags)).toEqual([
+        'test-flag',
+      ])
+    }
+  )
 
-  it.each([1, 0])(
+  it.each([0, 1])(
     'retains the valid flag when a feature-level %s flag uses a future variation value',
     (futureFlagFeatureLevel) => {
       expect(
-        decodeFlagKeys({
-          futureFlagFeatureLevel,
-          futureTargetingConditionIndex: 0,
-          futureVariationValueFields: protobufMessage(99, []),
-        })
+        Object.keys(
+          decodeRules({
+            futureFlagFeatureLevel,
+            futureTargetingConditionIndex: 0,
+            futureVariationValueFields: protobufMessage(99, []),
+          }).flags
+        )
       ).toEqual(['test-flag'])
     }
   )
 
   it.each([
-    {
-      description: 'unknown then known',
-      fields: [...protobufMessage(99, []), ...protobufVarint(5, 1)],
-      expectedFlags: ['test-flag'],
-    },
-    {
-      description: 'known then unknown',
-      fields: [...protobufVarint(5, 1), ...protobufMessage(99, [])],
-      expectedFlags: ['test-flag'],
-    },
-  ])('rejects a variation containing unknown oneof data for $description', ({ fields, expectedFlags }) => {
+    { fields: [...protobufMessage(99, []), ...protobufVarint(5, 1)] },
+    { fields: [...protobufVarint(5, 1), ...protobufMessage(99, [])] },
+  ])('drops a supported flag whose variation contains unknown oneof data', ({ fields }) => {
     expect(
-      decodeFlagKeys({
-        futureFlagFeatureLevel: 0,
-        futureTargetingConditionIndex: 0,
-        futureVariationValueFields: fields,
-      })
-    ).toEqual(expectedFlags)
+      Object.keys(
+        decodeRules({
+          futureFlagFeatureLevel: 0,
+          futureTargetingConditionIndex: 0,
+          futureVariationValueFields: fields,
+        }).flags
+      )
+    ).toEqual(['test-flag'])
   })
 
-  it.each([3, 4, 5, 6, 7, 8] as const)(
-    'omits only a supported flag referencing an unknown comparator in condition group %s',
-    (unknownConditionGroup) => {
-      expect(decodeFlagKeys({ futureFlagFeatureLevel: 0, unknownConditionGroup })).toEqual(['test-flag'])
-    }
-  )
-
-  it('omits only a supported flag referencing an unknown top-level condition', () => {
-    expect(decodeFlagKeys({ futureFlagFeatureLevel: 0, unknownTopLevelCondition: true })).toEqual(['test-flag'])
+  it('drops a supported flag whose partition key kind is missing', () => {
+    expect(
+      Object.keys(
+        decodeRules({
+          futureFlagFeatureLevel: 0,
+          futureTargetingConditionIndex: 0,
+          futurePartitionKeyFields: [],
+        }).flags
+      )
+    ).toEqual(['test-flag'])
   })
 
-  it('rejects a nested comparator containing unknown oneof data', () => {
+  it('drops a supported flag referencing an unknown top-level condition', () => {
+    expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 0, unknownTopLevelCondition: true }).flags)).toEqual([
+      'test-flag',
+    ])
+  })
+
+  it('drops a flag referencing a nested comparator with unknown data', () => {
     const numeric = protobufMessage(3, [...protobufVarint(1, 0), ...protobufMessage(99, []), ...protobufDouble(2, 1.5)])
 
-    expect(decodeFlagKeys({ conditionMessages: [numeric] })).toEqual([])
+    expect(Object.keys(decodeRules({ conditionMessages: [numeric] }).flags)).toEqual([])
   })
 
   it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
@@ -530,62 +485,112 @@ describe('UFC protobuf decoder', () => {
       ...protobufDouble(2, Number.NaN),
       ...protobufDouble(2, 1.5),
     ])
-    const condition = decodeTestCondition({ conditionMessages: [numeric] })
 
-    expect(condition).toEqual({ operator: 'LT', attribute: 'country', value: 1.5 })
+    expect(evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: 1 }).value).toBe(true)
   })
 
-  it('omits a flag whose final numeric comparator is non-finite', () => {
+  it('drops a flag whose final numeric comparator is non-finite', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
       ...protobufDouble(2, 1.5),
       ...protobufDouble(2, Number.NaN),
     ])
-    expect(decodeRules({ conditionMessages: [numeric] }).flags).toEqual({})
+
+    expect(Object.keys(decodeRules({ conditionMessages: [numeric] }).flags)).toEqual([])
   })
 
-  it('preserves different time ranges for ordered splits', () => {
-    const allocations = decodeTestFlag({
-      timeRanges: [[{ from: 100, to: 200 }], [{ from: 200, to: 300 }]],
-    }).allocations
-
-    expect(allocations).toHaveLength(2)
-    expect(allocations.map(({ startAt, endAt }) => [startAt?.getTime(), endAt?.getTime()])).toEqual([
-      [100, 200],
-      [200, 300],
-    ])
-  })
-
-  it('intersects multiple time partition dimensions', () => {
-    const allocation = decodeTestFlag({
+  it('preserves composite time ranges in the protobuf representation', () => {
+    const allocation = decodeRules({
       timeRanges: [
         [
           { from: 100, to: 400 },
           { from: 150, to: 300 },
         ],
       ],
-    }).allocations[0]
+    }).flags['test-flag'].allocations[0]
 
-    expect([allocation.startAt?.getTime(), allocation.endAt?.getTime()]).toEqual([150, 300])
+    expect(allocation.partitionKey.map((partition) => partition.kind.case)).toEqual(['time', 'time'])
+    expect(allocation.splits[0].ranges).toMatchObject([
+      { from: BigInt(100), to: BigInt(400) },
+      { from: BigInt(150), to: BigInt(300) },
+    ])
   })
 
-  it('retains an always-nonmatching window for an empty time intersection', () => {
-    const allocation = decodeTestFlag({
+  it('preserves ordered split time ranges', () => {
+    const splits = decodeRules({
+      timeRanges: [[{ from: 100, to: 200 }], [{ from: 200, to: 300 }]],
+    }).flags['test-flag'].allocations[0].splits
+
+    expect(splits.map((split) => split.ranges[0])).toMatchObject([
+      { from: BigInt(100), to: BigInt(200) },
+      { from: BigInt(200), to: BigInt(300) },
+    ])
+  })
+
+  it('preserves an empty composite time intersection for direct evaluation', () => {
+    const ranges = decodeRules({
       timeRanges: [
         [
           { from: 100, to: 200 },
           { from: 300, to: 400 },
         ],
       ],
-    }).allocations[0]
+    }).flags['test-flag'].allocations[0].splits[0].ranges
 
-    expect([allocation.startAt?.getTime(), allocation.endAt?.getTime()]).toEqual([300, 300])
+    expect(ranges).toMatchObject([
+      { from: BigInt(100), to: BigInt(200) },
+      { from: BigInt(300), to: BigInt(400) },
+    ])
   })
 
-  it('preserves a non-targeting-key shard attribute', () => {
-    expect(decodeTestFlag({ shardAttribute: true }).allocations[0].splits[0].shards[0]).toMatchObject({
-      attribute: 'country',
-      hashMode: 'PROTOBUF_V1',
+  it('evaluates a shard using its protobuf attribute index without requiring a targeting key', () => {
+    expect(evaluateBoolean({ shardAttribute: true }, { country: 'US' })).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
     })
+  })
+
+  it('uses the separately supplied targeting key for an explicit targetingKey partition attribute', () => {
+    const result = evaluateBoolean(
+      { shardAttribute: true, attributeName: 'targetingKey', includeFallbackAllocation: true },
+      { targetingKey: 'US' }
+    )
+
+    expect(result).toMatchObject({ value: true })
+    expect(result.flagMetadata).toMatchObject({ allocationKey: 'fallback' })
+  })
+
+  it('requires a targeting key for a protobuf shard without an attribute index', () => {
+    expect(evaluateBoolean({}, { country: 'US' })).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'TARGETING_KEY_MISSING',
+    })
+  })
+
+  it('returns a type mismatch before evaluating protobuf allocations', () => {
+    expect(
+      evaluateRulesBasedConfiguration(
+        decodeRules(),
+        'string',
+        'test-flag',
+        'default',
+        { targetingKey: 'user', country: 'US' },
+        logger
+      )
+    ).toMatchObject({ value: 'default', reason: 'ERROR', errorCode: 'TYPE_MISMATCH' })
+  })
+
+  it.each([
+    [1, 'TARGETING_MATCH'],
+    [2, 'SPLIT'],
+    [3, 'STATIC'],
+    [4, 'DEFAULT'],
+  ] as const)('uses explicit protobuf reason %s', (splitReason, reason) => {
+    expect(evaluateBoolean({ splitReason }, { targetingKey: 'user', country: 'US' }).reason).toBe(reason)
+  })
+
+  it('propagates observeFullEvaluationData on the protobuf configuration', () => {
+    expect(decodeRules({ observeFullEvaluationData: true }).observeFullEvaluationData).toBe(true)
   })
 })
