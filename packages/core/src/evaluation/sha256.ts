@@ -11,7 +11,7 @@ const ROUND_CONSTANTS = [
   0xc67178f2,
 ]
 
-export function sha256Hex(input: Uint8Array): string {
+export function sha256(input: Uint8Array): Uint8Array {
   const paddedLength = Math.ceil((input.length + 9) / 64) * 64
   const padded = new Uint8Array(paddedLength)
   padded.set(input)
@@ -59,7 +59,16 @@ export function sha256Hex(input: Uint8Array): string {
     hash[6] = (hash[6] + g) >>> 0
     hash[7] = (hash[7] + h) >>> 0
   }
-  return hash.map((word) => word.toString(16).padStart(8, '0')).join('')
+  const result = new Uint8Array(32)
+  const resultView = new DataView(result.buffer)
+  hash.forEach((word, index) => {
+    resultView.setUint32(index * 4, word, false)
+  })
+  return result
+}
+
+export function sha256Hex(input: Uint8Array): string {
+  return [...sha256(input)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function rotateRight(value: number, count: number): number {

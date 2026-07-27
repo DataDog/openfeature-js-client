@@ -17,8 +17,6 @@ export interface Shard {
   salt: string
   ranges: ShardRange[]
   totalShards: number
-  attribute?: string
-  hashMode?: 'PROTOBUF_V1'
 }
 
 export interface Split {
@@ -26,7 +24,6 @@ export interface Split {
   shards: Shard[]
   extraLogging?: Record<string, string>
   serialId?: number
-  reason?: 'TARGETING_MATCH' | 'SPLIT' | 'STATIC' | 'DEFAULT'
 }
 
 export interface Allocation {
@@ -49,7 +46,6 @@ export interface Flag {
 export interface UniversalFlagConfigurationV1 {
   createdAt: string
   format: string
-  observeFullEvaluationData?: boolean
   environment: {
     name: string
   }

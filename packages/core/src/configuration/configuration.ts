@@ -1,6 +1,6 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
-import type { UniversalFlagConfigurationV1 } from '../evaluation'
 import type { TimeStamp } from '../time'
+import type { FlagsConfiguration as ProtobufFlagsConfiguration } from './generated/ufc_pb'
 
 /**
  * Internal flags configuration for DatadogProvider.
@@ -22,7 +22,7 @@ export type PrecomputedConfiguration = {
 
 /** @internal */
 export type RulesConfiguration = {
-  response: UniversalFlagConfigurationV1
+  response: ProtobufFlagsConfiguration
   fetchedAt?: TimeStamp
   etag?: string
 }
@@ -55,6 +55,7 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   variationValue: FlagTypeToValue<T>
   reason: ResolutionReason
   doLog: boolean
+  /** @deprecated This field is not used by SDKs. */
   extraLogging: Record<string, string>
 }
 

@@ -1,13 +1,15 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue } from '../configuration'
+import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
 import { timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
+import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
-  config: UniversalFlagConfigurationV1 | undefined,
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration | undefined,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
@@ -23,6 +25,10 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
       errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
+  }
+
+  if (isProtobufConfiguration(config)) {
+    return evaluateProtobufConfiguration(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs)
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context
@@ -62,4 +68,10 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
+}
+
+function isProtobufConfiguration(
+  configuration: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration
+): configuration is ProtobufFlagsConfiguration {
+  return '$typeName' in configuration && configuration.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration'
 }
