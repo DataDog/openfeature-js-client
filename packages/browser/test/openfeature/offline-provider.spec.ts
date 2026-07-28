@@ -1,8 +1,9 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/configuration'
-import type { Logger } from '@openfeature/core'
-import { ProviderEvents } from '@openfeature/web-sdk'
+import type { EvaluationContext, Logger } from '@openfeature/core'
+import { InvalidContextError, OpenFeature, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
+import precomputedWire from '../data/precomputed-v1-wire.json'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const logger: Logger = {
@@ -13,6 +14,7 @@ const logger: Logger = {
 }
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
+const decodedPrecomputedConfiguration = configurationFromString(JSON.stringify(precomputedWire))
 
 const precomputedConfiguration: FlagsConfiguration = {
   precomputed: {
@@ -142,17 +144,42 @@ describe('DatadogOfflineProvider', () => {
     })
   })
 
+  it('adopts the context embedded in decoded precomputed configuration when initialized without a context', async () => {
+    const provider = new DatadogOfflineProvider({ configuration: decodedPrecomputedConfiguration })
+
+    await expect(provider.initialize({})).resolves.toBeUndefined()
+
+    expect(provider.resolveStringEvaluation('string-flag', 'default', {}, logger)).toMatchObject({
+      value: 'red',
+      variant: 'variation-123',
+      reason: 'TARGETING_MATCH',
+    })
+  })
+
+  it('treats a context containing only undefined values as empty', async () => {
+    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
+    const emptyContext = { targetingKey: undefined } as unknown as EvaluationContext
+
+    await expect(provider.initialize(emptyContext)).resolves.toBeUndefined()
+
+    expect(provider.resolveStringEvaluation('static-flag', 'default', emptyContext, logger)).toMatchObject({
+      value: 'static-value',
+      variant: 'static-variation',
+      reason: 'TARGETING_MATCH',
+    })
+  })
+
   it('throws for precomputed-only context changes that do not match the configuration', async () => {
     const provider = providerWithConfiguration(precomputedConfiguration)
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
-    expect(() =>
+    expect(() => {
       provider.onContextChange(
         { targetingKey: 'static-user', plan: 'free' },
         { targetingKey: 'other-user', plan: 'free' }
       )
-    ).toThrow('Precomputed flags configuration does not match the current context')
+    }).toThrow(InvalidContextError)
 
     expect(
       provider.resolveStringEvaluation('static-flag', 'default', { targetingKey: 'other-user', plan: 'free' }, logger)
@@ -254,5 +281,52 @@ describe('DatadogOfflineProvider', () => {
       errorCode: 'PROVIDER_NOT_READY',
       errorMessage: 'No flags configuration has been set',
     })
+  })
+
+  it('throws ProviderNotReadyError when initialized without evaluatable configuration', async () => {
+    const provider = new DatadogOfflineProvider({ configuration: {} })
+
+    await expect(provider.initialize({})).rejects.toBeInstanceOf(ProviderNotReadyError)
+  })
+})
+
+describe('DatadogOfflineProvider precomputed lifecycle', () => {
+  beforeEach(async () => {
+    await OpenFeature.clearProviders()
+    await OpenFeature.clearContext()
+    OpenFeature.clearHandlers()
+  })
+
+  afterEach(async () => {
+    await OpenFeature.clearProviders()
+    await OpenFeature.clearContext()
+    OpenFeature.clearHandlers()
+  })
+
+  it('recovers the embedded context after the OpenFeature context is cleared', async () => {
+    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
+    await OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+
+    expect(client.getStringValue('static-flag', 'default')).toBe('static-value')
+
+    await OpenFeature.setContext({ targetingKey: 'other-user', plan: 'free' })
+
+    const errorHandler = jest.fn()
+    OpenFeature.addHandler(ProviderEvents.Error, errorHandler)
+    expect(errorHandler).toHaveBeenCalledTimes(1)
+    expect(client.getStringDetails('static-flag', 'default')).toMatchObject({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT',
+    })
+
+    await OpenFeature.clearContext()
+
+    const readyHandler = jest.fn()
+    OpenFeature.addHandler(ProviderEvents.Ready, readyHandler)
+
+    expect(readyHandler).toHaveBeenCalledTimes(1)
+    expect(client.getStringValue('static-flag', 'default')).toBe('static-value')
   })
 })
