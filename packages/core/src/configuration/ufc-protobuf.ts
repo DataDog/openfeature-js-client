@@ -13,7 +13,7 @@ import {
 } from './generated/ufc_pb'
 
 export function decodeUniversalFlagConfiguration(response: string): FlagsConfiguration {
-  const configuration = fromBinary(FlagsConfigurationSchema, decodeBase64(response))
+  const configuration = fromBinary(FlagsConfigurationSchema, base64Decode(response))
   validateTimestamp(configuration)
   validateSafeIntegers(configuration)
   for (const [key, flag] of Object.entries(configuration.flags)) {
@@ -22,36 +22,6 @@ export function decodeUniversalFlagConfiguration(response: string): FlagsConfigu
     }
   }
   return configuration
-}
-
-function decodeBase64(input: string): Uint8Array {
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
-    throw new Error('Invalid base64')
-  }
-  const unpadded = input.replace(/=+$/, '')
-  const padding = input.length - unpadded.length
-  const remainder = unpadded.length % 4
-  if (remainder === 1 || (padding > 0 && (input.length % 4 !== 0 || padding !== (4 - remainder) % 4))) {
-    throw new Error('Invalid base64 padding')
-  }
-  if (remainder > 1) {
-    const lastValue = base64Value(unpadded.charCodeAt(unpadded.length - 1))
-    const unusedBits = remainder === 2 ? 4 : 2
-    if ((lastValue & ((1 << unusedBits) - 1)) !== 0) throw new Error('Non-canonical base64')
-  }
-  return base64Decode(input)
-}
-
-function base64Value(code: number): number {
-  return code >= 65 && code <= 90
-    ? code - 65
-    : code >= 97 && code <= 122
-      ? code - 71
-      : code >= 48 && code <= 57
-        ? code + 4
-        : code === 43
-          ? 62
-          : 63
 }
 
 function isSupportedFlag(flag: Flag, configuration: FlagsConfiguration): boolean {
