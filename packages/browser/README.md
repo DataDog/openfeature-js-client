@@ -113,6 +113,20 @@ If the RUM user changes after provider initialization, call
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
 
+## Offline configuration parsing
+
+The configuration parser is exposed through an optional entry point:
+
+```javascript
+import { configurationFromString } from '@datadog/openfeature-browser/configuration'
+
+const configuration = configurationFromString(wire)
+```
+
+It accepts both precomputed and rules-based wire configurations. Protobuf
+support is included only when this entry point is imported; applications that
+use only the main browser provider entry point do not include it.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula

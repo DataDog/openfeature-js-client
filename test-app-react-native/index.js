@@ -2,7 +2,8 @@ globalThis.TextEncoder = undefined
 globalThis.TextDecoder = undefined
 globalThis.BigInt = undefined
 
-const { configurationFromString, evaluateRulesBasedConfiguration } = require('@datadog/flagging-core')
+const { evaluateRulesBasedConfiguration } = require('@datadog/flagging-core')
+const { configurationFromString } = require('@datadog/flagging-core/configuration')
 
 const configuration = configurationFromString(
   JSON.stringify({

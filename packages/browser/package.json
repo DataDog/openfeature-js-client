@@ -12,12 +12,25 @@
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "configuration": [
+        "cjs/configuration.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./cjs/index.d.ts",
       "import": "./esm/index.js",
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
+    },
+    "./configuration": {
+      "types": "./cjs/configuration.d.ts",
+      "import": "./esm/configuration.js",
+      "require": "./cjs/configuration.js",
+      "default": "./esm/configuration.js"
     },
     "./package.json": "./package.json"
   },

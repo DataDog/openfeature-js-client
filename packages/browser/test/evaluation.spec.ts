@@ -1,4 +1,4 @@
-import { configurationFromString } from '@datadog/flagging-core'
+import { configurationFromString } from '@datadog/flagging-core/configuration'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
