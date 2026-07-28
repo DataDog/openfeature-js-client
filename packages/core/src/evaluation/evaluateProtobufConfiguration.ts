@@ -9,13 +9,12 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import {
-  type Allocation,
-  type Condition,
-  type Flag,
-  type FlagsConfiguration,
-  Reason,
-  type Split,
+import type {
+  Allocation,
+  Condition,
+  Flag,
+  FlagsConfiguration,
+  Split,
   VariationType,
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
@@ -26,6 +25,7 @@ import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
+import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -254,10 +254,10 @@ function variationValue(value: Flag['variations'][number]['value'], configuratio
 }
 
 function resolutionReason(split: Split, allocation: Allocation): ResolutionReason {
-  if (split.reason === Reason.TARGETING_MATCH) return 'TARGETING_MATCH'
-  if (split.reason === Reason.SPLIT) return 'SPLIT'
-  if (split.reason === Reason.STATIC) return 'STATIC'
-  if (split.reason === Reason.DEFAULT) return 'DEFAULT'
+  if (split.reason === UFC_REASON.TARGETING_MATCH) return 'TARGETING_MATCH'
+  if (split.reason === UFC_REASON.SPLIT) return 'SPLIT'
+  if (split.reason === UFC_REASON.STATIC) return 'STATIC'
+  if (split.reason === UFC_REASON.DEFAULT) return 'DEFAULT'
   if (allocation.targetingConditionIndex !== undefined) return 'TARGETING_MATCH'
   if (allocation.partitionKey.some((partition) => partition.kind.case === 'shardMd5')) return 'SPLIT'
   if (allocation.partitionKey.some((partition) => partition.kind.case === 'time')) return 'DEFAULT'
@@ -265,17 +265,19 @@ function resolutionReason(split: Split, allocation: Allocation): ResolutionReaso
 }
 
 function typeMatches(type: FlagValueType, variationType: VariationType): boolean {
-  if (type === 'boolean') return variationType === VariationType.BOOLEAN
-  if (type === 'string') return variationType === VariationType.STRING
-  if (type === 'number') return variationType === VariationType.INTEGER || variationType === VariationType.NUMERIC
-  return variationType === VariationType.JSON
+  if (type === 'boolean') return variationType === UFC_VARIATION_TYPE.BOOLEAN
+  if (type === 'string') return variationType === UFC_VARIATION_TYPE.STRING
+  if (type === 'number') {
+    return variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC
+  }
+  return variationType === UFC_VARIATION_TYPE.JSON
 }
 
 function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {
-  if (variationType === VariationType.BOOLEAN) return 'boolean'
-  if (variationType === VariationType.STRING) return 'string'
-  if (variationType === VariationType.INTEGER || variationType === VariationType.NUMERIC) return 'number'
-  if (variationType === VariationType.JSON) return 'object'
+  if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'boolean'
+  if (variationType === UFC_VARIATION_TYPE.STRING) return 'string'
+  if (variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC) return 'number'
+  if (variationType === UFC_VARIATION_TYPE.JSON) return 'object'
   throw new Error(`Unsupported variation type: ${variationType}`)
 }
 

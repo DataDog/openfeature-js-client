@@ -1,4 +1,6 @@
 import type { FlagsConfiguration } from './configuration'
+import { configurationFromPrecomputedString } from './precomputed-wire'
+import { configurationFromRulesString } from './rules-wire'
 import { configurationFromString, configurationToString } from './wire'
 
 const configuration: FlagsConfiguration = {
@@ -27,6 +29,29 @@ const configuration: FlagsConfiguration = {
 const rulesResponse = 'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
 
 describe('configuration wire', () => {
+  it('parses precomputed configuration without parsing rules', () => {
+    const precomputed = JSON.parse(configurationToString(configuration)).precomputed
+    const wire = JSON.stringify({
+      version: 1,
+      precomputed,
+      rules: { response: rulesResponse },
+    })
+
+    expect(configurationFromPrecomputedString(wire)).toEqual(configuration)
+  })
+
+  it('parses rules configuration without parsing precomputed data', () => {
+    const wire = JSON.stringify({
+      version: 1,
+      precomputed: { response: JSON.stringify(configuration.precomputed?.response) },
+      rules: { response: rulesResponse },
+    })
+
+    const restored = configurationFromRulesString(wire)
+    expect(restored.precomputed).toBeUndefined()
+    expect(restored.rules?.response.flags['browser-flag']).toBeDefined()
+  })
+
   it('round-trips a precomputed configuration', () => {
     const restored = configurationFromString(configurationToString(configuration))
 

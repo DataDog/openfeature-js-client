@@ -1,4 +1,5 @@
-import { configurationFromString, type FlagsConfiguration } from '@datadog/flagging-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { configurationFromString } from '@datadog/flagging-core/configuration'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
@@ -94,7 +95,6 @@ describe('evaluate', () => {
                   variationValue: 'red',
                   reason: 'TARGETING_MATCH',
                   doLog: true,
-                  extraLogging: {},
                   ...(serialId === undefined ? {} : { serialId }),
                 },
               },
