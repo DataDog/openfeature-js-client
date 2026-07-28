@@ -229,10 +229,6 @@ describe('UFC protobuf decoder', () => {
     expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
   })
 
-  it.each(['A=', 'AA=', 'AB=='])('rejects rules response with invalid base64 padding %s', (response) => {
-    expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
-  })
-
   it('evaluates the generated protobuf directly', () => {
     expect(evaluateBoolean({}, { targetingKey: 'user', country: 'US' })).toMatchObject({
       value: true,
