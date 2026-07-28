@@ -156,7 +156,7 @@ import {
 
 `DatadogOfflineProvider` is an opt-in evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It does not fetch or poll configuration.
 
-For dynamic context, the generic configuration wire should contain rules-based flag configuration. Precomputed configuration can also be evaluated, but only for the matching context it was generated for.
+For static offline initialization, a precomputed-only configuration adopts its embedded context when the OpenFeature context is empty. You do not need to call `OpenFeature.setContext()`. An explicit non-empty context must match the embedded context.
 
 ```javascript
 import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfeature-browser'
@@ -168,11 +168,11 @@ provider.setConfiguration(configuration)
 
 await OpenFeature.setProviderAndWait(provider)
 
-await OpenFeature.setContext({ targetingKey: 'user-123', plan: 'enterprise' })
-
 const client = OpenFeature.getClient()
 const enabled = client.getBooleanValue('new-checkout', false)
 ```
+
+For dynamic context, the configuration wire should contain rules-based flag configuration. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
 ## End-user license agreement
 
