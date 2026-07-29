@@ -3,7 +3,7 @@ globalThis.TextDecoder = undefined
 globalThis.BigInt = undefined
 
 const { evaluateRulesBasedConfiguration } = require('@datadog/flagging-core')
-const { configurationFromString } = require('@datadog/flagging-core/configuration')
+const { configurationFromString, configurationToString } = require('@datadog/flagging-core/configuration')
 
 const configuration = configurationFromString(
   JSON.stringify({
@@ -13,6 +13,7 @@ const configuration = configurationFromString(
     },
   })
 )
+const roundTrippedConfiguration = configurationFromString(configurationToString(configuration))
 const logger = {
   debug() {},
   info() {},
@@ -20,7 +21,7 @@ const logger = {
   error() {},
 }
 const result = evaluateRulesBasedConfiguration(
-  configuration.rules?.response,
+  roundTrippedConfiguration.rules?.response,
   'boolean',
   'browser-flag',
   false,
