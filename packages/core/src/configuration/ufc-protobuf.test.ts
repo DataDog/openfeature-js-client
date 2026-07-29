@@ -337,6 +337,13 @@ describe('UFC protobuf decoder', () => {
     expect(result.flagMetadata).toMatchObject({ allocationKey: 'fallback' })
   })
 
+  it('reports a composite condition that does not reference a preceding condition', () => {
+    const allWithForwardReference = protobufMessage(1, protobufVarint(1, 1))
+    const emptyAll = protobufMessage(1, [])
+
+    expectFlagConfigurationError({ conditionMessages: [allWithForwardReference, emptyAll] })
+  })
+
   it('retains direct protobuf variation values and evaluates JSON scalars', () => {
     const configuration = decodeRules({ jsonValue: '"scalar"' })
     const variation = configuration.flags['test-flag'].variations[0]
