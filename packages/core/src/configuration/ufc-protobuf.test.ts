@@ -221,6 +221,16 @@ function expectFlagConfigurationError(options: RulesResponseOptions, flagKey = '
   })
 }
 
+function expectFlagConfigurationAccepted(options: RulesResponseOptions, flagKey = 'test-flag'): void {
+  const configuration = decodeRules(options)
+
+  expect(configuration.flags).toHaveProperty(flagKey)
+  expect(
+    evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
+      .errorCode
+  ).toBeUndefined()
+}
+
 describe('UFC protobuf decoder', () => {
   it('returns the generated protobuf type without converting it to the JSON UFC shape', () => {
     const configuration = decodeRules()
@@ -427,8 +437,8 @@ describe('UFC protobuf decoder', () => {
   it.each([
     { fields: [...protobufMessage(99, []), ...protobufMessage(1, [])] },
     { fields: [...protobufMessage(1, []), ...protobufMessage(99, [])] },
-  ])('reports a supported flag with an unknown partition-key field', ({ fields }) => {
-    expectFlagConfigurationError(
+  ])('ignores an unknown partition-key field', ({ fields }) => {
+    expectFlagConfigurationAccepted(
       {
         futureFlagFeatureLevel: 0,
         futureTargetingConditionIndex: 0,
@@ -438,12 +448,16 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it.each([3, 4, 5, 6, 7, 8] as const)(
+  it.each([3, 4, 5, 6, 8] as const)(
     'reports a supported flag referencing an unknown condition comparator in group %s',
     (unknownConditionGroup) => {
       expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
     }
   )
+
+  it('ignores an unknown field in an attribute-presence condition', () => {
+    expectFlagConfigurationAccepted({ futureFlagFeatureLevel: 0, unknownConditionGroup: 7 }, 'future-flag')
+  })
 
   it.each([0, 1])('reports a feature-level %s flag that uses a future variation value', (futureFlagFeatureLevel) => {
     expectFlagConfigurationError(
@@ -459,8 +473,8 @@ describe('UFC protobuf decoder', () => {
   it.each([
     { fields: [...protobufMessage(99, []), ...protobufVarint(5, 1)] },
     { fields: [...protobufVarint(5, 1), ...protobufMessage(99, [])] },
-  ])('reports a supported flag whose variation contains unknown oneof data', ({ fields }) => {
-    expectFlagConfigurationError(
+  ])('ignores unknown variation fields alongside a known value', ({ fields }) => {
+    expectFlagConfigurationAccepted(
       {
         futureFlagFeatureLevel: 0,
         futureTargetingConditionIndex: 0,
@@ -485,10 +499,10 @@ describe('UFC protobuf decoder', () => {
     expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownTopLevelCondition: true }, 'future-flag')
   })
 
-  it('reports a flag referencing a nested comparator with unknown data', () => {
+  it('ignores unknown data alongside a known nested comparator', () => {
     const numeric = protobufMessage(3, [...protobufVarint(1, 0), ...protobufMessage(99, []), ...protobufDouble(2, 1.5)])
 
-    expectFlagConfigurationError({ conditionMessages: [numeric] })
+    expectFlagConfigurationAccepted({ conditionMessages: [numeric] })
   })
 
   it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
