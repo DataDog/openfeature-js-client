@@ -83,7 +83,9 @@ type RulesResponseOptions = {
   unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8
   futurePartitionKeyFields?: number[]
   futureVariationValueFields?: number[]
+  unusedVariationValueFields?: number[]
   futureTargetingConditionIndex?: number
+  fallbackTargetingConditionIndex?: number
   splitReason?: number
   attributeName?: string
 }
@@ -132,6 +134,9 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   ]
   const fallbackAllocation = [
     ...protobufString(1, 'fallback'),
+    ...(options.fallbackTargetingConditionIndex === undefined
+      ? []
+      : protobufVarint(2, options.fallbackTargetingConditionIndex)),
     ...partitionKeys.flatMap((partitionKey) => protobufMessage(3, partitionKey)),
     ...splits.flatMap((split) => protobufMessage(4, split)),
   ]
@@ -157,6 +162,9 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
               : 4)
     ),
     ...protobufMessage(3, variation),
+    ...(options.unusedVariationValueFields === undefined
+      ? []
+      : protobufMessage(3, [...protobufVarint(1, 1), ...options.unusedVariationValueFields])),
     ...protobufMessage(4, allocation),
     ...(options.includeFallbackAllocation ? protobufMessage(4, fallbackAllocation) : []),
   ]
@@ -208,14 +216,26 @@ function evaluateBoolean(options: RulesResponseOptions, context: EvaluationConte
   return evaluateRulesBasedConfiguration(decodeRules(options), 'boolean', 'test-flag', false, context, logger)
 }
 
+function evaluateFlag(configuration: ReturnType<typeof decodeRules>, flagKey: string) {
+  const context = { targetingKey: 'user', country: 'US' }
+  const variationType = configuration.flags[flagKey]?.variationType
+  if (variationType === 1) {
+    return evaluateRulesBasedConfiguration(configuration, 'string', flagKey, '', context, logger)
+  }
+  if (variationType === 2 || variationType === 3) {
+    return evaluateRulesBasedConfiguration(configuration, 'number', flagKey, 0, context, logger)
+  }
+  if (variationType === 5) {
+    return evaluateRulesBasedConfiguration(configuration, 'object', flagKey, null, context, logger)
+  }
+  return evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, context, logger)
+}
+
 function expectFlagConfigurationError(options: RulesResponseOptions, flagKey = 'test-flag'): void {
   const configuration = decodeRules(options)
 
   expect(configuration.flags).toHaveProperty(flagKey)
-  expect(
-    evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
-  ).toMatchObject({
-    value: false,
+  expect(evaluateFlag(configuration, flagKey)).toMatchObject({
     reason: 'ERROR',
     errorCode: 'PARSE_ERROR',
   })
@@ -225,10 +245,7 @@ function expectFlagConfigurationAccepted(options: RulesResponseOptions, flagKey 
   const configuration = decodeRules(options)
 
   expect(configuration.flags).toHaveProperty(flagKey)
-  expect(
-    evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
-      .errorCode
-  ).toBeUndefined()
+  expect(evaluateFlag(configuration, flagKey).errorCode).toBeUndefined()
 }
 
 describe('UFC protobuf decoder', () => {
@@ -346,10 +363,7 @@ describe('UFC protobuf decoder', () => {
     const configuration = decodeRules(options)
 
     expect(configuration.flags).toHaveProperty(flagKey)
-    expect(
-      evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
-    ).toMatchObject({
-      value: false,
+    expect(evaluateFlag(configuration, flagKey)).toMatchObject({
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
       errorMessage,
@@ -408,6 +422,26 @@ describe('UFC protobuf decoder', () => {
     }).flags['test-flag'].variations[0]
 
     expect(variation.value).toEqual({ case: 'integerValue', value: BigInt(-42) })
+  })
+
+  it('does not validate variations or allocations that evaluation does not reach', () => {
+    const configuration = decodeRules({
+      unusedVariationValueFields: protobufVarint(3, 42),
+      includeFallbackAllocation: true,
+      fallbackTargetingConditionIndex: 99,
+    })
+
+    expect(configuration.flags['test-flag'].variations).toHaveLength(2)
+    expect(
+      evaluateRulesBasedConfiguration(
+        configuration,
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'user', country: 'US' },
+        logger
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
   })
 
   it('accepts a finite numeric variation that overwrites an earlier non-finite value', () => {
@@ -502,6 +536,13 @@ describe('UFC protobuf decoder', () => {
       },
       'future-flag'
     )
+  })
+
+  it('uses the allocation-based fallback for an unknown split reason', () => {
+    expect(evaluateBoolean({ splitReason: 99 }, { targetingKey: 'user', country: 'US' })).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
   })
 
   it('reports a supported flag whose partition key kind is missing', () => {
