@@ -42,6 +42,15 @@ const configurationWithMalformedFlag = configurationFromString(
   })
 )
 
+const configurationWithMalformedResponse = configurationFromString(
+  JSON.stringify({
+    version: 1,
+    precomputed: {
+      response: JSON.stringify({ data: {} }),
+    },
+  })
+)
+
 describe('evaluate', () => {
   it('returns default for missing configuration', () => {
     const result = evaluate({}, 'boolean', 'boolean-flag', true, {})
@@ -71,6 +80,15 @@ describe('evaluate', () => {
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
       errorMessage: 'Invalid precomputed flag configuration',
+    })
+  })
+
+  it('returns a parse error for a malformed precomputed response', () => {
+    expect(evaluate(configurationWithMalformedResponse, 'boolean', 'flag', false, {})).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'Precomputed configuration response is missing attributes',
     })
   })
 
