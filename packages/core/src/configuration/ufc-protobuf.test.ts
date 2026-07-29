@@ -356,10 +356,30 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('rejects an int64 variation outside the JavaScript safe integer range', () => {
-    expect(() => decodeRules({ integerVariation: BigInt('9007199254740992') })).toThrow(
-      'Protobuf int64 is outside the JavaScript safe integer range'
-    )
+  it('preserves an int64 variation that cannot be represented as an OpenFeature number', () => {
+    const integerVariation = BigInt('9007199254740993')
+    const configuration = decodeRules({ integerVariation })
+
+    expect(BigInt(Number(integerVariation))).not.toBe(integerVariation)
+    expect(configuration.flags['test-flag'].variations[0].value).toEqual({
+      case: 'integerValue',
+      value: integerVariation,
+    })
+    expect(
+      evaluateRulesBasedConfiguration(
+        configuration,
+        'number',
+        'test-flag',
+        0,
+        { targetingKey: 'user', country: 'US' },
+        logger
+      )
+    ).toMatchObject({
+      value: 0,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Integer variation value cannot be represented safely as a JavaScript number',
+    })
   })
 
   it('keeps a negative int64 variation as protobuf and evaluates it as a number', () => {
