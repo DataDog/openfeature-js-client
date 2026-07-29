@@ -81,9 +81,16 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes)) {
         continue
       }
-      const split = allocation.splits.find((candidate) =>
-        matchesSplit(candidate, allocation, configuration, subjectKey, subjectAttributes, evaluationTimestampMs)
+      if (allocation.splits.length === 0) continue
+      const coordinates = partitionCoordinates(
+        allocation,
+        configuration,
+        subjectKey,
+        subjectAttributes,
+        evaluationTimestampMs
       )
+      if (!coordinates) continue
+      const split = allocation.splits.find((candidate) => matchesSplit(candidate, coordinates))
       if (!split) continue
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
@@ -258,23 +265,22 @@ function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegE
   }
 }
 
-function matchesSplit(
-  split: Split,
+type PartitionCoordinate = {
+  coordinate: number
+  upperBound?: number
+}
+
+function partitionCoordinates(
   allocation: Allocation,
   configuration: FlagsConfiguration,
   subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   evaluationTimestampMs: TimeStamp
-): boolean {
-  if (split.ranges.length !== allocation.partitionKey.length) {
-    throw new FlagConfigurationError('Invalid split')
-  }
-  return allocation.partitionKey.every((partition, index) => {
-    const range = atIndex(split.ranges, index, 'partition range')
-    let coordinate: number
-    let upperBound: number | undefined
+): PartitionCoordinate[] | undefined {
+  const coordinates: PartitionCoordinate[] = []
+  for (const partition of allocation.partitionKey) {
     if (partition.kind.case === 'time') {
-      coordinate = evaluationTimestampMs
+      coordinates.push({ coordinate: evaluationTimestampMs })
     } else if (partition.kind.case === 'shardMd5') {
       let value: EvaluationContextValue
       if (partition.kind.value.attributeNameIndex === undefined) {
@@ -287,15 +293,28 @@ function matchesSplit(
           'partition attribute'
         )
         const attributeValue = attribute === 'targetingKey' ? subjectKey : subjectAttributes[attribute]
-        if (attributeValue == null) return false
+        if (attributeValue == null) return undefined
         value = attributeValue
       }
-      upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
+      const upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
-      coordinate = protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound)
+      coordinates.push({
+        coordinate: protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound),
+        upperBound,
+      })
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }
+  }
+  return coordinates
+}
+
+function matchesSplit(split: Split, coordinates: PartitionCoordinate[]): boolean {
+  if (split.ranges.length !== coordinates.length) {
+    throw new FlagConfigurationError('Invalid split')
+  }
+  return coordinates.every(({ coordinate, upperBound }, index) => {
+    const range = atIndex(split.ranges, index, 'partition range')
     const from = range.from === undefined ? 0 : safeInteger(range.from, 'Partition range')
     const to = range.to === undefined ? upperBound : safeInteger(range.to, 'Partition range')
     if (to !== undefined && from > to) throw new FlagConfigurationError('Partition range is invalid')
