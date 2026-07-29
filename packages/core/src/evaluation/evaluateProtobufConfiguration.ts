@@ -388,13 +388,20 @@ function variationValueCase(
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
+  return containsSorted(indexes, (index) => {
+    const candidate = atIndex(strings, index, 'condition string')
+    return candidate === value ? 0 : candidate < value ? -1 : 1
+  })
+}
+
+function containsSorted<T>(values: T[], compare: (candidate: T) => number): boolean {
   let low = 0
-  let high = indexes.length - 1
+  let high = values.length - 1
   while (low <= high) {
     const middle = (low + high) >>> 1
-    const candidate = atIndex(strings, indexes[middle], 'condition string')
-    if (candidate === value) return true
-    if (candidate < value) low = middle + 1
+    const comparison = compare(values[middle])
+    if (comparison === 0) return true
+    if (comparison < 0) low = middle + 1
     else high = middle - 1
   }
   return false
@@ -424,16 +431,7 @@ function isJsonValue(value: unknown): value is FlagValue {
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
-  let low = 0
-  let high = values.length - 1
-  while (low <= high) {
-    const middle = (low + high) >>> 1
-    const comparison = compareBytes(values[middle], value)
-    if (comparison === 0) return true
-    if (comparison < 0) low = middle + 1
-    else high = middle - 1
-  }
-  return false
+  return containsSorted(values, (candidate) => compareBytes(candidate, value))
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {
