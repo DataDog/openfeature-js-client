@@ -1,11 +1,11 @@
-import type { FlagsConfiguration, PrecomputedConfigurationResponse } from './configuration'
+import type { FlagsConfiguration } from './configuration'
 import {
   decodeSafely,
   type FlagsConfigurationWire,
   parseConfigurationWire,
   type SerializedConfiguration,
 } from './wire-types'
-import { isPrecomputedConfigurationResponse, isPrecomputedWireEntry } from './wire-validation'
+import { isPrecomputedWireEntry, parsePrecomputedConfigurationResponse } from './wire-validation'
 
 /**
  * Parse the precomputed entry from an opaque flags configuration wire value.
@@ -19,13 +19,13 @@ export function precomputedConfigurationFromWire(serialized: SerializedConfigura
   if (!isPrecomputedWireEntry(serialized.precomputed)) return {}
 
   const { precomputed } = serialized
-  const response = decodeSafely(() => JSON.parse(precomputed.response) as PrecomputedConfigurationResponse)
-  if (!response || !isPrecomputedConfigurationResponse(response)) return {}
+  const parsed = decodeSafely(() => parsePrecomputedConfigurationResponse(JSON.parse(precomputed.response)))
+  if (!parsed) return {}
 
   return {
     precomputed: {
       ...precomputed,
-      response,
+      ...parsed,
     },
   }
 }
@@ -46,9 +46,12 @@ export function configurationToString(configuration: FlagsConfiguration): FlagsC
   }
 
   if (configuration.precomputed) {
+    const { context, response, fetchedAt, etag } = configuration.precomputed
     wire.precomputed = {
-      ...configuration.precomputed,
-      response: JSON.stringify(configuration.precomputed.response),
+      context,
+      response: JSON.stringify(response),
+      fetchedAt,
+      etag,
     }
   }
   return JSON.stringify(wire)

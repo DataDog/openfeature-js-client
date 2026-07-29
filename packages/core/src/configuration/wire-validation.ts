@@ -1,5 +1,5 @@
 import type { EvaluationContext } from '@openfeature/core'
-import type { PrecomputedConfigurationResponse } from './configuration'
+import type { PrecomputedConfigurationResponse, PrecomputedFlag } from './configuration'
 
 type WireEntry = {
   response: string
@@ -24,16 +24,41 @@ export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWire
   return isWireEntry(value) && (!('context' in value) || isEvaluationContext(value.context))
 }
 
-export function isPrecomputedConfigurationResponse(value: unknown): value is PrecomputedConfigurationResponse {
-  if (!isRecord(value) || !isRecord(value.data) || !isRecord(value.data.attributes)) return false
+export function parsePrecomputedConfigurationResponse(
+  value: unknown
+): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | undefined {
+  if (!isRecord(value) || !isRecord(value.data) || !isRecord(value.data.attributes)) return undefined
   const { createdAt, flags } = value.data.attributes
   if (
     (typeof createdAt !== 'string' && (typeof createdAt !== 'number' || !Number.isFinite(createdAt))) ||
     !isRecord(flags)
   ) {
-    return false
+    return undefined
   }
-  return Object.values(flags).every(isPrecomputedFlag)
+
+  const validFlags: Array<[string, PrecomputedFlag]> = []
+  const flagErrors: Array<[string, string]> = []
+  for (const [key, flag] of Object.entries(flags)) {
+    if (isPrecomputedFlag(flag)) {
+      validFlags.push([key, flag])
+    } else {
+      flagErrors.push([key, 'Invalid precomputed flag configuration'])
+    }
+  }
+
+  return {
+    response: {
+      ...value,
+      data: {
+        ...value.data,
+        attributes: {
+          ...value.data.attributes,
+          flags: Object.fromEntries(validFlags),
+        },
+      },
+    } as PrecomputedConfigurationResponse,
+    ...(flagErrors.length > 0 ? { flagErrors: Object.fromEntries(flagErrors) } : {}),
+  }
 }
 
 function isEvaluationContext(value: unknown): value is EvaluationContext {
@@ -44,7 +69,7 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
   )
 }
 
-function isPrecomputedFlag(value: unknown): boolean {
+function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
   if (
     !isRecord(value) ||
     typeof value.allocationKey !== 'string' ||

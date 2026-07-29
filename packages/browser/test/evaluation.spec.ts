@@ -8,6 +8,39 @@ const configuration = configurationFromString(
   JSON.stringify(configurationWire)
 )
 
+const configurationWithMalformedFlag = configurationFromString(
+  JSON.stringify({
+    version: 1,
+    precomputed: {
+      response: JSON.stringify({
+        data: {
+          attributes: {
+            createdAt: 0,
+            flags: {
+              valid: {
+                allocationKey: 'allocation',
+                variationKey: 'valid-variation',
+                variationType: 'BOOLEAN',
+                variationValue: true,
+                reason: 'STATIC',
+                doLog: false,
+              },
+              malformed: {
+                allocationKey: 'allocation',
+                variationKey: 'malformed-variation',
+                variationType: 'BOOLEAN',
+                variationValue: 'not-a-boolean',
+                reason: 'STATIC',
+                doLog: false,
+              },
+            },
+          },
+        },
+      }),
+    },
+  })
+)
+
 describe('evaluate', () => {
   it('returns default for missing configuration', () => {
     const result = evaluate({}, 'boolean', 'boolean-flag', true, {})
@@ -23,6 +56,20 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+    })
+  })
+
+  it('isolates malformed precomputed flags and returns a parse error for the affected flag', () => {
+    expect(evaluate(configurationWithMalformedFlag, 'boolean', 'valid', false, {})).toMatchObject({
+      value: true,
+      variant: 'valid-variation',
+      reason: 'STATIC',
+    })
+    expect(evaluate(configurationWithMalformedFlag, 'boolean', 'malformed', false, {})).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'Invalid precomputed flag configuration',
     })
   })
 

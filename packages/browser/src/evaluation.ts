@@ -30,6 +30,19 @@ function evaluatePrecomputed<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   _context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const flagError =
+    precomputed.flagErrors && Object.prototype.hasOwnProperty.call(precomputed.flagErrors, flagKey)
+      ? precomputed.flagErrors[flagKey]
+      : undefined
+  if (flagError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: flagError,
+    }
+  }
+
   const flag = precomputed.response.data.attributes.flags[flagKey]
   if (!flag) {
     return {

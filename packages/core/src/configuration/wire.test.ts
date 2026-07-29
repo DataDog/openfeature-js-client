@@ -163,15 +163,24 @@ describe('configuration wire', () => {
     ['STRING', false],
     ['NUMBER', Number.NaN],
     ['OBJECT', null],
-  ])('rejects precomputed %s flags with an invalid value', (variationType, variationValue) => {
+  ])('isolates a malformed precomputed %s flag', (variationType, variationValue) => {
+    const validFlag = {
+      allocationKey: 'allocation',
+      variationKey: 'valid-variation',
+      variationType: 'BOOLEAN',
+      variationValue: true,
+      reason: 'STATIC',
+      doLog: false,
+    }
     const response = {
       data: {
         attributes: {
           createdAt: 0,
           flags: {
-            flag: {
+            valid: validFlag,
+            malformed: {
               allocationKey: 'allocation',
-              variationKey: 'variation',
+              variationKey: 'malformed-variation',
               variationType,
               variationValue,
               reason: 'STATIC',
@@ -183,7 +192,21 @@ describe('configuration wire', () => {
     }
     const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
 
-    expect(configurationFromString(JSON.stringify(wire))).toEqual({})
+    expect(configurationFromString(JSON.stringify(wire))).toEqual({
+      precomputed: {
+        response: {
+          data: {
+            attributes: {
+              createdAt: 0,
+              flags: { valid: validFlag },
+            },
+          },
+        },
+        flagErrors: {
+          malformed: 'Invalid precomputed flag configuration',
+        },
+      },
+    })
   })
 
   it.each([
