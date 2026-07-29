@@ -77,7 +77,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
 
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, new Set<number>())) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes)) {
         continue
       }
       const split = allocation.splits.find((candidate) =>
@@ -147,22 +147,21 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 function matchesCondition(
   index: number | undefined,
   configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext,
-  ancestors: Set<number>
+  subjectAttributes: EvaluationContext
 ): boolean {
   if (index === undefined) return true
-  if (ancestors.has(index)) throw new FlagConfigurationError('Condition graph contains a cycle')
   const condition = atIndex(configuration.conditions, index, 'condition')
-  const nextAncestors = new Set(ancestors).add(index)
   if (condition.kind.case === 'all') {
-    return condition.kind.value.conditionIndexes.every((child) =>
-      matchesCondition(child, configuration, subjectAttributes, nextAncestors)
-    )
+    return condition.kind.value.conditionIndexes.every((child) => {
+      if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
+      return matchesCondition(child, configuration, subjectAttributes)
+    })
   }
   if (condition.kind.case === 'any') {
-    return condition.kind.value.conditionIndexes.some((child) =>
-      matchesCondition(child, configuration, subjectAttributes, nextAncestors)
-    )
+    return condition.kind.value.conditionIndexes.some((child) => {
+      if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
+      return matchesCondition(child, configuration, subjectAttributes)
+    })
   }
   return matchesLeafCondition(condition, configuration, subjectAttributes)
 }
