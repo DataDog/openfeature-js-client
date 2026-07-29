@@ -1,6 +1,6 @@
 // Protobuf descriptors initialize during import, so configure non-browser runtimes first.
 import './protobuf-text-encoding'
-import { fromBinary, type Message } from '@bufbuild/protobuf'
+import { fromBinary } from '@bufbuild/protobuf'
 import { base64Decode } from '@bufbuild/protobuf/wire'
 import { setFlagConfigurationErrors } from './flag-configuration-errors'
 import {
@@ -39,12 +39,12 @@ export function decodeUniversalFlagConfiguration(response: string): FlagsConfigu
 }
 
 function validateFlag(flag: Flag, configuration: FlagsConfiguration): void {
-  if (hasUnknownFields(flag) || !supportedVariationTypes.has(flag.variationType)) {
+  if (!supportedVariationTypes.has(flag.variationType)) {
     throw new Error('Unsupported flag')
   }
   const expectedValueCase = variationValueCases[flag.variationType]
   for (const variation of flag.variations) {
-    if (hasUnknownFields(variation) || variation.value.case !== expectedValueCase) {
+    if (variation.value.case !== expectedValueCase) {
       throw new Error('Unsupported variation')
     }
     atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
@@ -69,16 +69,14 @@ function validateFlag(flag: Flag, configuration: FlagsConfiguration): void {
 }
 
 function validateAllocation(allocation: Allocation, flag: Flag, configuration: FlagsConfiguration): void {
-  if (hasUnknownFields(allocation)) throw new Error('Unsupported allocation')
   if (allocation.targetingConditionIndex !== undefined) {
     validateCondition(allocation.targetingConditionIndex, configuration, new Set())
   }
   for (const partition of allocation.partitionKey) {
-    if (hasUnknownFields(partition) || partition.kind.case === undefined) {
+    if (partition.kind.case === undefined) {
       throw new Error('Unsupported partition key')
     }
     if (partition.kind.case === 'shardMd5') {
-      if (hasUnknownFields(partition.kind.value)) throw new Error('Unsupported shard partition key')
       if (partition.kind.value.attributeNameIndex !== undefined) {
         atIndex(configuration.attributeNames, partition.kind.value.attributeNameIndex, 'partition attribute')
       }
@@ -87,13 +85,12 @@ function validateAllocation(allocation: Allocation, flag: Flag, configuration: F
     }
   }
   for (const split of allocation.splits) {
-    if (hasUnknownFields(split) || split.ranges.length !== allocation.partitionKey.length) {
+    if (split.ranges.length !== allocation.partitionKey.length) {
       throw new Error('Invalid split')
     }
     atIndex(flag.variations, split.variationIndex, 'split variation')
     if (!supportedReasons.has(split.reason)) throw new Error('Unsupported split reason')
     split.ranges.forEach((range, index) => {
-      if (hasUnknownFields(range)) throw new Error('Unsupported partition range')
       const from = range.from === undefined ? undefined : safeInteger(range.from, 'Protobuf uint64')
       const to = range.to === undefined ? undefined : safeInteger(range.to, 'Protobuf uint64')
       if (from !== undefined && to !== undefined && from > to) throw new Error('Partition range is invalid')
@@ -111,10 +108,9 @@ function validateAllocation(allocation: Allocation, flag: Flag, configuration: F
 function validateCondition(index: number, configuration: FlagsConfiguration, ancestors: Set<number>): void {
   if (ancestors.has(index)) throw new Error('Condition graph contains a cycle')
   const condition = atIndex(configuration.conditions, index, 'condition')
-  if (hasUnknownFields(condition) || condition.kind.case === undefined) throw new Error('Unsupported condition')
+  if (condition.kind.case === undefined) throw new Error('Unsupported condition')
   const nextAncestors = new Set(ancestors).add(index)
   if (condition.kind.case === 'all' || condition.kind.case === 'any') {
-    if (hasUnknownFields(condition.kind.value)) throw new Error('Unsupported condition operands')
     condition.kind.value.conditionIndexes.forEach((child) => {
       validateCondition(child, configuration, nextAncestors)
     })
@@ -125,7 +121,7 @@ function validateCondition(index: number, configuration: FlagsConfiguration, anc
 
 function validateLeafCondition(condition: Condition, configuration: FlagsConfiguration): void {
   const kind = condition.kind
-  if (kind.case === undefined || kind.case === 'all' || kind.case === 'any' || hasUnknownFields(kind.value)) {
+  if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new Error('Unsupported condition')
   }
   atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
@@ -141,7 +137,7 @@ function validateLeafCondition(condition: Condition, configuration: FlagsConfigu
     return
   }
   if (kind.case === 'stringMembership') {
-    if (kind.value.comparator.case === undefined || hasUnknownFields(kind.value.comparator.value)) {
+    if (kind.value.comparator.case === undefined) {
       throw new Error('Unsupported string membership comparator')
     }
     kind.value.comparator.value.values.forEach((value) => {
@@ -150,7 +146,7 @@ function validateLeafCondition(condition: Condition, configuration: FlagsConfigu
     return
   }
   if (kind.case === 'sha256Membership') {
-    if (kind.value.comparator.case === undefined || hasUnknownFields(kind.value.comparator.value)) {
+    if (kind.value.comparator.case === undefined) {
       throw new Error('Unsupported SHA-256 comparator')
     }
     if (kind.value.comparator.value.hashes.some((hash) => hash.length !== 32)) {
@@ -213,10 +209,6 @@ function safeInteger(value: bigint | string, description: string): number {
     throw new Error(`${description} is outside the JavaScript safe integer range`)
   }
   return result
-}
-
-function hasUnknownFields(message: Message): boolean {
-  return (message.$unknown?.length ?? 0) > 0
 }
 
 function atIndex<T>(items: T[], index: number, description: string): T {
