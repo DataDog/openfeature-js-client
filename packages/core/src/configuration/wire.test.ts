@@ -146,17 +146,21 @@ describe('configuration wire', () => {
     )
 
     expect(restored.precomputed).toBeUndefined()
+    expect(restored.precomputedError).toBe('Precomputed configuration response is not valid JSON')
     expect(restored.rules?.response.flags['browser-flag']).toBeDefined()
   })
 
-  it.each([{}, { data: {} }, { data: { attributes: { createdAt: 0, flags: [] } } }])(
-    'rejects a structurally invalid precomputed response',
-    (response) => {
-      const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
+  it.each([
+    [null, 'Precomputed configuration response must be an object'],
+    [{}, 'Precomputed configuration response is missing data'],
+    [{ data: {} }, 'Precomputed configuration response is missing attributes'],
+    [{ data: { attributes: { createdAt: null, flags: {} } } }, 'Precomputed configuration createdAt is invalid'],
+    [{ data: { attributes: { createdAt: 0, flags: [] } } }, 'Precomputed configuration flags must be an object'],
+  ])('retains a parse error for a structurally invalid precomputed response', (response, error) => {
+    const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
 
-      expect(configurationFromString(JSON.stringify(wire))).toEqual({})
-    }
-  )
+    expect(configurationFromString(JSON.stringify(wire))).toEqual({ precomputedError: error })
+  })
 
   it.each([
     ['BOOLEAN', 'true'],
@@ -217,12 +221,13 @@ describe('configuration wire', () => {
     { response: '{}', context: { targetingKey: 42 } },
     { response: '{}', fetchedAt: 'now' },
     { response: '{}', etag: 42 },
-  ])('omits an invalid precomputed wire entry independently', (precomputed) => {
+  ])('retains an invalid precomputed wire entry error independently', (precomputed) => {
     const restored = configurationFromString(
       JSON.stringify({ version: 1, precomputed, rules: { response: rulesResponse } })
     )
 
     expect(restored.precomputed).toBeUndefined()
+    expect(restored.precomputedError).toBe('Invalid precomputed configuration wire entry')
     expect(restored.rules).toBeDefined()
   })
 

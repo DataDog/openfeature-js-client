@@ -13,6 +13,15 @@ export function evaluate<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  if (flagsConfiguration.precomputedError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: flagsConfiguration.precomputedError,
+    }
+  }
+
   if (flagsConfiguration.precomputed) {
     return evaluatePrecomputed(flagsConfiguration.precomputed, type, flagKey, defaultValue, context)
   }

@@ -16,11 +16,15 @@ export function configurationFromPrecomputedString(wire: FlagsConfigurationWire)
 }
 
 export function precomputedConfigurationFromWire(serialized: SerializedConfiguration): FlagsConfiguration {
-  if (!isPrecomputedWireEntry(serialized.precomputed)) return {}
+  if (serialized.precomputed === undefined) return {}
+  if (!isPrecomputedWireEntry(serialized.precomputed)) {
+    return { precomputedError: 'Invalid precomputed configuration wire entry' }
+  }
 
   const { precomputed } = serialized
   const parsed = decodeSafely(() => parsePrecomputedConfigurationResponse(JSON.parse(precomputed.response)))
-  if (!parsed) return {}
+  if (!parsed) return { precomputedError: 'Precomputed configuration response is not valid JSON' }
+  if ('error' in parsed) return { precomputedError: parsed.error }
 
   return {
     precomputed: {

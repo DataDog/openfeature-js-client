@@ -9,6 +9,8 @@ export type FlagsConfiguration = {
   /** @internal */
   precomputed?: PrecomputedConfiguration
   /** @internal */
+  precomputedError?: string
+  /** @internal */
   rules?: RulesConfiguration
 }
 

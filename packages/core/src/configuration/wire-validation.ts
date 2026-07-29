@@ -26,15 +26,17 @@ export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWire
 
 export function parsePrecomputedConfigurationResponse(
   value: unknown
-): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | undefined {
-  if (!isRecord(value) || !isRecord(value.data) || !isRecord(value.data.attributes)) return undefined
-  const { createdAt, flags } = value.data.attributes
-  if (
-    (typeof createdAt !== 'string' && (typeof createdAt !== 'number' || !Number.isFinite(createdAt))) ||
-    !isRecord(flags)
-  ) {
-    return undefined
+): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | { error: string } {
+  if (!isRecord(value)) return { error: 'Precomputed configuration response must be an object' }
+  if (!isRecord(value.data)) return { error: 'Precomputed configuration response is missing data' }
+  if (!isRecord(value.data.attributes)) {
+    return { error: 'Precomputed configuration response is missing attributes' }
   }
+  const { createdAt, flags } = value.data.attributes
+  if (typeof createdAt !== 'string' && (typeof createdAt !== 'number' || !Number.isFinite(createdAt))) {
+    return { error: 'Precomputed configuration createdAt is invalid' }
+  }
+  if (!isRecord(flags)) return { error: 'Precomputed configuration flags must be an object' }
 
   const validFlags: Array<[string, PrecomputedFlag]> = []
   const flagErrors: Array<[string, string]> = []
