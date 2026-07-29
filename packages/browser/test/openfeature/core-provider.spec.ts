@@ -1,7 +1,9 @@
-import { type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { configurationFromString } from '@datadog/flagging-core/configuration'
 import type { Logger } from '@openfeature/core'
 import { ProviderEvents } from '@openfeature/web-sdk'
 import { CoreProvider } from '../../src/openfeature/core-provider'
+import rulesWire from '../data/rules-v1-wire.json'
 
 const logger: Logger = {
   debug: jest.fn(),
@@ -10,57 +12,7 @@ const logger: Logger = {
   error: jest.fn(),
 }
 
-const rulesConfiguration: FlagsConfiguration = {
-  rules: {
-    response: {
-      createdAt: '2026-07-06T23:01:56.822Z',
-      format: 'SERVER',
-      environment: {
-        name: 'prod',
-      },
-      flags: {
-        'dynamic-flag': {
-          key: 'dynamic-flag',
-          enabled: true,
-          variationType: 'STRING',
-          variations: {
-            enterprise: { key: 'enterprise', value: 'enabled' },
-            fallback: { key: 'fallback', value: 'disabled' },
-          },
-          allocations: [
-            {
-              key: 'enterprise-allocation',
-              rules: [
-                {
-                  conditions: [{ operator: OperatorType.ONE_OF, attribute: 'plan', value: ['enterprise'] }],
-                },
-              ],
-              doLog: true,
-              splits: [
-                {
-                  variationKey: 'enterprise',
-                  extraLogging: { experiment: 'dynamic-context' },
-                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
-                },
-              ],
-            },
-            {
-              key: 'fallback-allocation',
-              doLog: false,
-              splits: [
-                {
-                  variationKey: 'fallback',
-                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    },
-    etag: 'rules-etag',
-  },
-}
+const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
 
 const precomputedConfiguration: FlagsConfiguration = {
   precomputed: {
@@ -77,7 +29,6 @@ const precomputedConfiguration: FlagsConfiguration = {
               variationValue: 'static-value',
               reason: 'TARGETING_MATCH',
               doLog: true,
-              extraLogging: { experiment: 'static-context' },
             },
           },
         },
@@ -97,34 +48,30 @@ describe('CoreProvider', () => {
   it('evaluates rules locally with the supplied context', async () => {
     const provider = new CoreProvider({ configuration: rulesConfiguration })
 
-    await provider.initialize({ targetingKey: 'user-1', plan: 'free' })
+    await provider.initialize({ targetingKey: 'user-1', country: 'CA' })
 
     expect(
-      provider.resolveStringEvaluation('dynamic-flag', 'default', { targetingKey: 'user-1', plan: 'free' }, logger)
+      provider.resolveBooleanEvaluation('test-flag', false, { targetingKey: 'user-1', country: 'CA' }, logger)
     ).toMatchObject({
-      value: 'disabled',
-      variant: 'fallback',
+      value: true,
+      variant: 'on',
       reason: 'SPLIT',
+      flagMetadata: {
+        allocationKey: 'fallback',
+        doLog: false,
+      },
     })
 
-    await provider.onContextChange(
-      { targetingKey: 'user-1', plan: 'free' },
-      { targetingKey: 'user-1', plan: 'enterprise' }
-    )
+    await provider.onContextChange({ targetingKey: 'user-1', country: 'CA' }, { targetingKey: 'user-1', country: 'US' })
 
     expect(
-      provider.resolveStringEvaluation(
-        'dynamic-flag',
-        'default',
-        { targetingKey: 'user-1', plan: 'enterprise' },
-        logger
-      )
+      provider.resolveBooleanEvaluation('test-flag', false, { targetingKey: 'user-1', country: 'US' }, logger)
     ).toMatchObject({
-      value: 'enabled',
-      variant: 'enterprise',
+      value: true,
+      variant: 'on',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        allocationKey: 'enterprise-allocation',
+        allocationKey: 'allocation',
         doLog: true,
       },
     })
@@ -173,18 +120,13 @@ describe('CoreProvider', () => {
       },
     })
 
-    await provider.initialize({ targetingKey: 'other-user', plan: 'enterprise' })
+    await provider.initialize({ targetingKey: 'other-user', country: 'US' })
 
     expect(
-      provider.resolveStringEvaluation(
-        'dynamic-flag',
-        'default',
-        { targetingKey: 'other-user', plan: 'enterprise' },
-        logger
-      )
+      provider.resolveBooleanEvaluation('test-flag', false, { targetingKey: 'other-user', country: 'US' }, logger)
     ).toMatchObject({
-      value: 'enabled',
-      variant: 'enterprise',
+      value: true,
+      variant: 'on',
       reason: 'TARGETING_MATCH',
     })
   })

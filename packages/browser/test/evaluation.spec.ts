@@ -1,7 +1,8 @@
+import { evaluate } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/configuration'
-import { evaluate, type FlagsConfiguration, OperatorType } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import configurationWire from './data/precomputed-v1-wire.json'
+import rulesWire from './data/rules-v1-wire.json'
 
 const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
@@ -9,56 +10,7 @@ const configuration = configurationFromString(
 )
 const matchingContext = configuration.precomputed?.context ?? {}
 
-const rulesConfiguration: FlagsConfiguration = {
-  rules: {
-    response: {
-      createdAt: '2026-07-06T23:01:56.822Z',
-      format: 'SERVER',
-      environment: {
-        name: 'prod',
-      },
-      flags: {
-        'dynamic-flag': {
-          key: 'dynamic-flag',
-          enabled: true,
-          variationType: 'STRING',
-          variations: {
-            enterprise: { key: 'enterprise', value: 'enabled' },
-            fallback: { key: 'fallback', value: 'disabled' },
-          },
-          allocations: [
-            {
-              key: 'enterprise-allocation',
-              rules: [
-                {
-                  conditions: [{ operator: OperatorType.ONE_OF, attribute: 'plan', value: ['enterprise'] }],
-                },
-              ],
-              doLog: true,
-              splits: [
-                {
-                  variationKey: 'enterprise',
-                  extraLogging: { experiment: 'dynamic-context' },
-                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
-                },
-              ],
-            },
-            {
-              key: 'fallback-allocation',
-              doLog: false,
-              splits: [
-                {
-                  variationKey: 'fallback',
-                  shards: [{ salt: 'salt', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    },
-  },
-}
+const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
 
 const configurationWithMalformedFlag = configurationFromString(
   JSON.stringify({
@@ -115,6 +67,14 @@ describe('evaluate', () => {
   it('returns default for unknown flag', () => {
     const result = evaluate(configuration, 'string', 'unknown-flag', 'default', matchingContext)
     expect(result).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+    })
+  })
+
+  it.each(['constructor', '__proto__'])('treats inherited precomputed flag key %s as missing', (flagKey) => {
+    expect(evaluate(configuration, 'string', flagKey, 'default', matchingContext)).toEqual({
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
@@ -208,17 +168,17 @@ describe('evaluate', () => {
   })
 
   it('evaluates rules-based configuration when present', () => {
-    const result = evaluate(rulesConfiguration, 'string', 'dynamic-flag', 'default', {
+    const result = evaluate(rulesConfiguration, 'boolean', 'test-flag', false, {
       targetingKey: 'user-1',
-      plan: 'enterprise',
+      country: 'US',
     })
 
     expect(result).toMatchObject({
-      value: 'enabled',
-      variant: 'enterprise',
+      value: true,
+      variant: 'on',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        allocationKey: 'enterprise-allocation',
+        allocationKey: 'allocation',
         doLog: true,
       },
     })
@@ -230,16 +190,20 @@ describe('evaluate', () => {
         ...rulesConfiguration,
         precomputed: configuration.precomputed,
       },
-      'string',
-      'dynamic-flag',
-      'default',
-      { targetingKey: 'other-user', plan: 'enterprise' }
+      'boolean',
+      'test-flag',
+      false,
+      { targetingKey: 'other-user', country: 'CA' }
     )
 
     expect(result).toMatchObject({
-      value: 'enabled',
-      variant: 'enterprise',
-      reason: 'TARGETING_MATCH',
+      value: true,
+      variant: 'on',
+      reason: 'SPLIT',
+      flagMetadata: {
+        allocationKey: 'fallback',
+        doLog: false,
+      },
     })
   })
 })
