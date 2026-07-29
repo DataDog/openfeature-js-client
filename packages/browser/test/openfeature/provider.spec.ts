@@ -297,7 +297,6 @@ describe('DatadogProvider', () => {
         flagMetadata: {
           allocationKey: 'allocation-123',
           doLog: true,
-          extraLogging: { experiment: true },
           variationType: 'STRING',
         },
       })
