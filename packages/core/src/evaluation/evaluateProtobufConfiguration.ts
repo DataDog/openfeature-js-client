@@ -28,6 +28,7 @@ import { MD5Sharder } from './sharders'
 import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
+const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -197,13 +198,7 @@ function matchesLeafCondition(
     if (kind.value.comparator.case === undefined) {
       throw new FlagConfigurationError('Missing regex comparator')
     }
-    const pattern = atIndex(configuration.regexes, kind.value.comparator.value, 'regex')
-    let matches: boolean
-    try {
-      matches = compileRegex(pattern).test(String(value)) // dd-iac-scan ignore-line
-    } catch {
-      throw new FlagConfigurationError('Invalid regular expression')
-    }
+    const matches = compiledRegexAt(configuration, kind.value.comparator.value).test(String(value)) // dd-iac-scan ignore-line
     return kind.value.comparator.case === 'matches' ? matches : !matches
   }
   if (kind.case === 'stringMembership') {
@@ -240,6 +235,27 @@ function matchesLeafCondition(
     return comparison >= 0
   }
   return false
+}
+
+function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegExp {
+  let cache = compiledRegexCache.get(configuration)
+  if (!cache) {
+    cache = new Map()
+    compiledRegexCache.set(configuration, cache)
+  }
+  const cached = cache.get(index)
+  if (cached === null) throw new FlagConfigurationError('Invalid regular expression')
+  if (cached) return cached
+
+  const pattern = atIndex(configuration.regexes, index, 'regex')
+  try {
+    const regex = compileRegex(pattern)
+    cache.set(index, regex)
+    return regex
+  } catch {
+    cache.set(index, null)
+    throw new FlagConfigurationError('Invalid regular expression')
+  }
 }
 
 function matchesSplit(

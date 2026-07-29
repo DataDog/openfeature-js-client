@@ -312,6 +312,22 @@ describe('UFC protobuf decoder', () => {
     ).toBe(true)
   })
 
+  it('lazily compiles each regex once per configuration', () => {
+    const configuration = decodeRules({ conditionKind: 7 })
+    const regexes = configuration.regexes
+    let reads = 0
+    configuration.regexes = new Proxy(regexes, {
+      get(target, property, receiver) {
+        if (property === '0') reads++
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    expect(evaluateFlag(configuration, 'test-flag').value).toBe(true)
+    expect(evaluateFlag(configuration, 'test-flag').value).toBe(true)
+    expect(reads).toBe(1)
+  })
+
   it('preserves empty ANY semantics without rewriting allocations', () => {
     const configuration = decodeRules({ conditionKind: 2 })
 
