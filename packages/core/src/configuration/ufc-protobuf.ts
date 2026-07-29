@@ -2,6 +2,7 @@
 import './protobuf-text-encoding'
 import { fromBinary, type Message } from '@bufbuild/protobuf'
 import { base64Decode } from '@bufbuild/protobuf/wire'
+import { setFlagConfigurationErrors } from './flag-configuration-errors'
 import {
   type Allocation,
   type Condition,
@@ -12,25 +13,29 @@ import {
   VariationType,
 } from './generated/ufc_pb'
 
+const SUPPORTED_FEATURE_LEVEL = 0
+
 export function decodeUniversalFlagConfiguration(response: string): FlagsConfiguration {
   const configuration = fromBinary(FlagsConfigurationSchema, base64Decode(response))
   validateTimestamp(configuration)
   validateSafeIntegers(configuration)
+  const errors = new Map<string, string>()
   for (const [key, flag] of Object.entries(configuration.flags)) {
-    if (flag.minimumFeatureLevel > 0 || !isSupportedFlag(flag, configuration)) {
-      delete configuration.flags[key]
+    if (flag.minimumFeatureLevel > SUPPORTED_FEATURE_LEVEL) {
+      errors.set(
+        key,
+        `Flag requires feature level ${flag.minimumFeatureLevel}, but this SDK supports ${SUPPORTED_FEATURE_LEVEL}`
+      )
+      continue
+    }
+    try {
+      validateFlag(flag, configuration)
+    } catch (error) {
+      errors.set(key, error instanceof Error ? error.message : 'Invalid flag configuration')
     }
   }
+  setFlagConfigurationErrors(configuration, errors)
   return configuration
-}
-
-function isSupportedFlag(flag: Flag, configuration: FlagsConfiguration): boolean {
-  try {
-    validateFlag(flag, configuration)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function validateFlag(flag: Flag, configuration: FlagsConfiguration): void {

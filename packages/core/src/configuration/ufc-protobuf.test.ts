@@ -208,6 +208,19 @@ function evaluateBoolean(options: RulesResponseOptions, context: EvaluationConte
   return evaluateRulesBasedConfiguration(decodeRules(options), 'boolean', 'test-flag', false, context, logger)
 }
 
+function expectFlagConfigurationError(options: RulesResponseOptions, flagKey = 'test-flag'): void {
+  const configuration = decodeRules(options)
+
+  expect(configuration.flags).toHaveProperty(flagKey)
+  expect(
+    evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
+  ).toMatchObject({
+    value: false,
+    reason: 'ERROR',
+    errorCode: 'PARSE_ERROR',
+  })
+}
+
 describe('UFC protobuf decoder', () => {
   it('returns the generated protobuf type without converting it to the JSON UFC shape', () => {
     const configuration = decodeRules()
@@ -314,11 +327,23 @@ describe('UFC protobuf decoder', () => {
     ).toBe('scalar')
   })
 
-  it('keeps valid flags while dropping unsupported or invalid flags', () => {
-    expect(Object.keys(decodeRules({ minimumFeatureLevel: 1 }).flags)).toEqual([])
-    expect(Object.keys(decodeRules({ nonFiniteVariation: true }).flags)).toEqual([])
-    expect(Object.keys(decodeRules({ jsonValue: '1e400' }).flags)).toEqual([])
-    expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 1 }).flags)).toEqual(['test-flag'])
+  it.each([
+    [{ minimumFeatureLevel: 1 }, 'test-flag', 'Flag requires feature level 1, but this SDK supports 0'],
+    [{ nonFiniteVariation: true }, 'test-flag', 'Numeric variation value is not finite'],
+    [{ jsonValue: '1e400' }, 'test-flag', 'JSON variation value is invalid'],
+    [{ futureFlagFeatureLevel: 1 }, 'future-flag', 'Flag requires feature level 1, but this SDK supports 0'],
+  ] as const)('preserves an invalid flag and reports its configuration error', (options, flagKey, errorMessage) => {
+    const configuration = decodeRules(options)
+
+    expect(configuration.flags).toHaveProperty(flagKey)
+    expect(
+      evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, { targetingKey: 'user' }, logger)
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage,
+    })
   })
 
   it('rejects an int64 variation outside the JavaScript safe integer range', () => {
@@ -366,26 +391,18 @@ describe('UFC protobuf decoder', () => {
     ).toEqual(['test-flag'])
   })
 
-  it('drops a flag whose final numeric variation is non-finite', () => {
-    expect(
-      Object.keys(
-        decodeRules({
-          variationType: 3,
-          variationValueFields: [...protobufDouble(4, 2.5), ...protobufDouble(4, Number.NaN)],
-        }).flags
-      )
-    ).toEqual([])
+  it('reports a flag whose final numeric variation is non-finite', () => {
+    expectFlagConfigurationError({
+      variationType: 3,
+      variationValueFields: [...protobufDouble(4, 2.5), ...protobufDouble(4, Number.NaN)],
+    })
   })
 
-  it('drops a flag whose final variation oneof disagrees with its variation type', () => {
-    expect(
-      Object.keys(
-        decodeRules({
-          variationType: 4,
-          variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
-        }).flags
-      )
-    ).toEqual([])
+  it('reports a flag whose final variation oneof disagrees with its variation type', () => {
+    expectFlagConfigurationError({
+      variationType: 4,
+      variationValueFields: [...protobufVarint(5, 1), ...protobufVarint(3, -42)],
+    })
   })
 
   it.each([
@@ -410,79 +427,68 @@ describe('UFC protobuf decoder', () => {
   it.each([
     { fields: [...protobufMessage(99, []), ...protobufMessage(1, [])] },
     { fields: [...protobufMessage(1, []), ...protobufMessage(99, [])] },
-  ])('drops a supported flag with an unknown partition-key field', ({ fields }) => {
-    expect(
-      Object.keys(
-        decodeRules({
-          futureFlagFeatureLevel: 0,
-          futureTargetingConditionIndex: 0,
-          futurePartitionKeyFields: fields,
-        }).flags
-      )
-    ).toEqual(['test-flag'])
+  ])('reports a supported flag with an unknown partition-key field', ({ fields }) => {
+    expectFlagConfigurationError(
+      {
+        futureFlagFeatureLevel: 0,
+        futureTargetingConditionIndex: 0,
+        futurePartitionKeyFields: fields,
+      },
+      'future-flag'
+    )
   })
 
   it.each([3, 4, 5, 6, 7, 8] as const)(
-    'drops a supported flag referencing an unknown condition comparator in group %s',
+    'reports a supported flag referencing an unknown condition comparator in group %s',
     (unknownConditionGroup) => {
-      expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 0, unknownConditionGroup }).flags)).toEqual([
-        'test-flag',
-      ])
+      expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
     }
   )
 
-  it.each([0, 1])(
-    'retains the valid flag when a feature-level %s flag uses a future variation value',
-    (futureFlagFeatureLevel) => {
-      expect(
-        Object.keys(
-          decodeRules({
-            futureFlagFeatureLevel,
-            futureTargetingConditionIndex: 0,
-            futureVariationValueFields: protobufMessage(99, []),
-          }).flags
-        )
-      ).toEqual(['test-flag'])
-    }
-  )
+  it.each([0, 1])('reports a feature-level %s flag that uses a future variation value', (futureFlagFeatureLevel) => {
+    expectFlagConfigurationError(
+      {
+        futureFlagFeatureLevel,
+        futureTargetingConditionIndex: 0,
+        futureVariationValueFields: protobufMessage(99, []),
+      },
+      'future-flag'
+    )
+  })
 
   it.each([
     { fields: [...protobufMessage(99, []), ...protobufVarint(5, 1)] },
     { fields: [...protobufVarint(5, 1), ...protobufMessage(99, [])] },
-  ])('drops a supported flag whose variation contains unknown oneof data', ({ fields }) => {
-    expect(
-      Object.keys(
-        decodeRules({
-          futureFlagFeatureLevel: 0,
-          futureTargetingConditionIndex: 0,
-          futureVariationValueFields: fields,
-        }).flags
-      )
-    ).toEqual(['test-flag'])
+  ])('reports a supported flag whose variation contains unknown oneof data', ({ fields }) => {
+    expectFlagConfigurationError(
+      {
+        futureFlagFeatureLevel: 0,
+        futureTargetingConditionIndex: 0,
+        futureVariationValueFields: fields,
+      },
+      'future-flag'
+    )
   })
 
-  it('drops a supported flag whose partition key kind is missing', () => {
-    expect(
-      Object.keys(
-        decodeRules({
-          futureFlagFeatureLevel: 0,
-          futureTargetingConditionIndex: 0,
-          futurePartitionKeyFields: [],
-        }).flags
-      )
-    ).toEqual(['test-flag'])
+  it('reports a supported flag whose partition key kind is missing', () => {
+    expectFlagConfigurationError(
+      {
+        futureFlagFeatureLevel: 0,
+        futureTargetingConditionIndex: 0,
+        futurePartitionKeyFields: [],
+      },
+      'future-flag'
+    )
   })
 
-  it('drops a supported flag referencing an unknown top-level condition', () => {
-    expect(Object.keys(decodeRules({ futureFlagFeatureLevel: 0, unknownTopLevelCondition: true }).flags)).toEqual([
-      'test-flag',
-    ])
+  it('reports a supported flag referencing an unknown top-level condition', () => {
+    expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownTopLevelCondition: true }, 'future-flag')
   })
 
-  it('drops a flag referencing a nested comparator with unknown data', () => {
+  it('reports a flag referencing a nested comparator with unknown data', () => {
     const numeric = protobufMessage(3, [...protobufVarint(1, 0), ...protobufMessage(99, []), ...protobufDouble(2, 1.5)])
 
-    expect(Object.keys(decodeRules({ conditionMessages: [numeric] }).flags)).toEqual([])
+    expectFlagConfigurationError({ conditionMessages: [numeric] })
   })
 
   it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
@@ -495,14 +501,14 @@ describe('UFC protobuf decoder', () => {
     expect(evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: 1 }).value).toBe(true)
   })
 
-  it('drops a flag whose final numeric comparator is non-finite', () => {
+  it('reports a flag whose final numeric comparator is non-finite', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
       ...protobufDouble(2, 1.5),
       ...protobufDouble(2, Number.NaN),
     ])
 
-    expect(Object.keys(decodeRules({ conditionMessages: [numeric] }).flags)).toEqual([])
+    expectFlagConfigurationError({ conditionMessages: [numeric] })
   })
 
   it('preserves composite time ranges in the protobuf representation', () => {
