@@ -5,7 +5,6 @@ type WireEntry = {
   response: string
   fetchedAt?: number
   etag?: string
-  context?: unknown
 }
 
 export type PrecomputedWireEntry = WireEntry & {
@@ -22,7 +21,7 @@ export function isWireEntry(value: unknown): value is WireEntry {
 }
 
 export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWireEntry {
-  return isWireEntry(value) && (value.context === undefined || isEvaluationContext(value.context))
+  return isWireEntry(value) && (!('context' in value) || isEvaluationContext(value.context))
 }
 
 export function isPrecomputedConfigurationResponse(value: unknown): value is PrecomputedConfigurationResponse {
