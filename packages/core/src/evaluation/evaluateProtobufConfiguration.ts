@@ -77,10 +77,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
 
     for (const allocation of flag.allocations) {
-      if (
-        allocation.targetingConditionIndex !== undefined &&
-        !matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, new Set<number>())
-      ) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, new Set<number>())) {
         continue
       }
       const split = allocation.splits.find((candidate) =>
@@ -148,11 +145,12 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 }
 
 function matchesCondition(
-  index: number,
+  index: number | undefined,
   configuration: FlagsConfiguration,
   subjectAttributes: EvaluationContext,
   ancestors: Set<number>
 ): boolean {
+  if (index === undefined) return true
   if (ancestors.has(index)) throw new FlagConfigurationError('Condition graph contains a cycle')
   const condition = atIndex(configuration.conditions, index, 'condition')
   const nextAncestors = new Set(ancestors).add(index)
