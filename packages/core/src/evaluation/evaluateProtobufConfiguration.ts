@@ -57,9 +57,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
   try {
     if (flag.minimumFeatureLevel > SUPPORTED_FEATURE_LEVEL) {
-      throw new FlagConfigurationError(
-        `Flag requires feature level ${flag.minimumFeatureLevel}, but this SDK supports ${SUPPORTED_FEATURE_LEVEL}`
-      )
+      throw new FlagConfigurationError('Flag requires an unsupported feature level')
     }
     const flagValueType = variationTypeToFlagValueType(flag.variationType)
     if (type !== flagValueType) {
@@ -373,7 +371,7 @@ function variationTypeToFlagValueType(variationType: VariationType): FlagValueTy
   if (variationType === UFC_VARIATION_TYPE.STRING) return 'string'
   if (variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC) return 'number'
   if (variationType === UFC_VARIATION_TYPE.JSON) return 'object'
-  throw new FlagConfigurationError(`Unsupported variation type: ${variationType}`)
+  throw new FlagConfigurationError('Unsupported variation type')
 }
 
 function variationValueCase(
@@ -384,7 +382,7 @@ function variationValueCase(
   if (variationType === UFC_VARIATION_TYPE.NUMERIC) return 'numericValue'
   if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'booleanValue'
   if (variationType === UFC_VARIATION_TYPE.JSON) return 'jsonStringIndex'
-  throw new FlagConfigurationError(`Unsupported variation type: ${variationType}`)
+  throw new FlagConfigurationError('Unsupported variation type')
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
@@ -417,7 +415,7 @@ function safeInteger(value: bigint, description: string): number {
 
 function atIndex<T>(items: T[], index: number, description: string): T {
   const value = items[index]
-  if (value === undefined) throw new FlagConfigurationError(`Invalid ${description} index: ${index}`)
+  if (value === undefined) throw new FlagConfigurationError(`Invalid ${description} index`)
   return value
 }
 
