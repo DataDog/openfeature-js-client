@@ -18,7 +18,6 @@ const SUPPORTED_FEATURE_LEVEL = 0
 export function decodeUniversalFlagConfiguration(response: string): FlagsConfiguration {
   const configuration = fromBinary(FlagsConfigurationSchema, base64Decode(response))
   validateTimestamp(configuration)
-  validateSafeIntegers(configuration)
   const errors = new Map<string, string>()
   for (const [key, flag] of Object.entries(configuration.flags)) {
     if (flag.minimumFeatureLevel > SUPPORTED_FEATURE_LEVEL) {
@@ -53,7 +52,7 @@ function validateFlag(flag: Flag, configuration: FlagsConfiguration): void {
         atIndex(configuration.strings, variation.value.value, 'string variation value')
         break
       case 'integerValue':
-        safeInteger(variation.value.value, 'Protobuf int64')
+        safeInteger(variation.value.value, 'Integer variation value')
         break
       case 'numericValue':
         if (!Number.isFinite(variation.value.value)) throw new Error('Numeric variation value is not finite')
@@ -168,27 +167,6 @@ function validateTimestamp(configuration: FlagsConfiguration): void {
   }
 }
 
-function validateSafeIntegers(configuration: FlagsConfiguration): void {
-  for (const flag of Object.values(configuration.flags)) {
-    for (const variation of flag.variations) {
-      if (variation.value.case === 'integerValue') safeInteger(variation.value.value, 'Protobuf int64')
-    }
-    for (const allocation of flag.allocations) {
-      for (const partition of allocation.partitionKey) {
-        if (partition.kind.case === 'shardMd5') {
-          safeInteger(partition.kind.value.totalShards, 'Protobuf uint64')
-        }
-      }
-      for (const split of allocation.splits) {
-        for (const range of split.ranges) {
-          if (range.from !== undefined) safeInteger(range.from, 'Protobuf uint64')
-          if (range.to !== undefined) safeInteger(range.to, 'Protobuf uint64')
-        }
-      }
-    }
-  }
-}
-
 function validateJson(serialized: string): void {
   const value: unknown = JSON.parse(serialized)
   if (!isJsonValue(value)) throw new Error('JSON variation value is invalid')
@@ -206,7 +184,7 @@ function isJsonValue(value: unknown): boolean {
 function safeInteger(value: bigint | string, description: string): number {
   const result = Number(value)
   if (!Number.isSafeInteger(result) || result.toString() !== value.toString()) {
-    throw new Error(`${description} is outside the JavaScript safe integer range`)
+    throw new Error(`${description} cannot be represented safely as a JavaScript number`)
   }
   return result
 }
