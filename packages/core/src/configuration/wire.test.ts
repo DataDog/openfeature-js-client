@@ -1,3 +1,4 @@
+import { base64Decode, base64Encode } from '@bufbuild/protobuf/wire'
 import type { FlagsConfiguration } from './configuration'
 import { configurationFromPrecomputedString } from './precomputed-wire'
 import { configurationFromRulesString } from './rules-wire'
@@ -27,6 +28,14 @@ const configuration: FlagsConfiguration = {
 }
 
 const rulesResponse = 'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
+
+function withUnknownField(response: string): string {
+  const decoded = base64Decode(response)
+  const encoded = new Uint8Array(decoded.length + 3)
+  encoded.set(decoded)
+  encoded.set([0xa0, 0x06, 0x07], decoded.length) // Unknown field 100 with varint value 7.
+  return base64Encode(encoded)
+}
 
 describe('configuration wire', () => {
   it('parses precomputed configuration without parsing rules', () => {
@@ -73,18 +82,31 @@ describe('configuration wire', () => {
   it.each([
     ['rules-only', false],
     ['combined precomputed and rules', true],
-  ])('rejects serializing a %s configuration instead of silently dropping rules', (_, includePrecomputed) => {
+  ])('round-trips a %s configuration', (_, includePrecomputed) => {
     const rules = configurationFromString(
-      JSON.stringify({ version: 1, rules: { response: rulesResponse, etag: 'rules-etag' } })
+      JSON.stringify({
+        version: 1,
+        rules: { response: rulesResponse, fetchedAt: 1731939819456, etag: 'rules-etag' },
+      })
     )
     const configurationWithRules: FlagsConfiguration = {
       ...(includePrecomputed ? configuration : {}),
       rules: rules.rules,
     }
 
-    expect(() => configurationToString(configurationWithRules)).toThrow(
-      'Rules configurations cannot be serialized to the wire format'
+    expect(configurationFromString(configurationToString(configurationWithRules))).toEqual(configurationWithRules)
+  })
+
+  it('preserves unknown protobuf fields when rules are serialized', () => {
+    const configurationWithUnknownField = configurationFromString(
+      JSON.stringify({ version: 1, rules: { response: withUnknownField(rulesResponse) } })
     )
+
+    const restored = configurationFromString(configurationToString(configurationWithUnknownField))
+    const unknown = restored.rules?.response.$unknown
+    expect(unknown).toHaveLength(1)
+    expect(unknown?.[0]).toMatchObject({ no: 100, wireType: 0 })
+    expect(Array.from(unknown?.[0]?.data ?? [])).toEqual([7])
   })
 
   it('returns an empty configuration for an unknown version', () => {
