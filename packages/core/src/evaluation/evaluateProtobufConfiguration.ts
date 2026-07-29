@@ -9,7 +9,6 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import { getFlagConfigurationError } from '../configuration/flag-configuration-errors'
 import type {
   Allocation,
   Condition,
@@ -20,13 +19,15 @@ import type {
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
-import { compareSemver, compileRegex } from './condition-helpers'
-import { TargetingKeyMissingError } from './errors'
+import { compareSemver, compileRegex, isValidSemver } from './condition-helpers'
+import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
 import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
+
+const SUPPORTED_FEATURE_LEVEL = 0
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -52,37 +53,29 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
-  const configurationError = getFlagConfigurationError(configuration, flagKey)
-  if (configurationError) {
-    logger.error('returning default value because flag configuration is invalid', {
-      flagKey,
-      subjectKey,
-      error: configurationError,
-    })
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: configurationError,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-    }
-  }
-  if (!typeMatches(type, flag.variationType)) {
-    logger.debug('variant value type mismatch, returning default value', {
-      flagKey,
-      subjectKey,
-      expectedType: type,
-      variantType: flag.variationType,
-    })
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'TYPE_MISMATCH' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-    }
-  }
 
   try {
+    if (flag.minimumFeatureLevel > SUPPORTED_FEATURE_LEVEL) {
+      throw new FlagConfigurationError(
+        `Flag requires feature level ${flag.minimumFeatureLevel}, but this SDK supports ${SUPPORTED_FEATURE_LEVEL}`
+      )
+    }
+    const flagValueType = variationTypeToFlagValueType(flag.variationType)
+    if (type !== flagValueType) {
+      logger.debug('variant value type mismatch, returning default value', {
+        flagKey,
+        subjectKey,
+        expectedType: type,
+        variantType: flag.variationType,
+      })
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'TYPE_MISMATCH' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      }
+    }
+
     for (const allocation of flag.allocations) {
       if (
         allocation.targetingConditionIndex !== undefined &&
@@ -95,9 +88,9 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       )
       if (!split) continue
 
-      const variation = flag.variations[split.variationIndex]
-      const variationKey = configuration.strings[variation.keyStringIndex]
-      const value = variationValue(variation.value, configuration)
+      const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
+      const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
+      const value = variationValue(flag, variation.value, configuration)
       logger.debug('evaluated a flag', { flagKey, subjectKey, assignment: value })
       return {
         value: value as FlagTypeToValue<T>,
@@ -115,6 +108,20 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       }
     }
   } catch (error) {
+    if (error instanceof FlagConfigurationError) {
+      logger.error('returning default value because flag configuration is invalid', {
+        flagKey,
+        subjectKey,
+        error: error.message,
+      })
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR' as ErrorCode,
+        errorMessage: error.message,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      }
+    }
     if (error instanceof TargetingKeyMissingError) {
       return {
         value: defaultValue,
@@ -146,9 +153,8 @@ function matchesCondition(
   subjectAttributes: EvaluationContext,
   ancestors: Set<number>
 ): boolean {
-  if (ancestors.has(index)) throw new Error('Condition graph contains a cycle')
-  const condition = configuration.conditions[index]
-  if (!condition) throw new Error(`Invalid condition index: ${index}`)
+  if (ancestors.has(index)) throw new FlagConfigurationError('Condition graph contains a cycle')
+  const condition = atIndex(configuration.conditions, index, 'condition')
   const nextAncestors = new Set(ancestors).add(index)
   if (condition.kind.case === 'all') {
     return condition.kind.value.conditionIndexes.every((child) =>
@@ -169,8 +175,10 @@ function matchesLeafCondition(
   subjectAttributes: EvaluationContext
 ): boolean {
   const kind = condition.kind
-  if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') return false
-  const attribute = configuration.attributeNames[kind.value.attributeNameIndex]
+  if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
+    throw new FlagConfigurationError('Unsupported condition')
+  }
+  const attribute = atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
   const value = subjectAttributes[attribute]
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
@@ -178,7 +186,10 @@ function matchesLeafCondition(
   if (kind.case === 'numeric') {
     const actual = Number(value)
     const expected = kind.value.comparator.value
-    if (!Number.isFinite(actual) || expected === undefined) return false
+    if (kind.value.comparator.case === undefined || expected === undefined || !Number.isFinite(expected)) {
+      throw new FlagConfigurationError('Invalid numeric comparator')
+    }
+    if (!Number.isFinite(actual)) return false
     if (kind.value.comparator.case === 'lessThan') return actual < expected
     if (kind.value.comparator.case === 'lessThanOrEqual') return actual <= expected
     if (kind.value.comparator.case === 'greaterThan') return actual > expected
@@ -186,23 +197,29 @@ function matchesLeafCondition(
     return false
   }
   if (kind.case === 'regex') {
-    if (kind.value.comparator.case === undefined) return false
-    const pattern = configuration.regexes[kind.value.comparator.value]
+    if (kind.value.comparator.case === undefined) {
+      throw new FlagConfigurationError('Missing regex comparator')
+    }
+    const pattern = atIndex(configuration.regexes, kind.value.comparator.value, 'regex')
     let matches: boolean
     try {
       matches = compileRegex(pattern).test(String(value)) // dd-iac-scan ignore-line
     } catch {
-      return false
+      throw new FlagConfigurationError('Invalid regular expression')
     }
     return kind.value.comparator.case === 'matches' ? matches : !matches
   }
   if (kind.case === 'stringMembership') {
-    if (kind.value.comparator.case === undefined) return false
+    if (kind.value.comparator.case === undefined) {
+      throw new FlagConfigurationError('Unsupported string membership comparator')
+    }
     const included = containsInternedString(kind.value.comparator.value.values, String(value), configuration.strings)
     return kind.value.comparator.case === 'oneOf' ? included : !included
   }
   if (kind.case === 'sha256Membership') {
-    if (kind.value.comparator.case === undefined) return false
+    if (kind.value.comparator.case === undefined) {
+      throw new FlagConfigurationError('Unsupported SHA-256 comparator')
+    }
     const encoded = encodeUtf8(String(value))
     const input = new Uint8Array(kind.value.salt.length + encoded.length)
     input.set(kind.value.salt)
@@ -211,8 +228,11 @@ function matchesLeafCondition(
     return kind.value.comparator.case === 'oneOfSha256' ? included : !included
   }
   if (kind.case === 'semver') {
-    if (kind.value.comparator.case === undefined) return false
-    const expected = configuration.semvers[kind.value.comparator.value]
+    if (kind.value.comparator.case === undefined) {
+      throw new FlagConfigurationError('Missing SemVer comparator')
+    }
+    const expected = atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer')
+    if (!isValidSemver(expected)) throw new FlagConfigurationError('Invalid SemVer comparator')
     const comparison = compareSemver(String(value), expected)
     if (comparison === undefined) return false
     if (kind.value.comparator.case === 'semverEqual') return comparison === 0
@@ -233,8 +253,11 @@ function matchesSplit(
   subjectAttributes: EvaluationContext,
   evaluationTimestampMs: TimeStamp
 ): boolean {
+  if (split.ranges.length !== allocation.partitionKey.length) {
+    throw new FlagConfigurationError('Invalid split')
+  }
   return allocation.partitionKey.every((partition, index) => {
-    const range = split.ranges[index]
+    const range = atIndex(split.ranges, index, 'partition range')
     let coordinate: number
     let upperBound: number | undefined
     if (partition.kind.case === 'time') {
@@ -245,28 +268,61 @@ function matchesSplit(
         if (subjectKey == null) throw new TargetingKeyMissingError()
         value = subjectKey
       } else {
-        const attribute = configuration.attributeNames[partition.kind.value.attributeNameIndex]
+        const attribute = atIndex(
+          configuration.attributeNames,
+          partition.kind.value.attributeNameIndex,
+          'partition attribute'
+        )
         const attributeValue = attribute === 'targetingKey' ? subjectKey : subjectAttributes[attribute]
         if (attributeValue == null) return false
         value = attributeValue
       }
-      upperBound = Number(partition.kind.value.totalShards)
+      upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
+      if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
       coordinate = protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound)
     } else {
-      return false
+      throw new FlagConfigurationError('Unsupported partition key')
     }
-    const from = range.from === undefined ? 0 : Number(range.from)
-    const to = range.to === undefined ? upperBound : Number(range.to)
+    const from = range.from === undefined ? 0 : safeInteger(range.from, 'Partition range')
+    const to = range.to === undefined ? upperBound : safeInteger(range.to, 'Partition range')
+    if (to !== undefined && from > to) throw new FlagConfigurationError('Partition range is invalid')
+    if (upperBound !== undefined && (from > upperBound || (to !== undefined && to > upperBound))) {
+      throw new FlagConfigurationError('Shard range is out of bounds')
+    }
     return coordinate >= from && (to === undefined || coordinate < to)
   })
 }
 
-function variationValue(value: Flag['variations'][number]['value'], configuration: FlagsConfiguration): FlagValue {
-  if (value.case === 'stringValueIndex') return configuration.strings[value.value]
-  if (value.case === 'integerValue') return Number(value.value)
-  if (value.case === 'numericValue' || value.case === 'booleanValue') return value.value
-  if (value.case === 'jsonStringIndex') return JSON.parse(configuration.jsonStrings[value.value]) as FlagValue
-  throw new Error('Variation value is missing')
+function variationValue(
+  flag: Flag,
+  value: Flag['variations'][number]['value'],
+  configuration: FlagsConfiguration
+): FlagValue {
+  const expectedCase = variationValueCase(flag.variationType)
+  if (value.case !== expectedCase) {
+    throw new FlagConfigurationError('Variation value does not match flag variation type')
+  }
+  if (value.case === 'stringValueIndex') {
+    return atIndex(configuration.strings, value.value, 'string variation value')
+  }
+  if (value.case === 'integerValue') return safeInteger(value.value, 'Integer variation value')
+  if (value.case === 'numericValue') {
+    if (!Number.isFinite(value.value)) throw new FlagConfigurationError('Numeric variation value is not finite')
+    return value.value
+  }
+  if (value.case === 'booleanValue') return value.value
+  if (value.case === 'jsonStringIndex') {
+    const serialized = atIndex(configuration.jsonStrings, value.value, 'JSON variation value')
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(serialized)
+    } catch {
+      throw new FlagConfigurationError('JSON variation value is invalid')
+    }
+    if (!isJsonValue(parsed)) throw new FlagConfigurationError('JSON variation value is invalid')
+    return parsed
+  }
+  throw new FlagConfigurationError('Variation value is missing')
 }
 
 function resolutionReason(split: Split, allocation: Allocation): ResolutionReason {
@@ -280,21 +336,23 @@ function resolutionReason(split: Split, allocation: Allocation): ResolutionReaso
   return 'STATIC'
 }
 
-function typeMatches(type: FlagValueType, variationType: VariationType): boolean {
-  if (type === 'boolean') return variationType === UFC_VARIATION_TYPE.BOOLEAN
-  if (type === 'string') return variationType === UFC_VARIATION_TYPE.STRING
-  if (type === 'number') {
-    return variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC
-  }
-  return variationType === UFC_VARIATION_TYPE.JSON
-}
-
 function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {
   if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'boolean'
   if (variationType === UFC_VARIATION_TYPE.STRING) return 'string'
   if (variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC) return 'number'
   if (variationType === UFC_VARIATION_TYPE.JSON) return 'object'
-  throw new Error(`Unsupported variation type: ${variationType}`)
+  throw new FlagConfigurationError(`Unsupported variation type: ${variationType}`)
+}
+
+function variationValueCase(
+  variationType: VariationType
+): 'stringValueIndex' | 'integerValue' | 'numericValue' | 'booleanValue' | 'jsonStringIndex' {
+  if (variationType === UFC_VARIATION_TYPE.STRING) return 'stringValueIndex'
+  if (variationType === UFC_VARIATION_TYPE.INTEGER) return 'integerValue'
+  if (variationType === UFC_VARIATION_TYPE.NUMERIC) return 'numericValue'
+  if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'booleanValue'
+  if (variationType === UFC_VARIATION_TYPE.JSON) return 'jsonStringIndex'
+  throw new FlagConfigurationError(`Unsupported variation type: ${variationType}`)
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
@@ -302,12 +360,35 @@ function containsInternedString(indexes: number[], value: string, strings: strin
   let high = indexes.length - 1
   while (low <= high) {
     const middle = (low + high) >>> 1
-    const candidate = strings[indexes[middle]]
+    const candidate = atIndex(strings, indexes[middle], 'condition string')
     if (candidate === value) return true
     if (candidate < value) low = middle + 1
     else high = middle - 1
   }
   return false
+}
+
+function safeInteger(value: bigint, description: string): number {
+  const result = Number(value)
+  if (!Number.isSafeInteger(result) || BigInt(result) !== value) {
+    throw new FlagConfigurationError(`${description} cannot be represented safely as a JavaScript number`)
+  }
+  return result
+}
+
+function atIndex<T>(items: T[], index: number, description: string): T {
+  const value = items[index]
+  if (value === undefined) throw new FlagConfigurationError(`Invalid ${description} index: ${index}`)
+  return value
+}
+
+function isJsonValue(value: unknown): value is FlagValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  return (
+    typeof value === 'object' && value !== null && Object.values(value as Record<string, unknown>).every(isJsonValue)
+  )
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {

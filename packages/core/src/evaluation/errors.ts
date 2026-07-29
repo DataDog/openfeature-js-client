@@ -4,3 +4,10 @@ export class TargetingKeyMissingError extends Error {
     this.name = 'TargetingKeyMissingError'
   }
 }
+
+export class FlagConfigurationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'FlagConfigurationError'
+  }
+}
