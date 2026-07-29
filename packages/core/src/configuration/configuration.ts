@@ -18,6 +18,8 @@ export type PrecomputedConfiguration = {
   context?: EvaluationContext
   fetchedAt?: TimeStamp
   etag?: string
+  /** Parsing errors for malformed flags, retained by flag key. */
+  flagErrors?: Record<string, string>
 }
 
 /** @internal */
