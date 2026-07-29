@@ -9,6 +9,7 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
+import { getFlagConfigurationError } from '../configuration/flag-configuration-errors'
 import type {
   Allocation,
   Condition,
@@ -48,6 +49,21 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+    }
+  }
+  const configurationError = getFlagConfigurationError(configuration, flagKey)
+  if (configurationError) {
+    logger.error('returning default value because flag configuration is invalid', {
+      flagKey,
+      subjectKey,
+      error: configurationError,
+    })
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: configurationError,
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
