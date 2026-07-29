@@ -1,5 +1,6 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateRulesBasedConfiguration } from '../evaluation'
+import { MD5Sharder } from '../evaluation/sharders'
 import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
 
 function varint(input: number | bigint): number[] {
@@ -72,6 +73,7 @@ type RulesResponseOptions = {
   variationType?: number
   variationValueFields?: number[]
   timeRanges?: Array<Array<{ from?: number; to?: number }>>
+  splitRanges?: Array<Array<{ from?: number; to?: number }>>
   conditionMessages?: number[][]
   targetingConditionIndex?: number
   includeFallbackAllocation?: boolean
@@ -113,7 +115,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   const partitionKeys = options.timeRanges
     ? options.timeRanges[0].map(() => protobufMessage(1, []))
     : [protobufMessage(2, md5Shard)]
-  const splitRanges = options.timeRanges ?? [[{ from: 0, to: 100 }]]
+  const splitRanges = options.splitRanges ?? options.timeRanges ?? [[{ from: 0, to: 100 }]]
   const splits = splitRanges.map((ranges) => [
     ...ranges.flatMap((range) =>
       protobufMessage(1, [
@@ -676,6 +678,22 @@ describe('UFC protobuf decoder', () => {
       reason: 'ERROR',
       errorCode: 'TARGETING_KEY_MISSING',
     })
+  })
+
+  it('computes partition coordinates once across multiple splits', () => {
+    const getShard = jest.spyOn(MD5Sharder.prototype, 'getShard')
+
+    expect(
+      evaluateBoolean(
+        {
+          splitRanges: [[{ from: 0, to: 0 }], [{ from: 0, to: 100 }]],
+        },
+        { targetingKey: 'user', country: 'US' }
+      ).value
+    ).toBe(true)
+    expect(getShard).toHaveBeenCalledTimes(1)
+
+    getShard.mockRestore()
   })
 
   it('returns a type mismatch before evaluating protobuf allocations', () => {
