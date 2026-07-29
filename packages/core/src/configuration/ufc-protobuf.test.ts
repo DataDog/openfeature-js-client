@@ -380,10 +380,11 @@ describe('UFC protobuf decoder', () => {
   })
 
   it.each([
-    [{ minimumFeatureLevel: 1 }, 'test-flag', 'Flag requires feature level 1, but this SDK supports 0'],
+    [{ minimumFeatureLevel: 1 }, 'test-flag', 'Flag requires an unsupported feature level'],
+    [{ minimumFeatureLevel: 4096 }, 'test-flag', 'Flag requires an unsupported feature level'],
     [{ nonFiniteVariation: true }, 'test-flag', 'Numeric variation value is not finite'],
     [{ jsonValue: '1e400' }, 'test-flag', 'JSON variation value is invalid'],
-    [{ futureFlagFeatureLevel: 1 }, 'future-flag', 'Flag requires feature level 1, but this SDK supports 0'],
+    [{ futureFlagFeatureLevel: 1 }, 'future-flag', 'Flag requires an unsupported feature level'],
   ] as const)('preserves an invalid flag and reports its configuration error', (options, flagKey, errorMessage) => {
     const configuration = decodeRules(options)
 
@@ -392,6 +393,25 @@ describe('UFC protobuf decoder', () => {
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
       errorMessage,
+    })
+  })
+
+  it.each([6, 4096])('does not include unsupported variation type %s in the error message', (variationType) => {
+    expect(evaluateFlag(decodeRules({ variationType }), 'test-flag')).toMatchObject({
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Unsupported variation type',
+    })
+  })
+
+  it.each([1, 4096])('does not include invalid variation index %s in the error message', (variationIndex) => {
+    const configuration = decodeRules()
+    configuration.flags['test-flag'].allocations[0].splits[0].variationIndex = variationIndex
+
+    expect(evaluateFlag(configuration, 'test-flag')).toMatchObject({
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Invalid split variation index',
     })
   })
 
