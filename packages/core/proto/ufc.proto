@@ -34,8 +34,8 @@ message FlagsConfiguration {
 
 message Flag {
   // The minimum feature level an SDK must support to evaluate this flag.
-  // SDKs that don't support this level must skip the flag entirely (e.g.
-  // treat it as absent) rather than risk evaluating it incorrectly.
+  // SDKs that don't support this level must not evaluate the flag and should
+  // report an informative flag-scoped error rather than treat it as absent.
   uint32 minimum_feature_level = 1;
   VariationType variation_type = 2;
   // Split.variation_index indexes this array.

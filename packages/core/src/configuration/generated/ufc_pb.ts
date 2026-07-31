@@ -97,8 +97,8 @@ export const FlagsConfigurationSchema: GenMessage<FlagsConfiguration> = /*@__PUR
 export type Flag = Message<"datadog.ffe.flagging.ufc.v1.Flag"> & {
   /**
    * The minimum feature level an SDK must support to evaluate this flag.
-   * SDKs that don't support this level must skip the flag entirely (e.g.
-   * treat it as absent) rather than risk evaluating it incorrectly.
+   * SDKs that don't support this level must not evaluate the flag and should
+   * report an informative flag-scoped error rather than treat it as absent.
    *
    * @generated from field: uint32 minimum_feature_level = 1;
    */
