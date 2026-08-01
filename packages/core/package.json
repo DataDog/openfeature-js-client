@@ -24,6 +24,9 @@
     "*": {
       "configuration": [
         "cjs/configuration-wire.d.ts"
+      ],
+      "precomputed": [
+        "cjs/precomputed-configuration-wire.d.ts"
       ]
     }
   },
@@ -39,6 +42,12 @@
       "import": "./esm/configuration-wire.js",
       "require": "./cjs/configuration-wire.js",
       "default": "./esm/configuration-wire.js"
+    },
+    "./precomputed": {
+      "types": "./cjs/precomputed-configuration-wire.d.ts",
+      "import": "./esm/precomputed-configuration-wire.js",
+      "require": "./cjs/precomputed-configuration-wire.js",
+      "default": "./esm/precomputed-configuration-wire.js"
     },
     "./package.json": "./package.json"
   },

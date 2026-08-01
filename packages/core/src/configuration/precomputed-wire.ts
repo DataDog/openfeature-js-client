@@ -15,6 +15,13 @@ export function configurationFromPrecomputedString(wire: FlagsConfigurationWire)
   return serialized ? precomputedConfigurationFromWire(serialized) : {}
 }
 
+/**
+ * Serialize only the precomputed capability of a flags configuration.
+ */
+export function configurationToPrecomputedString(configuration: FlagsConfiguration): FlagsConfigurationWire {
+  return JSON.stringify(precomputedConfigurationToWire(configuration))
+}
+
 export function precomputedConfigurationFromWire(serialized: SerializedConfiguration): FlagsConfiguration {
   if (serialized.precomputed === undefined) return {}
   if (!isPrecomputedWireEntry(serialized.precomputed)) {
@@ -32,4 +39,18 @@ export function precomputedConfigurationFromWire(serialized: SerializedConfigura
       ...parsed,
     },
   }
+}
+
+export function precomputedConfigurationToWire(configuration: FlagsConfiguration): SerializedConfiguration {
+  const wire: SerializedConfiguration = { version: 1 }
+  if (!configuration.precomputed) return wire
+
+  const { context, response, fetchedAt, etag } = configuration.precomputed
+  wire.precomputed = {
+    context,
+    response: JSON.stringify(response),
+    fetchedAt,
+    etag,
+  }
+  return wire
 }

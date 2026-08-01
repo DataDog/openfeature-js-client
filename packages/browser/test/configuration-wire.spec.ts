@@ -1,5 +1,5 @@
 import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
-import { configurationFromString, type FlagsConfigurationWire } from '../src/configuration'
+import { configurationFromString, type FlagsConfigurationWire } from '../src'
 
 function rulesWire(): FlagsConfigurationWire {
   return JSON.stringify({
