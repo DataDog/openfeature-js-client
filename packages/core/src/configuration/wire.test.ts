@@ -1,6 +1,6 @@
 import { base64Decode, base64Encode } from '@bufbuild/protobuf/wire'
 import type { FlagsConfiguration } from './configuration'
-import { configurationFromPrecomputedString } from './precomputed-wire'
+import { configurationFromPrecomputedString, configurationToPrecomputedString } from './precomputed-wire'
 import { configurationFromRulesString } from './rules-wire'
 import { configurationFromString, configurationToString } from './wire'
 
@@ -47,6 +47,13 @@ describe('configuration wire', () => {
     })
 
     expect(configurationFromPrecomputedString(wire)).toEqual(configuration)
+  })
+
+  it('round-trips only the precomputed capability', () => {
+    const wire = configurationToPrecomputedString(configuration)
+
+    expect(configurationFromPrecomputedString(wire)).toEqual(configuration)
+    expect(JSON.parse(wire).rules).toBeUndefined()
   })
 
   it('parses rules configuration without parsing precomputed data', () => {

@@ -14,8 +14,8 @@
   "types": "cjs/index.d.ts",
   "typesVersions": {
     "*": {
-      "configuration": [
-        "cjs/configuration.d.ts"
+      "precomputed": [
+        "cjs/precomputed.d.ts"
       ]
     }
   },
@@ -26,11 +26,11 @@
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
     },
-    "./configuration": {
-      "types": "./cjs/configuration.d.ts",
-      "import": "./esm/configuration.js",
-      "require": "./cjs/configuration.js",
-      "default": "./esm/configuration.js"
+    "./precomputed": {
+      "types": "./cjs/precomputed.d.ts",
+      "import": "./esm/precomputed.js",
+      "require": "./cjs/precomputed.js",
+      "default": "./esm/precomputed.js"
     },
     "./package.json": "./package.json"
   },

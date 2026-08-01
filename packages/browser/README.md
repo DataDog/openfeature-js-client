@@ -115,17 +115,21 @@ evaluation context.
 
 ## Offline configuration parsing
 
-The configuration parser is exposed through an optional entry point:
+The full-featured default entry point supports both precomputed and rules-based configurations:
 
 ```javascript
-import { configurationFromString } from '@datadog/openfeature-browser/configuration'
+import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser'
 
 const configuration = configurationFromString(wire)
 ```
 
-It accepts both precomputed and rules-based wire configurations. Protobuf
-support is included only when this entry point is imported; applications that
-use only the main browser provider entry point do not include it.
+Applications that only use precomputed configurations can select the smaller,
+protobuf-free capability entry point. It exposes the same provider and parser
+names, but ignores rules-based entries:
+
+```javascript
+import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser/precomputed'
+```
 
 ## End-user license agreement
 
