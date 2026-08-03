@@ -349,4 +349,103 @@ describe('createFlagsConfigurationFetcher', () => {
       })
     })
   })
+
+  describe('request reliability', () => {
+    it('should retry once after a request timeout', async () => {
+      jest.useFakeTimers()
+      mockFetch
+        .mockImplementationOnce((_url: string, init: RequestInit) => {
+          return new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+          })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: { get: jest.fn(() => 'application/json') },
+          json: jest.fn().mockResolvedValue({ flags: {} }),
+        })
+
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+      const resultPromise = fetcher(mockContext)
+
+      await jest.advanceTimersByTimeAsync(1_000)
+
+      await expect(resultPromise).resolves.toEqual({
+        precomputed: {
+          response: { flags: {} },
+          context: mockContext,
+          fetchedAt: 1234567890,
+        },
+      })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      jest.useRealTimers()
+    })
+
+    it('should retry once after a transient response', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Server Error',
+          headers: { get: jest.fn(() => null) },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: { get: jest.fn(() => 'application/json') },
+          json: jest.fn().mockResolvedValue({ flags: {} }),
+        })
+
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+
+      await expect(fetcher(mockContext)).resolves.toBeDefined()
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should not retry a non-transient response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { get: jest.fn(() => null) },
+      })
+
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+
+      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Bad Request')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('should use the configured retry count', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        headers: { get: jest.fn(() => null) },
+      })
+      const fetcher = createFlagsConfigurationFetcher({
+        ...baseConfig,
+        assignmentRequestTimeoutMs: 2_000,
+        assignmentRequestRetryCount: 2,
+      })
+
+      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Server Error')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should not retry a caller abort', async () => {
+      const controller = new AbortController()
+      mockFetch.mockImplementationOnce((_url: string, init: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+        })
+      })
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+
+      const resultPromise = fetcher(mockContext, { signal: controller.signal })
+      controller.abort()
+
+      await expect(resultPromise).rejects.toMatchObject({ name: 'AbortError' })
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+  })
 })

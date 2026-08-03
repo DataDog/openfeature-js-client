@@ -6,6 +6,12 @@
 
 ---
 
+## Unreleased
+
+**Features:**
+
+- Limit each browser assignment request to one second and retry transient failures once by default. Add timeout and retry-count configuration.
+
 ## @datadog/flagging-core@2.0.2, @datadog/openfeature-browser@1.2.5, @datadog/openfeature-node-server@2.0.2
 
 **Bug Fixes:**

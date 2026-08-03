@@ -71,6 +71,16 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
    */
   flaggingProxy?: string
+
+  /**
+   * Timeout for each flag assignment request in milliseconds (default: 1000ms).
+   */
+  assignmentRequestTimeoutMs?: number
+
+  /**
+   * Number of retries after a failed flag assignment request (default: 1).
+   */
+  assignmentRequestRetryCount?: number
 }
 
 export interface FlaggingConfiguration extends Configuration {

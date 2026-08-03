@@ -56,6 +56,10 @@ const provider = new DatadogProvider({
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
+
+  // Assignment requests use one second per attempt and one retry by default
+  assignmentRequestTimeoutMs: 1000,
+  assignmentRequestRetryCount: 1,
 })
 ```
 
