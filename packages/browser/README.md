@@ -152,18 +152,18 @@ import {
 } from '@datadog/openfeature-browser/rules-based'
 ```
 
-### Using CoreProvider with portable configuration
+### Using DatadogOfflineProvider with portable configuration
 
-`CoreProvider` is an opt-in evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It does not fetch or poll configuration.
+`DatadogOfflineProvider` is an opt-in evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It does not fetch or poll configuration.
 
 For dynamic context, the generic configuration wire should contain rules-based flag configuration. Precomputed configuration can also be evaluated, but only for the matching context it was generated for.
 
 ```javascript
-import { configurationFromString, CoreProvider } from '@datadog/openfeature-browser'
+import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfeature-browser'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
-const provider = new CoreProvider({ configuration })
+const provider = new DatadogOfflineProvider({ configuration })
 
 await OpenFeature.setProviderAndWait(provider)
 

@@ -6,16 +6,16 @@ jest.mock('@bufbuild/protobuf/wire', () => {
 })
 
 import {
-  CoreProvider,
   configurationFromString,
   configurationToString,
+  DatadogOfflineProvider,
   DatadogProvider,
   getPrecomputedContext,
 } from '../src'
 
 describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
-    expect(CoreProvider).toBeDefined()
+    expect(DatadogOfflineProvider).toBeDefined()
     expect(DatadogProvider).toBeDefined()
   })
 

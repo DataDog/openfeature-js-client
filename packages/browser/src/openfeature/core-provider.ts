@@ -1,5 +1,4 @@
-import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import { configMatchesContext, evaluate } from '@datadog/flagging-core'
+import type { FlagTypeToValue } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   FlagValueType,
@@ -12,56 +11,14 @@ import type {
 } from '@openfeature/web-sdk'
 import { OpenFeatureEventEmitter, type ProviderEventEmitter, ProviderEvents } from '@openfeature/web-sdk'
 
-export interface CoreProviderOptions {
-  configuration: FlagsConfiguration
-}
-
-export class CoreProvider implements Provider {
-  readonly metadata: ProviderMetadata = {
-    name: 'datadog-core',
-  }
+/** Shared OpenFeature evaluation surface for Datadog's browser providers. */
+export abstract class DatadogCoreProvider implements Provider {
+  abstract readonly metadata: ProviderMetadata
   readonly runsOn: Paradigm = 'client'
   readonly events: ProviderEventEmitter<ProviderEvents>
 
-  private flagsConfiguration: FlagsConfiguration
-  private context: EvaluationContext = {}
-
-  constructor(options: CoreProviderOptions) {
+  protected constructor() {
     this.events = new OpenFeatureEventEmitter()
-    this.flagsConfiguration = options.configuration
-  }
-
-  getConfiguration(): FlagsConfiguration {
-    return this.flagsConfiguration
-  }
-
-  setConfiguration(configuration: FlagsConfiguration): void {
-    const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
-    this.flagsConfiguration = configuration
-
-    const error = getConfigurationError(configuration, this.context)
-    if (error) {
-      this.events.emit(ProviderEvents.Error, { error })
-      return
-    }
-
-    this.events.emit(hadEvaluatableConfiguration ? ProviderEvents.ConfigurationChanged : ProviderEvents.Ready)
-  }
-
-  async initialize(context: EvaluationContext = {}): Promise<void> {
-    this.context = context
-    const error = getConfigurationError(this.flagsConfiguration, this.context)
-    if (error) {
-      throw error
-    }
-  }
-
-  onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
-    this.context = newContext
-    const error = getConfigurationError(this.flagsConfiguration, this.context)
-    if (error) {
-      throw error
-    }
   }
 
   resolveBooleanEvaluation(
@@ -97,36 +54,16 @@ export class CoreProvider implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<T> {
+    // OpenFeature requires a specific subtype of JsonValue without providing runtime type information.
+    // Callers are responsible for passing a default value with the expected object shape.
     return this.resolve('object', flagKey, defaultValue, context, logger) as ResolutionDetails<T>
   }
 
-  private resolve<T extends FlagValueType>(
+  protected abstract resolve<T extends FlagValueType>(
     type: T,
     flagKey: string,
     defaultValue: FlagTypeToValue<T>,
     context: EvaluationContext,
     logger: Logger
-  ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
-  }
-
-  private canEvaluateCurrentContext(): boolean {
-    return !getConfigurationError(this.flagsConfiguration, this.context)
-  }
-}
-
-function hasEvaluatableConfiguration(configuration: FlagsConfiguration): boolean {
-  return !!(configuration.precomputed || configuration.rules)
-}
-
-function getConfigurationError(configuration: FlagsConfiguration, context: EvaluationContext): Error | undefined {
-  if (!hasEvaluatableConfiguration(configuration)) {
-    return new Error('No flags configuration has been set')
-  }
-
-  if (!configuration.rules && configuration.precomputed && !configMatchesContext(configuration, context)) {
-    return new Error('Precomputed flags configuration does not match the current context')
-  }
-
-  return undefined
+  ): ResolutionDetails<FlagTypeToValue<T>>
 }
