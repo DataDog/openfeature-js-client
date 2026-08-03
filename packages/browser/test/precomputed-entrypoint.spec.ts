@@ -5,10 +5,11 @@ jest.mock('@bufbuild/protobuf/wire', () => {
   throw new Error('The precomputed entry point loaded Protobuf-ES wire helpers')
 })
 
-import { configurationFromString, configurationToString, DatadogProvider } from '../src/precomputed'
+import { CoreProvider, configurationFromString, configurationToString, DatadogProvider } from '../src/precomputed'
 
 describe('precomputed capability entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
+    expect(CoreProvider).toBeDefined()
     expect(DatadogProvider).toBeDefined()
   })
 
