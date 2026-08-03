@@ -159,8 +159,7 @@ import {
 For dynamic context, the generic configuration wire should contain rules-based flag configuration. Precomputed configuration can also be evaluated, but only for the matching context it was generated for.
 
 ```javascript
-import { CoreProvider } from '@datadog/openfeature-browser'
-import { configurationFromString } from '@datadog/openfeature-browser/configuration'
+import { configurationFromString, CoreProvider } from '@datadog/openfeature-browser'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
