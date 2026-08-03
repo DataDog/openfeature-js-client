@@ -138,7 +138,7 @@ import { configurationFromString, DatadogProvider } from '@datadog/openfeature-b
 For static offline initialization, a precomputed-only configuration adopts its embedded context when the OpenFeature context is empty. You do not need to call `OpenFeature.setContext()`. An explicit non-empty context must match the embedded context.
 
 ```javascript
-import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfeature-browser'
+import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfeature-browser/precomputed'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
@@ -151,7 +151,7 @@ const client = OpenFeature.getClient()
 const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
-For dynamic context, the configuration wire should contain rules-based flag configuration. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+For dynamic context, use the default `@datadog/openfeature-browser` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
 ## End-user license agreement
 
