@@ -2,7 +2,7 @@ import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/configuration'
 import type { Logger } from '@openfeature/core'
 import { ProviderEvents } from '@openfeature/web-sdk'
-import { CoreProvider } from '../../src/openfeature/core-provider'
+import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const logger: Logger = {
@@ -37,16 +37,16 @@ const precomputedConfiguration: FlagsConfiguration = {
   },
 }
 
-describe('CoreProvider', () => {
-  it('has browser provider metadata', () => {
-    const provider = new CoreProvider({ configuration: rulesConfiguration })
+describe('DatadogOfflineProvider', () => {
+  it('has offline provider metadata', () => {
+    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
 
-    expect(provider.metadata).toEqual({ name: 'datadog-core' })
+    expect(provider.metadata).toEqual({ name: 'datadog-offline' })
     expect(provider.runsOn).toBe('client')
   })
 
   it('evaluates rules locally with the supplied context', async () => {
-    const provider = new CoreProvider({ configuration: rulesConfiguration })
+    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
 
     await provider.initialize({ targetingKey: 'user-1', country: 'CA' })
 
@@ -78,7 +78,7 @@ describe('CoreProvider', () => {
   })
 
   it('uses precomputed configuration only when the context matches', async () => {
-    const provider = new CoreProvider({ configuration: precomputedConfiguration })
+    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
@@ -92,7 +92,7 @@ describe('CoreProvider', () => {
   })
 
   it('throws for precomputed-only context changes that do not match the configuration', async () => {
-    const provider = new CoreProvider({ configuration: precomputedConfiguration })
+    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
@@ -113,7 +113,7 @@ describe('CoreProvider', () => {
   })
 
   it('uses rules-based configuration when precomputed context does not match', async () => {
-    const provider = new CoreProvider({
+    const provider = new DatadogOfflineProvider({
       configuration: {
         ...rulesConfiguration,
         precomputed: precomputedConfiguration.precomputed,
@@ -132,17 +132,20 @@ describe('CoreProvider', () => {
   })
 
   it('emits Ready when setConfiguration recovers from an invalid configuration', () => {
-    const provider = new CoreProvider({ configuration: {} })
+    const provider = new DatadogOfflineProvider({ configuration: {} })
     const readyHandler = jest.fn()
+    const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Ready, readyHandler)
+    provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
 
     provider.setConfiguration(rulesConfiguration)
 
     expect(readyHandler).toHaveBeenCalledTimes(1)
+    expect(changedHandler).toHaveBeenCalledTimes(1)
   })
 
   it('emits ConfigurationChanged for replacement configuration', () => {
-    const provider = new CoreProvider({ configuration: rulesConfiguration })
+    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
 
@@ -157,7 +160,7 @@ describe('CoreProvider', () => {
   })
 
   it('emits Error when setConfiguration receives an invalid configuration', () => {
-    const provider = new CoreProvider({ configuration: rulesConfiguration })
+    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
     const errorHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
 
@@ -167,7 +170,7 @@ describe('CoreProvider', () => {
   })
 
   it('returns provider not ready when no evaluatable configuration is available', () => {
-    const provider = new CoreProvider({ configuration: {} })
+    const provider = new DatadogOfflineProvider({ configuration: {} })
 
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
       value: true,
