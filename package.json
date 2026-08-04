@@ -56,5 +56,10 @@
       "jest>@jest/core>jest-resolve>unrs-resolver": true,
       "lerna>nx": true
     }
+  },
+  "resolutions": {
+    "tar@npm:7.5.11": "npm:^7.5.22",
+    "minimatch@npm:10.1.1": "npm:^10.2.6",
+    "js-yaml@npm:4.1.1": "npm:^4.3.1"
   }
 }
