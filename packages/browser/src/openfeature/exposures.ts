@@ -3,14 +3,14 @@ import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser
 import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimestamp } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 
 /**
  * Create hook for exposure logging.
  */
 export function createExposureLoggingHook(
-  configuration: FlaggingConfiguration,
+  configuration: FlaggingTrackingConfiguration,
   exposureCache: AssignmentCache,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
 ): Hook {
@@ -26,8 +26,7 @@ export function createExposureLoggingHook(
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       const timestamp = timeStampNow()
-      const evaluationContext = getEvaluationContext(hookContext.context)
-      const exposureEvent = createExposureEvent(evaluationContext, details)
+      const exposureEvent = createExposureEvent(getEvaluationContext(hookContext.context), details)
       if (!exposureEvent) {
         return
       }
