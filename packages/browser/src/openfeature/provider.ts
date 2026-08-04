@@ -146,7 +146,10 @@ export class DatadogProvider extends DatadogCoreProvider {
     return this.setContext(context)
   }
 
-  private setContext(context: EvaluationContext, { useBootstrap = false }: { useBootstrap?: boolean } = {}): Promise<void> {
+  private setContext(
+    context: EvaluationContext,
+    { useBootstrap = false }: { useBootstrap?: boolean } = {}
+  ): Promise<void> {
     const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
 
     if (this.status === ProviderStatus.NOT_READY) {
@@ -249,9 +252,10 @@ export class DatadogProvider extends DatadogCoreProvider {
     }
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = this.flagsConfiguration.rules || configMatchesContext(this.flagsConfiguration, context)
-      ? Promise.resolve(this.flagsConfiguration)
-      : this.flagsCache?.get(context)
+    const cachedConfigPromise =
+      this.flagsConfiguration.rules || configMatchesContext(this.flagsConfiguration, context)
+        ? Promise.resolve(this.flagsConfiguration)
+        : this.flagsCache?.get(context)
 
     try {
       const fetchedConfig = await this.configuration.fetchFlagsConfiguration(context, { signal })
