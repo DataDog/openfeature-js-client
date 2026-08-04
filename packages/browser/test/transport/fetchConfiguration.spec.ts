@@ -1,10 +1,7 @@
 import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
-import {
-  createFlagsConfigurationFetcher,
-  fetchPrecomputedConfiguration,
-} from '../../src/transport/fetchConfiguration'
+import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
 import rulesWire from '../data/rules-v1-wire.json'
 

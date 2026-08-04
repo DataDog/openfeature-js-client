@@ -47,10 +47,7 @@ export async function getErrorMessage(response: Response) {
   return response.statusText || 'Unknown error'
 }
 
-export function buildConfigurationUrl(
-  options: ConfigurationFetchOptions,
-  endpoint: 'precomputed' | 'rules'
-): URL {
+export function buildConfigurationUrl(options: ConfigurationFetchOptions, endpoint: 'precomputed' | 'rules'): URL {
   let url: URL
   if (options.flaggingProxy?.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
