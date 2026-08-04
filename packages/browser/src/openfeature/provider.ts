@@ -139,14 +139,14 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.exposureCacheReady = this.exposureCache?.init()
-    return this.setContext(context)
+    return this.setContext(this.getInitializationContext(context), { useBootstrap: true })
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
     return this.setContext(context)
   }
 
-  private setContext(context: EvaluationContext): Promise<void> {
+  private setContext(context: EvaluationContext, { useBootstrap = false }: { useBootstrap?: boolean } = {}): Promise<void> {
     const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
 
     if (this.status === ProviderStatus.NOT_READY) {
@@ -167,7 +167,12 @@ export class DatadogProvider extends DatadogCoreProvider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
+    const configurationPromise =
+      useBootstrap && this.canUseBootstrap(evaluationContext)
+        ? Promise.resolve({ config: this.flagsConfiguration, fromCache: false })
+        : this.retrieveFlagsConfiguration(evaluationContext, { signal })
+
+    this.latestContextUpdate = configurationPromise
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
@@ -244,12 +249,13 @@ export class DatadogProvider extends DatadogCoreProvider {
     }
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = configMatchesContext(this.flagsConfiguration, context)
+    const cachedConfigPromise = this.flagsConfiguration.rules || configMatchesContext(this.flagsConfiguration, context)
       ? Promise.resolve(this.flagsConfiguration)
       : this.flagsCache?.get(context)
 
     try {
-      const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
+      const fetchedConfig = await this.configuration.fetchFlagsConfiguration(context, { signal })
+      const config = this.withRetainedRules(fetchedConfig)
       this.flagsCache?.set(config, context)
       return { config, fromCache: false }
     } catch (err) {
@@ -257,11 +263,30 @@ export class DatadogProvider extends DatadogCoreProvider {
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
         if (config) {
-          return { config, fromCache: true }
+          return { config: this.withRetainedRules(config), fromCache: true }
         }
       } catch (err) {}
 
       throw err
+    }
+  }
+
+  private canUseBootstrap(context: EvaluationContext): boolean {
+    return !!this.flagsConfiguration.rules || configMatchesContext(this.flagsConfiguration, context)
+  }
+
+  private getInitializationContext(context: EvaluationContext): EvaluationContext {
+    if (isEmptyContext(context) && this.flagsConfiguration.precomputed?.context) {
+      return this.flagsConfiguration.precomputed.context
+    }
+    return context
+  }
+
+  private withRetainedRules(configuration: FlagsConfiguration): FlagsConfiguration {
+    if (configuration.rules || !this.flagsConfiguration.rules) return configuration
+    return {
+      ...configuration,
+      rules: this.flagsConfiguration.rules,
     }
   }
 
@@ -287,4 +312,8 @@ export class DatadogProvider extends DatadogCoreProvider {
   ): ResolutionDetails<FlagTypeToValue<T>> {
     return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.evaluationContext)
   }
+}
+
+function isEmptyContext(context: EvaluationContext): boolean {
+  return Object.values(context).every((value) => value === undefined)
 }
