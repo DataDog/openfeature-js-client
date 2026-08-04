@@ -15,8 +15,8 @@ type JSONAPIError = {
   }[]
 }
 
-const REQUEST_TIMEOUT_MS = 1_000
-const REQUEST_RETRY_COUNT = 1
+const DEFAULT_REQUEST_TIMEOUT_MS = 1_000
+const DEFAULT_REQUEST_RETRY_COUNT = 1
 
 class HTTPResponseError extends Error {
   constructor(
@@ -44,7 +44,7 @@ async function getErrorMessage(response: Response) {
 }
 
 function isRetryableStatus(status: number) {
-  return status === 408 || status === 429 || (status >= 500 && status <= 599)
+  return status === 408 || (status >= 500 && status <= 599)
 }
 
 function isRetryableError(error: unknown) {
@@ -109,11 +109,11 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   const requestTimeoutMs =
     typeof configuredTimeout === 'number' && Number.isFinite(configuredTimeout) && configuredTimeout > 0
       ? configuredTimeout
-      : REQUEST_TIMEOUT_MS
+      : DEFAULT_REQUEST_TIMEOUT_MS
   const requestRetryCount =
     typeof configuredRetryCount === 'number' && Number.isFinite(configuredRetryCount) && configuredRetryCount >= 0
       ? Math.floor(configuredRetryCount)
-      : REQUEST_RETRY_COUNT
+      : DEFAULT_REQUEST_RETRY_COUNT
   let url: URL
   if (initConfiguration.flaggingProxy?.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is

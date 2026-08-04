@@ -415,6 +415,20 @@ describe('createFlagsConfigurationFetcher', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
+    it('should not retry a rate-limited response without a retry delay', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { get: jest.fn(() => null) },
+      })
+
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+
+      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Too Many Requests')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('should use the configured retry count', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
