@@ -15,7 +15,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   applicationId?: string
 
   /**
-   * Initial flags configuration (precomputed flags)
+   * Initial precomputed or rules-based flags configuration.
    */
   initialFlagsConfiguration?: FlagsConfiguration
 
