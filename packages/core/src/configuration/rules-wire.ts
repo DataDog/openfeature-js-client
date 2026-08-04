@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from './configuration'
-import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
+import { decodeUniversalFlagConfiguration, decodeUniversalFlagConfigurationBinary } from './ufc-protobuf'
 import {
   decodeSafely,
   type FlagsConfigurationWire,
@@ -15,6 +15,17 @@ import { isWireEntry } from './wire-validation'
 export function configurationFromRulesString(wire: FlagsConfigurationWire): FlagsConfiguration {
   const serialized = parseConfigurationWire(wire)
   return serialized ? rulesConfigurationFromWire(serialized) : { configurationError: INVALID_CONFIGURATION_WIRE_ERROR }
+}
+
+/**
+ * Decode a binary Universal Flag Configuration response.
+ */
+export function configurationFromRulesBinary(response: Uint8Array): FlagsConfiguration {
+  return {
+    rules: {
+      response: decodeUniversalFlagConfigurationBinary(response),
+    },
+  }
 }
 
 export function rulesConfigurationFromWire(serialized: SerializedConfiguration): FlagsConfiguration {

@@ -1,7 +1,12 @@
 import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
-import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
+import {
+  createFlagsConfigurationFetcher,
+  fetchPrecomputedConfiguration,
+} from '../../src/transport/fetchConfiguration'
+import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
+import rulesWire from '../data/rules-v1-wire.json'
 
 jest.mock('@datadog/js-core/time', () => ({
   timeStampNow: jest.fn(() => 1234567890),
@@ -347,6 +352,88 @@ describe('createFlagsConfigurationFetcher', () => {
           fetchedAt: 1234567890 as TimeStamp,
         },
       })
+    })
+
+    it('fetches a precomputed configuration directly', async () => {
+      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+
+      const result = await fetchPrecomputedConfiguration({ ...config, context: mockContext })
+
+      expect(result.precomputed?.context).toEqual(mockContext)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('reuses a previous precomputed configuration on a not-modified response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ etag: 'precomputed-etag' }),
+        json: jest.fn().mockResolvedValue({ mockResponse: true }),
+      })
+      const options = { ...baseConfig, flaggingProxy: 'https://proxy.example.com', context: mockContext }
+      const previousConfiguration = await fetchPrecomputedConfiguration(options)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        headers: new Headers(),
+      })
+
+      const result = await fetchPrecomputedConfiguration({ ...options, previousConfiguration })
+
+      expect(result).toEqual(previousConfiguration)
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ headers: expect.objectContaining({ 'If-None-Match': 'precomputed-etag' }) })
+      )
+    })
+
+    it('decodes a rules configuration response', async () => {
+      const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ etag: 'rules-etag' }),
+        arrayBuffer: async () => bytes.buffer,
+      })
+
+      const result = await fetchRulesConfiguration({ ...baseConfig, flaggingProxy: 'https://proxy.example.com' })
+
+      expect(result.rules).toMatchObject({
+        fetchedAt: 1234567890,
+        etag: 'rules-etag',
+        response: { environmentName: 'prod' },
+      })
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://proxy.example.com/?dd_env=test',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({ Accept: 'application/protobuf' }),
+        })
+      )
+    })
+
+    it('reuses a previous rules configuration on a not-modified response', async () => {
+      const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ etag: 'rules-etag' }),
+        arrayBuffer: async () => bytes.buffer,
+      })
+      const options = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const previousConfiguration = await fetchRulesConfiguration(options)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        headers: new Headers(),
+      })
+
+      const result = await fetchRulesConfiguration({ ...options, previousConfiguration })
+
+      expect(result).toEqual(previousConfiguration)
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ headers: expect.objectContaining({ 'If-None-Match': 'rules-etag' }) })
+      )
     })
   })
 })
