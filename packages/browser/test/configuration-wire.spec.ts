@@ -1,5 +1,5 @@
 import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
-import { configurationFromString, type FlagsConfigurationWire } from '../src/rules-based'
+import { configurationFromString, type FlagsConfigurationWire, getPrecomputedContext } from '../src/rules-based'
 
 function rulesWire(): FlagsConfigurationWire {
   return JSON.stringify({
@@ -40,15 +40,19 @@ describe('configurationFromString browser integration', () => {
       },
     }
 
-    expect(
-      configurationFromString(
-        JSON.stringify({
-          version: 1,
-          precomputed: { response: JSON.stringify(response) },
-        })
-      )
-    ).toEqual({
-      precomputed: { response },
+    const configuration = configurationFromString(
+      JSON.stringify({
+        version: 1,
+        precomputed: {
+          response: JSON.stringify(response),
+          context: { targetingKey: 'user-1' },
+        },
+      })
+    )
+
+    expect(configuration).toEqual({
+      precomputed: { response, context: { targetingKey: 'user-1' } },
     })
+    expect(getPrecomputedContext(configuration)).toEqual({ targetingKey: 'user-1' })
   })
 })

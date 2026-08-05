@@ -119,16 +119,25 @@ The default entry point supports precomputed configurations without including
 the Protobuf-ES dependency. Rules-based entries are ignored:
 
 ```javascript
-import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser'
+import { configurationFromString, DatadogProvider, getPrecomputedContext } from '@datadog/openfeature-browser'
 
 const configuration = configurationFromString(wire)
+const context = getPrecomputedContext(configuration)
+
+if (context !== undefined) {
+  await OpenFeature.setContext(context)
+}
 ```
 
 Applications that use rules-based configurations can opt into the full parser
 and its Protobuf-ES dependency through the rules-based entry point:
 
 ```javascript
-import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser/rules-based'
+import {
+  configurationFromString,
+  DatadogProvider,
+  getPrecomputedContext,
+} from '@datadog/openfeature-browser/rules-based'
 ```
 
 ## End-user license agreement
