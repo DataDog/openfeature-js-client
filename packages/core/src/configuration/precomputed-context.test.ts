@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import type { EvaluationContext } from '@openfeature/core'
 import type { FlagsConfiguration } from './configuration'
 import { getPrecomputedContext } from './precomputed-context'
@@ -64,6 +65,18 @@ describe('getPrecomputedContext', () => {
     expect(second).not.toBe(first)
     expect((second?.profile as { groups: unknown[] }).groups).not.toBe(firstProfile.groups)
     expect((second?.profile as { enrolledAt: Date }).enrolledAt).not.toBe(date)
+  })
+
+  it('copies a Date from another JavaScript realm', () => {
+    const date = runInNewContext(`new Date('2026-08-05T00:00:00.000Z')`) as Date
+    expect(date).not.toBeInstanceOf(Date)
+
+    const context = getPrecomputedContext(configurationWithContext({ enrolledAt: date }))
+    const copiedDate = context?.enrolledAt as Date
+
+    expect(copiedDate).toBeInstanceOf(Date)
+    expect(copiedDate.toISOString()).toBe('2026-08-05T00:00:00.000Z')
+    expect(copiedDate).not.toBe(date)
   })
 
   it.each([

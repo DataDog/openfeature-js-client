@@ -1,9 +1,20 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
 import type { FlagsConfiguration } from './configuration'
 
+function isDate(value: EvaluationContextValue): value is Date {
+  if (value === null || typeof value !== 'object') return false
+
+  try {
+    Date.prototype.getTime.call(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function cloneContextValue(value: EvaluationContextValue): EvaluationContextValue {
-  if (value instanceof Date) {
-    return new Date(value.getTime())
+  if (isDate(value)) {
+    return new Date(Date.prototype.getTime.call(value))
   }
 
   if (Array.isArray(value)) {

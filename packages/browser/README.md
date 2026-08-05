@@ -127,6 +127,14 @@ const context = getPrecomputedContext(configuration)
 if (context !== undefined) {
   await OpenFeature.setContext(context)
 }
+
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  site: 'datadoghq.com',
+  env: 'production',
+  initialFlagsConfiguration: configuration,
+})
+await OpenFeature.setProvider(provider)
 ```
 
 Applications that use rules-based configurations can opt into the full parser
