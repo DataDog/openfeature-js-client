@@ -3,6 +3,8 @@ import type { TimeStamp } from '../time'
 
 export type FlagsConfigurationWire = string
 
+export const INVALID_CONFIGURATION_WIRE_ERROR = 'Invalid flags configuration wire format'
+
 export type SerializedConfiguration = {
   version: 1
   precomputed?: {

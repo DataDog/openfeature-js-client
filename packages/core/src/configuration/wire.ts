@@ -2,7 +2,12 @@ import type { FlagsConfiguration } from './configuration'
 import { precomputedConfigurationFromWire, precomputedConfigurationToWire } from './precomputed-wire'
 import { rulesConfigurationFromWire } from './rules-wire'
 import { encodeUniversalFlagConfiguration } from './ufc-protobuf'
-import { type FlagsConfigurationWire, parseConfigurationWire, type SerializedConfiguration } from './wire-types'
+import {
+  type FlagsConfigurationWire,
+  INVALID_CONFIGURATION_WIRE_ERROR,
+  parseConfigurationWire,
+  type SerializedConfiguration,
+} from './wire-types'
 
 export type { FlagsConfigurationWire } from './wire-types'
 
@@ -11,7 +16,7 @@ export type { FlagsConfigurationWire } from './wire-types'
  */
 export function configurationFromString(wire: FlagsConfigurationWire): FlagsConfiguration {
   const serialized = parseConfigurationWire(wire)
-  if (!serialized) return {}
+  if (!serialized) return { configurationError: INVALID_CONFIGURATION_WIRE_ERROR }
   return {
     ...precomputedConfigurationFromWire(serialized),
     ...rulesConfigurationFromWire(serialized),

@@ -2,6 +2,7 @@ import type { FlagsConfiguration } from './configuration'
 import {
   decodeSafely,
   type FlagsConfigurationWire,
+  INVALID_CONFIGURATION_WIRE_ERROR,
   parseConfigurationWire,
   type SerializedConfiguration,
 } from './wire-types'
@@ -12,7 +13,9 @@ import { isPrecomputedWireEntry, parsePrecomputedConfigurationResponse } from '.
  */
 export function configurationFromPrecomputedString(wire: FlagsConfigurationWire): FlagsConfiguration {
   const serialized = parseConfigurationWire(wire)
-  return serialized ? precomputedConfigurationFromWire(serialized) : {}
+  return serialized
+    ? precomputedConfigurationFromWire(serialized)
+    : { configurationError: INVALID_CONFIGURATION_WIRE_ERROR }
 }
 
 /**
