@@ -63,7 +63,12 @@ export class DatadogProvider implements Provider {
 
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
+
+  /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+
+  /** Effective context associated with the active flags configuration. */
+  private evaluationContext: EvaluationContext = {}
 
   status: ProviderStatus
 
@@ -107,7 +112,7 @@ export class DatadogProvider implements Provider {
     // Add EVP flag evaluation hook.
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration))
+      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
     }
 
     // Add proper exposure logging hook (creates batch internally)
@@ -117,7 +122,7 @@ export class DatadogProvider implements Provider {
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
       })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, this.isRumIntegrationEnabled))
+      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
     }
 
     if (hasIndexedDB()) {
@@ -187,6 +192,7 @@ export class DatadogProvider implements Provider {
           // scheduling).
 
           this.flagsConfiguration = config
+          this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
@@ -271,34 +277,34 @@ export class DatadogProvider implements Provider {
   resolveBooleanEvaluation(
     flagKey: string,
     defaultValue: boolean,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveStringEvaluation(
     flagKey: string,
     defaultValue: string,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveNumberEvaluation(
     flagKey: string,
     defaultValue: number,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<T> {
     // type safety: OpenFeature interface requires us to return a
@@ -307,6 +313,12 @@ export class DatadogProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
+    return evaluate(
+      this.flagsConfiguration,
+      'object',
+      flagKey,
+      defaultValue,
+      this.evaluationContext
+    ) as ResolutionDetails<T>
   }
 }

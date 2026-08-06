@@ -116,21 +116,6 @@ describe('createRumTrackingHook', () => {
       })
     })
 
-    it('should enrich context in the before hook', () => {
-      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-      globalObject.DD_RUM = {
-        addFeatureFlagEvaluation: jest.fn(),
-        getUser: () => ({ id: 'rum-user', company_name: 'Example, Inc.' }),
-      }
-      const hook = createRumTrackingHook()
-
-      expect(hook.before!({ context: { request_attribute: 'request-value' } } as unknown as HookContext)).toEqual({
-        targetingKey: 'rum-user',
-        company_name: 'Example, Inc.',
-        request_attribute: 'request-value',
-      })
-    })
-
     it('should preserve context when RUM user lookup is unavailable', () => {
       const context = { targetingKey: 'explicit-user' }
       expect(enrichEvaluationContextWithRumUser(context)).toBe(context)

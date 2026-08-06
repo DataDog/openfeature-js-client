@@ -30,6 +30,7 @@ export function enrichEvaluationContextWithRumUser(context: EvaluationContext): 
 
     return {
       ...rumUserContext,
+      // RUM provides defaults; context explicitly supplied through OpenFeature remains authoritative.
       ...context,
     }
   } catch {
@@ -39,7 +40,6 @@ export function enrichEvaluationContextWithRumUser(context: EvaluationContext): 
 
 export function createRumTrackingHook(): Hook {
   return {
-    before: (hookContext: HookContext) => enrichEvaluationContextWithRumUser(hookContext.context),
     after: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       if (details.variant == null) {
         return

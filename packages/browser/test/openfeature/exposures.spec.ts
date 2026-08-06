@@ -210,6 +210,55 @@ describe('Exposures End-to-End', () => {
     })
   })
 
+  it('should keep exposure identity aligned with the active configuration until context is reconciled', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    let rumUser = { id: 'rum-user-a', user_email: 'a@example.com' }
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    globalObject.DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => rumUser,
+    }
+
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+      })
+    )
+
+    rumUser = { id: 'rum-user-b', user_email: 'b@example.com' }
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    let exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents[0].subject).toEqual({
+      id: 'rum-user-a',
+      attributes: { user_email: 'a@example.com' },
+    })
+
+    await OpenFeature.setContext(OpenFeature.getContext())
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
+    expect(exposureEvents.at(-1)?.subject).toEqual({
+      id: 'rum-user-b',
+      attributes: { user_email: 'b@example.com' },
+    })
+  })
+
   it('should not include RUM user properties when RUM integration is disabled', async () => {
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('exposures')) {

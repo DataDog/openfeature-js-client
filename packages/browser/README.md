@@ -108,8 +108,10 @@ DD_RUM.setUser({
 await OpenFeature.setProviderAndWait(new DatadogProvider(configuration))
 ```
 
-If the RUM user changes after provider initialization, call `OpenFeature.setContext()` to reconcile the provider with
-the latest user. Nested RUM user properties are not included in the evaluation context.
+If the RUM user changes after provider initialization, call
+`await OpenFeature.setContext(OpenFeature.getContext())` to reconcile the provider with the latest user while
+preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
+evaluation context.
 
 ## End-user license agreement
 
