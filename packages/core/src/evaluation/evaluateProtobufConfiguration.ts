@@ -407,7 +407,7 @@ function containsSorted<T>(values: T[], compare: (candidate: T) => number): bool
 
 function safeInteger(value: bigint, description: string): number {
   const result = Number(value)
-  if (!Number.isSafeInteger(result) || BigInt(result) !== value) {
+  if (!Number.isSafeInteger(result) || String(result) !== String(value)) {
     throw new FlagConfigurationError(`${description} cannot be represented safely as a JavaScript number`)
   }
   return result

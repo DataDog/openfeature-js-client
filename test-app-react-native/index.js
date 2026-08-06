@@ -9,7 +9,8 @@ const configuration = configurationFromString(
   JSON.stringify({
     version: 1,
     rules: {
-      response: 'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADKgJvbg==',
+      response:
+        'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg==',
     },
   })
 )
@@ -28,9 +29,20 @@ const result = evaluateRulesBasedConfiguration(
   {},
   logger
 )
+const integerResult = evaluateRulesBasedConfiguration(
+  roundTrippedConfiguration.rules?.response,
+  'number',
+  'integer-flag',
+  0,
+  {},
+  logger
+)
 
 if (result.value !== true || result.variant !== 'on' || result.reason !== 'STATIC') {
   throw new Error(`Unexpected React Native smoke-test result: ${JSON.stringify(result)}`)
+}
+if (integerResult.value !== 42 || integerResult.reason !== 'STATIC') {
+  throw new Error(`Unexpected React Native integer smoke-test result: ${JSON.stringify(integerResult)}`)
 }
 
 console.log('React Native Metro smoke test passed')
