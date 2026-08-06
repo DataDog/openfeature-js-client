@@ -139,7 +139,7 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.exposureCacheReady = this.exposureCache?.init()
-    return this.setContext(this.getInitializationContext(context), { useBootstrap: true })
+    return this.setContext(context, { useBootstrap: true })
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -277,13 +277,6 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   private canUseBootstrap(context: EvaluationContext): boolean {
     return !!this.flagsConfiguration.rules || configMatchesContext(this.flagsConfiguration, context)
-  }
-
-  private getInitializationContext(context: EvaluationContext): EvaluationContext {
-    if (isEmptyContext(context) && this.flagsConfiguration.precomputed?.context) {
-      return this.flagsConfiguration.precomputed.context
-    }
-    return context
   }
 
   private withRetainedRules(configuration: FlagsConfiguration): FlagsConfiguration {
