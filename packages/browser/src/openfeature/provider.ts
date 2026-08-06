@@ -26,7 +26,7 @@ import {
 import { evaluate } from '../evaluation'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
-import { createRumTrackingHook } from './rumIntegration'
+import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -63,6 +63,7 @@ export class DatadogProvider implements Provider {
 
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
+  private readonly isRumIntegrationEnabled: boolean
 
   status: ProviderStatus
 
@@ -98,8 +99,8 @@ export class DatadogProvider implements Provider {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
 
-    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (isRumFeatureFlagTrackingEnabled) {
+    this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (this.isRumIntegrationEnabled) {
       this.hooks.push(createRumTrackingHook())
     }
 
@@ -116,7 +117,7 @@ export class DatadogProvider implements Provider {
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
       })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
+      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, this.isRumIntegrationEnabled))
     }
 
     if (hasIndexedDB()) {
@@ -137,6 +138,8 @@ export class DatadogProvider implements Provider {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
+    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
@@ -155,7 +158,7 @@ export class DatadogProvider implements Provider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(context, { signal })
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
