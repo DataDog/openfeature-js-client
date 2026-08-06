@@ -1,5 +1,4 @@
 export type { FlaggingInitConfiguration } from './domain/configuration'
 export { DatadogDevtools } from './openfeature/devtools-provider'
-export type { DatadogOfflineProviderOptions } from './openfeature/offline-provider'
 export { DatadogOfflineProvider } from './openfeature/offline-provider'
 export { DatadogProvider } from './openfeature/provider'
