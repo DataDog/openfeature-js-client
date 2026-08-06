@@ -379,7 +379,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
       expect(result.value).toBe('red')
     })
 
-    it('adopts an embedded precomputed context when initialized with an empty context', async () => {
+    it('does not use a context-specific bootstrap for an empty initialization context', async () => {
       const embeddedContext = { targetingKey: 'embedded-user' }
       const initialConfig: FlagsConfiguration = {
         precomputed: {
@@ -392,12 +392,10 @@ describe('DatadogProvider IndexedDB persistence', () => {
       global.fetch = initialFetch
       const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
 
-      await provider.initialize({})
+      await expect(provider.initialize({})).rejects.toThrow('Network error')
 
-      expect(provider.status).toBe(ProviderStatus.READY)
-      expect(initialFetch).not.toHaveBeenCalled()
-      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-      expect(provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger).value).toBe('red')
+      expect(provider.status).toBe(ProviderStatus.ERROR)
+      expect(initialFetch).toHaveBeenCalledTimes(1)
     })
 
     it('uses rules bootstrap locally, then retains it after fetching precomputed flags', async () => {
