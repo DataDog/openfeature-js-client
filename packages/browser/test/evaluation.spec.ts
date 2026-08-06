@@ -1,4 +1,4 @@
-import { evaluate } from '@datadog/flagging-core'
+import { evaluate, type FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/configuration'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import configurationWire from './data/precomputed-v1-wire.json'
@@ -11,6 +11,30 @@ const configuration = configurationFromString(
 const matchingContext = configuration.precomputed?.context ?? {}
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
+
+const matrixContext = { targetingKey: 'user-1', country: 'US' }
+const matrixPrecomputedConfiguration: FlagsConfiguration = {
+  precomputed: {
+    context: matrixContext,
+    response: {
+      data: {
+        attributes: {
+          createdAt: '2026-08-06T00:00:00.000Z',
+          flags: {
+            'test-flag': {
+              allocationKey: 'precomputed-allocation',
+              variationKey: 'precomputed-off',
+              variationType: 'boolean',
+              variationValue: false,
+              reason: 'STATIC',
+              doLog: false,
+            },
+          },
+        },
+      },
+    },
+  },
+}
 
 const configurationWithMalformedFlag = configurationFromString(
   JSON.stringify({
@@ -204,6 +228,83 @@ describe('evaluate', () => {
         allocationKey: 'fallback',
         doLog: false,
       },
+    })
+  })
+
+  describe('combined capability validity matrix', () => {
+    it('prefers valid matching precomputed data over valid rules', () => {
+      const result = evaluate(
+        { ...matrixPrecomputedConfiguration, rules: rulesConfiguration.rules },
+        'boolean',
+        'test-flag',
+        true,
+        matrixContext
+      )
+
+      expect(result).toMatchObject({
+        value: false,
+        variant: 'precomputed-off',
+        reason: 'STATIC',
+      })
+    })
+
+    it('uses valid rules when valid precomputed data does not match', () => {
+      const result = evaluate(
+        { ...matrixPrecomputedConfiguration, rules: rulesConfiguration.rules },
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'other-user', country: 'US' }
+      )
+
+      expect(result).toMatchObject({
+        value: true,
+        variant: 'on',
+        reason: 'TARGETING_MATCH',
+      })
+    })
+
+    it('uses valid rules when precomputed data is invalid', () => {
+      const result = evaluate(
+        { precomputedError: 'Malformed precomputed data', rules: rulesConfiguration.rules },
+        'boolean',
+        'test-flag',
+        false,
+        matrixContext
+      )
+
+      expect(result).toMatchObject({
+        value: true,
+        variant: 'on',
+        reason: 'TARGETING_MATCH',
+      })
+    })
+
+    it('uses valid matching precomputed data when rules are invalid or absent', () => {
+      expect(evaluate(matrixPrecomputedConfiguration, 'boolean', 'test-flag', true, matrixContext)).toMatchObject({
+        value: false,
+        variant: 'precomputed-off',
+        reason: 'STATIC',
+      })
+    })
+
+    it('returns a configuration error when precomputed data is invalid and rules are invalid or absent', () => {
+      expect(
+        evaluate({ precomputedError: 'Malformed precomputed data' }, 'boolean', 'test-flag', false, matrixContext)
+      ).toEqual({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+        errorMessage: 'Malformed precomputed data',
+      })
+    })
+
+    it('returns provider not ready when both capabilities are absent', () => {
+      expect(evaluate({}, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+      })
     })
   })
 })

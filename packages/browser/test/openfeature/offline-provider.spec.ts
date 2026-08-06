@@ -77,6 +77,23 @@ describe('DatadogOfflineProvider', () => {
     })
   })
 
+  it('stays ready and evaluates valid rules when the precomputed branch is invalid', async () => {
+    const provider = new DatadogOfflineProvider({
+      configuration: {
+        precomputedError: 'Malformed precomputed data',
+        rules: rulesConfiguration.rules,
+      },
+    })
+    const context = { targetingKey: 'user-1', country: 'US' }
+
+    await expect(provider.initialize(context)).resolves.toBeUndefined()
+    expect(provider.resolveBooleanEvaluation('test-flag', false, context, logger)).toMatchObject({
+      value: true,
+      variant: 'on',
+      reason: 'TARGETING_MATCH',
+    })
+  })
+
   it('uses precomputed configuration only when the context matches', async () => {
     const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
 

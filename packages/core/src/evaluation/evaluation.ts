@@ -30,15 +30,6 @@ export function evaluate<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger = NOOP_LOGGER
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  if (flagsConfiguration.precomputedError) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: flagsConfiguration.precomputedError,
-    }
-  }
-
   if (flagsConfiguration.precomputed && configMatchesContext(flagsConfiguration, context)) {
     return evaluatePrecomputed(flagsConfiguration.precomputed, type, flagKey, defaultValue)
   }
@@ -52,6 +43,15 @@ export function evaluate<T extends FlagValueType>(
       context,
       logger
     )
+  }
+
+  if (flagsConfiguration.precomputedError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: flagsConfiguration.precomputedError,
+    }
   }
 
   if (flagsConfiguration.precomputed) {
