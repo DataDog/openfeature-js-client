@@ -7,11 +7,15 @@ import type { FlagsConfiguration as ProtobufFlagsConfiguration } from './generat
  */
 export type FlagsConfiguration = {
   /** @internal */
+  configurationError?: string
+  /** @internal */
   precomputed?: PrecomputedConfiguration
   /** @internal */
   precomputedError?: string
   /** @internal */
   rules?: RulesConfiguration
+  /** @internal */
+  rulesError?: string
 }
 
 /** @internal */

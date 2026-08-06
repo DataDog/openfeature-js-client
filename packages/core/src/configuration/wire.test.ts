@@ -116,13 +116,19 @@ describe('configuration wire', () => {
     expect(Array.from(unknown?.[0]?.data ?? [])).toEqual([7])
   })
 
-  it('returns an empty configuration for an unknown version', () => {
-    expect(configurationFromString(JSON.stringify({ version: 2 }))).toEqual({})
+  it('retains a configuration error for an unknown version', () => {
+    expect(configurationFromString(JSON.stringify({ version: 2 }))).toEqual({
+      configurationError: 'Invalid flags configuration wire format',
+    })
   })
 
-  it('returns an empty configuration for malformed input', () => {
-    expect(configurationFromString('not json')).toEqual({})
-    expect(configurationFromString('null')).toEqual({})
+  it('retains a configuration error for malformed input', () => {
+    expect(configurationFromString('not json')).toEqual({
+      configurationError: 'Invalid flags configuration wire format',
+    })
+    expect(configurationFromString('null')).toEqual({
+      configurationError: 'Invalid flags configuration wire format',
+    })
   })
 
   it('decodes a rules entry and preserves its wire metadata', () => {
@@ -151,6 +157,7 @@ describe('configuration wire', () => {
 
     expect(configurationFromString(JSON.stringify(wire))).toEqual({
       precomputed: { ...configuration.precomputed, etag: 'precomputed-etag' },
+      rulesError: 'Rules configuration response could not be decoded',
     })
   })
 
@@ -260,7 +267,7 @@ describe('configuration wire', () => {
     expect(restored.rules).toBeDefined()
   })
 
-  it('omits an invalid rules wire entry independently', () => {
+  it('retains an invalid rules wire entry error independently', () => {
     const precomputed = JSON.parse(configurationToString(configuration)).precomputed
     const restored = configurationFromString(
       JSON.stringify({ version: 1, precomputed, rules: { response: 42, fetchedAt: 'now' } })
@@ -268,5 +275,13 @@ describe('configuration wire', () => {
 
     expect(restored.precomputed).toEqual(configuration.precomputed)
     expect(restored.rules).toBeUndefined()
+    expect(restored.rulesError).toBe('Invalid rules configuration wire entry')
   })
+
+  it.each([configurationFromPrecomputedString, configurationFromRulesString])(
+    'retains an invalid envelope error in capability-specific parsers',
+    (parse) => {
+      expect(parse('not json')).toEqual({ configurationError: 'Invalid flags configuration wire format' })
+    }
+  )
 })
