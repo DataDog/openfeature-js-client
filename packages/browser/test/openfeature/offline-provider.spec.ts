@@ -37,16 +37,22 @@ const precomputedConfiguration: FlagsConfiguration = {
   },
 }
 
+function providerWithConfiguration(configuration: FlagsConfiguration): DatadogOfflineProvider {
+  const provider = new DatadogOfflineProvider()
+  provider.setConfiguration(configuration)
+  return provider
+}
+
 describe('DatadogOfflineProvider', () => {
   it('has offline provider metadata', () => {
-    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
+    const provider = providerWithConfiguration(rulesConfiguration)
 
     expect(provider.metadata).toEqual({ name: 'datadog-offline' })
     expect(provider.runsOn).toBe('client')
   })
 
   it('evaluates rules locally with the supplied context', async () => {
-    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
+    const provider = providerWithConfiguration(rulesConfiguration)
 
     await provider.initialize({ targetingKey: 'user-1', country: 'CA' })
 
@@ -78,11 +84,9 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('stays ready and evaluates valid rules when the precomputed branch is invalid', async () => {
-    const provider = new DatadogOfflineProvider({
-      configuration: {
-        precomputedError: 'Malformed precomputed data',
-        rules: rulesConfiguration.rules,
-      },
+    const provider = providerWithConfiguration({
+      precomputedError: 'Malformed precomputed data',
+      rules: rulesConfiguration.rules,
     })
     const context = { targetingKey: 'user-1', country: 'US' }
 
@@ -95,7 +99,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('uses precomputed configuration only when the context matches', async () => {
-    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
+    const provider = providerWithConfiguration(precomputedConfiguration)
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
@@ -109,7 +113,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('throws for precomputed-only context changes that do not match the configuration', async () => {
-    const provider = new DatadogOfflineProvider({ configuration: precomputedConfiguration })
+    const provider = providerWithConfiguration(precomputedConfiguration)
 
     await provider.initialize({ targetingKey: 'static-user', plan: 'free' })
 
@@ -130,11 +134,9 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('uses rules-based configuration when precomputed context does not match', async () => {
-    const provider = new DatadogOfflineProvider({
-      configuration: {
-        ...rulesConfiguration,
-        precomputed: precomputedConfiguration.precomputed,
-      },
+    const provider = providerWithConfiguration({
+      ...rulesConfiguration,
+      precomputed: precomputedConfiguration.precomputed,
     })
 
     await provider.initialize({ targetingKey: 'other-user', country: 'US' })
@@ -149,7 +151,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('emits Ready when setConfiguration recovers from an invalid configuration', () => {
-    const provider = new DatadogOfflineProvider({ configuration: {} })
+    const provider = new DatadogOfflineProvider()
     const readyHandler = jest.fn()
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Ready, readyHandler)
@@ -162,7 +164,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('emits ConfigurationChanged for replacement configuration', () => {
-    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
+    const provider = providerWithConfiguration(rulesConfiguration)
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
 
@@ -177,7 +179,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('emits Error when setConfiguration receives an invalid configuration', () => {
-    const provider = new DatadogOfflineProvider({ configuration: rulesConfiguration })
+    const provider = providerWithConfiguration(rulesConfiguration)
     const errorHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
 
@@ -187,7 +189,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('returns provider not ready when no evaluatable configuration is available', () => {
-    const provider = new DatadogOfflineProvider({ configuration: {} })
+    const provider = new DatadogOfflineProvider()
 
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
       value: true,

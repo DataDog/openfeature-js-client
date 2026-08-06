@@ -163,7 +163,8 @@ import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfe
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
-const provider = new DatadogOfflineProvider({ configuration })
+const provider = new DatadogOfflineProvider()
+provider.setConfiguration(configuration)
 
 await OpenFeature.setProviderAndWait(provider)
 

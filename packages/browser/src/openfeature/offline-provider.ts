@@ -10,21 +10,16 @@ import type {
 import { InvalidContextError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogCoreProvider } from './core-provider'
 
-export interface DatadogOfflineProviderOptions {
-  configuration: FlagsConfiguration
-}
-
 export class DatadogOfflineProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
     name: 'datadog-offline',
   }
 
-  private flagsConfiguration: FlagsConfiguration
+  private flagsConfiguration: FlagsConfiguration = {}
   private context: EvaluationContext = {}
 
-  constructor(options: DatadogOfflineProviderOptions) {
+  constructor() {
     super()
-    this.flagsConfiguration = options.configuration
   }
 
   getConfiguration(): FlagsConfiguration {
