@@ -80,11 +80,12 @@ const configurationWithMalformedResponse = configurationFromString(
 
 describe('evaluate', () => {
   it('returns default for missing configuration', () => {
-    const result = evaluate({}, 'boolean', 'boolean-flag', true, {})
+    const result = evaluate(undefined, 'boolean', 'boolean-flag', true, {})
     expect(result).toEqual({
       value: true,
       reason: 'ERROR',
       errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
+      errorMessage: 'No flags configuration has been set',
     })
   })
 
@@ -188,6 +189,7 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      errorMessage: 'Precomputed flags configuration does not match the current context',
     })
   })
 
@@ -280,8 +282,10 @@ describe('evaluate', () => {
       })
     })
 
-    it('uses valid matching precomputed data when rules are invalid or absent', () => {
-      expect(evaluate(matrixPrecomputedConfiguration, 'boolean', 'test-flag', true, matrixContext)).toMatchObject({
+    it.each([undefined, 'Malformed rules data'])('uses valid matching precomputed data when rules error is %s', (rulesError) => {
+      expect(
+        evaluate({ ...matrixPrecomputedConfiguration, rulesError }, 'boolean', 'test-flag', true, matrixContext)
+      ).toMatchObject({
         value: false,
         variant: 'precomputed-off',
         reason: 'STATIC',
@@ -300,10 +304,41 @@ describe('evaluate', () => {
     })
 
     it('returns provider not ready when both capabilities are absent', () => {
-      expect(evaluate({}, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+      expect(evaluate(undefined, 'boolean', 'test-flag', false, matrixContext)).toEqual({
         value: false,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
+      })
+    })
+
+    it.each([
+      [{ rulesError: 'Malformed rules data' }, 'Malformed rules data'],
+      [{ configurationError: 'Malformed configuration envelope' }, 'Malformed configuration envelope'],
+      [{}, 'Flags configuration contains no usable capability'],
+    ] as const)('returns a parse error for unusable configured data', (configured, errorMessage) => {
+      expect(evaluate(configured, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+        errorMessage,
+      })
+    })
+
+    it('returns a rules parse error when mismatched precomputed data cannot fall back to rules', () => {
+      expect(
+        evaluate(
+          { ...matrixPrecomputedConfiguration, rulesError: 'Malformed rules data' },
+          'boolean',
+          'test-flag',
+          false,
+          { targetingKey: 'other-user' }
+        )
+      ).toEqual({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+        errorMessage: 'Malformed rules data',
       })
     })
   })

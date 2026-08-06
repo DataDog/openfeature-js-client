@@ -1,5 +1,5 @@
 import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import { configMatchesContext, evaluate } from '@datadog/flagging-core'
+import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   FlagValueType,
@@ -7,7 +7,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { InvalidContextError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
+import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogCoreProvider } from './core-provider'
 
 export class DatadogOfflineProvider extends DatadogCoreProvider {
@@ -15,14 +15,14 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
     name: 'datadog-offline',
   }
 
-  private flagsConfiguration: FlagsConfiguration = {}
+  private flagsConfiguration: FlagsConfiguration | undefined
   private context: EvaluationContext = {}
 
   constructor() {
     super()
   }
 
-  getConfiguration(): FlagsConfiguration {
+  getConfiguration(): FlagsConfiguration | undefined {
     return this.flagsConfiguration
   }
 
@@ -30,7 +30,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
     const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
     this.flagsConfiguration = configuration
 
-    const error = getConfigurationError(configuration, this.context)
+    const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
     if (error) {
       this.events.emit(ProviderEvents.Error, { error })
       return
@@ -44,7 +44,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.context = context
-    const error = getConfigurationError(this.flagsConfiguration, this.context)
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
       throw error
     }
@@ -52,7 +52,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     this.context = newContext
-    const error = getConfigurationError(this.flagsConfiguration, this.context)
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
       throw error
     }
@@ -69,22 +69,13 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   }
 
   private canEvaluateCurrentContext(): boolean {
-    return !getConfigurationError(this.flagsConfiguration, this.context)
+    return !getFlagsConfigurationError(this.flagsConfiguration, this.context)
   }
 }
 
-function hasEvaluatableConfiguration(configuration: FlagsConfiguration): boolean {
-  return !!(configuration.precomputed || configuration.rules)
-}
-
-function getConfigurationError(configuration: FlagsConfiguration, context: EvaluationContext): Error | undefined {
-  if (!hasEvaluatableConfiguration(configuration)) {
-    return new ProviderNotReadyError('No flags configuration has been set')
-  }
-
-  if (!configuration.rules && configuration.precomputed && !configMatchesContext(configuration, context)) {
-    return new InvalidContextError('Precomputed flags configuration does not match the current context')
-  }
-
-  return undefined
+function toOpenFeatureError(error: FlagsConfigurationError | undefined): Error | undefined {
+  if (!error) return undefined
+  if (error.errorCode === 'PARSE_ERROR') return new ParseError(error.errorMessage)
+  if (error.errorCode === 'INVALID_CONTEXT') return new InvalidContextError(error.errorMessage)
+  return new ProviderNotReadyError(error.errorMessage)
 }
