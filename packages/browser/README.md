@@ -156,23 +156,28 @@ import {
 
 `DatadogOfflineProvider` is an opt-in evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It does not fetch or poll configuration.
 
-For static offline initialization, a precomputed-only configuration adopts its embedded context when the OpenFeature context is empty. You do not need to call `OpenFeature.setContext()`. An explicit non-empty context must match the embedded context.
+For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
 ```javascript
-import { configurationFromString, DatadogOfflineProvider } from '@datadog/openfeature-browser/precomputed'
+import { configurationFromString, getPrecomputedContext, DatadogOfflineProvider } from '@datadog/openfeature-browser'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
 const provider = new DatadogOfflineProvider()
 provider.setConfiguration(configuration)
+const context = getPrecomputedContext(configuration)
 
-await OpenFeature.setProviderAndWait(provider)
+if (context === undefined) {
+  await OpenFeature.setProviderAndWait(provider)
+} else {
+  await OpenFeature.setProviderAndWait(provider, context)
+}
 
 const client = OpenFeature.getClient()
 const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
-For dynamic context, use the default `@datadog/openfeature-browser` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
 ## End-user license agreement
 

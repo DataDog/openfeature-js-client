@@ -33,9 +33,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
     if (this.context === undefined) return
 
-    const error = toOpenFeatureError(
-      getFlagsConfigurationError(configuration, getEffectiveContext(configuration, this.context))
-    )
+    const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
     if (error) {
       this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
       return
@@ -49,12 +47,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
   initialize(context: EvaluationContext = {}): Promise<void> {
     this.context = context
-    const error = toOpenFeatureError(
-      getFlagsConfigurationError(
-        this.flagsConfiguration,
-        getEffectiveContext(this.flagsConfiguration, this.context)
-      )
-    )
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
       return Promise.reject(error)
     }
@@ -64,12 +57,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     this.context = newContext
-    const error = toOpenFeatureError(
-      getFlagsConfigurationError(
-        this.flagsConfiguration,
-        getEffectiveContext(this.flagsConfiguration, this.context)
-      )
-    )
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
       throw error
     }
@@ -82,24 +70,11 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluate(
-      this.flagsConfiguration,
-      type,
-      flagKey,
-      defaultValue,
-      getEffectiveContext(this.flagsConfiguration, context),
-      logger
-    )
+    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
   }
 
   private canEvaluateCurrentContext(): boolean {
-    return (
-      this.context !== undefined &&
-      !getFlagsConfigurationError(
-        this.flagsConfiguration,
-        getEffectiveContext(this.flagsConfiguration, this.context)
-      )
-    )
+    return this.context !== undefined && !getFlagsConfigurationError(this.flagsConfiguration, this.context)
   }
 }
 
@@ -108,20 +83,4 @@ function toOpenFeatureError(error: FlagsConfigurationError | undefined): Error |
   if (error.errorCode === 'PARSE_ERROR') return new ParseError(error.errorMessage)
   if (error.errorCode === 'INVALID_CONTEXT') return new InvalidContextError(error.errorMessage)
   return new ProviderNotReadyError(error.errorMessage)
-}
-
-function getEffectiveContext(
-  configuration: FlagsConfiguration | undefined,
-  context: EvaluationContext
-): EvaluationContext {
-  // An empty OpenFeature context means there is no external override for an offline precomputed configuration.
-  if (isEmptyContext(context) && configuration?.precomputed?.context) {
-    return configuration.precomputed.context
-  }
-
-  return context
-}
-
-function isEmptyContext(context: EvaluationContext): boolean {
-  return Object.values(context).every((value) => value === undefined)
 }
