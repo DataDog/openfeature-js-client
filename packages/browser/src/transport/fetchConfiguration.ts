@@ -145,7 +145,7 @@ export async function fetchPrecomputedConfiguration(
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
-  let previousConfiguration = initConfiguration.initialFlagsConfiguration
+  let previousConfiguration: FlagsConfiguration | undefined
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
     const configuration = await fetchPrecomputedConfiguration({
       ...initConfiguration,
