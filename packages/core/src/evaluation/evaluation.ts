@@ -5,6 +5,7 @@ import {
   type FlagTypeToValue,
   type PrecomputedConfiguration,
   type PrecomputedFlagMetadata,
+  type RulesConfiguration,
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
 import { timeStampNow } from '../time'
@@ -23,20 +24,21 @@ const NOOP_LOGGER: Logger = {
 }
 
 export function evaluate<T extends FlagValueType>(
-  flagsConfiguration: FlagsConfiguration,
+  flagsConfiguration: FlagsConfiguration | undefined,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger = NOOP_LOGGER
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  if (flagsConfiguration.precomputed && configMatchesContext(flagsConfiguration, context)) {
-    return evaluatePrecomputed(flagsConfiguration.precomputed, type, flagKey, defaultValue)
+  const selection = selectFlagsConfiguration(flagsConfiguration, context)
+  if (selection.kind === 'precomputed') {
+    return evaluatePrecomputed(selection.configuration, type, flagKey, defaultValue)
   }
 
-  if (flagsConfiguration.rules) {
+  if (selection.kind === 'rules') {
     return evaluateRulesBasedConfiguration(
-      flagsConfiguration.rules.response,
+      selection.configuration.response,
       type,
       flagKey,
       defaultValue,
@@ -45,27 +47,70 @@ export function evaluate<T extends FlagValueType>(
     )
   }
 
-  if (flagsConfiguration.precomputedError) {
+  const { error } = selection
+  return {
+    value: defaultValue,
+    reason: 'ERROR',
+    errorCode: error.errorCode as ErrorCode,
+    ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
+  }
+}
+
+export type FlagsConfigurationError = {
+  errorCode: 'INVALID_CONTEXT' | 'PARSE_ERROR' | 'PROVIDER_NOT_READY'
+  errorMessage?: string
+}
+
+/** Return the lifecycle/evaluation error when no configuration capability can serve the context. */
+export function getFlagsConfigurationError(
+  configuration: FlagsConfiguration | undefined,
+  context: EvaluationContext
+): FlagsConfigurationError | undefined {
+  const selection = selectFlagsConfiguration(configuration, context)
+  return selection.kind === 'error' ? selection.error : undefined
+}
+
+type FlagsConfigurationSelection =
+  | { kind: 'precomputed'; configuration: PrecomputedConfiguration }
+  | { kind: 'rules'; configuration: RulesConfiguration }
+  | { kind: 'error'; error: FlagsConfigurationError }
+
+function selectFlagsConfiguration(
+  configuration: FlagsConfiguration | undefined,
+  context: EvaluationContext
+): FlagsConfigurationSelection {
+  if (configuration === undefined) {
     return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: flagsConfiguration.precomputedError,
+      kind: 'error',
+      error: { errorCode: 'PROVIDER_NOT_READY', errorMessage: 'No flags configuration has been set' },
     }
   }
 
-  if (flagsConfiguration.precomputed) {
+  if (configuration.precomputed && configMatchesContext(configuration, context)) {
+    return { kind: 'precomputed', configuration: configuration.precomputed }
+  }
+  if (configuration.rules) {
+    return { kind: 'rules', configuration: configuration.rules }
+  }
+
+  const parseError = configuration.configurationError ?? configuration.rulesError ?? configuration.precomputedError
+  if (parseError !== undefined) {
+    return { kind: 'error', error: { errorCode: 'PARSE_ERROR', errorMessage: parseError } }
+  }
+
+  if (configuration.precomputed) {
     return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      kind: 'error',
+      error: {
+        errorCode: 'INVALID_CONTEXT',
+        errorMessage: 'Precomputed flags configuration does not match the current context',
+      },
     }
   }
 
   return {
-    value: defaultValue,
-    reason: 'ERROR',
-    errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
+    kind: 'error',
+    error: { errorCode: 'PARSE_ERROR', errorMessage: 'Flags configuration contains no usable capability' },
   }
 }
 

@@ -98,6 +98,36 @@ describe('DatadogOfflineProvider', () => {
     })
   })
 
+  it('stays ready with matching precomputed data when the rules branch is invalid', async () => {
+    const provider = providerWithConfiguration({
+      ...precomputedConfiguration,
+      rulesError: 'Malformed rules data',
+    })
+    const context = { targetingKey: 'static-user', plan: 'free' }
+
+    await expect(provider.initialize(context)).resolves.toBeUndefined()
+    expect(provider.resolveStringEvaluation('static-flag', 'default', context, logger)).toMatchObject({
+      value: 'static-value',
+      variant: 'static-variation',
+    })
+  })
+
+  it('uses a rules parse error when mismatched precomputed data cannot fall back to rules', async () => {
+    const provider = providerWithConfiguration({
+      ...precomputedConfiguration,
+      rulesError: 'Malformed rules data',
+    })
+    const context = { targetingKey: 'other-user' }
+
+    await expect(provider.initialize(context)).rejects.toMatchObject({ code: 'PARSE_ERROR' })
+    expect(provider.resolveStringEvaluation('static-flag', 'default', context, logger)).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Malformed rules data',
+    })
+  })
+
   it('uses precomputed configuration only when the context matches', async () => {
     const provider = providerWithConfiguration(precomputedConfiguration)
 
@@ -130,6 +160,7 @@ describe('DatadogOfflineProvider', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
+      errorMessage: 'Precomputed flags configuration does not match the current context',
     })
   })
 
@@ -186,6 +217,22 @@ describe('DatadogOfflineProvider', () => {
     provider.setConfiguration({})
 
     expect(errorHandler).toHaveBeenCalledTimes(1)
+    expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toMatchObject({
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Flags configuration contains no usable capability',
+    })
+  })
+
+  it('uses parse errors for malformed configured capabilities', async () => {
+    const provider = providerWithConfiguration({ rulesError: 'Malformed rules data' })
+
+    await expect(provider.initialize({})).rejects.toMatchObject({ code: 'PARSE_ERROR' })
+    expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
+      value: true,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Malformed rules data',
+    })
   })
 
   it('returns provider not ready when no evaluatable configuration is available', () => {
@@ -195,6 +242,7 @@ describe('DatadogOfflineProvider', () => {
       value: true,
       reason: 'ERROR',
       errorCode: 'PROVIDER_NOT_READY',
+      errorMessage: 'No flags configuration has been set',
     })
   })
 })
