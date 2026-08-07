@@ -2,14 +2,18 @@ import type { Context, RawError } from '@datadog/browser-core'
 import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
 import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimestamp } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
-import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 
 /**
  * Create hook for exposure logging.
  */
-export function createExposureLoggingHook(configuration: FlaggingConfiguration, exposureCache: AssignmentCache): Hook {
+export function createExposureLoggingHook(
+  configuration: FlaggingConfiguration,
+  exposureCache: AssignmentCache,
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const exposuresBatch = startExposuresBatch(
     configuration,
@@ -22,7 +26,8 @@ export function createExposureLoggingHook(configuration: FlaggingConfiguration, 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       const timestamp = timeStampNow()
-      const exposureEvent = createExposureEvent(hookContext.context, details)
+      const evaluationContext = getEvaluationContext(hookContext.context)
+      const exposureEvent = createExposureEvent(evaluationContext, details)
       if (!exposureEvent) {
         return
       }

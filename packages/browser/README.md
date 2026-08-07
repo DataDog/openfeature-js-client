@@ -90,6 +90,29 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### RUM User Context
+
+When RUM integration is enabled (the default), the provider includes flat primitive properties returned by
+`DD_RUM.getUser()` in the OpenFeature evaluation context. The RUM user ID is used as the targeting key, while fields
+set explicitly through `OpenFeature.setContext()` take precedence.
+
+Initialize the RUM user before registering the provider:
+
+```javascript
+DD_RUM.setUser({
+  id: 'user-123',
+  email: 'user@example.com',
+  company_name: 'Example, Inc.',
+})
+
+await OpenFeature.setProviderAndWait(new DatadogProvider(configuration))
+```
+
+If the RUM user changes after provider initialization, call
+`await OpenFeature.setContext(OpenFeature.getContext())` to reconcile the provider with the latest user while
+preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
+evaluation context.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula

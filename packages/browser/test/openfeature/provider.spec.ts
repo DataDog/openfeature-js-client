@@ -1,8 +1,9 @@
-import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
+import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 
 describe('DatadogProvider', () => {
@@ -301,6 +302,36 @@ describe('DatadogProvider', () => {
           variationType: 'STRING',
         },
       })
+    })
+
+    it('should include RUM user properties in the configuration request', async () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({
+          id: 'rum-user',
+          user_email: 'rum@example.com',
+          company_name: 'Example, Inc.',
+          profile: { plan: 'enterprise' },
+        }),
+      }
+
+      try {
+        await provider.onContextChange({}, { user_email: 'explicit@example.com' })
+
+        const [, requestOptions] = fetchMock.mock.calls[0]
+        const requestBody = JSON.parse(requestOptions.body)
+        expect(requestBody.data.attributes.subject).toEqual({
+          targeting_key: 'rum-user',
+          targeting_attributes: {
+            targetingKey: 'rum-user',
+            user_email: 'explicit@example.com',
+            company_name: 'Example, Inc.',
+          },
+        })
+      } finally {
+        delete globalObject.DD_RUM
+      }
     })
   })
 
