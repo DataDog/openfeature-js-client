@@ -36,10 +36,10 @@ for (const section of ['dependencies', 'peerDependencies']) {
     if (dep in pkg[section]) {
       fail(
         `"${dep}" is listed in "${section}" in package.json.\n` +
-        `  This would install a separate copy under SSI, breaking event emitter\n` +
-        `  identity with the customer's @openfeature/server-sdk.\n` +
-        `  See https://github.com/DataDog/dd-trace-js/pull/9570 for context.\n` +
-        `  If you need OpenFeature types, keep them in "devDependencies" only.`
+          `  This would install a separate copy under SSI, breaking event emitter\n` +
+          `  identity with the customer's @openfeature/server-sdk.\n` +
+          `  See https://github.com/DataDog/dd-trace-js/pull/9570 for context.\n` +
+          `  If you need OpenFeature types, keep them in "devDependencies" only.`
       )
     }
   }
@@ -52,12 +52,12 @@ function checkDir(dir, label) {
     if (!file.endsWith('.js')) continue
     const content = fs.readFileSync(path.join(dir, file), 'utf8')
     // Match require('@openfeature/...') or from '@openfeature/...'
-    if (content.includes("@openfeature/")) {
+    if (content.includes('@openfeature/')) {
       fail(
         `Runtime @openfeature import found in ${label}/${file}.\n` +
-        `  The compiled output must not import from @openfeature/* at runtime.\n` +
-        `  All OpenFeature types must be import type only (erased at compile time)\n` +
-        `  and the event emitter must use the custom NodeProviderEventEmitter.`
+          `  The compiled output must not import from @openfeature/* at runtime.\n` +
+          `  All OpenFeature types must be import type only (erased at compile time)\n` +
+          `  and the event emitter must use the custom NodeProviderEventEmitter.`
       )
     }
   }
@@ -69,9 +69,9 @@ checkDir(ESM_DIR, 'esm')
 if (failed) {
   console.error(
     '\n\x1b[31m[verify-no-openfeature-dep] ' +
-    'Publishing blocked. @openfeature/server-sdk must remain a devDependency ' +
-    'only. Adding it as a runtime dependency breaks SSI compatibility with ' +
-    'dd-trace-js (see https://github.com/DataDog/dd-trace-js/pull/9570).\x1b[0m\n'
+      'Publishing blocked. @openfeature/server-sdk must remain a devDependency ' +
+      'only. Adding it as a runtime dependency breaks SSI compatibility with ' +
+      'dd-trace-js (see https://github.com/DataDog/dd-trace-js/pull/9570).\x1b[0m\n'
   )
   process.exit(1)
 } else {
