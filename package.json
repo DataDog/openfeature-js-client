@@ -47,7 +47,10 @@
   },
   "packageManager": "yarn@4.10.3",
   "resolutions": {
-    "typescript": "5.9.3"
+    "tar@npm:7.5.11": "npm:^7.5.22",
+    "minimatch@npm:10.1.1": "npm:^10.2.6",
+    "js-yaml@npm:4.1.1": "npm:^4.3.1",
+    "typescript@npm:>=5.0.2": "npm:5.9.3"
   },
   "dependencies": {
     "emoji-name-map": "^2.0.3"
