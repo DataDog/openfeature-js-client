@@ -360,6 +360,7 @@
 "dot-prop","dot-prop","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)']"
 "dotenv","dotenv","['BSD-2-Clause']","['Scott Motte']"
 "dotenv-expand","dotenv-expand","['BSD-2-Clause']","['Scott Motte']"
+"dts-bundle-generator","dts-bundle-generator","['MIT']","['Evgeniy Timokhov']"
 "dunder-proto","dunder-proto","['MIT']","['ECMAScript Shims']"
 "eastasianwidth","eastasianwidth","['MIT']","['Masaki Komagata']"
 "ejs","ejs","['Apache-2.0']","['Joyent, Inc. and other Node contributors']"

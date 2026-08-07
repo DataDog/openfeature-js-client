@@ -14,7 +14,7 @@
   },
   "main": "cjs/index.js",
   "module": "esm/index.js",
-  "types": "cjs/index.d.ts",
+  "types": "index.d.ts",
   "sideEffects": false,
   "files": [
     "cjs/",
@@ -25,27 +25,27 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "yarn build",
+    "prepack": "yarn build && node scripts/verify-no-openfeature-dep.js",
     "pack": "yarn pack",
-    "build": "run-p build:cjs build:esm",
+    "build": "run-p build:cjs build:esm && yarn build:types",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
+    "//build:types": "Bundles @openfeature/* types into a self-contained index.d.ts with no external imports, required for SSI where dd-trace's node_modules can't reach the customer's @openfeature/server-sdk. See https://github.com/DataDog/dd-trace-js/pull/9570",
+    "build:types": "trap 'rm -f src/.dts-entry.ts' EXIT; printf '/// <reference path=\"./global.d.ts\" />\\nexport * from \"./index\"\\n' > src/.dts-entry.ts && dts-bundle-generator -o index.d.ts src/.dts-entry.ts --external-inlines @openfeature/core @openfeature/server-sdk --no-banner --export-referenced-types false",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
-    "clean": "rm -rf dist cjs esm",
+    "clean": "rm -rf dist cjs esm index.d.ts",
     "test": "jest --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@datadog/flagging-core": "2.0.2"
   },
-  "peerDependencies": {
-    "@openfeature/server-sdk": ">=1.15.1"
-  },
   "devDependencies": {
     "@openfeature/core": "1.9.2",
     "@openfeature/server-sdk": "1.20.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.19.130",
+    "dts-bundle-generator": "^9.0.0",
     "jest": "^30.0.5",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.9",
