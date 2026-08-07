@@ -486,7 +486,7 @@ describe('DatadogProvider', () => {
       // Both reject together — stale chains to latest, so both reject with the same error
       await expect(Promise.all([first, second])).rejects.toThrow('network failure')
 
-      expect(errorHandler).toHaveBeenCalledTimes(1)
+      expect(errorHandler).toHaveBeenCalledWith({ message: 'network failure' })
       expect(provider.status).toBe(ProviderStatus.ERROR)
     })
 
@@ -639,9 +639,7 @@ describe('DatadogProvider', () => {
 
         expect(errorHandler).toHaveBeenCalledWith(
           expect.objectContaining({
-            error: expect.objectContaining({
-              message: 'Context change fetch failed',
-            }),
+            message: 'Context change fetch failed',
             providerName: 'datadog',
           })
         )
