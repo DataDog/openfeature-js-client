@@ -30,6 +30,7 @@
     "build": "run-p build:cjs build:esm && yarn build:types",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
+    "//build:types": "Bundles @openfeature/* types into a self-contained index.d.ts with no external imports, required for SSI where dd-trace's node_modules can't reach the customer's @openfeature/server-sdk. See https://github.com/DataDog/dd-trace-js/pull/9570",
     "build:types": "trap 'rm -f src/.dts-entry.ts' EXIT; printf '/// <reference path=\"./global.d.ts\" />\\nexport * from \"./index\"\\n' > src/.dts-entry.ts && dts-bundle-generator -o index.d.ts src/.dts-entry.ts --external-inlines @openfeature/core @openfeature/server-sdk --no-banner --export-referenced-types false",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
     "clean": "rm -rf dist cjs esm index.d.ts",
