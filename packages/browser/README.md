@@ -16,6 +16,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 
 // Initialize the provider
 const provider = new DatadogProvider({
+  applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
   enableExposureLogging: true,
   enableFlagEvaluationTracking: true,
@@ -23,7 +24,7 @@ const provider = new DatadogProvider({
 })
 
 // Set the provider
-await OpenFeature.setProvider(provider)
+await OpenFeature.setProviderAndWait(provider)
 
 // Get a client and evaluate flags
 const client = OpenFeature.getClient()
@@ -120,6 +121,7 @@ the Protobuf-ES dependency. Rules-based entries are ignored:
 
 ```javascript
 import { configurationFromString, DatadogProvider, getPrecomputedContext } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString(wire)
 const context = getPrecomputedContext(configuration)
