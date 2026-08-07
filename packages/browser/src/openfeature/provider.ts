@@ -23,6 +23,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { DatadogCoreProvider } from './core-provider'
+import { toProviderErrorEvent } from './error-event'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -220,7 +221,7 @@ export class DatadogProvider extends DatadogCoreProvider {
           } else {
             // Otherwise, this is a legitimate error
             this.status = ProviderStatus.ERROR
-            this.events.emit(ProviderEvents.Error, { error })
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
         }

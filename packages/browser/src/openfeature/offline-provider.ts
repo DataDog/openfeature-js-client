@@ -9,6 +9,7 @@ import type {
 } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogCoreProvider } from './core-provider'
+import { toProviderErrorEvent } from './error-event'
 
 export class DatadogOfflineProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
@@ -32,7 +33,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
     const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
     if (error) {
-      this.events.emit(ProviderEvents.Error, { error })
+      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
       return
     }
 

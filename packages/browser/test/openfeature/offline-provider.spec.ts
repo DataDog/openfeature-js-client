@@ -216,7 +216,10 @@ describe('DatadogOfflineProvider', () => {
 
     provider.setConfiguration({})
 
-    expect(errorHandler).toHaveBeenCalledTimes(1)
+    expect(errorHandler).toHaveBeenCalledWith({
+      message: 'Flags configuration contains no usable capability',
+      errorCode: 'PARSE_ERROR',
+    })
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toMatchObject({
       errorCode: 'PARSE_ERROR',
       errorMessage: 'Flags configuration contains no usable capability',
@@ -224,9 +227,16 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('uses parse errors for malformed configured capabilities', async () => {
-    const provider = providerWithConfiguration({ rulesError: 'Malformed rules data' })
+    const provider = new DatadogOfflineProvider()
+    const errorHandler = jest.fn()
+    provider.events.addHandler(ProviderEvents.Error, errorHandler)
+    provider.setConfiguration({ rulesError: 'Malformed rules data' })
 
     await expect(provider.initialize({})).rejects.toMatchObject({ code: 'PARSE_ERROR' })
+    expect(errorHandler).toHaveBeenCalledWith({
+      message: 'Malformed rules data',
+      errorCode: 'PARSE_ERROR',
+    })
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
       value: true,
       reason: 'ERROR',
