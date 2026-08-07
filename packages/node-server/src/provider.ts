@@ -6,7 +6,7 @@ import {
   LRUInMemoryAssignmentCache,
   timeStampNow,
 } from '@datadog/flagging-core'
-import type { EvaluationContext } from '@openfeature/core'
+import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
 import type {
   EvaluationDetails,
   FlagValue,
@@ -19,10 +19,16 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/server-sdk'
-import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { InitializationController } from './initialization-controller'
+import { NodeProviderEventEmitter } from './provider-event-emitter'
+
+const PROVIDER_EVENTS = {
+  ConfigurationChanged: 'PROVIDER_CONFIGURATION_CHANGED' as ServerProviderEvents.ConfigurationChanged,
+  Error: 'PROVIDER_ERROR' as ServerProviderEvents.Error,
+  Ready: 'PROVIDER_READY' as ServerProviderEvents.Ready,
+}
 
 /**
  * Default timeout in milliseconds for provider initialization.
@@ -50,14 +56,14 @@ export class DatadogNodeServerProvider implements Provider {
   readonly hooks?: Hook[]
 
   private initController?: InitializationController
-  readonly events: ProviderEventEmitter<ProviderEvents>
+  readonly events: ProviderEventEmitter<ServerProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
     this.hooks = []
-    this.events = new OpenFeatureEventEmitter()
+    this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
   }
 
@@ -76,7 +82,7 @@ export class DatadogNodeServerProvider implements Provider {
     const hadConfiguration = !!this.configuration
 
     if (hadConfiguration && this.configuration !== configuration) {
-      this.events.emit(ProviderEvents.ConfigurationChanged)
+      this.events.emit(PROVIDER_EVENTS.ConfigurationChanged)
       const newCreatedAt = configuration?.createdAt
       if (prevCreatedAt !== newCreatedAt) {
         this.exposureCache?.clear()
@@ -94,7 +100,7 @@ export class DatadogNodeServerProvider implements Provider {
     } else if (!hadConfiguration) {
       // Configuration is being set after initialization completed/failed (e.g., after timeout)
       // Emit PROVIDER_READY to signal recovery from error state
-      this.events.emit(ProviderEvents.Ready)
+      this.events.emit(PROVIDER_EVENTS.Ready)
     }
   }
 
@@ -105,7 +111,7 @@ export class DatadogNodeServerProvider implements Provider {
     if (this.initController?.isInitializing()) {
       this.initController.fail(error)
     } else {
-      this.events.emit(ProviderEvents.Error, { error })
+      this.events.emit(PROVIDER_EVENTS.Error, { error })
     }
   }
 

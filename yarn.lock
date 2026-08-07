@@ -749,8 +749,6 @@ __metadata:
     ts-jest: "npm:^29.4.9"
     ts-loader: "npm:^9.5.7"
     typescript: "npm:^5.9.3"
-  peerDependencies:
-    "@openfeature/server-sdk": ">=1.15.1"
   languageName: unknown
   linkType: soft
 
