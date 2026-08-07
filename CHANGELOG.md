@@ -6,6 +6,22 @@
 
 ---
 
+## @datadog/openfeature-node-server@2.1.0
+
+**Bug Fixes:**
+
+- Remove `@openfeature/server-sdk` and `@openfeature/core` as runtime/peer dependencies, replacing the OpenFeature `EventEmitter` with a self-contained `NodeProviderEventEmitter` and bundling all `@openfeature/*` type declarations into a single self-contained `index.d.ts` via `dts-bundle-generator` ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+
+  This restores SSI (Single-Step Instrumentation) compatibility with `dd-trace-js`, where `dd-trace` is installed outside the application's `node_modules` tree and would otherwise get a separate copy of the OpenFeature SDK with a different event-emitter identity. The published package now has zero runtime imports from `@openfeature/*`.
+
+**Internal Changes:**
+
+- Add prepack guard (`verify-no-openfeature-dep.js`) that fails the publish if `@openfeature/server-sdk` or `@openfeature/core` appear in `dependencies`/`peerDependencies`, or if compiled `.js` files contain runtime `@openfeature` imports ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Add TypeScript consumer test (`test-app-node/typecheck.ts`) verifying the bundled `index.d.ts` compiles both with and without `@openfeature/*` installed, including an `OpenFeature.setProvider(provider)` compatibility check against the minimum supported SDK versions ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Add unit tests for `NodeProviderEventEmitter` covering emit/addHandler, handler error isolation, removeHandler LIFO semantics, removeAllHandlers scoping, getHandlers, and setLogger routing ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Pin TypeScript to 5.9.3 via root `resolutions` to satisfy `dts-bundle-generator`'s nested dependency ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Update `COMPATIBILITY.md` to reflect that `@openfeature/server-sdk` is no longer a peer dependency ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+
 ## @datadog/flagging-core@2.0.2, @datadog/openfeature-browser@1.2.5, @datadog/openfeature-node-server@2.0.2
 
 **Bug Fixes:**
