@@ -162,9 +162,7 @@ describe('NodeProviderEventEmitter', () => {
     })
 
     it('does not throw when removing a handler that was never registered', () => {
-      expect(() =>
-        emitter.removeHandler(ServerProviderEvents.Ready, jest.fn()),
-      ).not.toThrow()
+      expect(() => emitter.removeHandler(ServerProviderEvents.Ready, jest.fn())).not.toThrow()
     })
 
     it('does not affect handlers registered for other events', () => {
