@@ -4,12 +4,15 @@
   "private": true,
   "description": "Test app for validating @datadog/openfeature-node-server installation scenarios",
   "scripts": {
-    "test": "node test.js"
+    "test": "node test.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",
-    "@datadog/openfeature-node-server": "file:./node-server.tgz",
-    "@openfeature/core": "1.9.2",
-    "@openfeature/server-sdk": "1.15.1"
+    "@datadog/openfeature-node-server": "file:./node-server.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "typescript": "^5.9.3"
   }
 }
