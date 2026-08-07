@@ -78,5 +78,25 @@ provider.setError(new Error('test error'))
 // --- Test 10: initialize returns a Promise<void> ---
 const initPromise: Promise<void> = provider.initialize()
 
+// --- Test 11: Provider is compatible with OpenFeature.setProvider ---
+// Verifies that our provider can be registered with the OpenFeature SDK without
+// type errors. This is the key integration point: if the bundled type
+// declarations drift from the Provider interface that @openfeature/server-sdk
+// expects, this call will fail to compile.
+//
+// This test only type-checks when @openfeature/server-sdk is installed (normal
+// consumer scenario). In the SSI/dd-trace scenario where the SDK is absent, the
+// @ts-ignore below suppresses the missing-module error and OpenFeature resolves
+// to `any`, making the call a type-check no-op.
+//
+// Run against the minimum supported SDK version to catch regressions early:
+//   OF_SERVER_SDK_VERSION=1.15.0 OF_CORE_VERSION=1.3.0 \
+//     yarn test:node-install:with-of
+//
+// @ts-ignore: @openfeature/server-sdk may not be installed (SSI/dd-trace scenario)
+import { OpenFeature } from '@openfeature/server-sdk'
+
+OpenFeature.setProvider(provider)
+
 // Verify all bindings are used (no unused variable errors with strict mode)
 void [providerName, runsOn, events, hooks, initPromise]

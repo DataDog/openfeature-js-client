@@ -61,3 +61,6 @@ jobs:
 
       - name: Test node package installation (with OpenFeature)
         run: yarn test:node-install:with-of
+
+      - name: Test node package installation (with minimum OpenFeature)
+        run: OF_SERVER_SDK_VERSION=1.15.0 OF_CORE_VERSION=1.3.0 yarn test:node-install:with-of
