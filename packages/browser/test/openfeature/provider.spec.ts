@@ -33,7 +33,6 @@ describe('DatadogProvider', () => {
   describe('configuration validation', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should throw error when ddog-gov.com site is provided', () => {
@@ -139,7 +138,6 @@ describe('DatadogProvider', () => {
   describe('metadata', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should have correct metadata', () => {
@@ -517,6 +515,31 @@ describe('DatadogProvider', () => {
       // Settle both in-flight fetches so the provider doesn't leak
       calls[0].resolve(makeFetchResponse(makeResponse('first')))
       calls[1].resolve(makeFetchResponse(makeResponse('second')))
+    })
+  })
+
+  describe('initialization without applicationId', () => {
+    it('should initialize successfully', async () => {
+      const originalFetch = global.fetch
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => precomputedResponse,
+      })
+      const testProvider = new DatadogProvider({
+        clientToken: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+
+      try {
+        await expect(testProvider.initialize()).resolves.toBeUndefined()
+        expect(testProvider.status).toBe(ProviderStatus.READY)
+      } finally {
+        global.fetch = originalFetch
+      }
     })
   })
 
