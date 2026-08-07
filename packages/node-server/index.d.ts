@@ -1,26 +1,17 @@
 import { Channel } from 'node:diagnostics_channel';
 
-export type Metadata = Record<string, string>;
-/**
- * Defines where the library is intended to be run.
- */
-export type Paradigm = "server" | "client";
-export type PrimitiveValue = null | boolean | string | number;
-export type JsonObject = {
+type Metadata = Record<string, string>;
+type Paradigm = "server" | "client";
+type PrimitiveValue = null | boolean | string | number;
+type JsonObject = {
 	[key: string]: JsonValue;
 };
-export type JsonArray = JsonValue[];
-/**
- * Represents a JSON node value.
- */
-export type JsonValue = PrimitiveValue | JsonObject | JsonArray;
-export type EvaluationContextValue = PrimitiveValue | Date | {
+type JsonArray = JsonValue[];
+type JsonValue = PrimitiveValue | JsonObject | JsonArray;
+type EvaluationContextValue = PrimitiveValue | Date | {
 	[key: string]: EvaluationContextValue;
 } | EvaluationContextValue[];
-/**
- * A container for arbitrary contextual data that can be used as a basis for dynamic evaluation
- */
-export type EvaluationContext = {
+type EvaluationContext = {
 	/**
 	 * A string uniquely identifying the subject (end-user, or client service) of a flag evaluation.
 	 * Providers may require this field for fractional flag evaluation, rules, or overrides targeting specific users.
@@ -28,19 +19,11 @@ export type EvaluationContext = {
 	 */
 	targetingKey?: string;
 } & Record<string, EvaluationContextValue>;
-export type FlagValueType = "boolean" | "string" | "number" | "object";
-/**
- * Represents a JSON node value.
- */
-export type FlagValue = boolean | string | number | JsonValue;
-export type ResolutionReason = keyof typeof StandardResolutionReasons | (string & Record<never, never>);
-/**
- * A structure which supports definition of arbitrary properties, with keys of type string, and values of type boolean, string, or number.
- *
- * This structure is populated by a provider for use by an Application Author (via the Evaluation API) or an Application Integrator (via hooks).
- */
-export type FlagMetadata = Record<string, string | number | boolean>;
-export type ResolutionDetails<U> = {
+type FlagValueType = "boolean" | "string" | "number" | "object";
+type FlagValue = boolean | string | number | JsonValue;
+type ResolutionReason = keyof typeof StandardResolutionReasons | (string & Record<never, never>);
+type FlagMetadata = Record<string, string | number | boolean>;
+type ResolutionDetails<U> = {
 	value: U;
 	variant?: string;
 	flagMetadata?: FlagMetadata;
@@ -48,7 +31,7 @@ export type ResolutionDetails<U> = {
 	errorCode?: ErrorCode;
 	errorMessage?: string;
 };
-export type EvaluationDetails<T extends FlagValue> = {
+type EvaluationDetails<T extends FlagValue> = {
 	flagKey: string;
 	flagMetadata: Readonly<FlagMetadata>;
 } & ResolutionDetails<T>;
@@ -126,13 +109,13 @@ declare enum ErrorCode {
 	 */
 	GENERAL = "GENERAL"
 }
-export interface Logger {
+interface Logger {
 	error(...args: unknown[]): void;
 	warn(...args: unknown[]): void;
 	info(...args: unknown[]): void;
 	debug(...args: unknown[]): void;
 }
-export interface ManageLogger<T> {
+interface ManageLogger<T> {
 	/**
 	 * Sets a logger on this receiver. This logger supersedes to the global logger
 	 * and is passed to various components in the SDK.
@@ -188,15 +171,11 @@ declare enum ClientProviderEvents {
 	 */
 	Stale = "PROVIDER_STALE"
 }
-/**
- * A type representing any possible ProviderEvent (server or client side).
- * In most cases, you probably want to import `ProviderEvents` from the respective SDK.
- */
-export type AnyProviderEvent = ServerProviderEvents | ClientProviderEvents;
-export type EventMetadata = {
+type AnyProviderEvent = ServerProviderEvents | ClientProviderEvents;
+type EventMetadata = {
 	[key: string]: string | boolean | number;
 };
-export type CommonEventDetails = {
+type CommonEventDetails = {
 	readonly providerName: string;
 	/**
 	 * @deprecated alias of "domain", use domain instead
@@ -204,23 +183,23 @@ export type CommonEventDetails = {
 	readonly clientName?: string;
 	readonly domain?: string;
 };
-export type CommonEventProps = {
+type CommonEventProps = {
 	readonly message?: string;
 	readonly metadata?: EventMetadata;
 };
-export type ReadyEvent = CommonEventProps;
+type ReadyEvent = CommonEventProps;
 type ErrorEvent$1 = CommonEventProps;
-export type StaleEvent = CommonEventProps;
-export type ConfigChangeEvent = CommonEventProps & {
+type StaleEvent = CommonEventProps;
+type ConfigChangeEvent = CommonEventProps & {
 	readonly flagsChanged?: string[];
 };
-export type ServerEventMap = {
+type ServerEventMap = {
 	[ServerProviderEvents.Ready]: ReadyEvent;
 	[ServerProviderEvents.Error]: ErrorEvent$1;
 	[ServerProviderEvents.Stale]: StaleEvent;
 	[ServerProviderEvents.ConfigurationChanged]: ConfigChangeEvent;
 };
-export type ClientEventMap = {
+type ClientEventMap = {
 	[ClientProviderEvents.Ready]: ReadyEvent;
 	[ClientProviderEvents.Error]: ErrorEvent$1;
 	[ClientProviderEvents.Stale]: StaleEvent;
@@ -228,27 +207,20 @@ export type ClientEventMap = {
 	[ClientProviderEvents.Reconciling]: CommonEventProps;
 	[ClientProviderEvents.ContextChanged]: CommonEventProps;
 };
-export type EventContext<U extends Record<string, unknown> = Record<string, unknown>, T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = (T extends ClientProviderEvents ? ClientEventMap[T] : T extends ServerProviderEvents ? ServerEventMap[T] : never) & U;
-export type EventDetails<T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = EventContext<Record<string, unknown>, T> & CommonEventDetails;
-export type EventHandler<T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = (eventDetails?: EventDetails<T>) => Promise<unknown> | unknown;
-/**
- * Event emitter to be optionally implemented by providers.
- * Implemented by @see OpenFeatureEventEmitter.
- */
-export interface ProviderEventEmitter<E extends AnyProviderEvent, AdditionalContext extends Record<string, unknown> = Record<string, unknown>> extends ManageLogger<ProviderEventEmitter<E, AdditionalContext>> {
+type EventContext<U extends Record<string, unknown> = Record<string, unknown>, T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = (T extends ClientProviderEvents ? ClientEventMap[T] : T extends ServerProviderEvents ? ServerEventMap[T] : never) & U;
+type EventDetails<T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = EventContext<Record<string, unknown>, T> & CommonEventDetails;
+type EventHandler<T extends ServerProviderEvents | ClientProviderEvents = ServerProviderEvents | ClientProviderEvents> = (eventDetails?: EventDetails<T>) => Promise<unknown> | unknown;
+interface ProviderEventEmitter<E extends AnyProviderEvent, AdditionalContext extends Record<string, unknown> = Record<string, unknown>> extends ManageLogger<ProviderEventEmitter<E, AdditionalContext>> {
 	emit(eventType: E, context?: EventContext): void;
 	addHandler(eventType: AnyProviderEvent, handler: EventHandler): void;
 	removeHandler(eventType: AnyProviderEvent, handler: EventHandler): void;
 	removeAllHandlers(eventType?: AnyProviderEvent): void;
 	getHandlers(eventType: AnyProviderEvent): EventHandler[];
 }
-export type TrackingEventValue = PrimitiveValue | Date | {
+type TrackingEventValue = PrimitiveValue | Date | {
 	[key: string]: TrackingEventValue;
 } | TrackingEventValue[];
-/**
- * A container for arbitrary data that can relevant to tracking events.
- */
-export type TrackingEventDetails = {
+type TrackingEventDetails = {
 	/**
 	 * A numeric value associated with this event.
 	 */
@@ -302,13 +274,10 @@ declare enum ClientProviderStatus {
 	 */
 	RECONCILING = "RECONCILING"
 }
-/**
- * Static data about the provider.
- */
-export interface ProviderMetadata extends Readonly<Metadata> {
+interface ProviderMetadata extends Readonly<Metadata> {
 	readonly name: string;
 }
-export interface CommonProvider<S extends ClientProviderStatus | ServerProviderStatus> {
+interface CommonProvider<S extends ClientProviderStatus | ServerProviderStatus> {
 	readonly metadata: ProviderMetadata;
 	/**
 	 * Represents where the provider is intended to be run. If defined,
@@ -349,7 +318,7 @@ export interface CommonProvider<S extends ClientProviderStatus | ServerProviderS
 	 */
 	track?(trackingEventName: string, context: EvaluationContext, trackingEventDetails: TrackingEventDetails): void;
 }
-export interface ClientMetadata {
+interface ClientMetadata {
 	/**
 	 * @deprecated alias of "domain", use domain instead
 	 */
@@ -358,13 +327,7 @@ export interface ClientMetadata {
 	readonly version?: string;
 	readonly providerMetadata: ProviderMetadata;
 }
-/**
- * A mutable data structure for hooks to maintain state across their lifecycle.
- * Each hook instance gets its own isolated data store that persists for the
- * duration of a single flag evaluation.
- * @template TData - A record type that defines the shape of the stored data
- */
-export interface HookData<TData = Record<string, unknown>> {
+interface HookData<TData = Record<string, unknown>> {
 	/**
 	 * Sets a value in the hook data store.
 	 * @param key The key to store the value under
@@ -398,8 +361,8 @@ export interface HookData<TData = Record<string, unknown>> {
 	 */
 	clear(): void;
 }
-export type HookHints = Readonly<Record<string, unknown>>;
-export interface HookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> {
+type HookHints = Readonly<Record<string, unknown>>;
+interface HookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> {
 	readonly flagKey: string;
 	readonly defaultValue: T;
 	readonly flagValueType: FlagValueType;
@@ -409,10 +372,10 @@ export interface HookContext<T extends FlagValue = FlagValue, TData = Record<str
 	readonly logger: Logger;
 	readonly hookData: HookData<TData>;
 }
-export interface BeforeHookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> extends HookContext<T, TData> {
+interface BeforeHookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> extends HookContext<T, TData> {
 	context: EvaluationContext;
 }
-export interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unknown>, BeforeHookReturn = unknown, HooksReturn = unknown> {
+interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unknown>, BeforeHookReturn = unknown, HooksReturn = unknown> {
 	/**
 	 * Runs before flag values are resolved from the provider.
 	 * If an EvaluationContext is returned, it will be merged with the pre-existing EvaluationContext.
@@ -442,7 +405,7 @@ export interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string
 	 */
 	finally?(hookContext: Readonly<HookContext<T, TData>>, evaluationDetails: EvaluationDetails<T>, hookHints?: HookHints): HooksReturn;
 }
-export interface ExposureEvent {
+interface ExposureEvent {
 	allocation: {
 		key: string;
 	};
@@ -477,62 +440,62 @@ declare enum OperatorType {
 	NOT_ONE_OF = "NOT_ONE_OF",
 	IS_NULL = "IS_NULL"
 }
-export type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
-export type MatchesCondition = {
+type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
+type MatchesCondition = {
 	operator: OperatorType.MATCHES;
 	attribute: string;
 	value: string;
 };
-export type NotMatchesCondition = {
+type NotMatchesCondition = {
 	operator: OperatorType.NOT_MATCHES;
 	attribute: string;
 	value: string;
 };
-export type OneOfCondition = {
+type OneOfCondition = {
 	operator: OperatorType.ONE_OF;
 	attribute: string;
 	value: string[];
 };
-export type NotOneOfCondition = {
+type NotOneOfCondition = {
 	operator: OperatorType.NOT_ONE_OF;
 	attribute: string;
 	value: string[];
 };
-export type NumericCondition = {
+type NumericCondition = {
 	operator: NumericOperator;
 	attribute: string;
 	value: number;
 };
-export type NullCondition = {
+type NullCondition = {
 	operator: OperatorType.IS_NULL;
 	attribute: string;
 	value: boolean;
 };
-export type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition;
-export interface Rule {
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition;
+interface Rule {
 	conditions: Condition[];
 }
-export type VariantType = "BOOLEAN" | "INTEGER" | "NUMERIC" | "STRING" | "JSON";
-export interface VariantConfiguration {
+type VariantType = "BOOLEAN" | "INTEGER" | "NUMERIC" | "STRING" | "JSON";
+interface VariantConfiguration {
 	key: string;
 	value: FlagValue;
 }
-export interface ShardRange {
+interface ShardRange {
 	start: number;
 	end: number;
 }
-export interface Shard {
+interface Shard {
 	salt: string;
 	ranges: ShardRange[];
 	totalShards: number;
 }
-export interface Split {
+interface Split {
 	variationKey: string;
 	shards: Shard[];
 	extraLogging?: Record<string, string>;
 	serialId?: number;
 }
-export interface Allocation {
+interface Allocation {
 	key: string;
 	rules?: Rule[];
 	startAt?: Date;
@@ -540,7 +503,7 @@ export interface Allocation {
 	splits: Split[];
 	doLog?: boolean;
 }
-export interface Flag {
+interface Flag {
 	key: string;
 	enabled: boolean;
 	variationType: VariantType;
@@ -555,14 +518,8 @@ export interface UniversalFlagConfigurationV1 {
 	};
 	flags: Record<string, Flag>;
 }
-export type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
-/**
- * Interface that providers must implement to resolve flag values for their particular
- * backend or vendor.
- *
- * Implementation for resolving all the required flag types must be defined.
- */
-export interface Provider extends CommonProvider<ServerProviderStatus> {
+type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
+interface Provider extends CommonProvider<ServerProviderStatus> {
 	/**
 	 * A provider hook exposes a mechanism for provider authors to register hooks
 	 * to tap into various stages of the flag evaluation lifecycle. These hooks can

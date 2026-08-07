@@ -30,7 +30,7 @@
     "build": "run-p build:cjs build:esm && yarn build:types",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
-    "build:types": "printf '/// <reference path=\"./global.d.ts\" />\\nexport * from \"./index\"\\n' > src/.dts-entry.ts && dts-bundle-generator -o index.d.ts src/.dts-entry.ts --external-inlines @openfeature/core @openfeature/server-sdk --no-banner && rm -f src/.dts-entry.ts",
+    "build:types": "printf '/// <reference path=\"./global.d.ts\" />\\nexport * from \"./index\"\\n' > src/.dts-entry.ts && dts-bundle-generator -o index.d.ts src/.dts-entry.ts --external-inlines @openfeature/core @openfeature/server-sdk --no-banner --export-referenced-types false && rm -f src/.dts-entry.ts",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
     "clean": "rm -rf dist cjs esm",
     "test": "jest --passWithNoTests",
