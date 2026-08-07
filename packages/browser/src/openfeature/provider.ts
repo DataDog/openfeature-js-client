@@ -67,6 +67,12 @@ export class DatadogProvider implements Provider {
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
 
+  // TODO: Migrate this manual context plumbing to a provider `before` hook once
+  // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
+  // Watch upstream packages/web/src/hooks/hook.ts for the before return changing from `void`,
+  // and packages/web/src/client/internal/open-feature-client.ts for `beforeHooks` merging that
+  // result before calling the resolver and subsequent hooks. Return this stored context, not a
+  // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
   /** Effective context associated with the active flags configuration. */
   private evaluationContext: EvaluationContext = {}
 
