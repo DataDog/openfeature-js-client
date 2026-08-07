@@ -329,15 +329,18 @@ describe('evaluate', () => {
       })
     })
 
-    it.each([undefined, 'Malformed rules data'])('uses valid matching precomputed data when rules error is %s', (rulesError) => {
-      expect(
-        evaluate({ ...matrixPrecomputedConfiguration, rulesError }, 'boolean', 'test-flag', true, matrixContext)
-      ).toMatchObject({
-        value: false,
-        variant: 'precomputed-off',
-        reason: 'STATIC',
-      })
-    })
+    it.each([undefined, 'Malformed rules data'])(
+      'uses valid matching precomputed data when rules error is %s',
+      (rulesError) => {
+        expect(
+          evaluate({ ...matrixPrecomputedConfiguration, rulesError }, 'boolean', 'test-flag', true, matrixContext)
+        ).toMatchObject({
+          value: false,
+          variant: 'precomputed-off',
+          reason: 'STATIC',
+        })
+      }
+    )
 
     it('returns a configuration error when precomputed data is invalid and rules are invalid or absent', () => {
       expect(
