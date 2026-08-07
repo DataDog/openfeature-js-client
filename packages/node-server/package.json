@@ -25,7 +25,7 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "yarn build",
+    "prepack": "yarn build && node scripts/verify-no-openfeature-dep.js",
     "pack": "yarn pack",
     "build": "run-p build:cjs build:esm && yarn build:types",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
