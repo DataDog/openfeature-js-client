@@ -438,7 +438,15 @@ declare enum OperatorType {
 	LT = "LT",
 	ONE_OF = "ONE_OF",
 	NOT_ONE_OF = "NOT_ONE_OF",
-	IS_NULL = "IS_NULL"
+	ONE_OF_SHA256 = "ONE_OF_SHA256",
+	NOT_ONE_OF_SHA256 = "NOT_ONE_OF_SHA256",
+	IS_NULL = "IS_NULL",
+	SEMVER_EQUAL = "SEMVER_EQUAL",
+	SEMVER_NOT_EQUAL = "SEMVER_NOT_EQUAL",
+	SEMVER_LT = "SEMVER_LT",
+	SEMVER_LTE = "SEMVER_LTE",
+	SEMVER_GT = "SEMVER_GT",
+	SEMVER_GTE = "SEMVER_GTE"
 }
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
 type MatchesCondition = {
@@ -471,7 +479,20 @@ type NullCondition = {
 	attribute: string;
 	value: boolean;
 };
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition;
+type Sha256Condition = {
+	operator: OperatorType.ONE_OF_SHA256 | OperatorType.NOT_ONE_OF_SHA256;
+	attribute: string;
+	value: {
+		salt: number[];
+		hashes: string[];
+	};
+};
+type SemverCondition = {
+	operator: OperatorType.SEMVER_EQUAL | OperatorType.SEMVER_NOT_EQUAL | OperatorType.SEMVER_LT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_GTE;
+	attribute: string;
+	value: string;
+};
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | Sha256Condition | SemverCondition;
 interface Rule {
 	conditions: Condition[];
 }
