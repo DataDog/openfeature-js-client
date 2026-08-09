@@ -33,7 +33,6 @@ describe('DatadogProvider', () => {
   describe('configuration validation', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should throw error when ddog-gov.com site is provided', () => {
@@ -139,7 +138,6 @@ describe('DatadogProvider', () => {
   describe('metadata', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should have correct metadata', () => {
