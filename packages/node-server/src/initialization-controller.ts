@@ -27,7 +27,7 @@ export class InitializationController {
         this.timeoutId = setTimeout(() => {
           onTimeout()
         }, timeoutMs)
-        this.timeoutId.unref()
+        this.timeoutId.unref?.()
       }),
     ])
   }

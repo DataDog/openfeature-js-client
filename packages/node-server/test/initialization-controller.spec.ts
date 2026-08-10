@@ -73,6 +73,23 @@ describe('InitializationController', () => {
     }
   })
 
+  it('should support timer implementations without unref', async () => {
+    const timeout = 1 as unknown as NodeJS.Timeout
+    const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout').mockReturnValue(timeout)
+    const clearTimeoutSpy = jest.spyOn(globalThis, 'clearTimeout').mockImplementation()
+
+    try {
+      const controller = new InitializationController(5000, jest.fn())
+      controller.complete()
+      await controller.wait()
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timeout)
+    } finally {
+      setTimeoutSpy.mockRestore()
+      clearTimeoutSpy.mockRestore()
+    }
+  })
+
   it('should clear timeout when completed before timeout', async () => {
     jest.useFakeTimers()
     const onTimeout = jest.fn()
