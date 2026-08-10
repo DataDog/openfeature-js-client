@@ -59,6 +59,20 @@ describe('InitializationController', () => {
     expect(onTimeout).toHaveBeenCalledTimes(1)
   })
 
+  it('should not keep the event loop active while initialization is pending', async () => {
+    const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout')
+    const controller = new InitializationController(5000, jest.fn())
+    const timeout = setTimeoutSpy.mock.results[0].value
+
+    try {
+      expect(timeout.hasRef()).toBe(false)
+    } finally {
+      controller.complete()
+      await controller.wait()
+      setTimeoutSpy.mockRestore()
+    }
+  })
+
   it('should clear timeout when completed before timeout', async () => {
     jest.useFakeTimers()
     const onTimeout = jest.fn()
