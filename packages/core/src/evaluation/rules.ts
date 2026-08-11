@@ -25,6 +25,14 @@ const supportedOperators = new Set<string>(Object.values(OperatorType))
 
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT
 
+type SemVerOperator =
+  | OperatorType.SEMVER_EQ
+  | OperatorType.SEMVER_NEQ
+  | OperatorType.SEMVER_GTE
+  | OperatorType.SEMVER_GT
+  | OperatorType.SEMVER_LTE
+  | OperatorType.SEMVER_LT
+
 type MatchesCondition = {
   operator: OperatorType.MATCHES
   attribute: string
@@ -61,16 +69,8 @@ type NullCondition = {
   value: boolean
 }
 
-type SemverOperator =
-  | OperatorType.SEMVER_EQ
-  | OperatorType.SEMVER_NEQ
-  | OperatorType.SEMVER_LT
-  | OperatorType.SEMVER_LTE
-  | OperatorType.SEMVER_GT
-  | OperatorType.SEMVER_GTE
-
-type SemverCondition = {
-  operator: SemverOperator
+type SemVerCondition = {
+  operator: SemVerOperator
   attribute: string
   value: string
 }
@@ -82,26 +82,38 @@ export type Condition =
   | NotOneOfCondition
   | NumericCondition
   | NullCondition
-  | SemverCondition
+  | SemVerCondition
 
 export interface Rule {
   conditions: Condition[]
 }
 
-export function isValidRule(rule: Rule): boolean {
-  if (!Array.isArray(rule.conditions)) {
+export function isValidRule(rule: unknown): rule is Rule {
+  if (!isRecord(rule) || !Array.isArray(rule.conditions)) {
     return false
   }
 
   return rule.conditions.every((condition) => {
+    if (!isRecord(condition) || typeof condition.attribute !== 'string' || typeof condition.operator !== 'string') {
+      return false
+    }
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (isSemverOperator(condition.operator)) {
+    if (isNumericOperator(condition.operator)) {
+      return typeof condition.value === 'number' && Number.isFinite(condition.value)
+    }
+    if (condition.operator === OperatorType.ONE_OF || condition.operator === OperatorType.NOT_ONE_OF) {
+      return Array.isArray(condition.value) && condition.value.every((value) => typeof value === 'string')
+    }
+    if (condition.operator === OperatorType.IS_NULL) {
+      return typeof condition.value === 'boolean'
+    }
+    if (isSemVerOperator(condition.operator)) {
       return parseSemver(condition.value) !== null
     }
-    if (condition.operator !== OperatorType.MATCHES && condition.operator !== OperatorType.NOT_MATCHES) {
-      return true
+    if (typeof condition.value !== 'string') {
+      return false
     }
     try {
       compileRegex(condition.value)
@@ -169,27 +181,34 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
   return false
 }
 
-export function isSemverOperator(operator: string): operator is SemverOperator {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isNumericOperator(operator: string): operator is NumericOperator {
   return (
-    operator === OperatorType.SEMVER_EQ ||
-    operator === OperatorType.SEMVER_NEQ ||
-    operator === OperatorType.SEMVER_LT ||
-    operator === OperatorType.SEMVER_LTE ||
-    operator === OperatorType.SEMVER_GT ||
-    operator === OperatorType.SEMVER_GTE
+    operator === OperatorType.GTE ||
+    operator === OperatorType.GT ||
+    operator === OperatorType.LTE ||
+    operator === OperatorType.LT
   )
 }
 
-export function hasInvalidSemverComparand(rule: Rule): boolean {
-  return rule.conditions.some(
-    (condition) => isSemverOperator(condition.operator) && parseSemver(condition.value) === null
+function isSemVerOperator(operator: string): operator is SemVerOperator {
+  return (
+    operator === OperatorType.SEMVER_EQ ||
+    operator === OperatorType.SEMVER_NEQ ||
+    operator === OperatorType.SEMVER_GTE ||
+    operator === OperatorType.SEMVER_GT ||
+    operator === OperatorType.SEMVER_LTE ||
+    operator === OperatorType.SEMVER_LT
   )
 }
 
 function evaluateSemverCondition(
   attributeValue: EvaluationContextValue,
   comparandValue: string,
-  operator: SemverOperator
+  operator: SemVerOperator
 ): boolean {
   if (typeof attributeValue !== 'string') {
     return false
