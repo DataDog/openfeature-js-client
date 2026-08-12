@@ -12,12 +12,16 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   const url = buildConfigurationUrl(options, 'rules')
   const response = await fetch(url.toString(), {
     method: 'GET',
-    headers: buildConfigurationHeaders(options, {
-      Accept: 'application/protobuf',
-      ...(options.previousConfiguration?.rules?.etag && {
-        'If-None-Match': options.previousConfiguration.rules.etag,
-      }),
-    }),
+    headers: buildConfigurationHeaders(
+      options,
+      {
+        Accept: 'application/protobuf',
+        ...(options.previousConfiguration?.rules?.etag && {
+          'If-None-Match': options.previousConfiguration.rules.etag,
+        }),
+      },
+      'rules'
+    ),
     signal: options.signal,
   })
   if (response.status === 304 && options.previousConfiguration?.rules) {

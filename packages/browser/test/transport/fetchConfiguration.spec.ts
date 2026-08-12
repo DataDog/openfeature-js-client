@@ -403,7 +403,10 @@ describe('createFlagsConfigurationFetcher', () => {
         'https://proxy.example.com/?dd_env=test',
         expect.objectContaining({
           method: 'GET',
-          headers: expect.objectContaining({ Accept: 'application/protobuf' }),
+          headers: {
+            Accept: 'application/protobuf',
+            'dd-client-token': 'test-token',
+          },
         })
       )
     })

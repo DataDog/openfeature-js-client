@@ -70,7 +70,8 @@ export function buildConfigurationUrl(options: ConfigurationFetchOptions, endpoi
 
 export function buildConfigurationHeaders(
   options: ConfigurationFetchOptions,
-  contentHeaders: Record<string, string>
+  contentHeaders: Record<string, string>,
+  endpoint: 'precomputed' | 'rules'
 ): Record<string, string> {
   return {
     ...contentHeaders,
@@ -78,7 +79,7 @@ export function buildConfigurationHeaders(
       ? {}
       : {
           'dd-client-token': options.clientToken,
-          ...(options.applicationId && { 'dd-application-id': options.applicationId }),
+          ...(endpoint === 'precomputed' && options.applicationId && { 'dd-application-id': options.applicationId }),
         }),
     ...options.customHeaders,
   }
@@ -88,12 +89,16 @@ export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
   const url = buildConfigurationUrl(options, 'precomputed')
-  const defaultHeaders = buildConfigurationHeaders(options, {
-    'Content-Type': 'application/vnd.api+json',
-    ...(options.previousConfiguration?.precomputed?.etag && {
-      'If-None-Match': options.previousConfiguration.precomputed.etag,
-    }),
-  })
+  const defaultHeaders = buildConfigurationHeaders(
+    options,
+    {
+      'Content-Type': 'application/vnd.api+json',
+      ...(options.previousConfiguration?.precomputed?.etag && {
+        'If-None-Match': options.previousConfiguration.precomputed.etag,
+      }),
+    },
+    'precomputed'
+  )
 
   const envPayload = {
     dd_env: options.env || '',
