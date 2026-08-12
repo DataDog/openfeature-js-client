@@ -89,12 +89,15 @@ export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
   const url = buildConfigurationUrl(options, 'precomputed')
+  const previousConfiguration = configMatchesContext(options.previousConfiguration, options.context)
+    ? options.previousConfiguration
+    : undefined
   const defaultHeaders = buildConfigurationHeaders(
     options,
     {
       'Content-Type': 'application/vnd.api+json',
-      ...(options.previousConfiguration?.precomputed?.etag && {
-        'If-None-Match': options.previousConfiguration.precomputed.etag,
+      ...(previousConfiguration?.precomputed?.etag && {
+        'If-None-Match': previousConfiguration.precomputed.etag,
       }),
     },
     'precomputed'
@@ -128,8 +131,8 @@ export async function fetchPrecomputedConfiguration(
       },
     }),
   })
-  if (response.status === 304 && options.previousConfiguration?.precomputed) {
-    return { precomputed: options.previousConfiguration.precomputed }
+  if (response.status === 304 && previousConfiguration?.precomputed) {
+    return { precomputed: previousConfiguration.precomputed }
   }
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
@@ -156,7 +159,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       ...initConfiguration,
       context,
       signal,
-      previousConfiguration: configMatchesContext(previousConfiguration, context) ? previousConfiguration : undefined,
+      previousConfiguration,
     })
     previousConfiguration = configuration
     return configuration
