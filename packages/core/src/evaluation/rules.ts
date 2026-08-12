@@ -1,4 +1,5 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
+import { compareSemanticVersions, parseSemanticVersion } from './semver'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
@@ -12,11 +13,25 @@ export enum OperatorType {
   ONE_OF = 'ONE_OF',
   NOT_ONE_OF = 'NOT_ONE_OF',
   IS_NULL = 'IS_NULL',
+  SEMVER_EQ = 'SEMVER_EQ',
+  SEMVER_NEQ = 'SEMVER_NEQ',
+  SEMVER_GTE = 'SEMVER_GTE',
+  SEMVER_GT = 'SEMVER_GT',
+  SEMVER_LTE = 'SEMVER_LTE',
+  SEMVER_LT = 'SEMVER_LT',
 }
 
 const supportedOperators = new Set<string>(Object.values(OperatorType))
 
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT
+
+type SemVerOperator =
+  | OperatorType.SEMVER_EQ
+  | OperatorType.SEMVER_NEQ
+  | OperatorType.SEMVER_GTE
+  | OperatorType.SEMVER_GT
+  | OperatorType.SEMVER_LTE
+  | OperatorType.SEMVER_LT
 
 type MatchesCondition = {
   operator: OperatorType.MATCHES
@@ -54,6 +69,12 @@ type NullCondition = {
   value: boolean
 }
 
+type SemVerCondition = {
+  operator: SemVerOperator
+  attribute: string
+  value: string
+}
+
 export type Condition =
   | MatchesCondition
   | NotMatchesCondition
@@ -61,22 +82,38 @@ export type Condition =
   | NotOneOfCondition
   | NumericCondition
   | NullCondition
+  | SemVerCondition
 
 export interface Rule {
   conditions: Condition[]
 }
 
-export function isValidRule(rule: Rule): boolean {
-  if (!Array.isArray(rule.conditions)) {
+export function isValidRule(rule: unknown): rule is Rule {
+  if (!isRecord(rule) || !Array.isArray(rule.conditions)) {
     return false
   }
 
   return rule.conditions.every((condition) => {
+    if (!isRecord(condition) || typeof condition.attribute !== 'string' || typeof condition.operator !== 'string') {
+      return false
+    }
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (condition.operator !== OperatorType.MATCHES && condition.operator !== OperatorType.NOT_MATCHES) {
-      return true
+    if (isNumericOperator(condition.operator)) {
+      return typeof condition.value === 'number' && Number.isFinite(condition.value)
+    }
+    if (condition.operator === OperatorType.ONE_OF || condition.operator === OperatorType.NOT_ONE_OF) {
+      return Array.isArray(condition.value) && condition.value.every((value) => typeof value === 'string')
+    }
+    if (condition.operator === OperatorType.IS_NULL) {
+      return typeof condition.value === 'boolean'
+    }
+    if (isSemVerOperator(condition.operator)) {
+      return parseSemanticVersion(condition.value) !== undefined
+    }
+    if (typeof condition.value !== 'string') {
+      return false
     }
     try {
       compileRegex(condition.value)
@@ -132,9 +169,68 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
         return isNotOneOf(value.toString(), condition.value)
+      case OperatorType.SEMVER_EQ:
+      case OperatorType.SEMVER_NEQ:
+      case OperatorType.SEMVER_GTE:
+      case OperatorType.SEMVER_GT:
+      case OperatorType.SEMVER_LTE:
+      case OperatorType.SEMVER_LT:
+        return compareSemanticVersion(value, condition.value, condition.operator)
     }
   }
   return false
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isNumericOperator(operator: string): operator is NumericOperator {
+  return (
+    operator === OperatorType.GTE ||
+    operator === OperatorType.GT ||
+    operator === OperatorType.LTE ||
+    operator === OperatorType.LT
+  )
+}
+
+function isSemVerOperator(operator: string): operator is SemVerOperator {
+  return (
+    operator === OperatorType.SEMVER_EQ ||
+    operator === OperatorType.SEMVER_NEQ ||
+    operator === OperatorType.SEMVER_GTE ||
+    operator === OperatorType.SEMVER_GT ||
+    operator === OperatorType.SEMVER_LTE ||
+    operator === OperatorType.SEMVER_LT
+  )
+}
+
+function compareSemanticVersion(
+  attributeValue: EvaluationContextValue,
+  conditionValue: string,
+  operator: SemVerOperator
+): boolean {
+  const left = parseSemanticVersion(attributeValue)
+  const right = parseSemanticVersion(conditionValue)
+  if (!left || !right) {
+    return false
+  }
+
+  const comparison = compareSemanticVersions(left, right)
+  switch (operator) {
+    case OperatorType.SEMVER_EQ:
+      return comparison === 0
+    case OperatorType.SEMVER_NEQ:
+      return comparison !== 0
+    case OperatorType.SEMVER_GTE:
+      return comparison >= 0
+    case OperatorType.SEMVER_GT:
+      return comparison > 0
+    case OperatorType.SEMVER_LTE:
+      return comparison <= 0
+    case OperatorType.SEMVER_LT:
+      return comparison < 0
+  }
 }
 
 function compileRegex(pattern: string): RegExp {
