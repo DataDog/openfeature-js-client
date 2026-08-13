@@ -2,11 +2,17 @@ import { evaluateRulesBasedConfiguration, matchesRule, OperatorType } from '@dat
 import { configurationFromString, configurationToString } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
-const rulesResponse =
+const protobufRulesResponse =
   'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
-const configuration = configurationFromString(JSON.stringify({ version: 1, rules: { response: rulesResponse } }))
+const configuration = configurationFromString(
+  JSON.stringify({ version: 1, rules: { response: protobufRulesResponse } })
+)
 
-assert(configuration.rules, 'rules configuration was not parsed')
+assert(configuration.rules, 'protobuf rules configuration was not decoded')
+assert(
+  configuration.rules.response.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
+  'rules response is not a generated protobuf message'
+)
 
 const context = { targetingKey: 'browser-user' }
 const booleanDetails = evaluateRulesBasedConfiguration(
@@ -42,13 +48,17 @@ const sha256Matched = matchesRule(
   { name: 'hello' }
 )
 
-assert(booleanDetails.value === true, 'boolean rule evaluation returned the wrong value')
-assert(integerDetails.value === 42, 'integer rule evaluation returned the wrong value')
-assert(restored.rules?.response.flags['browser-flag'], 'rules configuration did not survive a round trip')
+assert(booleanDetails.value === true, 'protobuf boolean evaluation returned the wrong value')
+assert(integerDetails.value === 42, 'protobuf int64 evaluation returned the wrong value')
+assert(
+  restored.rules?.response.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
+  'protobuf rules configuration did not survive a round trip'
+)
 assert(sha256Matched, 'SHA-256 condition did not match')
 
 reportSuccess({
-  entrypoint: 'full',
+  entrypoint: 'protobuf',
+  protobufTypeName: configuration.rules.response.$typeName,
   booleanValue: booleanDetails.value,
   integerValue: integerDetails.value,
   sha256Matched,
