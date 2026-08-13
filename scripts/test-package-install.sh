@@ -32,7 +32,7 @@ cd "$REPO_ROOT/packages/browser"
 
 # Save original package.json and yarn.lock
 cp package.json package.json.backup
-
+cp "$REPO_ROOT/yarn.lock" "$REPO_ROOT/yarn.lock.backup"
 
 # Install the tarball temporarily
 yarn add "@datadog/flagging-core@file:$TEST_APP_DIR/core.tgz" --silent
@@ -45,6 +45,8 @@ yarn pack --filename "$TEST_APP_DIR/browser.tgz" > /dev/null 2>&1
 echo "Restoring browser package..."
 rm package.json
 mv package.json.backup package.json
+rm "$REPO_ROOT/yarn.lock"
+mv "$REPO_ROOT/yarn.lock.backup" "$REPO_ROOT/yarn.lock"
 
 cd "$REPO_ROOT"
 
@@ -67,8 +69,19 @@ yarn add @datadog/openfeature-browser@file:./browser.tgz --silent
 echo "Building test app..."
 yarn build
 
+# Execute the built application in a real browser runtime
+echo "Installing Chromium..."
+if [[ "${CI:-}" == "true" ]]; then
+  yarn playwright install --with-deps --only-shell chromium
+else
+  yarn playwright install --only-shell chromium
+fi
+
+echo "Running browser smoke tests..."
+yarn test:browser
+
 echo ""
-echo "✓ All tests passed! Package can be installed and the app builds successfully."
+echo "✓ All tests passed! Package can be installed and executed in Chromium."
 echo ""
 echo "To run the test app locally:"
 echo "  cd test-app"

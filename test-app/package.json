@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",
@@ -15,6 +16,7 @@
     "@openfeature/web-sdk": "^1.7.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "typescript": "^5.9.3",
     "vite": "^8.1.3"
   }
