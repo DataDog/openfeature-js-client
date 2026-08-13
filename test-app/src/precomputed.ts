@@ -25,15 +25,19 @@ const configuration = configurationFromString(
     rules: { response: 'ignored by the precomputed entrypoint' },
   })
 )
-const roundTrip = JSON.parse(configurationToString(configuration)) as Record<string, unknown>
+const serialized = configurationToString(configuration)
+const roundTripWire = JSON.parse(serialized) as Record<string, unknown>
+const restored = configurationFromString(serialized)
 const flag = configuration.precomputed?.response.data.attributes.flags['precomputed-flag']
+const restoredFlag = restored.precomputed?.response.data.attributes.flags['precomputed-flag']
 
 assert(flag?.variationValue === true, 'precomputed flag was not parsed')
 assert(configuration.rules === undefined, 'precomputed entrypoint parsed rules')
-assert(roundTrip.rules === undefined, 'precomputed entrypoint serialized rules')
+assert(roundTripWire.rules === undefined, 'precomputed entrypoint serialized rules')
+assert(restoredFlag?.variationValue === true, 'precomputed flag did not survive a round trip')
 
 reportSuccess({
   entrypoint: 'precomputed',
-  booleanValue: flag.variationValue,
+  booleanValue: restoredFlag.variationValue,
   rulesExcluded: true,
 })

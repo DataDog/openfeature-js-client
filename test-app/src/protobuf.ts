@@ -1,11 +1,32 @@
 import { evaluateRulesBasedConfiguration, matchesRule, OperatorType } from '@datadog/flagging-core'
-import { configurationFromString, configurationToString } from '@datadog/openfeature-browser'
+import { configurationFromString, configurationToString, DatadogProvider } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
 const protobufRulesResponse =
   'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
+const precomputedResponse = {
+  data: {
+    attributes: {
+      createdAt: '2026-07-06T23:01:56.822Z',
+      flags: {
+        'provider-flag': {
+          allocationKey: 'allocation',
+          variationKey: 'on',
+          variationType: 'BOOLEAN',
+          variationValue: true,
+          reason: 'STATIC',
+          doLog: false,
+        },
+      },
+    },
+  },
+}
 const configuration = configurationFromString(
-  JSON.stringify({ version: 1, rules: { response: protobufRulesResponse } })
+  JSON.stringify({
+    version: 1,
+    precomputed: { response: JSON.stringify(precomputedResponse) },
+    rules: { response: protobufRulesResponse },
+  })
 )
 
 assert(configuration.rules, 'protobuf rules configuration was not decoded')
@@ -31,6 +52,16 @@ const integerDetails = evaluateRulesBasedConfiguration(
   context,
   console
 )
+const provider = new DatadogProvider({
+  clientToken: 'test-token',
+  site: 'datadoghq.com',
+  env: 'test',
+  enableExposureLogging: false,
+  enableFlagEvaluationTracking: false,
+  enableRumFeatureFlagTracking: false,
+  initialFlagsConfiguration: configuration,
+})
+const providerDetails = provider.resolveBooleanEvaluation('provider-flag', false, context, console)
 const restored = configurationFromString(configurationToString(configuration))
 const sha256Matched = matchesRule(
   {
@@ -50,6 +81,7 @@ const sha256Matched = matchesRule(
 
 assert(booleanDetails.value === true, 'protobuf boolean evaluation returned the wrong value')
 assert(integerDetails.value === 42, 'protobuf int64 evaluation returned the wrong value')
+assert(providerDetails.value === true, 'DatadogProvider did not evaluate the decoded configuration')
 assert(
   restored.rules?.response.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
   'protobuf rules configuration did not survive a round trip'
@@ -61,5 +93,6 @@ reportSuccess({
   protobufTypeName: configuration.rules.response.$typeName,
   booleanValue: booleanDetails.value,
   integerValue: integerDetails.value,
+  providerValue: providerDetails.value,
   sha256Matched,
 })
