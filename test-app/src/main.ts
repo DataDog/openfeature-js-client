@@ -1,45 +1,55 @@
-import { DatadogProvider } from '@datadog/openfeature-browser'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { evaluateRulesBasedConfiguration, matchesRule, OperatorType } from '@datadog/flagging-core'
+import { configurationFromString, configurationToString } from '@datadog/openfeature-browser'
+import { assert, reportSuccess } from './smoke'
 
-// Initialize the Datadog provider
-const provider = new DatadogProvider({
-  applicationId: 'test-app-id',
-  clientToken: 'test-token',
-  site: 'datadoghq.com',
-  service: 'test-service',
+const rulesResponse =
+  'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
+const configuration = configurationFromString(JSON.stringify({ version: 1, rules: { response: rulesResponse } }))
+
+assert(configuration.rules, 'rules configuration was not parsed')
+
+const context = { targetingKey: 'browser-user' }
+const booleanDetails = evaluateRulesBasedConfiguration(
+  configuration.rules.response,
+  'boolean',
+  'browser-flag',
+  false,
+  context,
+  console
+)
+const integerDetails = evaluateRulesBasedConfiguration(
+  configuration.rules.response,
+  'number',
+  'integer-flag',
+  0,
+  context,
+  console
+)
+const restored = configurationFromString(configurationToString(configuration))
+const sha256Matched = matchesRule(
+  {
+    conditions: [
+      {
+        attribute: 'name',
+        operator: OperatorType.ONE_OF_SHA256,
+        value: {
+          salt: [1, 2],
+          hashes: ['c0e551d80aa1e2cb1eaf5be7edbb04e51eb1823e562e2ce5dfeda0ecba76c744'],
+        },
+      },
+    ],
+  },
+  { name: 'hello' }
+)
+
+assert(booleanDetails.value === true, 'boolean rule evaluation returned the wrong value')
+assert(integerDetails.value === 42, 'integer rule evaluation returned the wrong value')
+assert(restored.rules?.response.flags['browser-flag'], 'rules configuration did not survive a round trip')
+assert(sha256Matched, 'SHA-256 condition did not match')
+
+reportSuccess({
+  entrypoint: 'full',
+  booleanValue: booleanDetails.value,
+  integerValue: integerDetails.value,
+  sha256Matched,
 })
-
-// Set the provider
-OpenFeature.setProvider(provider)
-
-// Get a client
-const client = OpenFeature.getClient()
-
-// Evaluate a flag using getBooleanDetails to get full evaluation details
-const details = client.getBooleanDetails('test-flag', false)
-
-console.log('✓ Successfully imported and initialized @datadog/openfeature-browser')
-console.log('Flag evaluation details:', details)
-
-// Format the details for display
-const detailsJson = JSON.stringify(details, null, 2)
-
-// Update the DOM to show success
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
-    <h1>DataDog OpenFeature Browser Test App</h1>
-    <p class="success">✓ Successfully imported and initialized @datadog/openfeature-browser</p>
-
-    <div class="details">
-      <h2>Flag Evaluation Details</h2>
-      <p><strong>Flag Key:</strong> ${details.flagKey}</p>
-      <p><strong>Value:</strong> ${details.value}</p>
-      <p><strong>Reason:</strong> ${details.reason}</p>
-      <p><strong>Variant:</strong> ${details.variant || 'N/A'}</p>
-      <p><strong>Error Code:</strong> ${details.errorCode || 'N/A'}</p>
-
-      <h3>Full Details (JSON):</h3>
-      <pre>${detailsJson}</pre>
-    </div>
-  </div>
-`
