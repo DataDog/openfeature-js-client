@@ -1,4 +1,5 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
+import { compareSemver, parseSemver } from './semver'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
@@ -12,6 +13,12 @@ export enum OperatorType {
   ONE_OF = 'ONE_OF',
   NOT_ONE_OF = 'NOT_ONE_OF',
   IS_NULL = 'IS_NULL',
+  SEMVER_EQ = 'SEMVER_EQ',
+  SEMVER_NEQ = 'SEMVER_NEQ',
+  SEMVER_LT = 'SEMVER_LT',
+  SEMVER_LTE = 'SEMVER_LTE',
+  SEMVER_GT = 'SEMVER_GT',
+  SEMVER_GTE = 'SEMVER_GTE',
 }
 
 const supportedOperators = new Set<string>(Object.values(OperatorType))
@@ -54,6 +61,20 @@ type NullCondition = {
   value: boolean
 }
 
+type SemverOperator =
+  | OperatorType.SEMVER_EQ
+  | OperatorType.SEMVER_NEQ
+  | OperatorType.SEMVER_LT
+  | OperatorType.SEMVER_LTE
+  | OperatorType.SEMVER_GT
+  | OperatorType.SEMVER_GTE
+
+type SemverCondition = {
+  operator: SemverOperator
+  attribute: string
+  value: string
+}
+
 export type Condition =
   | MatchesCondition
   | NotMatchesCondition
@@ -61,6 +82,7 @@ export type Condition =
   | NotOneOfCondition
   | NumericCondition
   | NullCondition
+  | SemverCondition
 
 export interface Rule {
   conditions: Condition[]
@@ -74,6 +96,9 @@ export function isValidRule(rule: Rule): boolean {
   return rule.conditions.every((condition) => {
     if (!supportedOperators.has(condition.operator)) {
       return false
+    }
+    if (isSemverOperator(condition.operator)) {
+      return parseSemver(condition.value) !== null
     }
     if (condition.operator !== OperatorType.MATCHES && condition.operator !== OperatorType.NOT_MATCHES) {
       return true
@@ -132,9 +157,65 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         return isOneOf(value.toString(), condition.value)
       case OperatorType.NOT_ONE_OF:
         return isNotOneOf(value.toString(), condition.value)
+      case OperatorType.SEMVER_EQ:
+      case OperatorType.SEMVER_NEQ:
+      case OperatorType.SEMVER_LT:
+      case OperatorType.SEMVER_LTE:
+      case OperatorType.SEMVER_GT:
+      case OperatorType.SEMVER_GTE:
+        return evaluateSemverCondition(value, condition.value, condition.operator)
     }
   }
   return false
+}
+
+export function isSemverOperator(operator: string): operator is SemverOperator {
+  return (
+    operator === OperatorType.SEMVER_EQ ||
+    operator === OperatorType.SEMVER_NEQ ||
+    operator === OperatorType.SEMVER_LT ||
+    operator === OperatorType.SEMVER_LTE ||
+    operator === OperatorType.SEMVER_GT ||
+    operator === OperatorType.SEMVER_GTE
+  )
+}
+
+export function hasInvalidSemverComparand(rule: Rule): boolean {
+  return rule.conditions.some(
+    (condition) => isSemverOperator(condition.operator) && parseSemver(condition.value) === null
+  )
+}
+
+function evaluateSemverCondition(
+  attributeValue: EvaluationContextValue,
+  comparandValue: string,
+  operator: SemverOperator
+): boolean {
+  if (typeof attributeValue !== 'string') {
+    return false
+  }
+
+  const attribute = parseSemver(attributeValue)
+  const comparand = parseSemver(comparandValue)
+  if (!attribute || !comparand) {
+    return false
+  }
+
+  const ordering = compareSemver(attribute, comparand)
+  switch (operator) {
+    case OperatorType.SEMVER_EQ:
+      return ordering === 0
+    case OperatorType.SEMVER_NEQ:
+      return ordering !== 0
+    case OperatorType.SEMVER_LT:
+      return ordering < 0
+    case OperatorType.SEMVER_LTE:
+      return ordering <= 0
+    case OperatorType.SEMVER_GT:
+      return ordering > 0
+    case OperatorType.SEMVER_GTE:
+      return ordering >= 0
+  }
 }
 
 function compileRegex(pattern: string): RegExp {
