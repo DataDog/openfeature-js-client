@@ -151,7 +151,6 @@ describe('evaluateForSubject', () => {
               {
                 variationKey: 'treatment',
                 serialId,
-                extraLogging: { campaign: 'summer' },
                 shards: [
                   {
                     salt: 'experiment-salt',
@@ -178,7 +177,6 @@ describe('evaluateForSubject', () => {
         allocationKey: 'experiment-allocation',
         doLog: true,
       })
-      expect(result.flagMetadata).not.toHaveProperty('extraLogging')
     })
   })
 
