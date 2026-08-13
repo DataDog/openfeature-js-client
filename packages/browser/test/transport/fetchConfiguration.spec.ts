@@ -384,6 +384,42 @@ describe('createFlagsConfigurationFetcher', () => {
       )
     })
 
+    it('does not reuse a previous precomputed configuration for a different context', async () => {
+      const contextA = { targetingKey: 'user-a' }
+      const contextB = { targetingKey: 'user-b' }
+      const options = { ...baseConfig, flaggingProxy: 'https://proxy.example.com', context: contextA }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ etag: 'context-a-etag' }),
+        json: jest.fn().mockResolvedValue({ assignments: 'user-a' }),
+      })
+      const previousConfiguration = await fetchPrecomputedConfiguration(options)
+      mockFetch.mockImplementationOnce((_url, init) => {
+        const headers = init?.headers as Record<string, string>
+        if (headers['If-None-Match'] === 'context-a-etag') {
+          return Promise.resolve({ ok: false, status: 304, headers: new Headers() })
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue({ assignments: 'user-b' }),
+        })
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...options,
+        context: contextB,
+        previousConfiguration,
+      })
+
+      expect(result.precomputed).toMatchObject({
+        context: contextB,
+        response: { assignments: 'user-b' },
+      })
+    })
+
     it('decodes a rules configuration response', async () => {
       const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
       mockFetch.mockResolvedValue({
