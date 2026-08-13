@@ -88,6 +88,25 @@ describe('DatadogProvider IndexedDB persistence', () => {
   })
 
   describe('falls back to cached flags on network failure', () => {
+    it('should preserve initialFlagsConfiguration as an in-memory fallback', async () => {
+      const context = { targetingKey: 'initial-user' }
+      const initialFlagsConfiguration: FlagsConfiguration = {
+        precomputed: {
+          response: precomputedResponse as any,
+          context,
+          fetchedAt: 1731939819456 as TimeStamp,
+        },
+      }
+      global.fetch = failingFetchMock()
+      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration })
+
+      await provider.initialize(context)
+
+      expect(provider.status).toBe(ProviderStatus.STALE)
+      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      expect(provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger).value).toBe('red')
+    })
+
     it('should use IndexedDB cache and enter STALE state when network fails', async () => {
       // First: seed IndexedDB with a known config
       const context = { targetingKey: 'cached-user' }
