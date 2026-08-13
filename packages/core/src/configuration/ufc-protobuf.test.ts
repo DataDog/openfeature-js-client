@@ -366,6 +366,17 @@ describe('UFC protobuf decoder', () => {
     ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
   })
 
+  it.each([11, 12] as const)('reports an invalid SHA-256 hash length for condition kind %s', (conditionKind) => {
+    expect(
+      evaluateBoolean({ conditionKind, shaHashes: ['00'] }, { targetingKey: 'user', country: 'US' })
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'SHA-256 hashes must contain 32 bytes',
+    })
+  })
+
   it('lazily compiles each regex once per configuration', () => {
     const configuration = decodeRules({ conditionKind: 7 })
     const regexes = configuration.regexes

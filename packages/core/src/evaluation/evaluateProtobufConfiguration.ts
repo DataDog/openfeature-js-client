@@ -31,6 +31,7 @@ import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
 const SUPPORTED_FEATURE_LEVEL = 0
 const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
 const validatedSortedArrays = new WeakSet<object>()
+const validatedSha256Arrays = new WeakSet<object>()
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -443,8 +444,17 @@ function isJsonValue(value: unknown): value is FlagValue {
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
+  validateSha256Hashes(values)
   ensureSorted(values, compareBytes, 'SHA-256 hashes')
   return containsSorted(values, (candidate) => compareBytes(candidate, value))
+}
+
+function validateSha256Hashes(values: Uint8Array[]): void {
+  if (validatedSha256Arrays.has(values)) return
+  if (values.some((hash) => hash.length !== 32)) {
+    throw new FlagConfigurationError('SHA-256 hashes must contain 32 bytes')
+  }
+  validatedSha256Arrays.add(values)
 }
 
 function compareStrings(left: string, right: string): number {
