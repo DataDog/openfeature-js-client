@@ -69,6 +69,14 @@ describe('evaluate', () => {
     })
   })
 
+  it.each(['constructor', '__proto__'])('treats inherited flag key %s as unknown', (flagKey) => {
+    expect(evaluate(configuration, 'string', flagKey, 'default', {})).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+    })
+  })
+
   it('isolates malformed precomputed flags and returns a parse error for the affected flag', () => {
     expect(evaluate(configurationWithMalformedFlag, 'boolean', 'valid', false, {})).toMatchObject({
       value: true,

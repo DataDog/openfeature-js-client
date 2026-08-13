@@ -39,10 +39,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   _context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const flagError =
-    precomputed.flagErrors && Object.prototype.hasOwnProperty.call(precomputed.flagErrors, flagKey)
-      ? precomputed.flagErrors[flagKey]
-      : undefined
+  const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, flagKey) : undefined
   if (flagError) {
     return {
       value: defaultValue,
@@ -52,7 +49,7 @@ function evaluatePrecomputed<T extends FlagValueType>(
     }
   }
 
-  const flag = precomputed.response.data.attributes.flags[flagKey]
+  const flag = getOwnProperty(precomputed.response.data.attributes.flags, flagKey)
   if (!flag) {
     return {
       value: defaultValue,
@@ -80,6 +77,10 @@ function evaluatePrecomputed<T extends FlagValueType>(
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
+}
+
+function getOwnProperty<T>(record: Record<string, T>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined
 }
 
 function variationTypeToOpenFeature(s: string): FlagValueType {
