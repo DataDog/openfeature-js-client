@@ -15,6 +15,11 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   applicationId?: string
 
   /**
+   * Initial flags configuration (precomputed flags)
+   */
+  initialFlagsConfiguration?: FlagsConfiguration
+
+  /**
    * RUM integration options
    * @deprecated Use enableExposureLogging instead. RUM-based exposure tracking will be removed in a future version.
    */
