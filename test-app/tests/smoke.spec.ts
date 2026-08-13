@@ -32,6 +32,7 @@ test('decodes and evaluates packed protobuf rules in Chromium', async ({ page })
     protobufTypeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
     booleanValue: true,
     integerValue: 42,
+    providerValue: true,
     sha256Matched: true,
   })
 })
@@ -49,6 +50,7 @@ test('decodes protobuf without native text or bigint globals', async ({ page }) 
   expect(result.protobufTypeName).toBe('datadog.ffe.flagging.ufc.v1.FlagsConfiguration')
   expect(result.booleanValue).toBe(true)
   expect(result.integerValue).toBe(42)
+  expect(result.providerValue).toBe(true)
 })
 
 test('executes the packed precomputed entrypoint in Chromium', async ({ page }) => {
