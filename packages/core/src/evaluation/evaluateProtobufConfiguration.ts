@@ -30,6 +30,7 @@ import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
 const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
+const validatedSortedArrays = new WeakSet<object>()
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -388,10 +389,21 @@ function variationValueCase(
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
+  const stringAt = (index: number) => atIndex(strings, index, 'condition string')
+  ensureSorted(indexes, (left, right) => compareStrings(stringAt(left), stringAt(right)), 'Condition string indexes')
   return containsSorted(indexes, (index) => {
-    const candidate = atIndex(strings, index, 'condition string')
-    return candidate === value ? 0 : candidate < value ? -1 : 1
+    return compareStrings(stringAt(index), value)
   })
+}
+
+function ensureSorted<T>(values: T[], compare: (left: T, right: T) => number, description: string): void {
+  if (validatedSortedArrays.has(values)) return
+  for (let index = 1; index < values.length; index++) {
+    if (compare(values[index - 1], values[index]) > 0) {
+      throw new FlagConfigurationError(`${description} must be sorted`)
+    }
+  }
+  validatedSortedArrays.add(values)
 }
 
 function containsSorted<T>(values: T[], compare: (candidate: T) => number): boolean {
@@ -431,7 +443,12 @@ function isJsonValue(value: unknown): value is FlagValue {
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
+  ensureSorted(values, compareBytes, 'SHA-256 hashes')
   return containsSorted(values, (candidate) => compareBytes(candidate, value))
+}
+
+function compareStrings(left: string, right: string): number {
+  return left === right ? 0 : left < right ? -1 : 1
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {

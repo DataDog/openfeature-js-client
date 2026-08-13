@@ -43,7 +43,7 @@ function protobufDouble(field: number, value: number): number[] {
 }
 
 // Field numbers mirror ufc.proto from dd-source PR #30526 at commit 8ccbeb1fe2696913506fb61d2e7a4598ea5ec449.
-function protobufCondition(kind: number, shaHash: string): number[] {
+function protobufCondition(kind: number, shaHashes: string[], membershipIndexes: number[]): number[] {
   if (kind === 2) return protobufMessage(2, [])
   if (kind >= 3 && kind <= 6) {
     return protobufMessage(3, [...protobufVarint(1, 0), ...protobufDouble(kind - 1, 1.5)])
@@ -52,11 +52,17 @@ function protobufCondition(kind: number, shaHash: string): number[] {
     return protobufMessage(4, [...protobufVarint(1, 0), ...protobufVarint(kind - 5, 0)])
   }
   if (kind === 9 || kind === 10) {
-    const indexes = protobufMessage(kind - 7, protobufVarint(1, 2))
+    const indexes = protobufMessage(
+      kind - 7,
+      membershipIndexes.flatMap((index) => protobufVarint(1, index))
+    )
     return protobufMessage(5, [...protobufVarint(1, 0), ...indexes])
   }
   if (kind === 11 || kind === 12) {
-    const hashes = protobufMessage(kind - 8, protobufBytes(1, [...Buffer.from(shaHash, 'hex')]))
+    const hashes = protobufMessage(
+      kind - 8,
+      shaHashes.flatMap((hash) => protobufBytes(1, [...Buffer.from(hash, 'hex')]))
+    )
     return protobufMessage(6, [...protobufVarint(1, 0), ...protobufBytes(2, [1, 2]), ...hashes])
   }
   if (kind === 13 || kind === 14) {
@@ -91,12 +97,14 @@ type RulesResponseOptions = {
   splitReason?: number
   attributeName?: string
   semver?: string
+  membershipIndexes?: number[]
+  shaHashes?: string[]
 }
 
 function rulesResponse(options: RulesResponseOptions = {}): string {
   const conditionKind = options.conditionKind ?? 9
-  const shaHash = 'b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45'
-  const condition = protobufCondition(conditionKind, shaHash)
+  const shaHashes = options.shaHashes ?? ['b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45']
+  const condition = protobufCondition(conditionKind, shaHashes, options.membershipIndexes ?? [2])
   const variation = [
     ...protobufVarint(1, 0),
     ...(options.variationValueFields ??
@@ -335,6 +343,27 @@ describe('UFC protobuf decoder', () => {
     expect(
       evaluateBoolean({ conditionKind: 16 }, { targetingKey: 'user', country: '18446744073709551616.0.0' })
     ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it.each([9, 10] as const)('reports unsorted string membership values for condition kind %s', (conditionKind) => {
+    expect(
+      evaluateBoolean({ conditionKind, membershipIndexes: [1, 2] }, { targetingKey: 'user', country: 'US' })
+    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+  })
+
+  it.each([11, 12] as const)('reports unsorted SHA-256 hashes for condition kind %s', (conditionKind) => {
+    expect(
+      evaluateBoolean(
+        {
+          conditionKind,
+          shaHashes: [
+            'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+            'b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45',
+          ],
+        },
+        { targetingKey: 'user', country: 'US' }
+      )
+    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
   })
 
   it('lazily compiles each regex once per configuration', () => {
