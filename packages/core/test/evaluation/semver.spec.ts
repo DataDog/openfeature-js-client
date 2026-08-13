@@ -99,6 +99,11 @@ describe('SemVer', () => {
     })
   })
 
+  it('orders core components above Number.MAX_SAFE_INTEGER without precision loss', () => {
+    expect(compareSemver(parse('9007199254740992.0.0'), parse('9007199254740991.0.0'))).toBeGreaterThan(0)
+    expect(compareSemver(parse('18446744073709551615.0.0'), parse('18446744073709551614.0.0'))).toBeGreaterThan(0)
+  })
+
   it('ignores build metadata', () => {
     expect(compareSemver(parse('1.0.0+build.1'), parse('1.0.0+build.2'))).toBe(0)
   })
