@@ -4,7 +4,7 @@ import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { matchesShard } from './matchesShard'
-import { isValidRule, matchesRule, type Rule } from './rules'
+import { hasInvalidSemverComparand, isValidRule, matchesRule, type Rule } from './rules'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -157,15 +157,25 @@ function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType
 }
 
 function isValidFlag(flag: Flag): boolean {
-  return (
-    Array.isArray(flag.allocations) &&
-    flag.allocations.every(
+  if (!Array.isArray(flag.allocations)) {
+    return false
+  }
+
+  if (
+    flag.allocations.some(
       (allocation) =>
-        Array.isArray(allocation.splits) &&
-        allocation.splits.every((split) => Array.isArray(split.shards)) &&
-        (allocation.rules === undefined ||
-          (Array.isArray(allocation.rules) && allocation.rules.every((rule) => isValidRule(rule))))
+        Array.isArray(allocation.rules) && allocation.rules.some((rule) => hasInvalidSemverComparand(rule))
     )
+  ) {
+    throw new Error('invalid semantic version comparand')
+  }
+
+  return flag.allocations.every(
+    (allocation) =>
+      Array.isArray(allocation.splits) &&
+      allocation.splits.every((split) => Array.isArray(split.shards)) &&
+      (allocation.rules === undefined ||
+        (Array.isArray(allocation.rules) && allocation.rules.every((rule) => isValidRule(rule))))
   )
 }
 

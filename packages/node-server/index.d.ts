@@ -438,7 +438,13 @@ declare enum OperatorType {
 	LT = "LT",
 	ONE_OF = "ONE_OF",
 	NOT_ONE_OF = "NOT_ONE_OF",
-	IS_NULL = "IS_NULL"
+	IS_NULL = "IS_NULL",
+	SEMVER_EQ = "SEMVER_EQ",
+	SEMVER_NEQ = "SEMVER_NEQ",
+	SEMVER_LT = "SEMVER_LT",
+	SEMVER_LTE = "SEMVER_LTE",
+	SEMVER_GT = "SEMVER_GT",
+	SEMVER_GTE = "SEMVER_GTE"
 }
 type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
 type MatchesCondition = {
@@ -471,7 +477,13 @@ type NullCondition = {
 	attribute: string;
 	value: boolean;
 };
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition;
+type SemverOperator = OperatorType.SEMVER_EQ | OperatorType.SEMVER_NEQ | OperatorType.SEMVER_LT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_GTE;
+type SemverCondition = {
+	operator: SemverOperator;
+	attribute: string;
+	value: string;
+};
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | SemverCondition;
 interface Rule {
 	conditions: Condition[];
 }
