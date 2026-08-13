@@ -19,10 +19,11 @@ import type {
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
-import { compareSemver, compileRegex, isValidSemver } from './condition-helpers'
+import { compileRegex } from './condition-helpers'
 import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
+import { compareSemver, parseSemver } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
 import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
@@ -228,10 +229,11 @@ function matchesLeafCondition(
     if (kind.value.comparator.case === undefined) {
       throw new FlagConfigurationError('Missing SemVer comparator')
     }
-    const expected = atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer')
-    if (!isValidSemver(expected)) throw new FlagConfigurationError('Invalid SemVer comparator')
-    const comparison = compareSemver(String(value), expected)
-    if (comparison === undefined) return false
+    const expected = parseSemver(atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer'))
+    if (!expected) throw new FlagConfigurationError('Invalid SemVer comparator')
+    const actual = parseSemver(String(value))
+    if (!actual) return false
+    const comparison = compareSemver(actual, expected)
     if (kind.value.comparator.case === 'semverEqual') return comparison === 0
     if (kind.value.comparator.case === 'semverNotEqual') return comparison !== 0
     if (kind.value.comparator.case === 'semverLessThan') return comparison < 0

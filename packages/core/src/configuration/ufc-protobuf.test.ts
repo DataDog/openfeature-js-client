@@ -90,6 +90,7 @@ type RulesResponseOptions = {
   fallbackTargetingConditionIndex?: number
   splitReason?: number
   attributeName?: string
+  semver?: string
 }
 
 function rulesResponse(options: RulesResponseOptions = {}): string {
@@ -192,7 +193,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufString(5, 'off'),
     ...protobufString(5, 'US'),
     ...protobufString(6, '^US$'),
-    ...protobufString(7, '1.2.3'),
+    ...protobufString(7, options.semver ?? '1.2.3'),
     ...(options.jsonValue === undefined ? [] : protobufString(8, options.jsonValue)),
     ...(
       options.conditionMessages ??
@@ -319,6 +320,21 @@ describe('UFC protobuf decoder', () => {
       value: false,
       reason: 'DEFAULT',
     })
+  })
+
+  it('reports a configured SemVer comparand above uint64', () => {
+    expect(
+      evaluateBoolean(
+        { conditionKind: 15, semver: '18446744073709551616.0.0' },
+        { targetingKey: 'user', country: '18446744073709551616.0.0' }
+      )
+    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+  })
+
+  it('does not match a context SemVer value above uint64', () => {
+    expect(
+      evaluateBoolean({ conditionKind: 16 }, { targetingKey: 'user', country: '18446744073709551616.0.0' })
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
   })
 
   it('lazily compiles each regex once per configuration', () => {
