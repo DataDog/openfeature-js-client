@@ -24,18 +24,19 @@ async function runSmoke(page: Page, path: string): Promise<SmokeResult> {
   return result!
 }
 
-test('executes the packed full entrypoint in Chromium', async ({ page }) => {
+test('decodes and evaluates packed protobuf rules in Chromium', async ({ page }) => {
   const result = await runSmoke(page, '/')
 
   expect(result).toEqual({
-    entrypoint: 'full',
+    entrypoint: 'protobuf',
+    protobufTypeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
     booleanValue: true,
     integerValue: 42,
     sha256Matched: true,
   })
 })
 
-test('executes the packed full entrypoint without native text or bigint globals', async ({ page }) => {
+test('decodes protobuf without native text or bigint globals', async ({ page }) => {
   await page.addInitScript(() => {
     Object.assign(globalThis, {
       BigInt: undefined,
@@ -45,6 +46,7 @@ test('executes the packed full entrypoint without native text or bigint globals'
   })
 
   const result = await runSmoke(page, '/')
+  expect(result.protobufTypeName).toBe('datadog.ffe.flagging.ufc.v1.FlagsConfiguration')
   expect(result.booleanValue).toBe(true)
   expect(result.integerValue).toBe(42)
 })
