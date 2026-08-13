@@ -314,6 +314,13 @@ describe('UFC protobuf decoder', () => {
     ).toBe(true)
   })
 
+  it.each(['constructor', '__proto__'])('does not match an inherited condition attribute named %s', (attributeName) => {
+    expect(evaluateBoolean({ conditionKind: 14, attributeName }, { targetingKey: 'user' })).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
+  })
+
   it('lazily compiles each regex once per configuration', () => {
     const configuration = decodeRules({ conditionKind: 7 })
     const regexes = configuration.regexes
@@ -681,6 +688,16 @@ describe('UFC protobuf decoder', () => {
       reason: 'TARGETING_MATCH',
     })
   })
+
+  it.each(['constructor', '__proto__'])(
+    'does not partition on an inherited context attribute named %s',
+    (attributeName) => {
+      expect(evaluateBoolean({ shardAttribute: true, attributeName }, { targetingKey: 'user' })).toMatchObject({
+        value: false,
+        reason: 'DEFAULT',
+      })
+    }
+  )
 
   it('uses the separately supplied targeting key for an explicit targetingKey partition attribute', () => {
     const result = evaluateBoolean(

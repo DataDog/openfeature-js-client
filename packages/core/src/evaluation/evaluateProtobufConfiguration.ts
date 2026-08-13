@@ -182,7 +182,7 @@ function matchesLeafCondition(
     throw new FlagConfigurationError('Unsupported condition')
   }
   const attribute = atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
-  const value = subjectAttributes[attribute]
+  const value = getOwnProperty(subjectAttributes, attribute)
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -290,7 +290,7 @@ function partitionCoordinates(
           partition.kind.value.attributeNameIndex,
           'partition attribute'
         )
-        const attributeValue = attribute === 'targetingKey' ? subjectKey : subjectAttributes[attribute]
+        const attributeValue = attribute === 'targetingKey' ? subjectKey : getOwnProperty(subjectAttributes, attribute)
         if (attributeValue == null) return undefined
         value = attributeValue
       }
