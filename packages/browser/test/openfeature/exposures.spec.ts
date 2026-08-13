@@ -298,6 +298,39 @@ describe('Exposures End-to-End', () => {
     })
   })
 
+  it('should send exposure events without RUM application attribution when applicationId is not provided', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    await OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    const provider = new DatadogProvider({
+      clientToken: 'test-client-token',
+      env: 'test',
+      site: INTAKE_SITE_STAGING,
+      enableExposureLogging: true,
+    })
+    await OpenFeature.setProviderAndWait(provider)
+
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    const exposuresCalls = getExposuresCalls()
+    expect(exposuresCalls).toHaveLength(1)
+
+    const [event] = parseExposureEvents(exposuresCalls[0][1].body)
+    expect(event.rum).toEqual({ view: { url: 'http://localhost/' } })
+  })
+
   it('should not send exposure events when exposure logging is disabled', async () => {
     // Mock server response
     fetchMock.mockImplementation((url: string) => {

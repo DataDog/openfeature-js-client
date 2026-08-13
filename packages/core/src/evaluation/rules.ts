@@ -1,6 +1,7 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
 import { encodeUtf8 } from '../utf8'
-import { compareSemver, compileRegex, isValidSemver } from './condition-helpers'
+import { compileRegex } from './condition-helpers'
+import { compareSemver, parseSemver } from './semver'
 import { sha256Hex } from './sha256'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
@@ -17,8 +18,8 @@ export enum OperatorType {
   ONE_OF_SHA256 = 'ONE_OF_SHA256',
   NOT_ONE_OF_SHA256 = 'NOT_ONE_OF_SHA256',
   IS_NULL = 'IS_NULL',
-  SEMVER_EQUAL = 'SEMVER_EQUAL',
-  SEMVER_NOT_EQUAL = 'SEMVER_NOT_EQUAL',
+  SEMVER_EQ = 'SEMVER_EQ',
+  SEMVER_NEQ = 'SEMVER_NEQ',
   SEMVER_LT = 'SEMVER_LT',
   SEMVER_LTE = 'SEMVER_LTE',
   SEMVER_GT = 'SEMVER_GT',
@@ -74,14 +75,16 @@ type Sha256Condition = {
   }
 }
 
+type SemverOperator =
+  | OperatorType.SEMVER_EQ
+  | OperatorType.SEMVER_NEQ
+  | OperatorType.SEMVER_LT
+  | OperatorType.SEMVER_LTE
+  | OperatorType.SEMVER_GT
+  | OperatorType.SEMVER_GTE
+
 type SemverCondition = {
-  operator:
-    | OperatorType.SEMVER_EQUAL
-    | OperatorType.SEMVER_NOT_EQUAL
-    | OperatorType.SEMVER_LT
-    | OperatorType.SEMVER_LTE
-    | OperatorType.SEMVER_GT
-    | OperatorType.SEMVER_GTE
+  operator: SemverOperator
   attribute: string
   value: string
 }
@@ -109,13 +112,8 @@ export function isValidRule(rule: Rule): boolean {
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (condition.operator === OperatorType.MATCHES || condition.operator === OperatorType.NOT_MATCHES) {
-      try {
-        compileRegex(condition.value)
-        return true
-      } catch {
-        return false
-      }
+    if (isSemverOperator(condition.operator)) {
+      return parseSemver(condition.value) !== null
     }
     if (condition.operator === OperatorType.ONE_OF_SHA256 || condition.operator === OperatorType.NOT_ONE_OF_SHA256) {
       return (
@@ -124,8 +122,13 @@ export function isValidRule(rule: Rule): boolean {
         condition.value.hashes.every((hash) => /^[0-9a-f]{64}$/.test(hash))
       )
     }
-    if (condition.operator.startsWith('SEMVER_')) {
-      return isValidSemver(condition.value as string)
+    if (condition.operator === OperatorType.MATCHES || condition.operator === OperatorType.NOT_MATCHES) {
+      try {
+        compileRegex(condition.value)
+        return true
+      } catch {
+        return false
+      }
     }
     return true
   })
@@ -185,26 +188,66 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
         const included = condition.value.hashes.includes(sha256Hex(input))
         return condition.operator === OperatorType.ONE_OF_SHA256 ? included : !included
       }
-      case OperatorType.SEMVER_EQUAL:
-      case OperatorType.SEMVER_NOT_EQUAL:
+      case OperatorType.SEMVER_EQ:
+      case OperatorType.SEMVER_NEQ:
       case OperatorType.SEMVER_LT:
       case OperatorType.SEMVER_LTE:
       case OperatorType.SEMVER_GT:
-      case OperatorType.SEMVER_GTE: {
-        const comparison = compareSemver(String(value), condition.value)
-        if (comparison === undefined) return false
-        if (condition.operator === OperatorType.SEMVER_EQUAL) return comparison === 0
-        if (condition.operator === OperatorType.SEMVER_NOT_EQUAL) return comparison !== 0
-        if (condition.operator === OperatorType.SEMVER_LT) return comparison < 0
-        if (condition.operator === OperatorType.SEMVER_LTE) return comparison <= 0
-        if (condition.operator === OperatorType.SEMVER_GT) return comparison > 0
-        return comparison >= 0
-      }
+      case OperatorType.SEMVER_GTE:
+        return evaluateSemverCondition(value, condition.value, condition.operator)
     }
   }
   return false
 }
 
+export function isSemverOperator(operator: string): operator is SemverOperator {
+  return (
+    operator === OperatorType.SEMVER_EQ ||
+    operator === OperatorType.SEMVER_NEQ ||
+    operator === OperatorType.SEMVER_LT ||
+    operator === OperatorType.SEMVER_LTE ||
+    operator === OperatorType.SEMVER_GT ||
+    operator === OperatorType.SEMVER_GTE
+  )
+}
+
+export function hasInvalidSemverComparand(rule: Rule): boolean {
+  return rule.conditions.some(
+    (condition) => isSemverOperator(condition.operator) && parseSemver(condition.value) === null
+  )
+}
+
+function evaluateSemverCondition(
+  attributeValue: EvaluationContextValue,
+  comparandValue: string,
+  operator: SemverOperator
+): boolean {
+  if (typeof attributeValue !== 'string') {
+    return false
+  }
+
+  const attribute = parseSemver(attributeValue)
+  const comparand = parseSemver(comparandValue)
+  if (!attribute || !comparand) {
+    return false
+  }
+
+  const ordering = compareSemver(attribute, comparand)
+  switch (operator) {
+    case OperatorType.SEMVER_EQ:
+      return ordering === 0
+    case OperatorType.SEMVER_NEQ:
+      return ordering !== 0
+    case OperatorType.SEMVER_LT:
+      return ordering < 0
+    case OperatorType.SEMVER_LTE:
+      return ordering <= 0
+    case OperatorType.SEMVER_GT:
+      return ordering > 0
+    case OperatorType.SEMVER_GTE:
+      return ordering >= 0
+  }
+}
 function isOneOf(attributeValue: string, conditionValues: string[]) {
   return conditionValues.includes(attributeValue)
 }

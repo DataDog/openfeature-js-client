@@ -517,6 +517,31 @@ describe('DatadogProvider', () => {
     })
   })
 
+  describe('initialization without applicationId', () => {
+    it('should initialize successfully', async () => {
+      const originalFetch = global.fetch
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => precomputedResponse,
+      })
+      const testProvider = new DatadogProvider({
+        clientToken: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+
+      try {
+        await expect(testProvider.initialize()).resolves.toBeUndefined()
+        expect(testProvider.status).toBe(ProviderStatus.READY)
+      } finally {
+        global.fetch = originalFetch
+      }
+    })
+  })
+
   describe('error handling integration', () => {
     let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
     let isolatedFetchMock: jest.Mock

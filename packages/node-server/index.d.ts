@@ -441,8 +441,8 @@ declare enum OperatorType {
 	ONE_OF_SHA256 = "ONE_OF_SHA256",
 	NOT_ONE_OF_SHA256 = "NOT_ONE_OF_SHA256",
 	IS_NULL = "IS_NULL",
-	SEMVER_EQUAL = "SEMVER_EQUAL",
-	SEMVER_NOT_EQUAL = "SEMVER_NOT_EQUAL",
+	SEMVER_EQ = "SEMVER_EQ",
+	SEMVER_NEQ = "SEMVER_NEQ",
 	SEMVER_LT = "SEMVER_LT",
 	SEMVER_LTE = "SEMVER_LTE",
 	SEMVER_GT = "SEMVER_GT",
@@ -487,8 +487,9 @@ type Sha256Condition = {
 		hashes: string[];
 	};
 };
+type SemverOperator = OperatorType.SEMVER_EQ | OperatorType.SEMVER_NEQ | OperatorType.SEMVER_LT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_GTE;
 type SemverCondition = {
-	operator: OperatorType.SEMVER_EQUAL | OperatorType.SEMVER_NOT_EQUAL | OperatorType.SEMVER_LT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_GTE;
+	operator: SemverOperator;
 	attribute: string;
 	value: string;
 };
