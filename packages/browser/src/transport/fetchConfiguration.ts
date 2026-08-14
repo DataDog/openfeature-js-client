@@ -80,6 +80,10 @@ export function buildConfigurationHeaders(
       : {
           'dd-client-token': options.clientToken,
           ...(endpoint === 'precomputed' && options.applicationId && { 'dd-application-id': options.applicationId }),
+          ...(endpoint === 'rules' && {
+            'DD-Client-Library-Language': sourcePayload.sdk_name,
+            'DD-Client-Library-Version': sourcePayload.sdk_version,
+          }),
         }),
     ...options.customHeaders,
   }

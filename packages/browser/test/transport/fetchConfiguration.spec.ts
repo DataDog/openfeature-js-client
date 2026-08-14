@@ -384,7 +384,7 @@ describe('createFlagsConfigurationFetcher', () => {
       )
     })
 
-    it('decodes a rules configuration response', async () => {
+    it('decodes a rules configuration response and includes source headers', async () => {
       const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
       mockFetch.mockResolvedValue({
         ok: true,
@@ -405,6 +405,8 @@ describe('createFlagsConfigurationFetcher', () => {
           method: 'GET',
           headers: {
             Accept: 'application/protobuf',
+            'DD-Client-Library-Language': 'browser',
+            'DD-Client-Library-Version': '1.0.0-test',
             'dd-client-token': 'test-token',
           },
         })
