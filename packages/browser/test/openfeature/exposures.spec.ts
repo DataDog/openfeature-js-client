@@ -445,6 +445,58 @@ describe('Exposures End-to-End', () => {
     }
   })
 
+  it('should send serial_id only for flags whose precomputed assignment carries one', async () => {
+    const responseWithSerialId = {
+      ...precomputedServerResponse,
+      data: {
+        ...precomputedServerResponse.data,
+        attributes: {
+          ...precomputedServerResponse.data.attributes,
+          flags: {
+            'string-flag': {
+              ...precomputedServerResponse.data.attributes.flags['string-flag'],
+              serialId: 340132,
+            },
+            'boolean-flag': precomputedServerResponse.data.attributes.flags['boolean-flag'],
+          },
+        },
+      },
+    }
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(responseWithSerialId),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    await OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+      })
+    )
+
+    const client = OpenFeature.getClient()
+    client.getStringValue('string-flag', 'default')
+    client.getBooleanValue('boolean-flag', false)
+    triggerBatch()
+
+    const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents).toHaveLength(2)
+
+    const byFlagKey = new Map(exposureEvents.map((event) => [event.flag.key, event]))
+    expect(byFlagKey.get('string-flag').serial_id).toBe(340132)
+    expect(byFlagKey.get('boolean-flag')).not.toHaveProperty('serial_id')
+  })
+
   describe('exposure logging deduplication', () => {
     let providerConfig: FlaggingInitConfiguration
 
