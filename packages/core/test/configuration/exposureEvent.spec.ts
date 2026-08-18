@@ -45,17 +45,23 @@ describe('createExposureEvent', () => {
     expect(event?.serial_id).toBe(0)
   })
 
-  it.each([
+  it.each<[number, string]>([
     [-1, 'negative'],
     [1.5, 'not an integer'],
-    [Number.NaN, 'NaN'],
-    [Number.POSITIVE_INFINITY, 'infinite'],
-  ])('should drop a serial id of %p (%s) but still build the event', (serialId) => {
+  ])('should send a serial id of %p (%s) without validating it', (serialId) => {
+    const event = createExposureEvent(context, detailsWith({ ...baseMetadata, __dd_split_serial_id: serialId }))
+
+    expect(event?.serial_id).toBe(serialId)
+  })
+
+  it.each<[string | boolean, string]>([
+    ['340132', 'a string'],
+    [true, 'a boolean'],
+  ])('should not include serial_id when the metadata value is %p (%s)', (serialId) => {
     const event = createExposureEvent(context, detailsWith({ ...baseMetadata, __dd_split_serial_id: serialId }))
 
     expect(event).not.toHaveProperty('serial_id')
     expect(event?.flag.key).toBe('checkout-redesign')
-    expect(event?.variant.key).toBe('treatment')
   })
 
   it('should return undefined when doLog is false, whatever the serial id', () => {

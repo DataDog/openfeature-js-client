@@ -30,7 +30,7 @@ export function createExposureEvent<T extends FlagValue>(
     variant: {
       key: variantKey,
     },
-    ...(serialId !== null && serialId !== undefined ? { serial_id: serialId } : {}),
+    ...(typeof serialId === 'number' ? { serial_id: serialId } : {}),
     subject: {
       id,
       attributes,
