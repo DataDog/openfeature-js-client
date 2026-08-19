@@ -1,4 +1,4 @@
-import { evaluateRulesBasedConfiguration, matchesRule, OperatorType } from '@datadog/flagging-core'
+import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString, DatadogProvider } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
@@ -63,21 +63,6 @@ const provider = new DatadogProvider({
 })
 const providerDetails = provider.resolveBooleanEvaluation('provider-flag', false, context, console)
 const restored = configurationFromString(configurationToString(configuration))
-const sha256Matched = matchesRule(
-  {
-    conditions: [
-      {
-        attribute: 'name',
-        operator: OperatorType.ONE_OF_SHA256,
-        value: {
-          salt: [1, 2],
-          hashes: ['c0e551d80aa1e2cb1eaf5be7edbb04e51eb1823e562e2ce5dfeda0ecba76c744'],
-        },
-      },
-    ],
-  },
-  { name: 'hello' }
-)
 
 assert(booleanDetails.value === true, 'protobuf boolean evaluation returned the wrong value')
 assert(integerDetails.value === 42, 'protobuf int64 evaluation returned the wrong value')
@@ -86,7 +71,6 @@ assert(
   restored.rules?.response.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
   'protobuf rules configuration did not survive a round trip'
 )
-assert(sha256Matched, 'SHA-256 condition did not match')
 
 reportSuccess({
   entrypoint: 'protobuf',
@@ -94,5 +78,4 @@ reportSuccess({
   booleanValue: booleanDetails.value,
   integerValue: integerDetails.value,
   providerValue: providerDetails.value,
-  sha256Matched,
 })

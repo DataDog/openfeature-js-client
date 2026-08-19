@@ -1,8 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
-import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { compareSemver, parseSemver } from './semver'
-import { sha256Hex } from './sha256'
 
 export type ConditionValueType = EvaluationContextValue | EvaluationContextValue[]
 
@@ -15,8 +13,6 @@ export enum OperatorType {
   LT = 'LT',
   ONE_OF = 'ONE_OF',
   NOT_ONE_OF = 'NOT_ONE_OF',
-  ONE_OF_SHA256 = 'ONE_OF_SHA256',
-  NOT_ONE_OF_SHA256 = 'NOT_ONE_OF_SHA256',
   IS_NULL = 'IS_NULL',
   SEMVER_EQ = 'SEMVER_EQ',
   SEMVER_NEQ = 'SEMVER_NEQ',
@@ -66,15 +62,6 @@ type NullCondition = {
   value: boolean
 }
 
-type Sha256Condition = {
-  operator: OperatorType.ONE_OF_SHA256 | OperatorType.NOT_ONE_OF_SHA256
-  attribute: string
-  value: {
-    salt: number[]
-    hashes: string[]
-  }
-}
-
 type SemverOperator =
   | OperatorType.SEMVER_EQ
   | OperatorType.SEMVER_NEQ
@@ -96,7 +83,6 @@ export type Condition =
   | NotOneOfCondition
   | NumericCondition
   | NullCondition
-  | Sha256Condition
   | SemverCondition
 
 export interface Rule {
@@ -114,13 +100,6 @@ export function isValidRule(rule: Rule): boolean {
     }
     if (isSemverOperator(condition.operator)) {
       return parseSemver(condition.value) !== null
-    }
-    if (condition.operator === OperatorType.ONE_OF_SHA256 || condition.operator === OperatorType.NOT_ONE_OF_SHA256) {
-      return (
-        Array.isArray(condition.value.salt) &&
-        condition.value.salt.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255) &&
-        condition.value.hashes.every((hash) => /^[0-9a-f]{64}$/.test(hash))
-      )
     }
     if (condition.operator === OperatorType.MATCHES || condition.operator === OperatorType.NOT_MATCHES) {
       try {
@@ -188,17 +167,6 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
       case OperatorType.NOT_ONE_OF: {
         const attributeValue = coerceToString(value)
         return attributeValue !== undefined && isNotOneOf(attributeValue, condition.value)
-      }
-      case OperatorType.ONE_OF_SHA256:
-      case OperatorType.NOT_ONE_OF_SHA256: {
-        const attributeValue = coerceToString(value)
-        if (attributeValue === undefined) return false
-        const encoded = encodeUtf8(attributeValue)
-        const input = new Uint8Array(condition.value.salt.length + encoded.length)
-        input.set(condition.value.salt)
-        input.set(encoded, condition.value.salt.length)
-        const included = condition.value.hashes.includes(sha256Hex(input))
-        return condition.operator === OperatorType.ONE_OF_SHA256 ? included : !included
       }
       case OperatorType.SEMVER_EQ:
       case OperatorType.SEMVER_NEQ:

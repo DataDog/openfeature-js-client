@@ -33,7 +33,6 @@ test('decodes and evaluates packed protobuf rules in Chromium', async ({ page })
     booleanValue: true,
     integerValue: 42,
     providerValue: true,
-    sha256Matched: true,
   })
 })
 
