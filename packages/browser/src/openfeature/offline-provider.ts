@@ -17,7 +17,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   }
 
   private flagsConfiguration: FlagsConfiguration | undefined
-  private context: EvaluationContext = {}
+  private context: EvaluationContext | undefined
 
   constructor() {
     super()
@@ -30,6 +30,8 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   setConfiguration(configuration: FlagsConfiguration): void {
     const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
     this.flagsConfiguration = configuration
+
+    if (this.context === undefined) return
 
     const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
     if (error) {
@@ -72,7 +74,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   }
 
   private canEvaluateCurrentContext(): boolean {
-    return !getFlagsConfigurationError(this.flagsConfiguration, this.context)
+    return this.context !== undefined && !getFlagsConfigurationError(this.flagsConfiguration, this.context)
   }
 }
 

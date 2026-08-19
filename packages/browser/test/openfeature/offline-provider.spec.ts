@@ -1,7 +1,7 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import type { Logger } from '@openfeature/core'
-import { ProviderEvents } from '@openfeature/web-sdk'
+import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk'
 import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
 import rulesWire from '../data/rules-v1-wire.json'
 
@@ -181,12 +181,34 @@ describe('DatadogOfflineProvider', () => {
     })
   })
 
-  it('emits Ready when setConfiguration recovers from an invalid configuration', () => {
+  it('accepts configuration before registration and validates it against the initialization context', async () => {
+    const provider = new DatadogOfflineProvider()
+    const errorHandler = jest.fn()
+    provider.events.addHandler(ProviderEvents.Error, errorHandler)
+
+    provider.setConfiguration(precomputedConfiguration)
+
+    expect(errorHandler).not.toHaveBeenCalled()
+    try {
+      await expect(
+        OpenFeature.setProviderAndWait('offline-provider-ordering', provider, {
+          targetingKey: 'static-user',
+          plan: 'free',
+        })
+      ).resolves.toBeUndefined()
+      expect(errorHandler).not.toHaveBeenCalled()
+    } finally {
+      await OpenFeature.clearProviders()
+    }
+  })
+
+  it('emits Ready when setConfiguration recovers from an invalid configuration', async () => {
     const provider = new DatadogOfflineProvider()
     const readyHandler = jest.fn()
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Ready, readyHandler)
     provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
+    await expect(provider.initialize({})).rejects.toMatchObject({ code: 'PROVIDER_NOT_READY' })
 
     provider.setConfiguration(rulesConfiguration)
 
@@ -194,9 +216,10 @@ describe('DatadogOfflineProvider', () => {
     expect(changedHandler).toHaveBeenCalledTimes(1)
   })
 
-  it('emits ConfigurationChanged for replacement configuration', () => {
+  it('emits ConfigurationChanged for replacement configuration', async () => {
     const provider = providerWithConfiguration(rulesConfiguration)
     const changedHandler = jest.fn()
+    await provider.initialize({})
     provider.events.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
 
     provider.setConfiguration({
@@ -209,9 +232,10 @@ describe('DatadogOfflineProvider', () => {
     expect(changedHandler).toHaveBeenCalledTimes(1)
   })
 
-  it('emits Error when setConfiguration receives an invalid configuration', () => {
+  it('emits Error when setConfiguration receives an invalid configuration', async () => {
     const provider = providerWithConfiguration(rulesConfiguration)
     const errorHandler = jest.fn()
+    await provider.initialize({})
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
 
     provider.setConfiguration({})
@@ -232,11 +256,8 @@ describe('DatadogOfflineProvider', () => {
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
     provider.setConfiguration({ rulesError: 'Malformed rules data' })
 
+    expect(errorHandler).not.toHaveBeenCalled()
     await expect(provider.initialize({})).rejects.toMatchObject({ code: 'PARSE_ERROR' })
-    expect(errorHandler).toHaveBeenCalledWith({
-      message: 'Malformed rules data',
-      errorCode: 'PARSE_ERROR',
-    })
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
       value: true,
       reason: 'ERROR',
