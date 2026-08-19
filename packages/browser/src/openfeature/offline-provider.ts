@@ -43,12 +43,14 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
     this.events.emit(ProviderEvents.ConfigurationChanged)
   }
 
-  async initialize(context: EvaluationContext = {}): Promise<void> {
+  initialize(context: EvaluationContext = {}): Promise<void> {
     this.context = context
     const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
-      throw error
+      return Promise.reject(error)
     }
+
+    return Promise.resolve()
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
