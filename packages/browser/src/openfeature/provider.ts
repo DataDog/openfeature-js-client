@@ -76,7 +76,7 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   status: ProviderStatus
 
-  private flagsConfiguration: FlagsConfiguration = {}
+  private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined
@@ -133,7 +133,7 @@ export class DatadogProvider extends DatadogCoreProvider {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration || {}
+    this.flagsConfiguration = options.initialFlagsConfiguration
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -285,13 +285,6 @@ export class DatadogProvider extends DatadogCoreProvider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    if (!this.flagsConfiguration.precomputed && !this.flagsConfiguration.rules) {
-      return {
-        value: defaultValue,
-        reason: 'DEFAULT',
-      }
-    }
-
     return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.evaluationContext)
   }
 }

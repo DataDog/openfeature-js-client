@@ -1,5 +1,5 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
+import type { EvaluationContext, Logger } from '@openfeature/core'
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
@@ -156,11 +156,27 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
       expect(result).toEqual({
         value: true,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
+      })
+    })
+
+    it('should preserve configuration parse errors', () => {
+      provider = new DatadogProvider({
+        ...options,
+        initialFlagsConfiguration: { rulesError: 'Malformed rules data' },
+      })
+
+      expect(provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)).toEqual({
+        value: true,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+        errorMessage: 'Malformed rules data',
       })
     })
   })
@@ -170,11 +186,13 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
       expect(result).toEqual({
         value: 'default',
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
@@ -184,11 +202,13 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
       expect(result).toEqual({
         value: 42,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
@@ -198,12 +218,14 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const defaultValue = { key: 'value' }
       const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
       expect(result).toEqual({
         value: defaultValue,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
