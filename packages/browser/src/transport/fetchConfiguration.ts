@@ -1,4 +1,4 @@
-import { configMatchesContext, type FlagsConfiguration } from '@datadog/flagging-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
@@ -24,7 +24,6 @@ export interface ConfigurationFetchOptions {
   overwriteRequestHeaders?: boolean
   flaggingProxy?: string
   signal?: AbortSignal
-  previousConfiguration?: FlagsConfiguration
 }
 
 export interface PrecomputedConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -97,9 +96,6 @@ export async function fetchPrecomputedConfiguration(
     options,
     {
       'Content-Type': 'application/vnd.api+json',
-      ...(options.previousConfiguration?.precomputed?.etag && {
-        'If-None-Match': options.previousConfiguration.precomputed.etag,
-      }),
     },
     'precomputed'
   )
@@ -132,21 +128,16 @@ export async function fetchPrecomputedConfiguration(
       },
     }),
   })
-  if (response.status === 304 && options.previousConfiguration?.precomputed) {
-    return { precomputed: options.previousConfiguration.precomputed }
-  }
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   const precomputed = await response.json()
-  const etag = response.headers?.get('etag')
   return {
     precomputed: {
       response: precomputed,
       context: options.context,
       fetchedAt: timeStampNow(),
-      ...(etag && { etag }),
     },
   }
 }
@@ -154,15 +145,11 @@ export async function fetchPrecomputedConfiguration(
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
-  let previousConfiguration: FlagsConfiguration | undefined
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
-    const configuration = await fetchPrecomputedConfiguration({
+    return fetchPrecomputedConfiguration({
       ...initConfiguration,
       context,
       signal,
-      previousConfiguration: configMatchesContext(previousConfiguration, context) ? previousConfiguration : undefined,
     })
-    previousConfiguration = configuration
-    return configuration
   }
 }

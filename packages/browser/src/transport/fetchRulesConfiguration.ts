@@ -16,17 +16,11 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
       options,
       {
         Accept: 'application/protobuf',
-        ...(options.previousConfiguration?.rules?.etag && {
-          'If-None-Match': options.previousConfiguration.rules.etag,
-        }),
       },
       'rules'
     ),
     signal: options.signal,
   })
-  if (response.status === 304 && options.previousConfiguration?.rules) {
-    return { rules: options.previousConfiguration.rules }
-  }
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
@@ -35,8 +29,6 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   const configuration = configurationFromRulesBinary(new Uint8Array(await response.arrayBuffer()))
   if (configuration.rules) {
     configuration.rules.fetchedAt = timeStampNow()
-    const etag = response.headers?.get('etag')
-    if (etag) configuration.rules.etag = etag
   }
   return configuration
 }
