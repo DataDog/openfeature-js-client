@@ -1,4 +1,19 @@
+const textEncoder = getUsableTextEncoder()
+
 export function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
+  return textEncoder ? (textEncoder.encode(value) as Uint8Array<ArrayBuffer>) : encodeUtf8Fallback(value)
+}
+
+function getUsableTextEncoder(): TextEncoder | undefined {
+  try {
+    const encoder = new globalThis.TextEncoder()
+    return encoder.encode('').length === 0 ? encoder : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function encodeUtf8Fallback(value: string): Uint8Array<ArrayBuffer> {
   const bytes: number[] = []
   for (let index = 0; index < value.length; index++) {
     let codePoint = value.charCodeAt(index)
@@ -28,44 +43,4 @@ export function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
     }
   }
   return new Uint8Array(bytes)
-}
-
-export function decodeUtf8(bytes: Uint8Array): string {
-  let value = ''
-  for (let index = 0; index < bytes.length; ) {
-    const first = bytes[index++]
-    let codePoint: number
-    let continuationCount: number
-    if (first <= 0x7f) {
-      codePoint = first
-      continuationCount = 0
-    } else if (first >= 0xc2 && first <= 0xdf) {
-      codePoint = first & 0x1f
-      continuationCount = 1
-    } else if (first >= 0xe0 && first <= 0xef) {
-      codePoint = first & 0x0f
-      continuationCount = 2
-    } else if (first >= 0xf0 && first <= 0xf4) {
-      codePoint = first & 0x07
-      continuationCount = 3
-    } else {
-      throw new Error('Invalid UTF-8')
-    }
-
-    for (let offset = 0; offset < continuationCount; offset++) {
-      const continuation = bytes[index++]
-      if (continuation === undefined || (continuation & 0xc0) !== 0x80) throw new Error('Invalid UTF-8')
-      codePoint = (codePoint << 6) | (continuation & 0x3f)
-    }
-    if (
-      (continuationCount === 2 && codePoint < 0x800) ||
-      (continuationCount === 3 && codePoint < 0x10000) ||
-      codePoint > 0x10ffff ||
-      (codePoint >= 0xd800 && codePoint <= 0xdfff)
-    ) {
-      throw new Error('Invalid UTF-8')
-    }
-    value += String.fromCodePoint(codePoint)
-  }
-  return value
 }
