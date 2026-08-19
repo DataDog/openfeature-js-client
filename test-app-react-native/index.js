@@ -3,7 +3,7 @@ globalThis.TextDecoder = undefined
 globalThis.BigInt = undefined
 
 const { evaluateRulesBasedConfiguration } = require('@datadog/flagging-core')
-const { configurationFromString, configurationToString } = require('@datadog/flagging-core/configuration')
+const { configurationFromString, configurationToString } = require('@datadog/flagging-core/rules-based')
 
 const configuration = configurationFromString(
   JSON.stringify({

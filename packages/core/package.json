@@ -22,8 +22,8 @@
   "types": "cjs/index.d.ts",
   "typesVersions": {
     "*": {
-      "configuration": [
-        "cjs/configuration-wire.d.ts"
+      "rules-based": [
+        "cjs/rules-based-configuration-wire.d.ts"
       ],
       "precomputed": [
         "cjs/precomputed-configuration-wire.d.ts"
@@ -37,11 +37,11 @@
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
     },
-    "./configuration": {
-      "types": "./cjs/configuration-wire.d.ts",
-      "import": "./esm/configuration-wire.js",
-      "require": "./cjs/configuration-wire.js",
-      "default": "./esm/configuration-wire.js"
+    "./rules-based": {
+      "types": "./cjs/rules-based-configuration-wire.d.ts",
+      "import": "./esm/rules-based-configuration-wire.js",
+      "require": "./cjs/rules-based-configuration-wire.js",
+      "default": "./esm/rules-based-configuration-wire.js"
     },
     "./precomputed": {
       "types": "./cjs/precomputed-configuration-wire.d.ts",

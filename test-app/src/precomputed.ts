@@ -1,4 +1,4 @@
-import { configurationFromString, configurationToString } from '@datadog/openfeature-browser/precomputed'
+import { configurationFromString, configurationToString } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
 const response = {

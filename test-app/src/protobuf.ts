@@ -1,5 +1,9 @@
 import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
-import { configurationFromString, configurationToString, DatadogProvider } from '@datadog/openfeature-browser'
+import {
+  configurationFromString,
+  configurationToString,
+  DatadogProvider,
+} from '@datadog/openfeature-browser/rules-based'
 import { assert, reportSuccess } from './smoke'
 
 const protobufRulesResponse =
