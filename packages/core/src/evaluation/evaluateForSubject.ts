@@ -18,7 +18,7 @@ export function evaluateForSubject<T extends FlagValueType>(
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!isValidFlag(flag)) {
     logger.debug(`returning default assignment because flag configuration is invalid`, {
-      flagKey: flag.key,
+      flagKey: isRecord(flag) && typeof flag.key === 'string' ? flag.key : undefined,
       subjectKey,
     })
     return {
@@ -183,7 +183,7 @@ function isValidFlag(flag: unknown): boolean {
         (split) =>
           isRecord(split) &&
           typeof split.variationKey === 'string' &&
-          split.variationKey in variations &&
+          Object.prototype.hasOwnProperty.call(variations, split.variationKey) &&
           Array.isArray(split.shards) &&
           split.shards.every(isValidShard)
       ) &&
@@ -193,7 +193,7 @@ function isValidFlag(flag: unknown): boolean {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function isVariantType(value: unknown): value is VariantType {
