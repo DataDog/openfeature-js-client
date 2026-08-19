@@ -1,9 +1,7 @@
-export type {
-  ConfigurationFetchOptions,
-  PrecomputedConfigurationFetchOptions,
-} from './transport/fetchConfiguration'
-export { fetchPrecomputedConfiguration } from './transport/fetchConfiguration'
 import { registerGlobal } from './register-global'
+
+export type { ConfigurationFetchOptions, PrecomputedConfigurationFetchOptions } from './transport/fetchConfiguration'
+export { fetchPrecomputedConfiguration } from './transport/fetchConfiguration'
 
 registerGlobal()
 

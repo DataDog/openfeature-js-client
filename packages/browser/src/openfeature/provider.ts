@@ -133,7 +133,7 @@ export class DatadogProvider extends DatadogCoreProvider {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration || {}
+    this.flagsConfiguration = options.initialFlagsConfiguration
     this.status = ProviderStatus.NOT_READY
   }
 
