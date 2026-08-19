@@ -16,9 +16,6 @@
     "*": {
       "rules-based": [
         "cjs/rules-based.d.ts"
-      ],
-      "precomputed": [
-        "cjs/precomputed.d.ts"
       ]
     }
   },
@@ -28,12 +25,6 @@
       "import": "./esm/index.js",
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
-    },
-    "./precomputed": {
-      "types": "./cjs/precomputed.d.ts",
-      "import": "./esm/precomputed.js",
-      "require": "./cjs/precomputed.js",
-      "default": "./esm/precomputed.js"
     },
     "./rules-based": {
       "types": "./cjs/rules-based.d.ts",

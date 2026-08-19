@@ -1,13 +1,13 @@
 jest.mock('@bufbuild/protobuf', () => {
-  throw new Error('The precomputed entry point loaded Protobuf-ES')
+  throw new Error('The default entry point loaded Protobuf-ES')
 })
 jest.mock('@bufbuild/protobuf/wire', () => {
-  throw new Error('The precomputed entry point loaded Protobuf-ES wire helpers')
+  throw new Error('The default entry point loaded Protobuf-ES wire helpers')
 })
 
 import { configurationFromString, configurationToString, DatadogProvider } from '../src'
 
-describe('default precomputed entry point', () => {
+describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
     expect(DatadogProvider).toBeDefined()
   })

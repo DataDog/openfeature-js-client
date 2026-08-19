@@ -26,7 +26,7 @@ echo "Installing the React Native Metro smoke fixture..."
 cd "$SMOKE_DIR"
 npm install --ignore-scripts --no-audit --no-fund
 
-echo "Checking that the default and precomputed entry points do not load protobuf..."
+echo "Checking that the root entry point does not load protobuf..."
 node default-entrypoint.js
 
 echo "Bundling the packed core package with the React Native Metro configuration..."
