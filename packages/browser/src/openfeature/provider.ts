@@ -26,6 +26,7 @@ import {
 import { evaluate } from '../evaluation'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
+import { createFeatureFlagsLifecycleTelemetry, type FeatureFlagsLifecycleTelemetry } from './lifecycleTelemetry'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
@@ -66,6 +67,9 @@ export class DatadogProvider implements Provider {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+
+  /** Low-volume internal telemetry used to verify the onboarding lifecycle. */
+  private readonly lifecycleTelemetry?: FeatureFlagsLifecycleTelemetry
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -110,6 +114,13 @@ export class DatadogProvider implements Provider {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
 
+    if (this.configuration) {
+      this.lifecycleTelemetry = createFeatureFlagsLifecycleTelemetry(this.configuration)
+      this.hooks.push({
+        after: () => this.lifecycleTelemetry?.firstEvaluation(this.status),
+      })
+    }
+
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     if (this.isRumIntegrationEnabled) {
       this.hooks.push(createRumTrackingHook())
@@ -140,8 +151,13 @@ export class DatadogProvider implements Provider {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    this.lifecycleTelemetry?.sdkInitStarted()
     this.exposureCacheReady = this.exposureCache?.init()
     return this.setContext(context)
+  }
+
+  async onClose(): Promise<void> {
+    this.lifecycleTelemetry?.stop()
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -197,6 +213,9 @@ export class DatadogProvider implements Provider {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          if (!fromCache) {
+            this.lifecycleTelemetry?.configurationReceived(config)
+          }
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
