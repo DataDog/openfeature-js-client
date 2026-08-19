@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
-import { configurationFromString } from '@datadog/flagging-core/configuration'
+import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import type { Logger } from '@openfeature/core'
 import { ProviderEvents } from '@openfeature/web-sdk'
 import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
