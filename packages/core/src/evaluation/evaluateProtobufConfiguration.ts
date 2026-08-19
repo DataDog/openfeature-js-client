@@ -465,7 +465,20 @@ function validateSha256Hashes(values: Uint8Array[]): void {
 }
 
 function compareStrings(left: string, right: string): number {
-  return left === right ? 0 : left < right ? -1 : 1
+  if (left === right) return 0
+  // Go sorts protobuf strings by UTF-8 bytes, whose ordering follows Unicode code points.
+  // JavaScript's relational operators compare UTF-16 code units instead.
+  let leftIndex = 0
+  let rightIndex = 0
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftCodePoint = left.codePointAt(leftIndex) as number
+    const rightCodePoint = right.codePointAt(rightIndex) as number
+    if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1
+    leftIndex += leftCodePoint > 0xffff ? 2 : 1
+    rightIndex += rightCodePoint > 0xffff ? 2 : 1
+  }
+  if (leftIndex === left.length && rightIndex === right.length) return 0
+  return leftIndex === left.length ? -1 : 1
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {

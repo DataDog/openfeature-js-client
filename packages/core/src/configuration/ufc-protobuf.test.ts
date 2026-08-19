@@ -96,6 +96,7 @@ type RulesResponseOptions = {
   fallbackTargetingConditionIndex?: number
   splitReason?: number
   attributeName?: string
+  strings?: string[]
   semver?: string
   membershipIndexes?: number[]
   shaHashes?: string[]
@@ -197,9 +198,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufMessage(3, flagEntry),
     ...(options.futureFlagFeatureLevel === undefined ? [] : protobufMessage(3, futureFlagEntry)),
     ...protobufString(4, options.attributeName ?? 'country'),
-    ...protobufString(5, 'on'),
-    ...protobufString(5, 'off'),
-    ...protobufString(5, 'US'),
+    ...(options.strings ?? ['on', 'off', 'US']).flatMap((value) => protobufString(5, value)),
     ...protobufString(6, '^US$'),
     ...protobufString(7, options.semver ?? '1.2.3'),
     ...(options.jsonValue === undefined ? [] : protobufString(8, options.jsonValue)),
@@ -366,6 +365,27 @@ describe('UFC protobuf decoder', () => {
     expect(
       evaluateBoolean({ conditionKind, membershipIndexes: [1, 2] }, { targetingKey: 'user', country: 'US' })
     ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+  })
+
+  it('uses Go UTF-8 ordering for string membership values', () => {
+    const configuration = decodeRules({
+      conditionKind: 9,
+      strings: ['on', 'off', '\ue000', '😀'],
+      membershipIndexes: [2, 3],
+    })
+
+    for (const country of ['\ue000', '😀']) {
+      expect(
+        evaluateRulesBasedConfiguration(
+          configuration,
+          'boolean',
+          'test-flag',
+          false,
+          { targetingKey: 'user', country },
+          logger
+        )
+      ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    }
   })
 
   it.each([11, 12] as const)('reports unsorted SHA-256 hashes for condition kind %s', (conditionKind) => {
