@@ -1,6 +1,6 @@
 import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
 import { encodeUtf8 } from '../utf8'
-import { compileRegex } from './condition-helpers'
+import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { compareSemver, parseSemver } from './semver'
 import { sha256Hex } from './sha256'
 
@@ -169,19 +169,31 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
                 : a < b
         return compareNumber(value, condition.value, comparator)
       }
-      case OperatorType.MATCHES:
+      case OperatorType.MATCHES: {
+        const attributeValue = coerceToString(value)
+        if (attributeValue === undefined) return false
         // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
-        return compileRegex(condition.value).test(String(value)) // dd-iac-scan ignore-line
-      case OperatorType.NOT_MATCHES:
+        return compileRegex(condition.value).test(attributeValue) // dd-iac-scan ignore-line
+      }
+      case OperatorType.NOT_MATCHES: {
+        const attributeValue = coerceToString(value)
+        if (attributeValue === undefined) return false
         // ReDoS mitigation should happen on user input to avoid event loop saturation (https://datadoghq.atlassian.net/browse/FFL-1060)
-        return !compileRegex(condition.value).test(String(value)) // dd-iac-scan ignore-line
-      case OperatorType.ONE_OF:
-        return isOneOf(value.toString(), condition.value)
-      case OperatorType.NOT_ONE_OF:
-        return isNotOneOf(value.toString(), condition.value)
+        return !compileRegex(condition.value).test(attributeValue) // dd-iac-scan ignore-line
+      }
+      case OperatorType.ONE_OF: {
+        const attributeValue = coerceToString(value)
+        return attributeValue !== undefined && isOneOf(attributeValue, condition.value)
+      }
+      case OperatorType.NOT_ONE_OF: {
+        const attributeValue = coerceToString(value)
+        return attributeValue !== undefined && isNotOneOf(attributeValue, condition.value)
+      }
       case OperatorType.ONE_OF_SHA256:
       case OperatorType.NOT_ONE_OF_SHA256: {
-        const encoded = encodeUtf8(String(value))
+        const attributeValue = coerceToString(value)
+        if (attributeValue === undefined) return false
+        const encoded = encodeUtf8(attributeValue)
         const input = new Uint8Array(condition.value.salt.length + encoded.length)
         input.set(condition.value.salt)
         input.set(encoded, condition.value.salt.length)
@@ -262,5 +274,7 @@ function compareNumber(
   conditionValue: ConditionValueType,
   compareFn: (a: number, b: number) => boolean
 ): boolean {
-  return compareFn(Number(attributeValue), Number(conditionValue))
+  const attribute = coerceToNumber(attributeValue)
+  const comparand = coerceToNumber(conditionValue)
+  return attribute !== undefined && comparand !== undefined && compareFn(attribute, comparand)
 }

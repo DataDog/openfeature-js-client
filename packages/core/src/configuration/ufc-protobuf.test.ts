@@ -323,6 +323,23 @@ describe('UFC protobuf decoder', () => {
     ).toBe(true)
   })
 
+  it.each([
+    [3, [1]],
+    [3, true],
+    [7, ['US']],
+    [8, {}],
+    [9, ['US']],
+    [10, {}],
+    [11, ['US']],
+    [12, {}],
+    [15, ['1.2.3']],
+  ] as const)('does not coerce unsupported context value for condition kind %s', (conditionKind, country) => {
+    expect(evaluateBoolean({ conditionKind }, { targetingKey: 'user', country } as EvaluationContext)).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
+  })
+
   it.each(['constructor', '__proto__'])('does not match an inherited condition attribute named %s', (attributeName) => {
     expect(evaluateBoolean({ conditionKind: 14, attributeName }, { targetingKey: 'user' })).toMatchObject({
       value: false,

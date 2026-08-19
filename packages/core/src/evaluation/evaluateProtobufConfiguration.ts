@@ -19,7 +19,7 @@ import type {
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
-import { compileRegex } from './condition-helpers'
+import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
@@ -190,12 +190,12 @@ function matchesLeafCondition(
   if (value == null) return false
 
   if (kind.case === 'numeric') {
-    const actual = Number(value)
+    const actual = coerceToNumber(value)
     const expected = kind.value.comparator.value
     if (kind.value.comparator.case === undefined || expected === undefined || !Number.isFinite(expected)) {
       throw new FlagConfigurationError('Invalid numeric comparator')
     }
-    if (!Number.isFinite(actual)) return false
+    if (actual === undefined) return false
     if (kind.value.comparator.case === 'lessThan') return actual < expected
     if (kind.value.comparator.case === 'lessThanOrEqual') return actual <= expected
     if (kind.value.comparator.case === 'greaterThan') return actual > expected
@@ -206,21 +206,27 @@ function matchesLeafCondition(
     if (kind.value.comparator.case === undefined) {
       throw new FlagConfigurationError('Missing regex comparator')
     }
-    const matches = compiledRegexAt(configuration, kind.value.comparator.value).test(String(value)) // dd-iac-scan ignore-line
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const matches = compiledRegexAt(configuration, kind.value.comparator.value).test(attributeValue) // dd-iac-scan ignore-line
     return kind.value.comparator.case === 'matches' ? matches : !matches
   }
   if (kind.case === 'stringMembership') {
     if (kind.value.comparator.case === undefined) {
       throw new FlagConfigurationError('Unsupported string membership comparator')
     }
-    const included = containsInternedString(kind.value.comparator.value.values, String(value), configuration.strings)
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const included = containsInternedString(kind.value.comparator.value.values, attributeValue, configuration.strings)
     return kind.value.comparator.case === 'oneOf' ? included : !included
   }
   if (kind.case === 'sha256Membership') {
     if (kind.value.comparator.case === undefined) {
       throw new FlagConfigurationError('Unsupported SHA-256 comparator')
     }
-    const encoded = encodeUtf8(String(value))
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const encoded = encodeUtf8(attributeValue)
     const input = new Uint8Array(kind.value.salt.length + encoded.length)
     input.set(kind.value.salt)
     input.set(encoded, kind.value.salt.length)
@@ -233,7 +239,8 @@ function matchesLeafCondition(
     }
     const expected = parseSemver(atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer'))
     if (!expected) throw new FlagConfigurationError('Invalid SemVer comparator')
-    const actual = parseSemver(String(value))
+    if (typeof value !== 'string') return false
+    const actual = parseSemver(value)
     if (!actual) return false
     const comparison = compareSemver(actual, expected)
     if (kind.value.comparator.case === 'semverEqual') return comparison === 0
