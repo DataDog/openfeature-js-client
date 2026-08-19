@@ -78,8 +78,9 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       }
     }
 
+    const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes)) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, conditionResults)) {
         continue
       }
       if (allocation.splits.length === 0) continue
@@ -156,23 +157,29 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 function matchesCondition(
   index: number | undefined,
   configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext
+  subjectAttributes: EvaluationContext,
+  results: Map<number, boolean>
 ): boolean {
   if (index === undefined) return true
+  const cached = results.get(index)
+  if (cached !== undefined) return cached
   const condition = atIndex(configuration.conditions, index, 'condition')
+  let result: boolean
   if (condition.kind.case === 'all') {
-    return condition.kind.value.conditionIndexes.every((child) => {
+    result = condition.kind.value.conditionIndexes.every((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes)
+      return matchesCondition(child, configuration, subjectAttributes, results)
     })
-  }
-  if (condition.kind.case === 'any') {
-    return condition.kind.value.conditionIndexes.some((child) => {
+  } else if (condition.kind.case === 'any') {
+    result = condition.kind.value.conditionIndexes.some((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes)
+      return matchesCondition(child, configuration, subjectAttributes, results)
     })
+  } else {
+    result = matchesLeafCondition(condition, configuration, subjectAttributes)
   }
-  return matchesLeafCondition(condition, configuration, subjectAttributes)
+  results.set(index, result)
+  return result
 }
 
 function matchesLeafCondition(

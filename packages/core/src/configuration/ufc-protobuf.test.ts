@@ -462,6 +462,28 @@ describe('UFC protobuf decoder', () => {
     expectFlagConfigurationError({ conditionMessages: [allWithForwardReference, emptyAll] })
   })
 
+  it('evaluates each reachable condition once', () => {
+    const conditionMessages = [protobufCondition(9, [], [2])]
+    for (let index = 1; index <= 8; index++) {
+      const child = index - 1
+      conditionMessages.push(protobufMessage(1, [...protobufVarint(1, child), ...protobufVarint(1, child)]))
+    }
+    const configuration = decodeRules({
+      conditionMessages,
+      targetingConditionIndex: conditionMessages.length - 1,
+    })
+    let reads = 0
+    configuration.conditions = new Proxy(configuration.conditions, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) reads++
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    expect(evaluateFlag(configuration, 'test-flag').value).toBe(true)
+    expect(reads).toBe(conditionMessages.length)
+  })
+
   it('retains direct protobuf variation values and evaluates JSON scalars', () => {
     const configuration = decodeRules({ jsonValue: '"scalar"' })
     const variation = configuration.flags['test-flag'].variations[0]
