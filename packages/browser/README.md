@@ -16,6 +16,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 
 // Initialize the provider
 const provider = new DatadogProvider({
+  applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
   enableExposureLogging: true,
   enableFlagEvaluationTracking: true,
@@ -23,7 +24,7 @@ const provider = new DatadogProvider({
 })
 
 // Set the provider
-await OpenFeature.setProvider(provider)
+await OpenFeature.setProviderAndWait(provider)
 
 // Get a client and evaluate flags
 const client = OpenFeature.getClient()
@@ -119,16 +120,36 @@ The default entry point supports precomputed configurations without including
 the Protobuf-ES dependency. Rules-based entries are ignored:
 
 ```javascript
-import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser'
+import { configurationFromString, DatadogProvider, getPrecomputedContext } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString(wire)
+const context = getPrecomputedContext(configuration)
+
+const provider = new DatadogProvider({
+  applicationId: 'app-id',
+  clientToken: 'pub_...',
+  site: 'datadoghq.com',
+  env: 'production',
+  initialFlagsConfiguration: configuration,
+})
+
+if (context !== undefined) {
+  await OpenFeature.setProviderAndWait(provider, context)
+} else {
+  await OpenFeature.setProviderAndWait(provider)
+}
 ```
 
 Applications that use rules-based configurations can opt into the full parser
 and its Protobuf-ES dependency through the rules-based entry point:
 
 ```javascript
-import { configurationFromString, DatadogProvider } from '@datadog/openfeature-browser/rules-based'
+import {
+  configurationFromString,
+  DatadogProvider,
+  getPrecomputedContext,
+} from '@datadog/openfeature-browser/rules-based'
 ```
 
 ## End-user license agreement

@@ -5,7 +5,7 @@ jest.mock('@bufbuild/protobuf/wire', () => {
   throw new Error('The default entry point loaded Protobuf-ES wire helpers')
 })
 
-import { configurationFromString, configurationToString, DatadogProvider } from '../src'
+import { configurationFromString, configurationToString, DatadogProvider, getPrecomputedContext } from '../src'
 
 describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
@@ -24,12 +24,13 @@ describe('default entry point', () => {
     const configuration = configurationFromString(
       JSON.stringify({
         version: 1,
-        precomputed: { response: JSON.stringify(response) },
+        precomputed: { response: JSON.stringify(response), context: { targetingKey: 'user-1' } },
         rules: { response: 'ignored' },
       })
     )
 
-    expect(configuration).toEqual({ precomputed: { response } })
+    expect(configuration).toEqual({ precomputed: { response, context: { targetingKey: 'user-1' } } })
+    expect(getPrecomputedContext(configuration)).toEqual({ targetingKey: 'user-1' })
     expect(JSON.parse(configurationToString(configuration)).rules).toBeUndefined()
   })
 })
