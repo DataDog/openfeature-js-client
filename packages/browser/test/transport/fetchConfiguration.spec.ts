@@ -23,7 +23,7 @@ describe('createFlagsConfigurationFetcher', () => {
           return null
         }),
       },
-      json: jest.fn().mockResolvedValue({ mockResponse: true }),
+      json: jest.fn().mockResolvedValue(validPrecomputedResponse),
     })
     global.fetch = mockFetch
   })
@@ -44,6 +44,26 @@ describe('createFlagsConfigurationFetcher', () => {
     customAttr: 'value',
     numericAttr: 42,
     booleanAttr: true,
+  }
+
+  const validFlag = {
+    allocationKey: 'allocation',
+    variationKey: 'enabled',
+    variationType: 'boolean',
+    variationValue: true,
+    reason: 'TARGETING_MATCH',
+    doLog: true,
+  }
+
+  const validPrecomputedResponse = {
+    data: {
+      attributes: {
+        createdAt: '2026-08-19T00:00:00.000Z',
+        flags: {
+          'test-flag': validFlag,
+        },
+      },
+    },
   }
 
   describe('URL construction with flaggingProxy', () => {
@@ -325,7 +345,6 @@ describe('createFlagsConfigurationFetcher', () => {
 
   describe('return value', () => {
     it('should return precomputed configuration with context and timestamp', async () => {
-      const mockResponse = { flags: { 'test-flag': 'value' } }
       mockFetch.mockResolvedValue({
         ok: true,
         headers: {
@@ -334,7 +353,7 @@ describe('createFlagsConfigurationFetcher', () => {
             return null
           }),
         },
-        json: jest.fn().mockResolvedValue(mockResponse),
+        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
       })
 
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
@@ -344,11 +363,57 @@ describe('createFlagsConfigurationFetcher', () => {
 
       expect(result).toEqual({
         precomputed: {
-          response: mockResponse,
+          response: validPrecomputedResponse,
           context: mockContext,
           fetchedAt: 1234567890 as TimeStamp,
         },
       })
+    })
+
+    it.each([
+      ['null', null, 'Precomputed configuration response must be an object'],
+      ['an empty object', {}, 'Precomputed configuration response is missing data'],
+    ])('returns a parse error for %s', async (_, response, error) => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue(response),
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...baseConfig,
+        flaggingProxy: 'https://proxy.example.com',
+        context: mockContext,
+      })
+
+      expect(result).toEqual({ precomputedError: error })
+    })
+
+    it('preserves valid flags and records malformed flags', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({
+          data: {
+            attributes: {
+              createdAt: '2026-08-19T00:00:00.000Z',
+              flags: {
+                valid: validFlag,
+                malformed: {},
+              },
+            },
+          },
+        }),
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...baseConfig,
+        flaggingProxy: 'https://proxy.example.com',
+        context: mockContext,
+      })
+
+      expect(result.precomputed?.response.data.attributes.flags).toEqual({ valid: validFlag })
+      expect(result.precomputed?.flagErrors).toEqual({ malformed: 'Invalid precomputed flag configuration' })
     })
 
     it('fetches a precomputed configuration directly', async () => {

@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { type FlagsConfiguration, parsePrecomputedConfigurationResponse } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
@@ -132,10 +132,12 @@ export async function fetchPrecomputedConfiguration(
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  const precomputed = await response.json()
+  const parsed = parsePrecomputedConfigurationResponse(await response.json())
+  if ('error' in parsed) return { precomputedError: parsed.error }
+
   return {
     precomputed: {
-      response: precomputed,
+      ...parsed,
       context: options.context,
       fetchedAt: timeStampNow(),
     },
