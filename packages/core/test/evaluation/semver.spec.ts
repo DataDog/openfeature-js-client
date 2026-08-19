@@ -26,15 +26,6 @@ describe('SemVer', () => {
     '1.2.3-alpha-1+build.001',
     '18446744073709551615.18446744073709551615.18446744073709551615',
     '1.2.3-18446744073709551616',
-    // Extended version-part support: one- and two-part versions normalize to
-    // three parts; any number of additional parts is accepted.
-    '18',
-    '18.0',
-    '1.2.3.4',
-    '1.2.3.4.5',
-    '1.2.3.4.5.6',
-    '18.0.0.0',
-    '18.0.0.0.0',
   ])('accepts %s', (version) => {
     expect(parseSemver(version)).not.toBeNull()
   })
@@ -106,27 +97,8 @@ describe('SemVer', () => {
     })
   })
 
-  it('normalizes one- and two-part versions and retains additional parts', () => {
-    expect(parseSemver('18')).toEqual({ parts: ['18'], prerelease: '' })
-    expect(parseSemver('18.0')).toEqual({ parts: ['18', '0'], prerelease: '' })
-    expect(parseSemver('1.2.3.4')).toEqual({ parts: ['1', '2', '3', '4'], prerelease: '' })
-    expect(parseSemver('1.2.3.4.5')).toEqual({ parts: ['1', '2', '3', '4', '5'], prerelease: '' })
-    expect(parseSemver('1.2.3.4.5.6')).toEqual({ parts: ['1', '2', '3', '4', '5', '6'], prerelease: '' })
-  })
-
-  it('compares extended version parts with zero-padding', () => {
-    // One- and two-part versions compare equal to their three-part form.
-    expect(compareSemver(parse('18'), parse('18.0.0'))).toBe(0)
-    expect(compareSemver(parse('18.0'), parse('18.0.0'))).toBe(0)
-    // A four- or five-part version compares above a lower three-part version.
-    expect(compareSemver(parse('18.0.0.0'), parse('17.0.0'))).toBeGreaterThan(0)
-    expect(compareSemver(parse('18.0.0.0.0'), parse('17.0.0'))).toBeGreaterThan(0)
-    // A three-part version compares above a lower four- or five-part comparand.
-    expect(compareSemver(parse('19.0.0'), parse('18.0.0.0'))).toBeGreaterThan(0)
-    expect(compareSemver(parse('19.0.0'), parse('18.0.0.0.0'))).toBeGreaterThan(0)
-    // Extra zero parts do not change precedence against the three-part form.
-    expect(compareSemver(parse('1.0.0.0'), parse('1.0.0'))).toBe(0)
-    expect(compareSemver(parse('1.0.0.0.0'), parse('1.0.0'))).toBe(0)
+  it('compares version parts beyond the shared five-part fixtures', () => {
+    expect(compareSemver(parse('1.2.3.4.5.6'), parse('1.2.3.4.5.5'))).toBeGreaterThan(0)
   })
 
   it('orders core components above Number.MAX_SAFE_INTEGER without precision loss', () => {
