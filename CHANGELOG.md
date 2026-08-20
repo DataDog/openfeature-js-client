@@ -6,6 +6,17 @@
 
 ---
 
+## @datadog/flagging-core@2.1.0, @datadog/openfeature-node-server@2.2.0
+
+**Features:**
+
+- Include the optional holdout `serial_id` in exposure events so the exposures worker can attribute compiler-generated allocations back to their holdout ([#368](https://github.com/DataDog/openfeature-js-client/pull/368)) [NODE-SERVER]
+- Support semantic-version conditions in the shared rules evaluator ([#365](https://github.com/DataDog/openfeature-js-client/pull/365)) [NODE-SERVER]
+
+**Bug Fixes:**
+
+- Unref the Node.js provider initialization timeout without failing on timer implementations that do not expose `unref()` ([#361](https://github.com/DataDog/openfeature-js-client/pull/361)) [NODE-SERVER]
+
 ## @datadog/openfeature-node-server@2.1.0
 
 **Bug Fixes:**
