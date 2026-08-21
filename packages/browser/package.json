@@ -44,15 +44,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/browser-core": "^6.33.0",
     "@datadog/flagging-core": "2.0.2",
     "@datadog/js-core": "0.0.3"
   },
   "peerDependencies": {
+    "@datadog/browser-core": "^6.33.0",
     "@openfeature/core": "^1.9.2",
     "@openfeature/web-sdk": "^1.5.0"
   },
   "devDependencies": {
+    "@datadog/browser-core": "^6.33.0",
     "@openfeature/core": "^1.9.2",
     "@openfeature/web-sdk": "^1.5.0",
     "@types/chrome": "^0.1.18",
