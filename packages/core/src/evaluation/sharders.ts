@@ -7,6 +7,7 @@ export abstract class Sharder {
 export class MD5Sharder extends Sharder {
   getShard(input: string, totalShards: number): number {
     const hashOutput = getMD5Hash(input)
+    // Interpret the first four MD5 bytes as an unsigned big-endian integer.
     const intFromHash = parseInt(hashOutput.slice(0, 8), 16)
     return intFromHash % totalShards
   }

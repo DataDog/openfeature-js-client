@@ -276,7 +276,7 @@ describe('configuration wire', () => {
   })
 
   it.each([configurationFromPrecomputedString, configurationFromRulesString])(
-    'retains an invalid envelope error in capability-specific parsers',
+    'retains an invalid wire error in capability-specific parsers',
     (parse) => {
       expect(parse('not json')).toEqual({ configurationError: 'Invalid flags configuration wire format' })
     }

@@ -1023,7 +1023,7 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('computes partition coordinates once across multiple splits', () => {
+  it('computes the partition key once across multiple splits', () => {
     const getShard = jest.spyOn(MD5Sharder.prototype, 'getShard')
 
     expect(

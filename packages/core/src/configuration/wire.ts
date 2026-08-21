@@ -5,8 +5,8 @@ import { encodeUniversalFlagConfiguration } from './ufc-protobuf'
 import {
   type FlagsConfigurationWire,
   INVALID_CONFIGURATION_WIRE_ERROR,
+  type ParsedConfigurationWire,
   parseConfigurationWire,
-  type SerializedConfiguration,
 } from './wire-types'
 
 export type { FlagsConfigurationWire } from './wire-types'
@@ -28,7 +28,7 @@ export function configurationFromString(wire: FlagsConfigurationWire): FlagsConf
  * `configurationFromString`.
  */
 export function configurationToString(configuration: FlagsConfiguration): FlagsConfigurationWire {
-  const wire: SerializedConfiguration = precomputedConfigurationToWire(configuration)
+  const wire: ParsedConfigurationWire = precomputedConfigurationToWire(configuration)
 
   if (configuration.rules) {
     const { response, fetchedAt, etag } = configuration.rules

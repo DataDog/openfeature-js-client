@@ -15,8 +15,8 @@ import type {
   Flag,
   FlagsConfiguration,
   Split,
-  Version,
   VariationType,
+  Version,
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
@@ -58,14 +58,14 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const { targetingKey: subjectKey, ...remainingContext } = context
-  const subjectAttributes = {
-    ...(subjectKey != null ? { id: subjectKey } : {}),
+  const { targetingKey, ...remainingContext } = context
+  const attributes = {
+    ...(targetingKey != null ? { id: targetingKey } : {}),
     ...remainingContext,
   }
   const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
-    logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
+    logger.debug('returning default value because flag is not found', { flagKey, targetingKey })
     return {
       value: defaultValue,
       reason: 'ERROR',
@@ -82,7 +82,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (type !== flagValueType) {
       logger.debug('variant value type mismatch, returning default value', {
         flagKey,
-        subjectKey,
+        targetingKey,
         expectedType: type,
         variantType: flag.variationType,
       })
@@ -96,25 +96,23 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, conditionResults)) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, attributes, conditionResults)) {
         continue
       }
-      if (allocation.splits.length === 0) continue
-      const coordinates = partitionCoordinates(
+      const partitionKey = computePartitionKey(
         allocation,
         configuration,
-        subjectKey,
-        subjectAttributes,
+        targetingKey,
+        attributes,
         evaluationTimestampMs
       )
-      if (!coordinates) continue
-      const split = allocation.splits.find((candidate) => matchesSplit(candidate, coordinates))
+      const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
       if (!split) continue
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
-      logger.debug('evaluated a flag', { flagKey, subjectKey, assignment: value })
+      logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
       return {
         value: value as FlagTypeToValue<T>,
         reason: resolutionReason(split),
@@ -134,7 +132,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (error instanceof FlagConfigurationError) {
       logger.error('returning default value because flag configuration is invalid', {
         flagKey,
-        subjectKey,
+        targetingKey,
         error: error.message,
       })
       return {
@@ -170,7 +168,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
   }
 
-  logger.debug('returning default assignment because no allocation matched', { flagKey, subjectKey })
+  logger.debug('returning default assignment because no allocation matched', { flagKey, targetingKey })
   return {
     value: defaultValue,
     reason: 'DEFAULT',
@@ -181,7 +179,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 function matchesCondition(
   index: number | undefined,
   configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext,
+  attributes: EvaluationContext,
   results: Map<number, boolean>
 ): boolean {
   if (index === undefined) return true
@@ -192,15 +190,15 @@ function matchesCondition(
   if (condition.kind.case === 'all') {
     result = condition.kind.value.conditionIndexes.every((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes, results)
+      return matchesCondition(child, configuration, attributes, results)
     })
   } else if (condition.kind.case === 'any') {
     result = condition.kind.value.conditionIndexes.some((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes, results)
+      return matchesCondition(child, configuration, attributes, results)
     })
   } else {
-    result = matchesLeafCondition(condition, configuration, subjectAttributes)
+    result = matchesLeafCondition(condition, configuration, attributes)
   }
   results.set(index, result)
   return result
@@ -209,14 +207,14 @@ function matchesCondition(
 function matchesLeafCondition(
   condition: Condition,
   configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext
+  attributes: EvaluationContext
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new FlagConfigurationError('Unsupported condition')
   }
   const attribute = atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
-  const value = getOwnProperty(subjectAttributes, attribute)
+  const value = getOwnProperty(attributes, attribute)
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -374,29 +372,29 @@ function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegE
   }
 }
 
-function partitionCoordinates(
+function computePartitionKey(
   allocation: Allocation,
   configuration: FlagsConfiguration,
-  subjectKey: string | null | undefined,
-  subjectAttributes: EvaluationContext,
+  targetingKey: string | null | undefined,
+  attributes: EvaluationContext,
   evaluationTimestampMs: TimeStamp
 ): number[] {
-  const coordinates: number[] = []
+  const partitionKey: number[] = []
   for (const partition of allocation.partitionKey) {
     if (partition.kind.case === 'time') {
-      coordinates.push(evaluationTimestampMs)
+      partitionKey.push(evaluationTimestampMs)
     } else if (partition.kind.case === 'shardMd5') {
       let value: EvaluationContextValue
       if (partition.kind.value.attributeNameIndex === undefined) {
-        if (subjectKey == null) throw new TargetingKeyMissingError()
-        value = subjectKey
+        if (targetingKey == null) throw new TargetingKeyMissingError()
+        value = targetingKey
       } else {
         const attribute = atIndex(
           configuration.attributeNames,
           partition.kind.value.attributeNameIndex,
           'partition attribute'
         )
-        const attributeValue = attribute === 'targetingKey' ? subjectKey : getOwnProperty(subjectAttributes, attribute)
+        const attributeValue = attribute === 'targetingKey' ? targetingKey : getOwnProperty(attributes, attribute)
         if (attributeValue == null) throw new InvalidContextError()
         value = attributeValue
       }
@@ -404,23 +402,23 @@ function partitionCoordinates(
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
       const partitionValue = coerceToString(value)
       if (partitionValue === undefined) throw new InvalidContextError()
-      coordinates.push(protobufSharder.getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
+      partitionKey.push(md5Sharder.getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }
   }
-  return coordinates
+  return partitionKey
 }
 
-function matchesSplit(split: Split, coordinates: number[]): boolean {
-  if (split.ranges.length !== coordinates.length) {
+function matchesSplit(split: Split, partitionKey: number[]): boolean {
+  if (split.ranges.length !== partitionKey.length) {
     throw new FlagConfigurationError('Invalid split')
   }
-  return coordinates.every((coordinate, index) => {
+  return partitionKey.every((value, index) => {
     const range = atIndex(split.ranges, index, 'partition range')
     const from = range.from === undefined ? undefined : safeInteger(range.from, 'Partition range')
     const to = range.to === undefined ? undefined : safeInteger(range.to, 'Partition range')
-    return (from === undefined || coordinate >= from) && (to === undefined || coordinate < to)
+    return (from === undefined || value >= from) && (to === undefined || value < to)
   })
 }
 
@@ -529,4 +527,4 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
   return left.length === right.length ? 0 : left.length < right.length ? -1 : 1
 }
 
-const protobufSharder = new MD5Sharder()
+const md5Sharder = new MD5Sharder()

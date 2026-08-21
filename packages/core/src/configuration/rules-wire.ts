@@ -4,8 +4,8 @@ import {
   decodeSafely,
   type FlagsConfigurationWire,
   INVALID_CONFIGURATION_WIRE_ERROR,
+  type ParsedConfigurationWire,
   parseConfigurationWire,
-  type SerializedConfiguration,
 } from './wire-types'
 import { isWireEntry } from './wire-validation'
 
@@ -17,7 +17,7 @@ export function configurationFromRulesString(wire: FlagsConfigurationWire): Flag
   return serialized ? rulesConfigurationFromWire(serialized) : { configurationError: INVALID_CONFIGURATION_WIRE_ERROR }
 }
 
-export function rulesConfigurationFromWire(serialized: SerializedConfiguration): FlagsConfiguration {
+export function rulesConfigurationFromWire(serialized: ParsedConfigurationWire): FlagsConfiguration {
   if (serialized.rules === undefined) return {}
   if (!isWireEntry(serialized.rules)) return { rulesError: 'Invalid rules configuration wire entry' }
 

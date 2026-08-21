@@ -6,15 +6,15 @@ import type { FlagsConfiguration as ProtobufFlagsConfiguration } from './generat
  * Internal flags configuration for DatadogProvider.
  */
 export type FlagsConfiguration = {
-  /** @internal */
+  /** The configuration wire could not be parsed, so no capability was decoded. @internal */
   configurationError?: string
   /** @internal */
   precomputed?: PrecomputedConfiguration
-  /** @internal */
+  /** The precomputed capability could not be decoded; a valid rules capability remains usable. @internal */
   precomputedError?: string
   /** @internal */
   rules?: RulesConfiguration
-  /** @internal */
+  /** The rules capability could not be decoded; a valid precomputed capability remains usable. @internal */
   rulesError?: string
 }
 
