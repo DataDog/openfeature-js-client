@@ -38,8 +38,6 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
-const validatedSortedArrays = new WeakSet<object>()
-const validatedSha256Arrays = new WeakSet<object>()
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -480,34 +478,7 @@ function variationValueCase(
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
-  const stringAt = (index: number) => atIndex(strings, index, 'condition string')
-  ensureSorted(indexes, (left, right) => compareStrings(stringAt(left), stringAt(right)), 'Condition string indexes')
-  return containsSorted(indexes, (index) => {
-    return compareStrings(stringAt(index), value)
-  })
-}
-
-function ensureSorted<T>(values: T[], compare: (left: T, right: T) => number, description: string): void {
-  if (validatedSortedArrays.has(values)) return
-  for (let index = 1; index < values.length; index++) {
-    if (compare(values[index - 1], values[index]) > 0) {
-      throw new FlagConfigurationError(`${description} must be sorted`)
-    }
-  }
-  validatedSortedArrays.add(values)
-}
-
-function containsSorted<T>(values: T[], compare: (candidate: T) => number): boolean {
-  let low = 0
-  let high = values.length - 1
-  while (low <= high) {
-    const middle = (low + high) >>> 1
-    const comparison = compare(values[middle])
-    if (comparison === 0) return true
-    if (comparison < 0) low = middle + 1
-    else high = middle - 1
-  }
-  return false
+  return indexes.some((index) => atIndex(strings, index, 'condition string') === value)
 }
 
 function safeInteger(value: bigint, description: string): number {
@@ -534,34 +505,7 @@ function isJsonValue(value: unknown): value is FlagValue {
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
-  validateSha256Hashes(values)
-  ensureSorted(values, compareBytes, 'SHA-256 hashes')
-  return containsSorted(values, (candidate) => compareBytes(candidate, value))
-}
-
-function validateSha256Hashes(values: Uint8Array[]): void {
-  if (validatedSha256Arrays.has(values)) return
-  if (values.some((hash) => hash.length !== 32)) {
-    throw new FlagConfigurationError('SHA-256 hashes must contain 32 bytes')
-  }
-  validatedSha256Arrays.add(values)
-}
-
-function compareStrings(left: string, right: string): number {
-  if (left === right) return 0
-  // Go sorts protobuf strings by UTF-8 bytes, whose ordering follows Unicode code points.
-  // JavaScript's relational operators compare UTF-16 code units instead.
-  let leftIndex = 0
-  let rightIndex = 0
-  while (leftIndex < left.length && rightIndex < right.length) {
-    const leftCodePoint = left.codePointAt(leftIndex) as number
-    const rightCodePoint = right.codePointAt(rightIndex) as number
-    if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1
-    leftIndex += leftCodePoint > 0xffff ? 2 : 1
-    rightIndex += rightCodePoint > 0xffff ? 2 : 1
-  }
-  if (leftIndex === left.length && rightIndex === right.length) return 0
-  return leftIndex === left.length ? -1 : 1
+  return values.some((candidate) => compareBytes(candidate, value) === 0)
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {

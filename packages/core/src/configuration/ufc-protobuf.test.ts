@@ -469,10 +469,13 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it.each([9, 10] as const)('reports unsorted string membership values for condition kind %s', (conditionKind) => {
+  it.each([
+    [9, true, 'TARGETING_MATCH'],
+    [10, false, 'DEFAULT'],
+  ] as const)('evaluates unsorted string membership values for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean({ conditionKind, membershipIndexes: [1, 2] }, { targetingKey: 'user', country: 'US' })
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    ).toMatchObject({ value, reason })
   })
 
   it('uses Go UTF-8 ordering for string membership values', () => {
@@ -496,7 +499,10 @@ describe('UFC protobuf decoder', () => {
     }
   })
 
-  it.each([11, 12] as const)('reports unsorted SHA-256 hashes for condition kind %s', (conditionKind) => {
+  it.each([
+    [11, true, 'TARGETING_MATCH'],
+    [12, false, 'DEFAULT'],
+  ] as const)('evaluates unsorted SHA-256 hashes for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean(
         {
@@ -508,18 +514,31 @@ describe('UFC protobuf decoder', () => {
         },
         { targetingKey: 'user', country: 'US' }
       )
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    ).toMatchObject({ value, reason })
   })
 
-  it.each([11, 12] as const)('reports an invalid SHA-256 hash length for condition kind %s', (conditionKind) => {
+  it.each([
+    [11, true, 'TARGETING_MATCH'],
+    [12, false, 'DEFAULT'],
+  ] as const)('ignores an unrelated SHA-256 hash length for condition kind %s', (conditionKind, value, reason) => {
+    expect(
+      evaluateBoolean(
+        {
+          conditionKind,
+          shaHashes: ['00', 'b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45'],
+        },
+        { targetingKey: 'user', country: 'US' }
+      )
+    ).toMatchObject({ value, reason })
+  })
+
+  it.each([
+    [11, false, 'DEFAULT'],
+    [12, true, 'TARGETING_MATCH'],
+  ] as const)('does not match a malformed SHA-256 hash for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean({ conditionKind, shaHashes: ['00'] }, { targetingKey: 'user', country: 'US' })
-    ).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'SHA-256 hashes must contain 32 bytes',
-    })
+    ).toMatchObject({ value, reason })
   })
 
   it('lazily compiles each regex once per configuration', () => {
