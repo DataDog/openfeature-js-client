@@ -42,37 +42,89 @@ function protobufDouble(field: number, value: number): number[] {
   return protobufField(field, 1, [...new Uint8Array(buffer)])
 }
 
-// Field numbers mirror ufc.proto from dd-source PR #30526 at commit 8ccbeb1fe2696913506fb61d2e7a4598ea5ec449.
+// Field numbers mirror ufc.proto from dd-source PR #59643 at commit 31332ecb15d9ad75445228e2c4939db4a4aad19a.
 function protobufCondition(kind: number, shaHashes: string[], membershipIndexes: number[]): number[] {
   if (kind === 2) return protobufMessage(2, [])
   if (kind >= 3 && kind <= 6) {
-    return protobufMessage(3, [...protobufVarint(1, 0), ...protobufDouble(kind - 1, 1.5)])
+    return protobufMessage(3, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 2), ...protobufDouble(3, 1.5)])
   }
   if (kind === 7 || kind === 8) {
-    return protobufMessage(4, [...protobufVarint(1, 0), ...protobufVarint(kind - 5, 0)])
+    return protobufMessage(4, [
+      ...protobufVarint(1, 0),
+      ...protobufVarint(2, 0),
+      ...(kind === 8 ? protobufVarint(3, 1) : []),
+    ])
   }
   if (kind === 9 || kind === 10) {
-    const indexes = protobufMessage(
-      kind - 7,
-      membershipIndexes.flatMap((index) => protobufVarint(1, index))
-    )
-    return protobufMessage(5, [...protobufVarint(1, 0), ...indexes])
+    return protobufMessage(5, [
+      ...protobufVarint(1, 0),
+      ...membershipIndexes.flatMap((index) => protobufVarint(2, index)),
+      ...(kind === 10 ? protobufVarint(3, 1) : []),
+    ])
   }
   if (kind === 11 || kind === 12) {
-    const hashes = protobufMessage(
-      kind - 8,
-      shaHashes.flatMap((hash) => protobufBytes(1, [...Buffer.from(hash, 'hex')]))
-    )
-    return protobufMessage(6, [...protobufVarint(1, 0), ...protobufBytes(2, [1, 2]), ...hashes])
+    return protobufMessage(6, [
+      ...protobufVarint(1, 0),
+      ...protobufBytes(2, [1, 2]),
+      ...shaHashes.flatMap((hash) => protobufBytes(3, [...Buffer.from(hash, 'hex')])),
+      ...(kind === 12 ? protobufVarint(4, 1) : []),
+    ])
   }
   if (kind === 13 || kind === 14) {
     return protobufMessage(7, [...protobufVarint(1, 0), ...protobufVarint(2, kind === 13 ? 1 : 0)])
   }
-  return protobufMessage(8, [...protobufVarint(1, 0), ...protobufVarint(kind - 13, 0)])
+  if (kind >= 15 && kind <= 20) {
+    return protobufMessage(8, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 14), ...protobufVarint(3, 0)])
+  }
+  if (kind >= 21 && kind <= 23) {
+    return protobufMessage(9, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 20), ...protobufVarint(3, 2)])
+  }
+  return protobufMessage(10, [
+    ...protobufVarint(1, 0),
+    ...protobufBytes(2, [1, 2]),
+    ...protobufVarint(3, kind - 23),
+    ...protobufVarint(4, 2),
+    ...protobufBytes(5, [...Buffer.from(shaHashes[0], 'hex')]),
+  ])
+}
+
+function protobufVersion(value: string): number[] {
+  const withoutBuild = value.split('+', 1)[0]
+  const prereleaseStart = withoutBuild.indexOf('-')
+  const core = prereleaseStart === -1 ? withoutBuild : withoutBuild.slice(0, prereleaseStart)
+  const prerelease = prereleaseStart === -1 ? '' : withoutBuild.slice(prereleaseStart + 1)
+  return [
+    ...core.split('.').flatMap((component) => protobufString(1, component)),
+    ...(prerelease ? prerelease.split('.').flatMap((identifier) => protobufString(2, identifier)) : []),
+  ]
 }
 
 type RulesResponseOptions = {
-  conditionKind?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20
+  conditionKind?:
+    | 2
+    | 3
+    | 4
+    | 5
+    | 6
+    | 7
+    | 8
+    | 9
+    | 10
+    | 11
+    | 12
+    | 13
+    | 14
+    | 15
+    | 16
+    | 17
+    | 18
+    | 19
+    | 20
+    | 21
+    | 22
+    | 23
+    | 24
+    | 25
   shardAttribute?: boolean
   nonFiniteVariation?: boolean
   integerVariation?: bigint
@@ -88,7 +140,7 @@ type RulesResponseOptions = {
   observeFullEvaluationData?: boolean
   futureFlagFeatureLevel?: number
   unknownTopLevelCondition?: boolean
-  unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8
+  unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
   futurePartitionKeyFields?: number[]
   futureVariationValueFields?: number[]
   unusedVariationValueFields?: number[]
@@ -97,7 +149,7 @@ type RulesResponseOptions = {
   splitReason?: number
   attributeName?: string
   strings?: string[]
-  semver?: string
+  version?: string
   membershipIndexes?: number[]
   shaHashes?: string[]
 }
@@ -200,7 +252,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufString(4, options.attributeName ?? 'country'),
     ...(options.strings ?? ['on', 'off', 'US']).flatMap((value) => protobufString(5, value)),
     ...protobufString(6, '^US$'),
-    ...protobufString(7, options.semver ?? '1.2.3'),
+    ...protobufMessage(7, protobufVersion(options.version ?? '1.2.3')),
     ...(options.jsonValue === undefined ? [] : protobufString(8, options.jsonValue)),
     ...(
       options.conditionMessages ??
@@ -316,6 +368,11 @@ describe('UFC protobuf decoder', () => {
     [18, '1.2.3'],
     [19, '2.0.0'],
     [20, '1.2.3'],
+    [21, 'USA'],
+    [22, 'CAUS'],
+    [23, 'xUSy'],
+    [24, 'USA'],
+    [25, 'CAUS'],
   ] as const)('evaluates condition kind %s from interned protobuf data', (conditionKind, country) => {
     expect(
       evaluateBoolean({ conditionKind }, { targetingKey: 'user', ...(country === undefined ? {} : { country }) }).value
@@ -346,19 +403,43 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('reports a configured SemVer comparand above uint64', () => {
+  it('compares configured version components above uint64 without precision loss', () => {
     expect(
       evaluateBoolean(
-        { conditionKind: 15, semver: '18446744073709551616.0.0' },
+        { conditionKind: 15, version: '18446744073709551616.0.0' },
         { targetingKey: 'user', country: '18446744073709551616.0.0' }
       )
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
   })
 
-  it('does not match a context SemVer value above uint64', () => {
+  it('matches a context version component above uint64', () => {
     expect(
-      evaluateBoolean({ conditionKind: 16 }, { targetingKey: 'user', country: '18446744073709551616.0.0' })
-    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+      evaluateBoolean(
+        { conditionKind: 15, version: '18446744073709551616.0.0' },
+        { targetingKey: 'user', country: '18446744073709551616.0.0' }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    ['1', '1.0.0'],
+    ['1.2', '1.2.0'],
+    ['1.2.0.0', '1.2'],
+  ])('treats missing version components as zero: %s == %s', (configured, actual) => {
+    expect(
+      evaluateBoolean({ conditionKind: 15, version: configured }, { targetingKey: 'user', country: actual })
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('does not hash a partial UTF-8 code point for prefix and suffix comparisons', () => {
+    expect(evaluateBoolean({ conditionKind: 24 }, { targetingKey: 'user', country: '😀US' })).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
+    expect(evaluateBoolean({ conditionKind: 25 }, { targetingKey: 'user', country: 'US😀' })).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
   })
 
   it.each([9, 10] as const)('reports unsorted string membership values for condition kind %s', (conditionKind) => {
@@ -669,15 +750,24 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it.each([3, 4, 5, 6, 8] as const)(
-    'reports a supported flag referencing an unknown condition comparator in group %s',
+  it.each([3, 8, 9, 10] as const)(
+    'reports a supported flag referencing an unspecified condition comparator in group %s',
     (unknownConditionGroup) => {
       expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
     }
   )
 
-  it('ignores an unknown field in an attribute-presence condition', () => {
-    expectFlagConfigurationAccepted({ futureFlagFeatureLevel: 0, unknownConditionGroup: 7 }, 'future-flag')
+  it.each([
+    [3, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufDouble(3, 1.5)]],
+    [8, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 0)]],
+    [9, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 2)]],
+    [10, [...protobufVarint(1, 0), ...protobufBytes(2, []), ...protobufVarint(3, 99)]],
+  ])('reports an unknown enum value in condition group %s', (group, fields) => {
+    expectFlagConfigurationError({ conditionMessages: [protobufMessage(group, fields)] })
+  })
+
+  it.each([4, 5, 6, 7] as const)('ignores an unknown field in condition group %s', (unknownConditionGroup) => {
+    expectFlagConfigurationAccepted({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
   })
 
   it.each([0, 1])('reports a feature-level %s flag that uses a future variation value', (futureFlagFeatureLevel) => {
@@ -728,7 +818,12 @@ describe('UFC protobuf decoder', () => {
   })
 
   it('ignores unknown data alongside a known nested comparator', () => {
-    const numeric = protobufMessage(3, [...protobufVarint(1, 0), ...protobufMessage(99, []), ...protobufDouble(2, 1.5)])
+    const numeric = protobufMessage(3, [
+      ...protobufVarint(1, 0),
+      ...protobufVarint(2, 1),
+      ...protobufMessage(99, []),
+      ...protobufDouble(3, 1.5),
+    ])
 
     expectFlagConfigurationAccepted({ conditionMessages: [numeric] })
   })
@@ -736,8 +831,9 @@ describe('UFC protobuf decoder', () => {
   it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
-      ...protobufDouble(2, Number.NaN),
-      ...protobufDouble(2, 1.5),
+      ...protobufVarint(2, 1),
+      ...protobufDouble(3, Number.NaN),
+      ...protobufDouble(3, 1.5),
     ])
 
     expect(evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: 1 }).value).toBe(true)
@@ -746,8 +842,9 @@ describe('UFC protobuf decoder', () => {
   it('reports a flag whose final numeric comparator is non-finite', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
-      ...protobufDouble(2, 1.5),
-      ...protobufDouble(2, Number.NaN),
+      ...protobufVarint(2, 1),
+      ...protobufDouble(3, 1.5),
+      ...protobufDouble(3, Number.NaN),
     ])
 
     expectFlagConfigurationError({ conditionMessages: [numeric] })

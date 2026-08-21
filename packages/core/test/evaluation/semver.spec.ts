@@ -1,6 +1,13 @@
 import type { EvaluationContext } from '@openfeature/core'
 import { isValidRule, matchesRule, OperatorType, type Rule } from '../../src/evaluation/rules'
-import { compareSemver, type ParsedSemver, parseSemver } from '../../src/evaluation/semver'
+import {
+  compareSemver,
+  compareVersions,
+  isParsedVersion,
+  type ParsedSemver,
+  parseSemver,
+  parseVersion,
+} from '../../src/evaluation/semver'
 
 type SemverOperator =
   | OperatorType.SEMVER_EQ
@@ -194,5 +201,51 @@ describe('SemVer', () => {
       } as unknown as Rule
       expect(matchesRule(rule, { version: '1.0.0' } as EvaluationContext)).toBe(false)
     })
+  })
+})
+
+describe('UFC Version', () => {
+  it.each([
+    ['1', { components: ['1'], prerelease: [] }],
+    ['1.2', { components: ['1', '2'], prerelease: [] }],
+    ['1.2.3.4-alpha.1+build', { components: ['1', '2', '3', '4'], prerelease: ['alpha', '1'] }],
+  ])('parses %s', (value, expected) => {
+    expect(parseVersion(value)).toEqual(expected)
+  })
+
+  it.each(['', '01', '1.02', '1.2-', '1.2-01', 'v1.2'])('rejects %s', (value) => {
+    expect(parseVersion(value)).toBeNull()
+  })
+
+  it.each([
+    [{ components: [], prerelease: [] }],
+    [{ components: ['01'], prerelease: [] }],
+    [{ components: ['1'], prerelease: ['01'] }],
+  ])('rejects malformed pre-parsed versions', (version) => {
+    expect(isParsedVersion(version)).toBe(false)
+  })
+
+  it('treats missing and trailing zero components as equal', () => {
+    expect(
+      compareVersions({ components: ['1'], prerelease: [] }, { components: ['1', '0', '0'], prerelease: [] })
+    ).toBe(0)
+    expect(
+      compareVersions({ components: ['1', '2'], prerelease: [] }, { components: ['1', '2', '0', '0'], prerelease: [] })
+    ).toBe(0)
+  })
+
+  it('compares arbitrary-size components and prerelease identifiers', () => {
+    expect(
+      compareVersions(
+        { components: ['18446744073709551616'], prerelease: [] },
+        { components: ['18446744073709551615'], prerelease: [] }
+      )
+    ).toBeGreaterThan(0)
+    expect(
+      compareVersions(
+        { components: ['1'], prerelease: ['99999999999999999999'] },
+        { components: ['1'], prerelease: ['100000000000000000000'] }
+      )
+    ).toBeLessThan(0)
   })
 })

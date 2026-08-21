@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ufc.proto.
  */
 export const file_ufc: GenFile = /*@__PURE__*/
-  fileDesc("Cgl1ZmMucHJvdG8SG2RhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MSK+AwoSRmxhZ3NDb25maWd1cmF0aW9uEi4KCmNyZWF0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhgKEGVudmlyb25tZW50X25hbWUYAiABKAkSSQoFZmxhZ3MYAyADKAsyOi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZ3NDb25maWd1cmF0aW9uLkZsYWdzRW50cnkSFwoPYXR0cmlidXRlX25hbWVzGAQgAygJEg8KB3N0cmluZ3MYBSADKAkSDwoHcmVnZXhlcxgGIAMoCRIPCgdzZW12ZXJzGAcgAygJEhQKDGpzb25fc3RyaW5ncxgIIAMoCRI6Cgpjb25kaXRpb25zGAkgAygLMiYuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbhIkChxvYnNlcnZlX2Z1bGxfZXZhbHVhdGlvbl9kYXRhGAogASgIGk8KCkZsYWdzRW50cnkSCwoDa2V5GAEgASgJEjAKBXZhbHVlGAIgASgLMiEuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkZsYWc6AjgBIuMBCgRGbGFnEh0KFW1pbmltdW1fZmVhdHVyZV9sZXZlbBgBIAEoDRJCCg52YXJpYXRpb25fdHlwZRgCIAEoDjIqLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WYXJpYXRpb25UeXBlEjoKCnZhcmlhdGlvbnMYAyADKAsyJi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVmFyaWF0aW9uEjwKC2FsbG9jYXRpb25zGAQgAygLMicuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkFsbG9jYXRpb24itAEKCVZhcmlhdGlvbhIYChBrZXlfc3RyaW5nX2luZGV4GAEgASgNEhwKEnN0cmluZ192YWx1ZV9pbmRleBgCIAEoDUgAEhcKDWludGVnZXJfdmFsdWUYAyABKANIABIXCg1udW1lcmljX3ZhbHVlGAQgASgBSAASFwoNYm9vbGVhbl92YWx1ZRgFIAEoCEgAEhsKEWpzb25fc3RyaW5nX2luZGV4GAYgASgNSABCBwoFdmFsdWUi8QEKCkFsbG9jYXRpb24SCwoDa2V5GAEgASgJEiYKGXRhcmdldGluZ19jb25kaXRpb25faW5kZXgYAiABKA1IAIgBARJACg1wYXJ0aXRpb25fa2V5GAMgAygLMikuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlBhcnRpdGlvbktleRIyCgZzcGxpdHMYBCADKAsyIi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3BsaXQSGgoSbG9nX2V4cG9zdXJlX2V2ZW50GAUgASgIQhwKGl90YXJnZXRpbmdfY29uZGl0aW9uX2luZGV4ItIECglDb25kaXRpb24SPQoDYWxsGAEgASgLMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbk9wZXJhbmRzSAASPQoDYW55GAIgASgLMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbk9wZXJhbmRzSAASQAoHbnVtZXJpYxgDIAEoCzItLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5OdW1lcmljQ29uZGl0aW9uSAASPAoFcmVnZXgYBCABKAsyKy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuUmVnZXhDb25kaXRpb25IABJTChFzdHJpbmdfbWVtYmVyc2hpcBgFIAEoCzI2LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TdHJpbmdNZW1iZXJzaGlwQ29uZGl0aW9uSAASUwoRc2hhMjU2X21lbWJlcnNoaXAYBiABKAsyNi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU2hhMjU2TWVtYmVyc2hpcENvbmRpdGlvbkgAElUKEmF0dHJpYnV0ZV9wcmVzZW5jZRgHIAEoCzI3LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5BdHRyaWJ1dGVQcmVzZW5jZUNvbmRpdGlvbkgAEj4KBnNlbXZlchgIIAEoCzIsLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TZW12ZXJDb25kaXRpb25IAEIGCgRraW5kIi4KEUNvbmRpdGlvbk9wZXJhbmRzEhkKEWNvbmRpdGlvbl9pbmRleGVzGAEgAygNIqoBChBOdW1lcmljQ29uZGl0aW9uEhwKFGF0dHJpYnV0ZV9uYW1lX2luZGV4GAEgASgNEhMKCWxlc3NfdGhhbhgCIAEoAUgAEhwKEmxlc3NfdGhhbl9vcl9lcXVhbBgDIAEoAUgAEhYKDGdyZWF0ZXJfdGhhbhgEIAEoAUgAEh8KFWdyZWF0ZXJfdGhhbl9vcl9lcXVhbBgFIAEoAUgAQgwKCmNvbXBhcmF0b3IiaQoOUmVnZXhDb25kaXRpb24SHAoUYXR0cmlidXRlX25hbWVfaW5kZXgYASABKA0SEQoHbWF0Y2hlcxgCIAEoDUgAEhgKDmRvZXNfbm90X21hdGNoGAMgASgNSABCDAoKY29tcGFyYXRvciIfCg1TdHJpbmdJbmRleGVzEg4KBnZhbHVlcxgBIAMoDSLHAQoZU3RyaW5nTWVtYmVyc2hpcENvbmRpdGlvbhIcChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgBIAEoDRI8CgZvbmVfb2YYAiABKAsyKi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3RyaW5nSW5kZXhlc0gAEkAKCm5vdF9vbmVfb2YYAyABKAsyKi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3RyaW5nSW5kZXhlc0gAQgwKCmNvbXBhcmF0b3IiHgoMU2hhMjU2SGFzaGVzEg4KBmhhc2hlcxgBIAMoDCLhAQoZU2hhMjU2TWVtYmVyc2hpcENvbmRpdGlvbhIcChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgBIAEoDRIMCgRzYWx0GAIgASgMEkIKDW9uZV9vZl9zaGEyNTYYAyABKAsyKS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU2hhMjU2SGFzaGVzSAASRgoRbm90X29uZV9vZl9zaGEyNTYYBCABKAsyKS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU2hhMjU2SGFzaGVzSABCDAoKY29tcGFyYXRvciJPChpBdHRyaWJ1dGVQcmVzZW5jZUNvbmRpdGlvbhIcChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgBIAEoDRITCgtleHBlY3RfbnVsbBgCIAEoCCL5AQoPU2VtdmVyQ29uZGl0aW9uEhwKFGF0dHJpYnV0ZV9uYW1lX2luZGV4GAEgASgNEhYKDHNlbXZlcl9lcXVhbBgCIAEoDUgAEhoKEHNlbXZlcl9ub3RfZXF1YWwYAyABKA1IABIaChBzZW12ZXJfbGVzc190aGFuGAQgASgNSAASIwoZc2VtdmVyX2xlc3NfdGhhbl9vcl9lcXVhbBgFIAEoDUgAEh0KE3NlbXZlcl9ncmVhdGVyX3RoYW4YBiABKA1IABImChxzZW12ZXJfZ3JlYXRlcl90aGFuX29yX2VxdWFsGAcgASgNSABCDAoKY29tcGFyYXRvciKdAQoMUGFydGl0aW9uS2V5Ej0KBHRpbWUYASABKAsyLS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVGltZVBhcnRpdGlvbktleUgAEkYKCXNoYXJkX21kNRgCIAEoCzIxLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5NZDVTaGFyZFBhcnRpdGlvbktleUgAQgYKBGtpbmQiEgoQVGltZVBhcnRpdGlvbktleSJ2ChRNZDVTaGFyZFBhcnRpdGlvbktleRIMCgRzYWx0GAEgASgJEiEKFGF0dHJpYnV0ZV9uYW1lX2luZGV4GAIgASgNSACIAQESFAoMdG90YWxfc2hhcmRzGAMgASgEQhcKFV9hdHRyaWJ1dGVfbmFtZV9pbmRleCK4AQoFU3BsaXQSOwoGcmFuZ2VzGAEgAygLMisuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlBhcnRpdGlvblJhbmdlEhcKD3ZhcmlhdGlvbl9pbmRleBgCIAEoDRIWCglzZXJpYWxfaWQYAyABKAVIAIgBARIzCgZyZWFzb24YBCABKA4yIy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuUmVhc29uQgwKCl9zZXJpYWxfaWQiRAoOUGFydGl0aW9uUmFuZ2USEQoEZnJvbRgBIAEoBEgAiAEBEg8KAnRvGAIgASgESAGIAQFCBwoFX2Zyb21CBQoDX3RvKrcBCg1WYXJpYXRpb25UeXBlEh4KGlZBUklBVElPTl9UWVBFX1VOU1BFQ0lGSUVEEAASGQoVVkFSSUFUSU9OX1RZUEVfU1RSSU5HEAESGgoWVkFSSUFUSU9OX1RZUEVfSU5URUdFUhACEhoKFlZBUklBVElPTl9UWVBFX05VTUVSSUMQAxIaChZWQVJJQVRJT05fVFlQRV9CT09MRUFOEAQSFwoTVkFSSUFUSU9OX1RZUEVfSlNPThAFKnUKBlJlYXNvbhIWChJSRUFTT05fVU5TUEVDSUZJRUQQABIaChZSRUFTT05fVEFSR0VUSU5HX01BVENIEAESEAoMUkVBU09OX1NQTElUEAISEQoNUkVBU09OX1NUQVRJQxADEhIKDlJFQVNPTl9ERUZBVUxUEARCQlpAZ2l0aHViLmNvbS9EYXRhRG9nL2RkLXNvdXJjZS9kb21haW5zL2ZmZS9saWJzL2ZsYWdnaW5nL3VmYy91ZmNwYmIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Cgl1ZmMucHJvdG8SG2RhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MSLlAwoSRmxhZ3NDb25maWd1cmF0aW9uEi4KCmNyZWF0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhgKEGVudmlyb25tZW50X25hbWUYAiABKAkSSQoFZmxhZ3MYAyADKAsyOi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZ3NDb25maWd1cmF0aW9uLkZsYWdzRW50cnkSFwoPYXR0cmlidXRlX25hbWVzGAQgAygJEg8KB3N0cmluZ3MYBSADKAkSDwoHcmVnZXhlcxgGIAMoCRI2Cgh2ZXJzaW9ucxgHIAMoCzIkLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WZXJzaW9uEhQKDGpzb25fc3RyaW5ncxgIIAMoCRI6Cgpjb25kaXRpb25zGAkgAygLMiYuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbhIkChxvYnNlcnZlX2Z1bGxfZXZhbHVhdGlvbl9kYXRhGAogASgIGk8KCkZsYWdzRW50cnkSCwoDa2V5GAEgASgJEjAKBXZhbHVlGAIgASgLMiEuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkZsYWc6AjgBIjEKB1ZlcnNpb24SEgoKY29tcG9uZW50cxgBIAMoCRISCgpwcmVyZWxlYXNlGAIgAygJIuMBCgRGbGFnEh0KFW1pbmltdW1fZmVhdHVyZV9sZXZlbBgBIAEoDRJCCg52YXJpYXRpb25fdHlwZRgCIAEoDjIqLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WYXJpYXRpb25UeXBlEjoKCnZhcmlhdGlvbnMYAyADKAsyJi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVmFyaWF0aW9uEjwKC2FsbG9jYXRpb25zGAQgAygLMicuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkFsbG9jYXRpb24itAEKCVZhcmlhdGlvbhIYChBrZXlfc3RyaW5nX2luZGV4GAEgASgNEhwKEnN0cmluZ192YWx1ZV9pbmRleBgCIAEoDUgAEhcKDWludGVnZXJfdmFsdWUYAyABKANIABIXCg1udW1lcmljX3ZhbHVlGAQgASgBSAASFwoNYm9vbGVhbl92YWx1ZRgFIAEoCEgAEhsKEWpzb25fc3RyaW5nX2luZGV4GAYgASgNSABCBwoFdmFsdWUi8QEKCkFsbG9jYXRpb24SCwoDa2V5GAEgASgJEiYKGXRhcmdldGluZ19jb25kaXRpb25faW5kZXgYAiABKA1IAIgBARJACg1wYXJ0aXRpb25fa2V5GAMgAygLMikuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlBhcnRpdGlvbktleRIyCgZzcGxpdHMYBCADKAsyIi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3BsaXQSGgoSbG9nX2V4cG9zdXJlX2V2ZW50GAUgASgIQhwKGl90YXJnZXRpbmdfY29uZGl0aW9uX2luZGV4IosGCglDb25kaXRpb24SPQoDYWxsGAEgASgLMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbk9wZXJhbmRzSAASPQoDYW55GAIgASgLMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkNvbmRpdGlvbk9wZXJhbmRzSAASQAoHbnVtZXJpYxgDIAEoCzItLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5OdW1lcmljQ29uZGl0aW9uSAASPAoFcmVnZXgYBCABKAsyKy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuUmVnZXhDb25kaXRpb25IABJTChFzdHJpbmdfbWVtYmVyc2hpcBgFIAEoCzI2LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TdHJpbmdNZW1iZXJzaGlwQ29uZGl0aW9uSAASUwoRc2hhMjU2X21lbWJlcnNoaXAYBiABKAsyNi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU2hhMjU2TWVtYmVyc2hpcENvbmRpdGlvbkgAElUKEmF0dHJpYnV0ZV9wcmVzZW5jZRgHIAEoCzI3LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5BdHRyaWJ1dGVQcmVzZW5jZUNvbmRpdGlvbkgAEkAKB3ZlcnNpb24YCCABKAsyLS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVmVyc2lvbkNvbmRpdGlvbkgAElMKEXN0cmluZ19jb21wYXJpc29uGAkgASgLMjYuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlN0cmluZ0NvbXBhcmlzb25Db25kaXRpb25IABJgChhzaGEyNTZfc3RyaW5nX2NvbXBhcmlzb24YCiABKAsyPC5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU2hhMjU2U3RyaW5nQ29tcGFyaXNvbkNvbmRpdGlvbkgAQgYKBGtpbmQiLgoRQ29uZGl0aW9uT3BlcmFuZHMSGQoRY29uZGl0aW9uX2luZGV4ZXMYASADKA0ihwEKEE51bWVyaWNDb25kaXRpb24SHAoUYXR0cmlidXRlX25hbWVfaW5kZXgYASABKA0SQgoKY29tcGFyYXRvchgCIAEoDjIuLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5OdW1lcmljQ29tcGFyYXRvchIRCgljb21wYXJhbmQYAyABKAEiUwoOUmVnZXhDb25kaXRpb24SHAoUYXR0cmlidXRlX25hbWVfaW5kZXgYASABKA0SEwoLcmVnZXhfaW5kZXgYAiABKA0SDgoGbmVnYXRlGAMgASgIImEKGVN0cmluZ01lbWJlcnNoaXBDb25kaXRpb24SHAoUYXR0cmlidXRlX25hbWVfaW5kZXgYASABKA0SFgoOc3RyaW5nX2luZGV4ZXMYAiADKA0SDgoGbmVnYXRlGAMgASgIIpIBChlTdHJpbmdDb21wYXJpc29uQ29uZGl0aW9uEhwKFGF0dHJpYnV0ZV9uYW1lX2luZGV4GAEgASgNEkEKCmNvbXBhcmF0b3IYAiABKA4yLS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3RyaW5nQ29tcGFyYXRvchIUCgxzdHJpbmdfaW5kZXgYAyABKA0itgEKH1NoYTI1NlN0cmluZ0NvbXBhcmlzb25Db25kaXRpb24SHAoUYXR0cmlidXRlX25hbWVfaW5kZXgYASABKA0SDAoEc2FsdBgCIAEoDBJHCgpjb21wYXJhdG9yGAMgASgOMjMuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlNoYTI1NlN0cmluZ0NvbXBhcmF0b3ISDgoGbGVuZ3RoGAQgASgNEg4KBnNoYTI1NhgFIAEoDCJnChlTaGEyNTZNZW1iZXJzaGlwQ29uZGl0aW9uEhwKFGF0dHJpYnV0ZV9uYW1lX2luZGV4GAEgASgNEgwKBHNhbHQYAiABKAwSDgoGc2hhMjU2GAMgAygMEg4KBm5lZ2F0ZRgEIAEoCCJPChpBdHRyaWJ1dGVQcmVzZW5jZUNvbmRpdGlvbhIcChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgBIAEoDRITCgtleHBlY3RfbnVsbBgCIAEoCCKLAQoQVmVyc2lvbkNvbmRpdGlvbhIcChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgBIAEoDRJCCgpjb21wYXJhdG9yGAIgASgOMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlZlcnNpb25Db21wYXJhdG9yEhUKDXZlcnNpb25faW5kZXgYAyABKA0inQEKDFBhcnRpdGlvbktleRI9CgR0aW1lGAEgASgLMi0uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlRpbWVQYXJ0aXRpb25LZXlIABJGCglzaGFyZF9tZDUYAiABKAsyMS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuTWQ1U2hhcmRQYXJ0aXRpb25LZXlIAEIGCgRraW5kIhIKEFRpbWVQYXJ0aXRpb25LZXkidgoUTWQ1U2hhcmRQYXJ0aXRpb25LZXkSDAoEc2FsdBgBIAEoCRIhChRhdHRyaWJ1dGVfbmFtZV9pbmRleBgCIAEoDUgAiAEBEhQKDHRvdGFsX3NoYXJkcxgDIAEoBEIXChVfYXR0cmlidXRlX25hbWVfaW5kZXgiuAEKBVNwbGl0EjsKBnJhbmdlcxgBIAMoCzIrLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5QYXJ0aXRpb25SYW5nZRIXCg92YXJpYXRpb25faW5kZXgYAiABKA0SFgoJc2VyaWFsX2lkGAMgASgFSACIAQESMwoGcmVhc29uGAQgASgOMiMuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlJlYXNvbkIMCgpfc2VyaWFsX2lkIkQKDlBhcnRpdGlvblJhbmdlEhEKBGZyb20YASABKARIAIgBARIPCgJ0bxgCIAEoBEgBiAEBQgcKBV9mcm9tQgUKA190byq3AQoNVmFyaWF0aW9uVHlwZRIeChpWQVJJQVRJT05fVFlQRV9VTlNQRUNJRklFRBAAEhkKFVZBUklBVElPTl9UWVBFX1NUUklORxABEhoKFlZBUklBVElPTl9UWVBFX0lOVEVHRVIQAhIaChZWQVJJQVRJT05fVFlQRV9OVU1FUklDEAMSGgoWVkFSSUFUSU9OX1RZUEVfQk9PTEVBThAEEhcKE1ZBUklBVElPTl9UWVBFX0pTT04QBSrXAQoRTnVtZXJpY0NvbXBhcmF0b3ISIgoeTlVNRVJJQ19DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASIAocTlVNRVJJQ19DT01QQVJBVE9SX0xFU1NfVEhBThABEikKJU5VTUVSSUNfQ09NUEFSQVRPUl9MRVNTX1RIQU5fT1JfRVFVQUwQAhIjCh9OVU1FUklDX0NPTVBBUkFUT1JfR1JFQVRFUl9USEFOEAMSLAooTlVNRVJJQ19DT01QQVJBVE9SX0dSRUFURVJfVEhBTl9PUl9FUVVBTBAEKpkBChBTdHJpbmdDb21wYXJhdG9yEiEKHVNUUklOR19DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASIQodU1RSSU5HX0NPTVBBUkFUT1JfU1RBUlRTX1dJVEgQARIfChtTVFJJTkdfQ09NUEFSQVRPUl9FTkRTX1dJVEgQAhIeChpTVFJJTkdfQ09NUEFSQVRPUl9DT05UQUlOUxADKpQBChZTaGEyNTZTdHJpbmdDb21wYXJhdG9yEigKJFNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9VTlNQRUNJRklFRBAAEigKJFNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9TVEFSVFNfV0lUSBABEiYKIlNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9FTkRTX1dJVEgQAiqXAgoRVmVyc2lvbkNvbXBhcmF0b3ISIgoeVkVSU0lPTl9DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASHAoYVkVSU0lPTl9DT01QQVJBVE9SX0VRVUFMEAESIAocVkVSU0lPTl9DT01QQVJBVE9SX05PVF9FUVVBTBACEiAKHFZFUlNJT05fQ09NUEFSQVRPUl9MRVNTX1RIQU4QAxIpCiVWRVJTSU9OX0NPTVBBUkFUT1JfTEVTU19USEFOX09SX0VRVUFMEAQSIwofVkVSU0lPTl9DT01QQVJBVE9SX0dSRUFURVJfVEhBThAFEiwKKFZFUlNJT05fQ09NUEFSQVRPUl9HUkVBVEVSX1RIQU5fT1JfRVFVQUwQBip1CgZSZWFzb24SFgoSUkVBU09OX1VOU1BFQ0lGSUVEEAASGgoWUkVBU09OX1RBUkdFVElOR19NQVRDSBABEhAKDFJFQVNPTl9TUExJVBACEhEKDVJFQVNPTl9TVEFUSUMQAxISCg5SRUFTT05fREVGQVVMVBAEQkJaQGdpdGh1Yi5jb20vRGF0YURvZy9kZC1zb3VyY2UvZG9tYWlucy9mZmUvbGlicy9mbGFnZ2luZy91ZmMvdWZjcGJiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * FlagsConfiguration is a compiled rules-based flag configuration.
@@ -54,9 +54,9 @@ export type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfi
   regexes: string[];
 
   /**
-   * @generated from field: repeated string semvers = 7;
+   * @generated from field: repeated datadog.ffe.flagging.ufc.v1.Version versions = 7;
    */
-  semvers: string[];
+  versions: Version[];
 
   /**
    * Interned JSON variation values, each a serialized JSON document. Indexed
@@ -90,6 +90,32 @@ export type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfi
  */
 export const FlagsConfigurationSchema: GenMessage<FlagsConfiguration> = /*@__PURE__*/
   messageDesc(file_ufc, 0);
+
+/**
+ * @generated from message datadog.ffe.flagging.ufc.v1.Version
+ */
+export type Version = Message<"datadog.ffe.flagging.ufc.v1.Version"> & {
+  /**
+   * Main version components (usually "major.minor.patch" but can have more/less
+   * parts). Missing components should be treated as "0" for comparison
+   * purposes.
+   *
+   * @generated from field: repeated string components = 1;
+   */
+  components: string[];
+
+  /**
+   * @generated from field: repeated string prerelease = 2;
+   */
+  prerelease: string[];
+};
+
+/**
+ * Describes the message datadog.ffe.flagging.ufc.v1.Version.
+ * Use `create(VersionSchema)` to create a new message.
+ */
+export const VersionSchema: GenMessage<Version> = /*@__PURE__*/
+  messageDesc(file_ufc, 1);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.Flag
@@ -127,7 +153,7 @@ export type Flag = Message<"datadog.ffe.flagging.ufc.v1.Flag"> & {
  * Use `create(FlagSchema)` to create a new message.
  */
 export const FlagSchema: GenMessage<Flag> = /*@__PURE__*/
-  messageDesc(file_ufc, 1);
+  messageDesc(file_ufc, 2);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.Variation
@@ -188,7 +214,7 @@ export type Variation = Message<"datadog.ffe.flagging.ufc.v1.Variation"> & {
  * Use `create(VariationSchema)` to create a new message.
  */
 export const VariationSchema: GenMessage<Variation> = /*@__PURE__*/
-  messageDesc(file_ufc, 2);
+  messageDesc(file_ufc, 3);
 
 /**
  * An allocation first selects subjects matching its targeting expression. It
@@ -235,11 +261,11 @@ export type Allocation = Message<"datadog.ffe.flagging.ufc.v1.Allocation"> & {
  * Use `create(AllocationSchema)` to create a new message.
  */
 export const AllocationSchema: GenMessage<Allocation> = /*@__PURE__*/
-  messageDesc(file_ufc, 3);
+  messageDesc(file_ufc, 4);
 
 /**
  * An attribute_name_index refers to FlagsConfiguration.attribute_names.
- * A regex_index and semver_index refer to their respective top-level lists.
+ * A regex_index and version_index refer to their respective top-level lists.
  *
  * Leaf conditions are grouped by the attribute value type they operate on,
  * so implementations can fetch and convert the attribute once per group
@@ -301,10 +327,22 @@ export type Condition = Message<"datadog.ffe.flagging.ufc.v1.Condition"> & {
     case: "attributePresence";
   } | {
     /**
-     * @generated from field: datadog.ffe.flagging.ufc.v1.SemverCondition semver = 8;
+     * @generated from field: datadog.ffe.flagging.ufc.v1.VersionCondition version = 8;
      */
-    value: SemverCondition;
-    case: "semver";
+    value: VersionCondition;
+    case: "version";
+  } | {
+    /**
+     * @generated from field: datadog.ffe.flagging.ufc.v1.StringComparisonCondition string_comparison = 9;
+     */
+    value: StringComparisonCondition;
+    case: "stringComparison";
+  } | {
+    /**
+     * @generated from field: datadog.ffe.flagging.ufc.v1.Sha256StringComparisonCondition sha256_string_comparison = 10;
+     */
+    value: Sha256StringComparisonCondition;
+    case: "sha256StringComparison";
   } | { case: undefined; value?: undefined };
 };
 
@@ -313,7 +351,7 @@ export type Condition = Message<"datadog.ffe.flagging.ufc.v1.Condition"> & {
  * Use `create(ConditionSchema)` to create a new message.
  */
 export const ConditionSchema: GenMessage<Condition> = /*@__PURE__*/
-  messageDesc(file_ufc, 4);
+  messageDesc(file_ufc, 5);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.ConditionOperands
@@ -332,7 +370,7 @@ export type ConditionOperands = Message<"datadog.ffe.flagging.ufc.v1.ConditionOp
  * Use `create(ConditionOperandsSchema)` to create a new message.
  */
 export const ConditionOperandsSchema: GenMessage<ConditionOperands> = /*@__PURE__*/
-  messageDesc(file_ufc, 5);
+  messageDesc(file_ufc, 6);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.NumericCondition
@@ -344,33 +382,14 @@ export type NumericCondition = Message<"datadog.ffe.flagging.ufc.v1.NumericCondi
   attributeNameIndex: number;
 
   /**
-   * @generated from oneof datadog.ffe.flagging.ufc.v1.NumericCondition.comparator
+   * @generated from field: datadog.ffe.flagging.ufc.v1.NumericComparator comparator = 2;
    */
-  comparator: {
-    /**
-     * @generated from field: double less_than = 2;
-     */
-    value: number;
-    case: "lessThan";
-  } | {
-    /**
-     * @generated from field: double less_than_or_equal = 3;
-     */
-    value: number;
-    case: "lessThanOrEqual";
-  } | {
-    /**
-     * @generated from field: double greater_than = 4;
-     */
-    value: number;
-    case: "greaterThan";
-  } | {
-    /**
-     * @generated from field: double greater_than_or_equal = 5;
-     */
-    value: number;
-    case: "greaterThanOrEqual";
-  } | { case: undefined; value?: undefined };
+  comparator: NumericComparator;
+
+  /**
+   * @generated from field: double comparand = 3;
+   */
+  comparand: number;
 };
 
 /**
@@ -378,7 +397,7 @@ export type NumericCondition = Message<"datadog.ffe.flagging.ufc.v1.NumericCondi
  * Use `create(NumericConditionSchema)` to create a new message.
  */
 export const NumericConditionSchema: GenMessage<NumericCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 6);
+  messageDesc(file_ufc, 7);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.RegexCondition
@@ -390,25 +409,18 @@ export type RegexCondition = Message<"datadog.ffe.flagging.ufc.v1.RegexCondition
   attributeNameIndex: number;
 
   /**
-   * @generated from oneof datadog.ffe.flagging.ufc.v1.RegexCondition.comparator
+   * Index into FlagsConfiguration.regexes.
+   *
+   * @generated from field: uint32 regex_index = 2;
    */
-  comparator: {
-    /**
-     * Index into FlagsConfiguration.regexes.
-     *
-     * @generated from field: uint32 matches = 2;
-     */
-    value: number;
-    case: "matches";
-  } | {
-    /**
-     * Index into FlagsConfiguration.regexes.
-     *
-     * @generated from field: uint32 does_not_match = 3;
-     */
-    value: number;
-    case: "doesNotMatch";
-  } | { case: undefined; value?: undefined };
+  regexIndex: number;
+
+  /**
+   * True negates the regex match.
+   *
+   * @generated from field: bool negate = 3;
+   */
+  negate: boolean;
 };
 
 /**
@@ -416,27 +428,6 @@ export type RegexCondition = Message<"datadog.ffe.flagging.ufc.v1.RegexCondition
  * Use `create(RegexConditionSchema)` to create a new message.
  */
 export const RegexConditionSchema: GenMessage<RegexCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 7);
-
-/**
- * @generated from message datadog.ffe.flagging.ufc.v1.StringIndexes
- */
-export type StringIndexes = Message<"datadog.ffe.flagging.ufc.v1.StringIndexes"> & {
-  /**
-   * Indices into FlagsConfiguration.strings. Sorted by the
-   * referenced string value (not by index), so implementations can
-   * binary search instead of scanning linearly.
-   *
-   * @generated from field: repeated uint32 values = 1;
-   */
-  values: number[];
-};
-
-/**
- * Describes the message datadog.ffe.flagging.ufc.v1.StringIndexes.
- * Use `create(StringIndexesSchema)` to create a new message.
- */
-export const StringIndexesSchema: GenMessage<StringIndexes> = /*@__PURE__*/
   messageDesc(file_ufc, 8);
 
 /**
@@ -449,21 +440,18 @@ export type StringMembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.Str
   attributeNameIndex: number;
 
   /**
-   * @generated from oneof datadog.ffe.flagging.ufc.v1.StringMembershipCondition.comparator
+   * Indices into FlagsConfiguration.strings. Sorted by referenced value.
+   *
+   * @generated from field: repeated uint32 string_indexes = 2;
    */
-  comparator: {
-    /**
-     * @generated from field: datadog.ffe.flagging.ufc.v1.StringIndexes one_of = 2;
-     */
-    value: StringIndexes;
-    case: "oneOf";
-  } | {
-    /**
-     * @generated from field: datadog.ffe.flagging.ufc.v1.StringIndexes not_one_of = 3;
-     */
-    value: StringIndexes;
-    case: "notOneOf";
-  } | { case: undefined; value?: undefined };
+  stringIndexes: number[];
+
+  /**
+   * True negates membership.
+   *
+   * @generated from field: bool negate = 3;
+   */
+  negate: boolean;
 };
 
 /**
@@ -474,27 +462,88 @@ export const StringMembershipConditionSchema: GenMessage<StringMembershipConditi
   messageDesc(file_ufc, 9);
 
 /**
- * @generated from message datadog.ffe.flagging.ufc.v1.Sha256Hashes
+ * @generated from message datadog.ffe.flagging.ufc.v1.StringComparisonCondition
  */
-export type Sha256Hashes = Message<"datadog.ffe.flagging.ufc.v1.Sha256Hashes"> & {
+export type StringComparisonCondition = Message<"datadog.ffe.flagging.ufc.v1.StringComparisonCondition"> & {
   /**
-   * Sorted lexicographically as raw bytes, so implementations can binary
-   * search instead of scanning linearly.
-   *
-   * @generated from field: repeated bytes hashes = 1;
+   * @generated from field: uint32 attribute_name_index = 1;
    */
-  hashes: Uint8Array[];
+  attributeNameIndex: number;
+
+  /**
+   * @generated from field: datadog.ffe.flagging.ufc.v1.StringComparator comparator = 2;
+   */
+  comparator: StringComparator;
+
+  /**
+   * Index into FlagsConfiguration.strings.
+   *
+   * @generated from field: uint32 string_index = 3;
+   */
+  stringIndex: number;
 };
 
 /**
- * Describes the message datadog.ffe.flagging.ufc.v1.Sha256Hashes.
- * Use `create(Sha256HashesSchema)` to create a new message.
+ * Describes the message datadog.ffe.flagging.ufc.v1.StringComparisonCondition.
+ * Use `create(StringComparisonConditionSchema)` to create a new message.
  */
-export const Sha256HashesSchema: GenMessage<Sha256Hashes> = /*@__PURE__*/
+export const StringComparisonConditionSchema: GenMessage<StringComparisonCondition> = /*@__PURE__*/
   messageDesc(file_ufc, 10);
 
 /**
- * True when sha256(salt || attribute_value) matches one of the hashes.
+ * Compares a prefix or suffix without exposing its plaintext value. For
+ * non-string attributes, SDKs must first apply the same conversion used by
+ * StringMembershipCondition. SDKs must then encode the resulting string as
+ * UTF-8 exactly as provided, without Unicode normalization or case folding.
+ * length is measured in UTF-8 bytes. The byte
+ * boundary at length (starts-with) or len(attribute)-length (ends-with) must be
+ * a Unicode code point boundary; otherwise the condition is false. This avoids
+ * hashing malformed partial code points, especially when extracting a suffix.
+ *
+ * @generated from message datadog.ffe.flagging.ufc.v1.Sha256StringComparisonCondition
+ */
+export type Sha256StringComparisonCondition = Message<"datadog.ffe.flagging.ufc.v1.Sha256StringComparisonCondition"> & {
+  /**
+   * @generated from field: uint32 attribute_name_index = 1;
+   */
+  attributeNameIndex: number;
+
+  /**
+   * @generated from field: bytes salt = 2;
+   */
+  salt: Uint8Array;
+
+  /**
+   * @generated from field: datadog.ffe.flagging.ufc.v1.Sha256StringComparator comparator = 3;
+   */
+  comparator: Sha256StringComparator;
+
+  /**
+   * Number of UTF-8 bytes to extract from the start or end. If the attribute
+   * has fewer bytes, or extraction would split a code point, the condition is
+   * false.
+   *
+   * @generated from field: uint32 length = 4;
+   */
+  length: number;
+
+  /**
+   * Expected SHA-256(salt || extracted UTF-8 bytes), as raw digest bytes.
+   *
+   * @generated from field: bytes sha256 = 5;
+   */
+  sha256: Uint8Array;
+};
+
+/**
+ * Describes the message datadog.ffe.flagging.ufc.v1.Sha256StringComparisonCondition.
+ * Use `create(Sha256StringComparisonConditionSchema)` to create a new message.
+ */
+export const Sha256StringComparisonConditionSchema: GenMessage<Sha256StringComparisonCondition> = /*@__PURE__*/
+  messageDesc(file_ufc, 11);
+
+/**
+ * True when SHA-256(salt || attribute_value) matches one of sha256 values.
  *
  * @generated from message datadog.ffe.flagging.ufc.v1.Sha256MembershipCondition
  */
@@ -510,21 +559,18 @@ export type Sha256MembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.Sha
   salt: Uint8Array;
 
   /**
-   * @generated from oneof datadog.ffe.flagging.ufc.v1.Sha256MembershipCondition.comparator
+   * Sorted lexicographically as raw bytes.
+   *
+   * @generated from field: repeated bytes sha256 = 3;
    */
-  comparator: {
-    /**
-     * @generated from field: datadog.ffe.flagging.ufc.v1.Sha256Hashes one_of_sha256 = 3;
-     */
-    value: Sha256Hashes;
-    case: "oneOfSha256";
-  } | {
-    /**
-     * @generated from field: datadog.ffe.flagging.ufc.v1.Sha256Hashes not_one_of_sha256 = 4;
-     */
-    value: Sha256Hashes;
-    case: "notOneOfSha256";
-  } | { case: undefined; value?: undefined };
+  sha256: Uint8Array[];
+
+  /**
+   * True negates membership.
+   *
+   * @generated from field: bool negate = 4;
+   */
+  negate: boolean;
 };
 
 /**
@@ -532,7 +578,7 @@ export type Sha256MembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.Sha
  * Use `create(Sha256MembershipConditionSchema)` to create a new message.
  */
 export const Sha256MembershipConditionSchema: GenMessage<Sha256MembershipCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 11);
+  messageDesc(file_ufc, 12);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.AttributePresenceCondition
@@ -557,77 +603,36 @@ export type AttributePresenceCondition = Message<"datadog.ffe.flagging.ufc.v1.At
  * Use `create(AttributePresenceConditionSchema)` to create a new message.
  */
 export const AttributePresenceConditionSchema: GenMessage<AttributePresenceCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 12);
+  messageDesc(file_ufc, 13);
 
 /**
- * @generated from message datadog.ffe.flagging.ufc.v1.SemverCondition
+ * @generated from message datadog.ffe.flagging.ufc.v1.VersionCondition
  */
-export type SemverCondition = Message<"datadog.ffe.flagging.ufc.v1.SemverCondition"> & {
+export type VersionCondition = Message<"datadog.ffe.flagging.ufc.v1.VersionCondition"> & {
   /**
    * @generated from field: uint32 attribute_name_index = 1;
    */
   attributeNameIndex: number;
 
   /**
-   * @generated from oneof datadog.ffe.flagging.ufc.v1.SemverCondition.comparator
+   * @generated from field: datadog.ffe.flagging.ufc.v1.VersionComparator comparator = 2;
    */
-  comparator: {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_equal = 2;
-     */
-    value: number;
-    case: "semverEqual";
-  } | {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_not_equal = 3;
-     */
-    value: number;
-    case: "semverNotEqual";
-  } | {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_less_than = 4;
-     */
-    value: number;
-    case: "semverLessThan";
-  } | {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_less_than_or_equal = 5;
-     */
-    value: number;
-    case: "semverLessThanOrEqual";
-  } | {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_greater_than = 6;
-     */
-    value: number;
-    case: "semverGreaterThan";
-  } | {
-    /**
-     * Index into FlagsConfiguration.semvers.
-     *
-     * @generated from field: uint32 semver_greater_than_or_equal = 7;
-     */
-    value: number;
-    case: "semverGreaterThanOrEqual";
-  } | { case: undefined; value?: undefined };
+  comparator: VersionComparator;
+
+  /**
+   * Index into FlagsConfiguration.versions.
+   *
+   * @generated from field: uint32 version_index = 3;
+   */
+  versionIndex: number;
 };
 
 /**
- * Describes the message datadog.ffe.flagging.ufc.v1.SemverCondition.
- * Use `create(SemverConditionSchema)` to create a new message.
+ * Describes the message datadog.ffe.flagging.ufc.v1.VersionCondition.
+ * Use `create(VersionConditionSchema)` to create a new message.
  */
-export const SemverConditionSchema: GenMessage<SemverCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 13);
+export const VersionConditionSchema: GenMessage<VersionCondition> = /*@__PURE__*/
+  messageDesc(file_ufc, 14);
 
 /**
  * PartitionKey computes one coordinate of the composite key used to select a
@@ -659,7 +664,7 @@ export type PartitionKey = Message<"datadog.ffe.flagging.ufc.v1.PartitionKey"> &
  * Use `create(PartitionKeySchema)` to create a new message.
  */
 export const PartitionKeySchema: GenMessage<PartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 14);
+  messageDesc(file_ufc, 15);
 
 /**
  * Time is the current Unix timestamp in milliseconds.
@@ -674,7 +679,7 @@ export type TimePartitionKey = Message<"datadog.ffe.flagging.ufc.v1.TimePartitio
  * Use `create(TimePartitionKeySchema)` to create a new message.
  */
 export const TimePartitionKeySchema: GenMessage<TimePartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 15);
+  messageDesc(file_ufc, 16);
 
 /**
  * Partition value is computed as follows:
@@ -710,7 +715,7 @@ export type Md5ShardPartitionKey = Message<"datadog.ffe.flagging.ufc.v1.Md5Shard
  * Use `create(Md5ShardPartitionKeySchema)` to create a new message.
  */
 export const Md5ShardPartitionKeySchema: GenMessage<Md5ShardPartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 16);
+  messageDesc(file_ufc, 17);
 
 /**
  * Split.ranges is a Cartesian-product range over Allocation.partition_key.
@@ -747,7 +752,7 @@ export type Split = Message<"datadog.ffe.flagging.ufc.v1.Split"> & {
  * Use `create(SplitSchema)` to create a new message.
  */
 export const SplitSchema: GenMessage<Split> = /*@__PURE__*/
-  messageDesc(file_ufc, 17);
+  messageDesc(file_ufc, 18);
 
 /**
  * A half-open range: from <= partition coordinate < to. Time coordinates are
@@ -772,7 +777,7 @@ export type PartitionRange = Message<"datadog.ffe.flagging.ufc.v1.PartitionRange
  * Use `create(PartitionRangeSchema)` to create a new message.
  */
 export const PartitionRangeSchema: GenMessage<PartitionRange> = /*@__PURE__*/
-  messageDesc(file_ufc, 18);
+  messageDesc(file_ufc, 19);
 
 /**
  * @generated from enum datadog.ffe.flagging.ufc.v1.VariationType
@@ -816,6 +821,145 @@ export const VariationTypeSchema: GenEnum<VariationType> = /*@__PURE__*/
   enumDesc(file_ufc, 0);
 
 /**
+ * @generated from enum datadog.ffe.flagging.ufc.v1.NumericComparator
+ */
+export enum NumericComparator {
+  /**
+   * @generated from enum value: NUMERIC_COMPARATOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: NUMERIC_COMPARATOR_LESS_THAN = 1;
+   */
+  LESS_THAN = 1,
+
+  /**
+   * @generated from enum value: NUMERIC_COMPARATOR_LESS_THAN_OR_EQUAL = 2;
+   */
+  LESS_THAN_OR_EQUAL = 2,
+
+  /**
+   * @generated from enum value: NUMERIC_COMPARATOR_GREATER_THAN = 3;
+   */
+  GREATER_THAN = 3,
+
+  /**
+   * @generated from enum value: NUMERIC_COMPARATOR_GREATER_THAN_OR_EQUAL = 4;
+   */
+  GREATER_THAN_OR_EQUAL = 4,
+}
+
+/**
+ * Describes the enum datadog.ffe.flagging.ufc.v1.NumericComparator.
+ */
+export const NumericComparatorSchema: GenEnum<NumericComparator> = /*@__PURE__*/
+  enumDesc(file_ufc, 1);
+
+/**
+ * @generated from enum datadog.ffe.flagging.ufc.v1.StringComparator
+ */
+export enum StringComparator {
+  /**
+   * @generated from enum value: STRING_COMPARATOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: STRING_COMPARATOR_STARTS_WITH = 1;
+   */
+  STARTS_WITH = 1,
+
+  /**
+   * @generated from enum value: STRING_COMPARATOR_ENDS_WITH = 2;
+   */
+  ENDS_WITH = 2,
+
+  /**
+   * @generated from enum value: STRING_COMPARATOR_CONTAINS = 3;
+   */
+  CONTAINS = 3,
+}
+
+/**
+ * Describes the enum datadog.ffe.flagging.ufc.v1.StringComparator.
+ */
+export const StringComparatorSchema: GenEnum<StringComparator> = /*@__PURE__*/
+  enumDesc(file_ufc, 2);
+
+/**
+ * @generated from enum datadog.ffe.flagging.ufc.v1.Sha256StringComparator
+ */
+export enum Sha256StringComparator {
+  /**
+   * @generated from enum value: SHA256_STRING_COMPARATOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SHA256_STRING_COMPARATOR_STARTS_WITH = 1;
+   */
+  STARTS_WITH = 1,
+
+  /**
+   * @generated from enum value: SHA256_STRING_COMPARATOR_ENDS_WITH = 2;
+   */
+  ENDS_WITH = 2,
+}
+
+/**
+ * Describes the enum datadog.ffe.flagging.ufc.v1.Sha256StringComparator.
+ */
+export const Sha256StringComparatorSchema: GenEnum<Sha256StringComparator> = /*@__PURE__*/
+  enumDesc(file_ufc, 3);
+
+/**
+ * @generated from enum datadog.ffe.flagging.ufc.v1.VersionComparator
+ */
+export enum VersionComparator {
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_EQUAL = 1;
+   */
+  EQUAL = 1,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_NOT_EQUAL = 2;
+   */
+  NOT_EQUAL = 2,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_LESS_THAN = 3;
+   */
+  LESS_THAN = 3,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_LESS_THAN_OR_EQUAL = 4;
+   */
+  LESS_THAN_OR_EQUAL = 4,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_GREATER_THAN = 5;
+   */
+  GREATER_THAN = 5,
+
+  /**
+   * @generated from enum value: VERSION_COMPARATOR_GREATER_THAN_OR_EQUAL = 6;
+   */
+  GREATER_THAN_OR_EQUAL = 6,
+}
+
+/**
+ * Describes the enum datadog.ffe.flagging.ufc.v1.VersionComparator.
+ */
+export const VersionComparatorSchema: GenEnum<VersionComparator> = /*@__PURE__*/
+  enumDesc(file_ufc, 4);
+
+/**
  * @generated from enum datadog.ffe.flagging.ufc.v1.Reason
  */
 export enum Reason {
@@ -849,5 +993,5 @@ export enum Reason {
  * Describes the enum datadog.ffe.flagging.ufc.v1.Reason.
  */
 export const ReasonSchema: GenEnum<Reason> = /*@__PURE__*/
-  enumDesc(file_ufc, 1);
+  enumDesc(file_ufc, 5);
 

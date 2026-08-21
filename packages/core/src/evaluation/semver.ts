@@ -12,6 +12,48 @@ export interface ParsedSemver {
   prerelease: string
 }
 
+export interface ParsedVersion {
+  components: string[]
+  prerelease: string[]
+}
+
+const versionRegex =
+  /^((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+
+/** Parse the version syntax represented by the UFC protobuf Version message. */
+export function parseVersion(value: unknown): ParsedVersion | null {
+  if (typeof value !== 'string') return null
+  const match = versionRegex.exec(value)
+  if (!match) return null
+  return {
+    components: match[1].split('.'),
+    prerelease: match[2] ? match[2].split('.') : [],
+  }
+}
+
+/** Validate a pre-parsed version received from protobuf. */
+export function isParsedVersion(value: ParsedVersion): boolean {
+  return (
+    value.components.length > 0 &&
+    value.components.every((component) => /^(?:0|[1-9]\d*)$/.test(component)) &&
+    value.prerelease.every(
+      (identifier) =>
+        /^[0-9A-Za-z-]+$/.test(identifier) &&
+        (!/^\d+$/.test(identifier) || identifier === '0' || !identifier.startsWith('0'))
+    )
+  )
+}
+
+/** Compare versions, treating missing main components as zero. */
+export function compareVersions(left: ParsedVersion, right: ParsedVersion): number {
+  const componentCount = Math.max(left.components.length, right.components.length)
+  for (let index = 0; index < componentCount; index++) {
+    const ordering = compareNumericStrings(left.components[index] ?? '0', right.components[index] ?? '0')
+    if (ordering !== 0) return ordering
+  }
+  return compareVersionPrerelease(left.prerelease, right.prerelease)
+}
+
 /**
  * Parse the SemVer subset.
  * Core identifiers are limited to uint64; numeric prerelease identifiers may
@@ -168,6 +210,20 @@ function compareSemverPrerelease(left: string, right: string): number {
     leftRemaining = nextLeft.slice(1)
     rightRemaining = nextRight.slice(1)
   }
+}
+
+function compareVersionPrerelease(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) {
+    if (left.length === right.length) return 0
+    return left.length === 0 ? 1 : -1
+  }
+  const count = Math.min(left.length, right.length)
+  for (let index = 0; index < count; index++) {
+    const ordering = compareSemverIdentifier(left[index], right[index])
+    if (ordering !== 0) return ordering
+  }
+  if (left.length === right.length) return 0
+  return left.length < right.length ? -1 : 1
 }
 
 function nextSemverIdentifier(value: string): [string, string] {

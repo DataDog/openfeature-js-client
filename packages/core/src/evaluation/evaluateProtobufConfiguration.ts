@@ -15,6 +15,7 @@ import type {
   Flag,
   FlagsConfiguration,
   Split,
+  Version,
   VariationType,
 } from '../configuration/generated/ufc_pb'
 import { type TimeStamp, timeStampNow } from '../time'
@@ -23,10 +24,17 @@ import { coerceToNumber, coerceToString, compileRegex } from './condition-helper
 import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
-import { compareSemver, parseSemver } from './semver'
+import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
-import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
+import {
+  UFC_NUMERIC_COMPARATOR,
+  UFC_REASON,
+  UFC_SHA256_STRING_COMPARATOR,
+  UFC_STRING_COMPARATOR,
+  UFC_VARIATION_TYPE,
+  UFC_VERSION_COMPARATOR,
+} from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
 const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
@@ -197,67 +205,140 @@ function matchesLeafCondition(
   if (value == null) return false
 
   if (kind.case === 'numeric') {
-    const actual = coerceToNumber(value)
-    const expected = kind.value.comparator.value
-    if (kind.value.comparator.case === undefined || expected === undefined || !Number.isFinite(expected)) {
-      throw new FlagConfigurationError('Invalid numeric comparator')
+    const expected = kind.value.comparand
+    if (!isNumericComparator(kind.value.comparator)) {
+      throw new FlagConfigurationError('Unsupported numeric comparator')
     }
+    if (!Number.isFinite(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
+    const actual = coerceToNumber(value)
     if (actual === undefined) return false
-    if (kind.value.comparator.case === 'lessThan') return actual < expected
-    if (kind.value.comparator.case === 'lessThanOrEqual') return actual <= expected
-    if (kind.value.comparator.case === 'greaterThan') return actual > expected
-    if (kind.value.comparator.case === 'greaterThanOrEqual') return actual >= expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL) return actual <= expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN) return actual > expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL) return actual >= expected
     return false
   }
   if (kind.case === 'regex') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Missing regex comparator')
-    }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
-    const matches = compiledRegexAt(configuration, kind.value.comparator.value).test(attributeValue) // dd-iac-scan ignore-line
-    return kind.value.comparator.case === 'matches' ? matches : !matches
+    const matches = compiledRegexAt(configuration, kind.value.regexIndex).test(attributeValue) // dd-iac-scan ignore-line
+    return kind.value.negate ? !matches : matches
   }
   if (kind.case === 'stringMembership') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Unsupported string membership comparator')
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const included = containsInternedString(kind.value.stringIndexes, attributeValue, configuration.strings)
+    return kind.value.negate ? !included : included
+  }
+  if (kind.case === 'sha256Membership') {
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const included = containsBytes(kind.value.sha256, saltedSha256(kind.value.salt, encodeUtf8(attributeValue)))
+    return kind.value.negate ? !included : included
+  }
+  if (kind.case === 'version') {
+    if (!isVersionComparator(kind.value.comparator)) {
+      throw new FlagConfigurationError('Unsupported version comparator')
+    }
+    const expected = versionAt(configuration.versions, kind.value.versionIndex)
+    if (typeof value !== 'string') return false
+    const actual = parseVersion(value)
+    if (!actual) return false
+    const comparison = compareVersions(actual, expected)
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.EQUAL) return comparison === 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL) return comparison !== 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN) return comparison < 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL) return comparison <= 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN) return comparison > 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL) return comparison >= 0
+    return false
+  }
+  if (kind.case === 'stringComparison') {
+    if (!isStringComparator(kind.value.comparator)) {
+      throw new FlagConfigurationError('Unsupported string comparator')
     }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
-    const included = containsInternedString(kind.value.comparator.value.values, attributeValue, configuration.strings)
-    return kind.value.comparator.case === 'oneOf' ? included : !included
+    const expected = atIndex(configuration.strings, kind.value.stringIndex, 'condition string')
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
+    return false
   }
-  if (kind.case === 'sha256Membership') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Unsupported SHA-256 comparator')
+  if (kind.case === 'sha256StringComparison') {
+    if (!isSha256StringComparator(kind.value.comparator)) {
+      throw new FlagConfigurationError('Unsupported SHA-256 string comparator')
     }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const encoded = encodeUtf8(attributeValue)
-    const input = new Uint8Array(kind.value.salt.length + encoded.length)
-    input.set(kind.value.salt)
-    input.set(encoded, kind.value.salt.length)
-    const included = containsBytes(kind.value.comparator.value.hashes, sha256(input))
-    return kind.value.comparator.case === 'oneOfSha256' ? included : !included
+    const extracted = extractUtf8Bytes(encoded, kind.value.length, kind.value.comparator)
+    if (!extracted) return false
+    return compareBytes(saltedSha256(kind.value.salt, extracted), kind.value.sha256) === 0
   }
-  if (kind.case === 'semver') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Missing SemVer comparator')
-    }
-    const expected = parseSemver(atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer'))
-    if (!expected) throw new FlagConfigurationError('Invalid SemVer comparator')
-    if (typeof value !== 'string') return false
-    const actual = parseSemver(value)
-    if (!actual) return false
-    const comparison = compareSemver(actual, expected)
-    if (kind.value.comparator.case === 'semverEqual') return comparison === 0
-    if (kind.value.comparator.case === 'semverNotEqual') return comparison !== 0
-    if (kind.value.comparator.case === 'semverLessThan') return comparison < 0
-    if (kind.value.comparator.case === 'semverLessThanOrEqual') return comparison <= 0
-    if (kind.value.comparator.case === 'semverGreaterThan') return comparison > 0
-    return comparison >= 0
-  }
-  return false
+  throw new FlagConfigurationError('Unsupported condition')
+}
+
+function isNumericComparator(comparator: number): boolean {
+  return (
+    comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN ||
+    comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL ||
+    comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN ||
+    comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL
+  )
+}
+
+function isVersionComparator(comparator: number): boolean {
+  return (
+    comparator === UFC_VERSION_COMPARATOR.EQUAL ||
+    comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL ||
+    comparator === UFC_VERSION_COMPARATOR.LESS_THAN ||
+    comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL ||
+    comparator === UFC_VERSION_COMPARATOR.GREATER_THAN ||
+    comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL
+  )
+}
+
+function isStringComparator(comparator: number): boolean {
+  return (
+    comparator === UFC_STRING_COMPARATOR.STARTS_WITH ||
+    comparator === UFC_STRING_COMPARATOR.ENDS_WITH ||
+    comparator === UFC_STRING_COMPARATOR.CONTAINS
+  )
+}
+
+function isSha256StringComparator(comparator: number): boolean {
+  return (
+    comparator === UFC_SHA256_STRING_COMPARATOR.STARTS_WITH || comparator === UFC_SHA256_STRING_COMPARATOR.ENDS_WITH
+  )
+}
+
+function versionAt(versions: Version[], index: number): Version {
+  const version = atIndex(versions, index, 'version')
+  if (!isParsedVersion(version)) throw new FlagConfigurationError('Invalid version comparator')
+  return version
+}
+
+function saltedSha256(salt: Uint8Array, value: Uint8Array): Uint8Array {
+  const input = new Uint8Array(salt.length + value.length)
+  input.set(salt)
+  input.set(value, salt.length)
+  return sha256(input)
+}
+
+function extractUtf8Bytes(value: Uint8Array, length: number, comparator: number): Uint8Array | undefined {
+  if (length > value.length) return undefined
+  let start: number
+  if (comparator === UFC_SHA256_STRING_COMPARATOR.STARTS_WITH) start = 0
+  else if (comparator === UFC_SHA256_STRING_COMPARATOR.ENDS_WITH) start = value.length - length
+  else throw new FlagConfigurationError('Unsupported SHA-256 string comparator')
+  const end = start + length
+  if (!isUtf8Boundary(value, start) || !isUtf8Boundary(value, end)) return undefined
+  return value.subarray(start, end)
+}
+
+function isUtf8Boundary(value: Uint8Array, index: number): boolean {
+  return index === 0 || index === value.length || (value[index] & 0xc0) !== 0x80
 }
 
 function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegExp {
