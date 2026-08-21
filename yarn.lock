@@ -706,6 +706,7 @@ __metadata:
     typescript: "npm:^5.5.0"
     whatwg-fetch: "npm:^3.6.20"
   peerDependencies:
+    "@datadog/browser-core": ^6.33.0
     "@openfeature/core": ^1.9.2
     "@openfeature/web-sdk": ^1.5.0
   languageName: unknown
