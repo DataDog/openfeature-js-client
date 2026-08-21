@@ -557,6 +557,22 @@ describe('UFC protobuf decoder', () => {
     expect(reads).toBe(1)
   })
 
+  it('lazily parses each JSON variation once per configuration', () => {
+    const configuration = decodeRules({ jsonValue: '{"enabled":true}' })
+    const jsonStrings = configuration.jsonStrings
+    let reads = 0
+    configuration.jsonStrings = new Proxy(jsonStrings, {
+      get(target, property, receiver) {
+        if (property === '0') reads++
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    expect(evaluateFlag(configuration, 'test-flag').value).toEqual({ enabled: true })
+    expect(evaluateFlag(configuration, 'test-flag').value).toEqual({ enabled: true })
+    expect(reads).toBe(1)
+  })
+
   it('preserves empty ANY semantics without rewriting allocations', () => {
     const configuration = decodeRules({ conditionKind: 2 })
 

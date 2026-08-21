@@ -37,7 +37,17 @@ import {
 } from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
-const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
+const INVALID_JSON = Symbol('invalid JSON')
+const evaluationCacheSymbol = Symbol('UFC evaluation cache')
+
+type EvaluationCache = {
+  regexes: Map<number, RegExp | null>
+  jsonValues: Map<number, FlagValue | typeof INVALID_JSON>
+}
+
+type CachedFlagsConfiguration = FlagsConfiguration & {
+  [evaluationCacheSymbol]?: EvaluationCache
+}
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: FlagsConfiguration,
@@ -348,11 +358,7 @@ function isUtf8Boundary(value: Uint8Array, index: number): boolean {
 }
 
 function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegExp {
-  let cache = compiledRegexCache.get(configuration)
-  if (!cache) {
-    cache = new Map()
-    compiledRegexCache.set(configuration, cache)
-  }
+  const cache = evaluationCache(configuration).regexes
   const cached = cache.get(index)
   if (cached === null) throw new FlagConfigurationError('Invalid regular expression')
   if (cached) return cached
@@ -436,17 +442,7 @@ function variationValue(
     return value.value
   }
   if (value.case === 'booleanValue') return value.value
-  if (value.case === 'jsonStringIndex') {
-    const serialized = atIndex(configuration.jsonStrings, value.value, 'JSON variation value')
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(serialized)
-    } catch {
-      throw new FlagConfigurationError('JSON variation value is invalid')
-    }
-    if (!isJsonValue(parsed)) throw new FlagConfigurationError('JSON variation value is invalid')
-    return parsed
-  }
+  if (value.case === 'jsonStringIndex') return jsonValueAt(configuration, value.value)
   throw new FlagConfigurationError('Variation value is missing')
 }
 
@@ -495,13 +491,31 @@ function atIndex<T>(items: T[], index: number, description: string): T {
   return value
 }
 
-function isJsonValue(value: unknown): value is FlagValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (Array.isArray(value)) return value.every(isJsonValue)
-  return (
-    typeof value === 'object' && value !== null && Object.values(value as Record<string, unknown>).every(isJsonValue)
-  )
+function evaluationCache(configuration: FlagsConfiguration): EvaluationCache {
+  const cachedConfiguration = configuration as CachedFlagsConfiguration
+  if (cachedConfiguration[evaluationCacheSymbol]) return cachedConfiguration[evaluationCacheSymbol]
+
+  const cache: EvaluationCache = { regexes: new Map(), jsonValues: new Map() }
+  Object.defineProperty(cachedConfiguration, evaluationCacheSymbol, { value: cache })
+  return cache
+}
+
+function jsonValueAt(configuration: FlagsConfiguration, index: number): FlagValue {
+  const cache = evaluationCache(configuration).jsonValues
+  const cached = cache.get(index)
+  if (cached === INVALID_JSON) throw new FlagConfigurationError('JSON variation value is invalid')
+  if (cached !== undefined) return cached
+
+  const serialized = atIndex(configuration.jsonStrings, index, 'JSON variation value')
+  try {
+    const parsed = JSON.parse(serialized) as FlagValue
+    if (typeof parsed === 'number' && !Number.isFinite(parsed)) throw new Error()
+    cache.set(index, parsed)
+    return parsed
+  } catch {
+    cache.set(index, INVALID_JSON)
+    throw new FlagConfigurationError('JSON variation value is invalid')
+  }
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
