@@ -231,22 +231,19 @@ describe('configuration wire', () => {
       },
     }
     const wire = { version: 1, precomputed: { response: JSON.stringify(response) } }
+    const serializedResponse = JSON.parse(wire.precomputed.response)
 
-    expect(configurationFromString(JSON.stringify(wire))).toEqual({
+    const parsed = configurationFromString(JSON.stringify(wire))
+
+    expect(parsed).toEqual({
       precomputed: {
-        response: {
-          data: {
-            attributes: {
-              createdAt: 0,
-              flags: { valid: validFlag },
-            },
-          },
-        },
+        response: serializedResponse,
         flagErrors: {
           malformed: 'Invalid precomputed flag configuration',
         },
       },
     })
+    expect(configurationFromString(configurationToString(parsed))).toEqual(parsed)
   })
 
   it.each([
