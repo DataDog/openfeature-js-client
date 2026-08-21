@@ -21,7 +21,7 @@ import type {
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
-import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
+import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
@@ -109,7 +109,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       logger.debug('evaluated a flag', { flagKey, subjectKey, assignment: value })
       return {
         value: value as FlagTypeToValue<T>,
-        reason: resolutionReason(split, allocation),
+        reason: resolutionReason(split),
         variant: variationKey,
         flagMetadata: {
           ...createEvaluationTimestampMetadata(evaluationTimestampMs),
@@ -142,6 +142,14 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'TARGETING_KEY_MISSING' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      }
+    }
+    if (error instanceof InvalidContextError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'INVALID_CONTEXT' as ErrorCode,
         flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
@@ -362,22 +370,17 @@ function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegE
   }
 }
 
-type PartitionCoordinate = {
-  coordinate: number
-  upperBound?: number
-}
-
 function partitionCoordinates(
   allocation: Allocation,
   configuration: FlagsConfiguration,
   subjectKey: string | null | undefined,
   subjectAttributes: EvaluationContext,
   evaluationTimestampMs: TimeStamp
-): PartitionCoordinate[] | undefined {
-  const coordinates: PartitionCoordinate[] = []
+): number[] {
+  const coordinates: number[] = []
   for (const partition of allocation.partitionKey) {
     if (partition.kind.case === 'time') {
-      coordinates.push({ coordinate: evaluationTimestampMs })
+      coordinates.push(evaluationTimestampMs)
     } else if (partition.kind.case === 'shardMd5') {
       let value: EvaluationContextValue
       if (partition.kind.value.attributeNameIndex === undefined) {
@@ -390,15 +393,12 @@ function partitionCoordinates(
           'partition attribute'
         )
         const attributeValue = attribute === 'targetingKey' ? subjectKey : getOwnProperty(subjectAttributes, attribute)
-        if (attributeValue == null) return undefined
+        if (attributeValue == null) throw new InvalidContextError()
         value = attributeValue
       }
       const upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
-      coordinates.push({
-        coordinate: protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound),
-        upperBound,
-      })
+      coordinates.push(protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound))
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }
@@ -406,19 +406,15 @@ function partitionCoordinates(
   return coordinates
 }
 
-function matchesSplit(split: Split, coordinates: PartitionCoordinate[]): boolean {
+function matchesSplit(split: Split, coordinates: number[]): boolean {
   if (split.ranges.length !== coordinates.length) {
     throw new FlagConfigurationError('Invalid split')
   }
-  return coordinates.every(({ coordinate, upperBound }, index) => {
+  return coordinates.every((coordinate, index) => {
     const range = atIndex(split.ranges, index, 'partition range')
-    const from = range.from === undefined ? 0 : safeInteger(range.from, 'Partition range')
-    const to = range.to === undefined ? upperBound : safeInteger(range.to, 'Partition range')
-    if (to !== undefined && from > to) throw new FlagConfigurationError('Partition range is invalid')
-    if (upperBound !== undefined && (from > upperBound || (to !== undefined && to > upperBound))) {
-      throw new FlagConfigurationError('Shard range is out of bounds')
-    }
-    return coordinate >= from && (to === undefined || coordinate < to)
+    const from = range.from === undefined ? undefined : safeInteger(range.from, 'Partition range')
+    const to = range.to === undefined ? undefined : safeInteger(range.to, 'Partition range')
+    return (from === undefined || coordinate >= from) && (to === undefined || coordinate < to)
   })
 }
 
@@ -454,15 +450,12 @@ function variationValue(
   throw new FlagConfigurationError('Variation value is missing')
 }
 
-function resolutionReason(split: Split, allocation: Allocation): ResolutionReason {
+function resolutionReason(split: Split): ResolutionReason {
   if (split.reason === UFC_REASON.TARGETING_MATCH) return 'TARGETING_MATCH'
   if (split.reason === UFC_REASON.SPLIT) return 'SPLIT'
   if (split.reason === UFC_REASON.STATIC) return 'STATIC'
   if (split.reason === UFC_REASON.DEFAULT) return 'DEFAULT'
-  if (allocation.targetingConditionIndex !== undefined) return 'TARGETING_MATCH'
-  if (allocation.partitionKey.some((partition) => partition.kind.case === 'shardMd5')) return 'SPLIT'
-  if (allocation.partitionKey.some((partition) => partition.kind.case === 'time')) return 'DEFAULT'
-  return 'STATIC'
+  return 'UNKNOWN'
 }
 
 function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {

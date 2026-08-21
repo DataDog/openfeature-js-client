@@ -1,6 +1,8 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateRulesBasedConfiguration } from '../evaluation'
+import { evaluateProtobufConfiguration } from '../evaluation/evaluateProtobufConfiguration'
 import { MD5Sharder } from '../evaluation/sharders'
+import type { TimeStamp } from '../time'
 import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
 
 function varint(input: number | bigint): number[] {
@@ -134,6 +136,7 @@ type RulesResponseOptions = {
   splitRanges?: Array<Array<{ from?: number; to?: number }>>
   conditionMessages?: number[][]
   targetingConditionIndex?: number
+  omitTargetingCondition?: boolean
   includeFallbackAllocation?: boolean
   minimumFeatureLevel?: number
   jsonValue?: string
@@ -191,7 +194,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   ])
   const allocation = [
     ...protobufString(1, 'allocation'),
-    ...protobufVarint(2, options.targetingConditionIndex ?? 0),
+    ...(options.omitTargetingCondition ? [] : protobufVarint(2, options.targetingConditionIndex ?? 0)),
     ...partitionKeys.flatMap((partitionKey) => protobufMessage(3, partitionKey)),
     ...splits.flatMap((split) => protobufMessage(4, split)),
     ...protobufVarint(5, 1),
@@ -795,10 +798,10 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it('uses the allocation-based fallback for an unknown split reason', () => {
+  it('returns UNKNOWN for an unknown split reason', () => {
     expect(evaluateBoolean({ splitReason: 99 }, { targetingKey: 'user', country: 'US' })).toMatchObject({
       value: true,
-      reason: 'TARGETING_MATCH',
+      reason: 'UNKNOWN',
     })
   })
 
@@ -894,6 +897,22 @@ describe('UFC protobuf decoder', () => {
     ])
   })
 
+  it('treats an omitted partition range bound as unbounded', () => {
+    const configuration = decodeRules({ timeRanges: [[{ to: 0 }]] })
+
+    expect(
+      evaluateProtobufConfiguration(
+        configuration,
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'user', country: 'US' },
+        logger,
+        -1 as TimeStamp
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
   it('evaluates a shard using its protobuf attribute index without requiring a targeting key', () => {
     expect(evaluateBoolean({ shardAttribute: true }, { country: 'US' })).toMatchObject({
       value: true,
@@ -904,9 +923,12 @@ describe('UFC protobuf decoder', () => {
   it.each(['constructor', '__proto__'])(
     'does not partition on an inherited context attribute named %s',
     (attributeName) => {
-      expect(evaluateBoolean({ shardAttribute: true, attributeName }, { targetingKey: 'user' })).toMatchObject({
+      expect(
+        evaluateBoolean({ shardAttribute: true, attributeName, omitTargetingCondition: true }, { targetingKey: 'user' })
+      ).toMatchObject({
         value: false,
-        reason: 'DEFAULT',
+        reason: 'ERROR',
+        errorCode: 'INVALID_CONTEXT',
       })
     }
   )
