@@ -399,6 +399,30 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
+  it.each([
+    ['a bigint', BigInt(42), '42'],
+    ['a Date', new Date('2026-01-01T00:00:00.000Z'), String(new Date('2026-01-01T00:00:00.000Z'))],
+    ['a custom scalar-like object', { toString: () => 'custom' }, 'custom'],
+  ] as const)('coerces %s for string comparison', (_description, country, expected) => {
+    expect(
+      evaluateBoolean({ conditionKind: 9, strings: ['on', 'off', expected] }, {
+        targetingKey: 'user',
+        country,
+      } as EvaluationContext)
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    ['positive infinity', Number.POSITIVE_INFINITY, true],
+    ['a string that overflows to positive infinity', '1e400', true],
+    ['NaN', Number.NaN, false],
+  ] as const)('uses JavaScript numeric comparison semantics for %s', (_description, country, matches) => {
+    expect(evaluateBoolean({ conditionKind: 5 }, { targetingKey: 'user', country })).toMatchObject({
+      value: matches,
+      reason: matches ? 'TARGETING_MATCH' : 'DEFAULT',
+    })
+  })
+
   it.each(['constructor', '__proto__'])('does not match an inherited condition attribute named %s', (attributeName) => {
     expect(evaluateBoolean({ conditionKind: 14, attributeName }, { targetingKey: 'user' })).toMatchObject({
       value: false,
@@ -932,6 +956,19 @@ describe('UFC protobuf decoder', () => {
       })
     }
   )
+
+  it('rejects a nested partition attribute', () => {
+    expect(
+      evaluateBoolean({ shardAttribute: true, omitTargetingCondition: true }, {
+        targetingKey: 'user',
+        country: {},
+      } as EvaluationContext)
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT',
+    })
+  })
 
   it('uses the separately supplied targeting key for an explicit targetingKey partition attribute', () => {
     const result = evaluateBoolean(

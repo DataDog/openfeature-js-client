@@ -398,7 +398,9 @@ function partitionCoordinates(
       }
       const upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
-      coordinates.push(protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound))
+      const partitionValue = coerceToString(value)
+      if (partitionValue === undefined) throw new InvalidContextError()
+      coordinates.push(protobufSharder.getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }

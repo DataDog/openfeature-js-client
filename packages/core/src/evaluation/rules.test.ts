@@ -14,4 +14,28 @@ describe('condition attribute coercion', () => {
 
     expect(matchesRule(rule, { value } as EvaluationContext)).toBe(false)
   })
+
+  it.each([
+    ['a bigint', BigInt(42), '42'],
+    ['a Date', new Date('2026-01-01T00:00:00.000Z'), String(new Date('2026-01-01T00:00:00.000Z'))],
+    ['a custom scalar-like object', { toString: () => 'custom' }, 'custom'],
+  ] as const)('coerces %s to a string', (_description, value, expected) => {
+    const rule = {
+      conditions: [{ operator: OperatorType.ONE_OF, attribute: 'value', value: [expected] }],
+    } as Rule
+
+    expect(matchesRule(rule, { value } as EvaluationContext)).toBe(true)
+  })
+
+  it.each([
+    ['positive infinity', Number.POSITIVE_INFINITY, true],
+    ['a string that overflows to positive infinity', '1e400', true],
+    ['NaN', Number.NaN, false],
+  ] as const)('uses JavaScript numeric comparison semantics for %s', (_description, value, expected) => {
+    const rule = {
+      conditions: [{ operator: OperatorType.GT, attribute: 'value', value: 10 }],
+    } as Rule
+
+    expect(matchesRule(rule, { value } as EvaluationContext)).toBe(expected)
+  })
 })
