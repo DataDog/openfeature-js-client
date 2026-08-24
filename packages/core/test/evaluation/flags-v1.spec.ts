@@ -96,6 +96,9 @@ describe('Universal Flag Configuration V1', () => {
       const details = evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
+      if (testCase.result.errorCode !== undefined) {
+        expect(details.errorCode).toEqual(testCase.result.errorCode)
+      }
     })
   })
 })

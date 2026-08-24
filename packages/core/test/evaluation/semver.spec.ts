@@ -32,9 +32,6 @@ describe('SemVer', () => {
 
   it.each([
     '',
-    '1',
-    '1.2',
-    '1.2.3.4',
     'v1.2.3',
     '01.2.3',
     '1.02.3',
@@ -50,6 +47,11 @@ describe('SemVer', () => {
     '1.2.3-α',
     ' 1.2.3',
     '1.2.3 ',
+    // A trailing dot leaves an empty core identifier.
+    '1.2.',
+    '1.',
+    // Consecutive dots leave an empty core identifier.
+    '1..2',
   ])('rejects %s', (version) => {
     expect(parseSemver(version)).toBeNull()
   })
@@ -83,20 +85,20 @@ describe('SemVer', () => {
 
   it('parses the core and prerelease fields while discarding build metadata', () => {
     expect(parseSemver('1.2.3-alpha.1+build.001')).toEqual({
-      major: '1',
-      minor: '2',
-      patch: '3',
+      parts: ['1', '2', '3'],
       prerelease: 'alpha.1',
     })
   })
 
   it('accepts the maximum uint64 core components', () => {
     expect(parseSemver('18446744073709551615.18446744073709551615.18446744073709551615')).toEqual({
-      major: '18446744073709551615',
-      minor: '18446744073709551615',
-      patch: '18446744073709551615',
+      parts: ['18446744073709551615', '18446744073709551615', '18446744073709551615'],
       prerelease: '',
     })
+  })
+
+  it('compares version parts beyond the shared five-part fixtures', () => {
+    expect(compareSemver(parse('1.2.3.4.5.6'), parse('1.2.3.4.5.5'))).toBeGreaterThan(0)
   })
 
   it('orders core components above Number.MAX_SAFE_INTEGER without precision loss', () => {
@@ -157,7 +159,7 @@ describe('SemVer', () => {
       expect(matchesSemver(OperatorType.SEMVER_EQ, '4.0.0+exp.sha.5114f85', '4.0.0')).toBe(true)
     })
 
-    it.each(['not-a-version', '1.2', 'v1.2.3', '18446744073709551616.0.0'])(
+    it.each(['not-a-version', 'v1.2.3', '18446744073709551616.0.0'])(
       'does not match an invalid attribute: %s',
       (attribute) => {
         expect(matchesSemver(OperatorType.SEMVER_NEQ, attribute, '1.0.0')).toBe(false)
