@@ -212,7 +212,7 @@ function matchesLeafCondition(
     if (!isNumericComparator(kind.value.comparator)) {
       throw new FlagConfigurationError('Unsupported numeric comparator')
     }
-    if (!Number.isFinite(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
+    if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
     if (actual === undefined) return false
     if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected

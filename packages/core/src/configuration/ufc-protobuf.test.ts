@@ -890,7 +890,7 @@ describe('UFC protobuf decoder', () => {
     expectFlagConfigurationAccepted({ conditionMessages: [numeric] })
   })
 
-  it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
+  it('accepts a finite numeric comparator that overwrites an earlier NaN value', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
       ...protobufVarint(2, 1),
@@ -901,7 +901,7 @@ describe('UFC protobuf decoder', () => {
     expect(evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: 1 }).value).toBe(true)
   })
 
-  it('reports a flag whose final numeric comparator is non-finite', () => {
+  it('reports a flag whose final numeric comparator is NaN', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
       ...protobufVarint(2, 1),
@@ -911,6 +911,27 @@ describe('UFC protobuf decoder', () => {
 
     expectFlagConfigurationError({ conditionMessages: [numeric] })
   })
+
+  it.each([
+    [1, Number.POSITIVE_INFINITY, 1, true, Number.POSITIVE_INFINITY, false],
+    [3, Number.NEGATIVE_INFINITY, 1, true, Number.NEGATIVE_INFINITY, false],
+  ])(
+    'supports numeric comparator %s with an infinite comparand',
+    (comparator, comparand, finiteValue, finiteResult, infiniteValue, infiniteResult) => {
+      const numeric = protobufMessage(3, [
+        ...protobufVarint(1, 0),
+        ...protobufVarint(2, comparator),
+        ...protobufDouble(3, comparand),
+      ])
+
+      expect(
+        evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: finiteValue }).value
+      ).toBe(finiteResult)
+      expect(
+        evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: infiniteValue }).value
+      ).toBe(infiniteResult)
+    }
+  )
 
   it('preserves composite time ranges in the protobuf representation', () => {
     const allocation = decodeRules({
