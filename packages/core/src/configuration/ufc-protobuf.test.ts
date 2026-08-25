@@ -132,8 +132,8 @@ type RulesResponseOptions = {
   integerVariation?: bigint
   variationType?: number
   variationValueFields?: number[]
-  timeRanges?: Array<Array<{ from?: number; to?: number }>>
-  splitRanges?: Array<Array<{ from?: number; to?: number }>>
+  timeRanges?: Array<Array<{ from?: number | bigint; to?: number | bigint }>>
+  splitRanges?: Array<Array<{ from?: number | bigint; to?: number | bigint }>>
   conditionMessages?: number[][]
   targetingConditionIndex?: number
   omitTargetingCondition?: boolean
@@ -1011,6 +1011,25 @@ describe('UFC protobuf decoder', () => {
         -1 as TimeStamp
       )
     ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    [{ from: BigInt('9007199254740993') }, false, 'DEFAULT'],
+    [{ to: BigInt('9007199254740993') }, true, 'TARGETING_MATCH'],
+  ] as const)('compares a time coordinate with an exact BigInt range bound', (range, value, reason) => {
+    const configuration = decodeRules({ timeRanges: [[range]] })
+
+    expect(
+      evaluateProtobufConfiguration(
+        configuration,
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'user', country: 'US' },
+        logger,
+        (Number.MAX_SAFE_INTEGER + 1) as TimeStamp
+      )
+    ).toMatchObject({ value, reason })
   })
 
   it('evaluates a shard using its protobuf attribute index without requiring a targeting key', () => {

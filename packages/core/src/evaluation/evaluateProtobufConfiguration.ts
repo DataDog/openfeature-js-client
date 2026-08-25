@@ -359,9 +359,7 @@ function matchesSplit(split: Split, partitionKey: number[]): boolean {
   }
   return partitionKey.every((value, index) => {
     const range = atIndex(split.ranges, index, 'partition range')
-    const from = range.from === undefined ? undefined : safeInteger(range.from, 'Partition range')
-    const to = range.to === undefined ? undefined : safeInteger(range.to, 'Partition range')
-    return (from === undefined || value >= from) && (to === undefined || value < to)
+    return (range.from === undefined || value >= range.from) && (range.to === undefined || value < range.to)
   })
 }
 
