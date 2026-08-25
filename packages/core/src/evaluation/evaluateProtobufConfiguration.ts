@@ -209,9 +209,6 @@ function matchesLeafCondition(
 
   if (kind.case === 'numeric') {
     const expected = kind.value.comparand
-    if (!isNumericComparator(kind.value.comparator)) {
-      throw new FlagConfigurationError('Unsupported numeric comparator')
-    }
     if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
     if (actual === undefined) return false
@@ -219,7 +216,7 @@ function matchesLeafCondition(
     if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL) return actual <= expected
     if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN) return actual > expected
     if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL) return actual >= expected
-    return false
+    throw new FlagConfigurationError('Unsupported numeric comparator')
   }
   if (kind.case === 'regex') {
     const attributeValue = coerceToString(value)
@@ -240,9 +237,6 @@ function matchesLeafCondition(
     return kind.value.negate ? !included : included
   }
   if (kind.case === 'version') {
-    if (!isVersionComparator(kind.value.comparator)) {
-      throw new FlagConfigurationError('Unsupported version comparator')
-    }
     const expected = versionAt(configuration.versions, kind.value.versionIndex)
     if (typeof value !== 'string') return false
     const actual = parseVersion(value)
@@ -254,24 +248,18 @@ function matchesLeafCondition(
     if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL) return comparison <= 0
     if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN) return comparison > 0
     if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL) return comparison >= 0
-    return false
+    throw new FlagConfigurationError('Unsupported version comparator')
   }
   if (kind.case === 'stringComparison') {
-    if (!isStringComparator(kind.value.comparator)) {
-      throw new FlagConfigurationError('Unsupported string comparator')
-    }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const expected = atIndex(configuration.strings, kind.value.stringIndex, 'condition string')
     if (kind.value.comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
     if (kind.value.comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
     if (kind.value.comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
-    return false
+    throw new FlagConfigurationError('Unsupported string comparator')
   }
   if (kind.case === 'sha256StringComparison') {
-    if (!isSha256StringComparator(kind.value.comparator)) {
-      throw new FlagConfigurationError('Unsupported SHA-256 string comparator')
-    }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const encoded = encodeUtf8(attributeValue)
@@ -280,40 +268,6 @@ function matchesLeafCondition(
     return compareBytes(saltedSha256(kind.value.salt, extracted), kind.value.sha256) === 0
   }
   throw new FlagConfigurationError('Unsupported condition')
-}
-
-function isNumericComparator(comparator: number): boolean {
-  return (
-    comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN ||
-    comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL ||
-    comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN ||
-    comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL
-  )
-}
-
-function isVersionComparator(comparator: number): boolean {
-  return (
-    comparator === UFC_VERSION_COMPARATOR.EQUAL ||
-    comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL ||
-    comparator === UFC_VERSION_COMPARATOR.LESS_THAN ||
-    comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL ||
-    comparator === UFC_VERSION_COMPARATOR.GREATER_THAN ||
-    comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL
-  )
-}
-
-function isStringComparator(comparator: number): boolean {
-  return (
-    comparator === UFC_STRING_COMPARATOR.STARTS_WITH ||
-    comparator === UFC_STRING_COMPARATOR.ENDS_WITH ||
-    comparator === UFC_STRING_COMPARATOR.CONTAINS
-  )
-}
-
-function isSha256StringComparator(comparator: number): boolean {
-  return (
-    comparator === UFC_SHA256_STRING_COMPARATOR.STARTS_WITH || comparator === UFC_SHA256_STRING_COMPARATOR.ENDS_WITH
-  )
 }
 
 function versionAt(versions: Version[], index: number): Version {
@@ -330,11 +284,11 @@ function saltedSha256(salt: Uint8Array, value: Uint8Array): Uint8Array {
 }
 
 function extractUtf8Bytes(value: Uint8Array, length: number, comparator: number): Uint8Array | undefined {
-  if (length > value.length) return undefined
   let start: number
   if (comparator === UFC_SHA256_STRING_COMPARATOR.STARTS_WITH) start = 0
   else if (comparator === UFC_SHA256_STRING_COMPARATOR.ENDS_WITH) start = value.length - length
   else throw new FlagConfigurationError('Unsupported SHA-256 string comparator')
+  if (length > value.length) return undefined
   const end = start + length
   if (!isUtf8Boundary(value, start) || !isUtf8Boundary(value, end)) return undefined
   return value.subarray(start, end)

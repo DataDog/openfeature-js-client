@@ -281,8 +281,11 @@ function evaluateBoolean(options: RulesResponseOptions, context: EvaluationConte
   return evaluateRulesBasedConfiguration(decodeRules(options), 'boolean', 'test-flag', false, context, logger)
 }
 
-function evaluateFlag(configuration: ReturnType<typeof decodeRules>, flagKey: string) {
-  const context = { targetingKey: 'user', country: 'US' }
+function evaluateFlag(
+  configuration: ReturnType<typeof decodeRules>,
+  flagKey: string,
+  context: EvaluationContext = { targetingKey: 'user', country: 'US' }
+) {
   const variationType = configuration.flags[flagKey]?.variationType
   if (variationType === 1) {
     return evaluateRulesBasedConfiguration(configuration, 'string', flagKey, '', context, logger)
@@ -296,11 +299,15 @@ function evaluateFlag(configuration: ReturnType<typeof decodeRules>, flagKey: st
   return evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, context, logger)
 }
 
-function expectFlagConfigurationError(options: RulesResponseOptions, flagKey = 'test-flag'): void {
+function expectFlagConfigurationError(
+  options: RulesResponseOptions,
+  flagKey = 'test-flag',
+  context?: EvaluationContext
+): void {
   const configuration = decodeRules(options)
 
   expect(configuration.flags).toHaveProperty(flagKey)
-  expect(evaluateFlag(configuration, flagKey)).toMatchObject({
+  expect(evaluateFlag(configuration, flagKey, context)).toMatchObject({
     reason: 'ERROR',
     errorCode: 'PARSE_ERROR',
   })
@@ -812,20 +819,33 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it.each([3, 8, 9, 10] as const)(
+  it.each([
+    [3, 1],
+    [8, '1.2.3'],
+    [9, 'US'],
+    [10, 'US'],
+  ] as const)(
     'reports a supported flag referencing an unspecified condition comparator in group %s',
-    (unknownConditionGroup) => {
-      expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
+    (unknownConditionGroup, country) => {
+      expectFlagConfigurationError(
+        { futureFlagFeatureLevel: 0, unknownConditionGroup },
+        'future-flag',
+        { targetingKey: 'user', country } as EvaluationContext
+      )
     }
   )
 
   it.each([
-    [3, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufDouble(3, 1.5)]],
-    [8, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 0)]],
-    [9, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 2)]],
-    [10, [...protobufVarint(1, 0), ...protobufBytes(2, []), ...protobufVarint(3, 99)]],
-  ])('reports an unknown enum value in condition group %s', (group, fields) => {
-    expectFlagConfigurationError({ conditionMessages: [protobufMessage(group, fields)] })
+    [3, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufDouble(3, 1.5)], 1],
+    [8, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 0)], '1.2.3'],
+    [9, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 2)], 'US'],
+    [10, [...protobufVarint(1, 0), ...protobufBytes(2, []), ...protobufVarint(3, 99)], 'US'],
+  ])('reports an unknown enum value in condition group %s', (group, fields, country) => {
+    expectFlagConfigurationError(
+      { conditionMessages: [protobufMessage(group, fields)] },
+      'test-flag',
+      { targetingKey: 'user', country } as EvaluationContext
+    )
   })
 
   it.each([4, 5, 6, 7] as const)('ignores an unknown field in condition group %s', (unknownConditionGroup) => {
