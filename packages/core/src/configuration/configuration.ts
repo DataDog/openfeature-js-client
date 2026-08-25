@@ -1,6 +1,6 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '../time'
-import type { FlagsConfiguration as ProtobufFlagsConfiguration } from './generated/ufc_pb'
+import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
  * Internal flags configuration for DatadogProvider.
@@ -30,7 +30,7 @@ export type PrecomputedConfiguration = {
 
 /** @internal */
 export type RulesConfiguration = {
-  response: ProtobufFlagsConfiguration
+  response: PreparedRulesResponse
   fetchedAt?: TimeStamp
   etag?: string
 }

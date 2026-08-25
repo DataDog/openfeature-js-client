@@ -1,6 +1,7 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
+import { prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
@@ -29,7 +30,15 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   }
 
   if (isProtobufConfiguration(config)) {
-    return evaluateProtobufConfiguration(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs)
+    return evaluateProtobufConfiguration(
+      prepareRulesResponse(config),
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      logger,
+      evaluationTimestampMs
+    )
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context

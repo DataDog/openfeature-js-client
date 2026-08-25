@@ -13,11 +13,11 @@ import type {
   Allocation,
   Condition,
   Flag,
-  FlagsConfiguration,
   Split,
   VariationType,
   Version,
 } from '../configuration/generated/ufc_pb'
+import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
@@ -37,20 +37,9 @@ import {
 } from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
-const INVALID_JSON = Symbol('invalid JSON')
-const evaluationCacheSymbol = Symbol('UFC evaluation cache')
-
-type EvaluationCache = {
-  regexes: Map<number, RegExp | null>
-  jsonValues: Map<number, FlagValue | typeof INVALID_JSON>
-}
-
-type CachedFlagsConfiguration = FlagsConfiguration & {
-  [evaluationCacheSymbol]?: EvaluationCache
-}
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
-  configuration: FlagsConfiguration,
+  configuration: PreparedRulesResponse,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
@@ -178,7 +167,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
 function matchesCondition(
   index: number | undefined,
-  configuration: FlagsConfiguration,
+  configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
   results: Map<number, boolean>
 ): boolean {
@@ -206,7 +195,7 @@ function matchesCondition(
 
 function matchesLeafCondition(
   condition: Condition,
-  configuration: FlagsConfiguration,
+  configuration: PreparedRulesResponse,
   attributes: EvaluationContext
 ): boolean {
   const kind = condition.kind
@@ -355,8 +344,8 @@ function isUtf8Boundary(value: Uint8Array, index: number): boolean {
   return index === 0 || index === value.length || (value[index] & 0xc0) !== 0x80
 }
 
-function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegExp {
-  const cache = evaluationCache(configuration).regexes
+function compiledRegexAt(configuration: PreparedRulesResponse, index: number): RegExp {
+  const cache = configuration.evaluationRegexCache
   const cached = cache.get(index)
   if (cached === null) throw new FlagConfigurationError('Invalid regular expression')
   if (cached) return cached
@@ -374,7 +363,7 @@ function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegE
 
 function computePartitionKey(
   allocation: Allocation,
-  configuration: FlagsConfiguration,
+  configuration: PreparedRulesResponse,
   targetingKey: string | null | undefined,
   attributes: EvaluationContext,
   evaluationTimestampMs: TimeStamp
@@ -425,7 +414,7 @@ function matchesSplit(split: Split, partitionKey: number[]): boolean {
 function variationValue(
   flag: Flag,
   value: Flag['variations'][number]['value'],
-  configuration: FlagsConfiguration
+  configuration: PreparedRulesResponse
 ): FlagValue {
   const expectedCase = variationValueCase(flag.variationType)
   if (value.case !== expectedCase) {
@@ -489,29 +478,20 @@ function atIndex<T>(items: T[], index: number, description: string): T {
   return value
 }
 
-function evaluationCache(configuration: FlagsConfiguration): EvaluationCache {
-  const cachedConfiguration = configuration as CachedFlagsConfiguration
-  if (cachedConfiguration[evaluationCacheSymbol]) return cachedConfiguration[evaluationCacheSymbol]
-
-  const cache: EvaluationCache = { regexes: new Map(), jsonValues: new Map() }
-  Object.defineProperty(cachedConfiguration, evaluationCacheSymbol, { value: cache })
-  return cache
-}
-
-function jsonValueAt(configuration: FlagsConfiguration, index: number): FlagValue {
-  const cache = evaluationCache(configuration).jsonValues
+function jsonValueAt(configuration: PreparedRulesResponse, index: number): FlagValue {
+  const cache = configuration.evaluationJsonCache
   const cached = cache.get(index)
-  if (cached === INVALID_JSON) throw new FlagConfigurationError('JSON variation value is invalid')
-  if (cached !== undefined) return cached
+  if (cached && !cached.valid) throw new FlagConfigurationError('JSON variation value is invalid')
+  if (cached) return cached.value
 
   const serialized = atIndex(configuration.jsonStrings, index, 'JSON variation value')
   try {
     const parsed = JSON.parse(serialized) as FlagValue
     if (typeof parsed === 'number' && !Number.isFinite(parsed)) throw new Error()
-    cache.set(index, parsed)
+    cache.set(index, { valid: true, value: parsed })
     return parsed
   } catch {
-    cache.set(index, INVALID_JSON)
+    cache.set(index, { valid: false })
     throw new FlagConfigurationError('JSON variation value is invalid')
   }
 }
