@@ -141,8 +141,10 @@ if (context !== undefined) {
 }
 ```
 
-Applications that use rules-based configurations can opt into the full parser
-and its Protobuf-ES dependency through the rules-based entry point:
+Rules-based configurations contain targeting rules that the SDK evaluates locally
+against the OpenFeature evaluation context, rather than assignments precomputed for one context.
+Applications that use them can opt into the full parser and its Protobuf-ES dependency
+through the rules-based entry point:
 
 ```javascript
 import {
