@@ -380,6 +380,7 @@ function computePartitionKey(
   evaluationTimestampMs: TimeStamp
 ): number[] {
   const partitionKey: number[] = []
+  let md5Sharder: MD5Sharder | undefined
   for (const partition of allocation.partitionKey) {
     if (partition.kind.case === 'time') {
       partitionKey.push(evaluationTimestampMs)
@@ -402,6 +403,7 @@ function computePartitionKey(
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
       const partitionValue = coerceToString(value)
       if (partitionValue === undefined) throw new InvalidContextError()
+      md5Sharder ??= new MD5Sharder()
       partitionKey.push(md5Sharder.getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
@@ -526,5 +528,3 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
   }
   return left.length === right.length ? 0 : left.length < right.length ? -1 : 1
 }
-
-const md5Sharder = new MD5Sharder()
