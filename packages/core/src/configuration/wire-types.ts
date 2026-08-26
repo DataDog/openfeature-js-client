@@ -5,7 +5,7 @@ export type FlagsConfigurationWire = string
 
 export const INVALID_CONFIGURATION_WIRE_ERROR = 'Invalid flags configuration wire format'
 
-export type ParsedConfigurationWire = {
+export type ConfigurationWireContents = {
   version: 1
   precomputed?: {
     context?: EvaluationContext
@@ -20,7 +20,7 @@ export type ParsedConfigurationWire = {
   }
 }
 
-export function parseConfigurationWire(wire: FlagsConfigurationWire): ParsedConfigurationWire | undefined {
+export function parseConfigurationWire(wire: FlagsConfigurationWire): ConfigurationWireContents | undefined {
   let serialized: unknown
   try {
     serialized = JSON.parse(wire)
@@ -30,7 +30,7 @@ export function parseConfigurationWire(wire: FlagsConfigurationWire): ParsedConf
   if (typeof serialized !== 'object' || serialized === null || !('version' in serialized) || serialized.version !== 1) {
     return undefined
   }
-  return serialized as ParsedConfigurationWire
+  return serialized as ConfigurationWireContents
 }
 
 export function decodeSafely<T>(decode: () => T): T | undefined {

@@ -1,9 +1,9 @@
 import type { FlagsConfiguration } from './configuration'
 import {
+  type ConfigurationWireContents,
   decodeSafely,
   type FlagsConfigurationWire,
   INVALID_CONFIGURATION_WIRE_ERROR,
-  type ParsedConfigurationWire,
   parseConfigurationWire,
 } from './wire-types'
 import { isPrecomputedWireEntry, parsePrecomputedConfigurationResponse } from './wire-validation'
@@ -25,7 +25,7 @@ export function configurationToPrecomputedString(configuration: FlagsConfigurati
   return JSON.stringify(precomputedConfigurationToWire(configuration))
 }
 
-export function precomputedConfigurationFromWire(serialized: ParsedConfigurationWire): FlagsConfiguration {
+export function precomputedConfigurationFromWire(serialized: ConfigurationWireContents): FlagsConfiguration {
   if (serialized.precomputed === undefined) return {}
   if (!isPrecomputedWireEntry(serialized.precomputed)) {
     return { precomputedError: 'Invalid precomputed configuration wire entry' }
@@ -44,8 +44,8 @@ export function precomputedConfigurationFromWire(serialized: ParsedConfiguration
   }
 }
 
-export function precomputedConfigurationToWire(configuration: FlagsConfiguration): ParsedConfigurationWire {
-  const wire: ParsedConfigurationWire = { version: 1 }
+export function precomputedConfigurationToWire(configuration: FlagsConfiguration): ConfigurationWireContents {
+  const wire: ConfigurationWireContents = { version: 1 }
   if (!configuration.precomputed) return wire
 
   const { context, response, fetchedAt, etag } = configuration.precomputed

@@ -3,9 +3,9 @@ import { precomputedConfigurationFromWire, precomputedConfigurationToWire } from
 import { rulesConfigurationFromWire } from './rules-wire'
 import { encodeUniversalFlagConfiguration } from './ufc-protobuf'
 import {
+  type ConfigurationWireContents,
   type FlagsConfigurationWire,
   INVALID_CONFIGURATION_WIRE_ERROR,
-  type ParsedConfigurationWire,
   parseConfigurationWire,
 } from './wire-types'
 
@@ -28,7 +28,7 @@ export function configurationFromString(wire: FlagsConfigurationWire): FlagsConf
  * `configurationFromString`.
  */
 export function configurationToString(configuration: FlagsConfiguration): FlagsConfigurationWire {
-  const wire: ParsedConfigurationWire = precomputedConfigurationToWire(configuration)
+  const wire: ConfigurationWireContents = precomputedConfigurationToWire(configuration)
 
   if (configuration.rules) {
     const { response, fetchedAt, etag } = configuration.rules
