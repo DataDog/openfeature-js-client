@@ -7,7 +7,6 @@ import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
-import { getOwnProperty } from './getOwnProperty'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
@@ -48,8 +47,7 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
     ...(subjectKey != null ? { id: subjectKey } : {}),
     ...remainingContext,
   }
-  const flag = getOwnProperty(config.flags, flagKey)
-  if (!flag) {
+  if (!Object.prototype.hasOwnProperty.call(config.flags, flagKey)) {
     logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
     return {
       value: defaultValue,
@@ -59,6 +57,7 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
     }
   }
 
+  const flag = config.flags[flagKey]
   try {
     return evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger, evaluationTimestampMs)
   } catch (error) {
