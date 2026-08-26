@@ -1,8 +1,8 @@
 # UFC protobuf schema
 
 `ufc.proto` is copied byte-for-byte from
-[`ddoghq/dd-source#59643`](https://github.com/ddoghq/dd-source/pull/59643) at commit
-`31332ecb15d9ad75445228e2c4939db4a4aad19a`.
+[`ddoghq/dd-source#70386`](https://github.com/ddoghq/dd-source/pull/70386) at merge commit
+`15f7187d7e8958738af06bae117895ab01ccfc03`.
 
 After updating the schema, regenerate the TypeScript definitions from the repository root:
 

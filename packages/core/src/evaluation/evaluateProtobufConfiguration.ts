@@ -40,11 +40,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const { targetingKey, ...remainingContext } = context
-  const attributes = {
-    ...(targetingKey != null ? { id: targetingKey } : {}),
-    ...remainingContext,
-  }
+  const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
     logger.debug('returning default value because flag is not found', { flagKey, targetingKey })
@@ -78,16 +74,10 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, attributes, conditionResults)) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
         continue
       }
-      const partitionKey = computePartitionKey(
-        allocation,
-        configuration,
-        targetingKey,
-        attributes,
-        evaluationTimestampMs
-      )
+      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
       if (!split) continue
 
@@ -189,14 +179,13 @@ function matchesCondition(
 function matchesLeafCondition(
   condition: Condition,
   configuration: PreparedRulesResponse,
-  attributes: EvaluationContext
+  context: EvaluationContext
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new FlagConfigurationError('Unsupported condition')
   }
-  const attribute = atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
-  const value = getOwnProperty(attributes, attribute)
+  const value = attributeValueAt(configuration, kind.value.attributeIndex, context)
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -311,8 +300,7 @@ function compiledRegexAt(configuration: PreparedRulesResponse, index: number): R
 function computePartitionKey(
   allocation: Allocation,
   configuration: PreparedRulesResponse,
-  targetingKey: string | null | undefined,
-  attributes: EvaluationContext,
+  context: EvaluationContext,
   evaluationTimestampMs: TimeStamp
 ): number[] {
   const partitionKey: number[] = []
@@ -320,19 +308,11 @@ function computePartitionKey(
     if (partition.kind.case === 'time') {
       partitionKey.push(evaluationTimestampMs)
     } else if (partition.kind.case === 'shardMd5') {
-      let value: EvaluationContextValue
-      if (partition.kind.value.attributeNameIndex === undefined) {
-        if (targetingKey == null) throw new TargetingKeyMissingError()
-        value = targetingKey
-      } else {
-        const attribute = atIndex(
-          configuration.attributeNames,
-          partition.kind.value.attributeNameIndex,
-          'partition attribute'
-        )
-        const attributeValue = attribute === 'targetingKey' ? targetingKey : getOwnProperty(attributes, attribute)
-        if (attributeValue == null) throw new InvalidContextError()
-        value = attributeValue
+      const attribute = atIndex(configuration.attributes, partition.kind.value.attributeIndex, 'partition attribute')
+      const value = attributeValue(attribute, configuration, context)
+      if (value == null) {
+        if (attribute.kind.case === 'targetingKey') throw new TargetingKeyMissingError()
+        throw new InvalidContextError()
       }
       const upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
@@ -344,6 +324,47 @@ function computePartitionKey(
     }
   }
   return partitionKey
+}
+
+function attributeValueAt(
+  configuration: PreparedRulesResponse,
+  index: number,
+  context: EvaluationContext
+): EvaluationContextValue | undefined {
+  return attributeValue(atIndex(configuration.attributes, index, 'condition attribute'), configuration, context)
+}
+
+function attributeValue(
+  attribute: PreparedRulesResponse['attributes'][number],
+  configuration: PreparedRulesResponse,
+  context: EvaluationContext
+): EvaluationContextValue | undefined {
+  if (attribute.kind.case === 'targetingKey') return context.targetingKey
+  if (attribute.kind.case !== 'attributePath') throw new FlagConfigurationError('Unsupported attribute reference')
+
+  const { segments } = attribute.kind.value
+  if (segments.length === 0 || segments[0].kind.case !== 'objectKeyStringIndex') {
+    throw new FlagConfigurationError('Invalid attribute path')
+  }
+
+  let value: unknown = context
+  for (const segment of segments) {
+    if (segment.kind.case === 'objectKeyStringIndex') {
+      if (!isContextObject(value)) return undefined
+      const key = atIndex(configuration.strings, segment.kind.value, 'attribute path')
+      value = getOwnProperty(value, key)
+    } else if (segment.kind.case === 'arrayIndex') {
+      if (!Array.isArray(value)) return undefined
+      value = Object.prototype.hasOwnProperty.call(value, segment.kind.value) ? value[segment.kind.value] : undefined
+    } else {
+      throw new FlagConfigurationError('Invalid attribute path')
+    }
+  }
+  return value as EvaluationContextValue | undefined
+}
+
+function isContextObject(value: unknown): value is Record<string, EvaluationContextValue | undefined> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date)
 }
 
 function matchesSplit(split: Split, partitionKey: number[]): boolean {

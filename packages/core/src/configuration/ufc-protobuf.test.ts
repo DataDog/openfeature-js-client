@@ -44,45 +44,63 @@ function protobufDouble(field: number, value: number): number[] {
   return protobufField(field, 1, [...new Uint8Array(buffer)])
 }
 
-// Field numbers mirror ufc.proto from dd-source PR #59643 at commit 31332ecb15d9ad75445228e2c4939db4a4aad19a.
-function protobufCondition(kind: number, shaHashes: string[], membershipIndexes: number[]): number[] {
+// Field numbers mirror ufc.proto from dd-source PR #70386 at merge commit
+// 15f7187d7e8958738af06bae117895ab01ccfc03.
+function protobufCondition(
+  kind: number,
+  shaHashes: string[],
+  membershipIndexes: number[],
+  attributeIndex = 0
+): number[] {
   if (kind === 2) return protobufMessage(2, [])
   if (kind >= 3 && kind <= 6) {
-    return protobufMessage(3, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 2), ...protobufDouble(3, 1.5)])
+    return protobufMessage(3, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 2),
+      ...protobufDouble(3, 1.5),
+    ])
   }
   if (kind === 7 || kind === 8) {
     return protobufMessage(4, [
-      ...protobufVarint(1, 0),
+      ...protobufVarint(1, attributeIndex),
       ...protobufVarint(2, 0),
       ...(kind === 8 ? protobufVarint(3, 1) : []),
     ])
   }
   if (kind === 9 || kind === 10) {
     return protobufMessage(5, [
-      ...protobufVarint(1, 0),
+      ...protobufVarint(1, attributeIndex),
       ...membershipIndexes.flatMap((index) => protobufVarint(2, index)),
       ...(kind === 10 ? protobufVarint(3, 1) : []),
     ])
   }
   if (kind === 11 || kind === 12) {
     return protobufMessage(6, [
-      ...protobufVarint(1, 0),
+      ...protobufVarint(1, attributeIndex),
       ...protobufBytes(2, [1, 2]),
       ...shaHashes.flatMap((hash) => protobufBytes(3, [...Buffer.from(hash, 'hex')])),
       ...(kind === 12 ? protobufVarint(4, 1) : []),
     ])
   }
   if (kind === 13 || kind === 14) {
-    return protobufMessage(7, [...protobufVarint(1, 0), ...protobufVarint(2, kind === 13 ? 1 : 0)])
+    return protobufMessage(7, [...protobufVarint(1, attributeIndex), ...protobufVarint(2, kind === 13 ? 1 : 0)])
   }
   if (kind >= 15 && kind <= 20) {
-    return protobufMessage(8, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 14), ...protobufVarint(3, 0)])
+    return protobufMessage(8, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 14),
+      ...protobufVarint(3, 0),
+    ])
   }
   if (kind >= 21 && kind <= 23) {
-    return protobufMessage(9, [...protobufVarint(1, 0), ...protobufVarint(2, kind - 20), ...protobufVarint(3, 2)])
+    return protobufMessage(9, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 20),
+      ...protobufVarint(3, 2),
+    ])
   }
   return protobufMessage(10, [
-    ...protobufVarint(1, 0),
+    ...protobufVarint(1, attributeIndex),
     ...protobufBytes(2, [1, 2]),
     ...protobufVarint(3, kind - 23),
     ...protobufVarint(4, 2),
@@ -151,6 +169,8 @@ type RulesResponseOptions = {
   fallbackTargetingConditionIndex?: number
   splitReason?: number
   attributeName?: string
+  attributePath?: Array<string | number>
+  conditionAttributeIndex?: number
   strings?: string[]
   version?: string
   membershipIndexes?: number[]
@@ -160,7 +180,26 @@ type RulesResponseOptions = {
 function rulesResponse(options: RulesResponseOptions = {}): string {
   const conditionKind = options.conditionKind ?? 9
   const shaHashes = options.shaHashes ?? ['b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45']
-  const condition = protobufCondition(conditionKind, shaHashes, options.membershipIndexes ?? [2])
+  const condition = protobufCondition(
+    conditionKind,
+    shaHashes,
+    options.membershipIndexes ?? [2],
+    options.conditionAttributeIndex
+  )
+  const strings = options.strings ?? ['on', 'off', 'US']
+  const attributePath = options.attributePath ?? [options.attributeName ?? 'country']
+  const attributePathStrings = attributePath.filter((segment): segment is string => typeof segment === 'string')
+  let attributePathStringIndex = strings.length
+  const attributePathReference = protobufMessage(
+    2,
+    attributePath.flatMap((segment) =>
+      protobufMessage(
+        1,
+        typeof segment === 'string' ? protobufVarint(1, attributePathStringIndex++) : protobufVarint(2, segment)
+      )
+    )
+  )
+  const targetingKeyReference = protobufMessage(1, [])
   const variation = [
     ...protobufVarint(1, 0),
     ...(options.variationValueFields ??
@@ -174,7 +213,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   ]
   const md5Shard = [
     ...protobufString(1, 'salt'),
-    ...(options.shardAttribute ? protobufVarint(2, 0) : []),
+    ...protobufVarint(2, options.shardAttribute ? 0 : 1),
     ...protobufVarint(3, 100),
   ]
   const partitionKeys = options.timeRanges
@@ -252,8 +291,9 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufString(2, 'prod'),
     ...protobufMessage(3, flagEntry),
     ...(options.futureFlagFeatureLevel === undefined ? [] : protobufMessage(3, futureFlagEntry)),
-    ...protobufString(4, options.attributeName ?? 'country'),
-    ...(options.strings ?? ['on', 'off', 'US']).flatMap((value) => protobufString(5, value)),
+    ...protobufMessage(4, attributePathReference),
+    ...protobufMessage(4, targetingKeyReference),
+    ...[...strings, ...attributePathStrings].flatMap((value) => protobufString(5, value)),
     ...protobufString(6, '^US$'),
     ...protobufMessage(7, protobufVersion(options.version ?? '1.2.3')),
     ...(options.jsonValue === undefined ? [] : protobufString(8, options.jsonValue)),
@@ -328,8 +368,8 @@ describe('UFC protobuf decoder', () => {
     expect(configuration).toMatchObject({
       $typeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
       environmentName: 'prod',
-      attributeNames: ['country'],
-      strings: ['on', 'off', 'US'],
+      attributes: [{ kind: { case: 'attributePath' } }, { kind: { case: 'targetingKey' } }],
+      strings: ['on', 'off', 'US', 'country'],
       observeFullEvaluationData: false,
     })
     expect(flag).toMatchObject({ variationType: 4, minimumFeatureLevel: 0 })
@@ -435,6 +475,78 @@ describe('UFC protobuf decoder', () => {
       value: false,
       reason: 'DEFAULT',
     })
+  })
+
+  it('evaluates a condition against an explicit targeting-key reference', () => {
+    expect(evaluateBoolean({ conditionAttributeIndex: 1 }, { targetingKey: 'US', country: 'CA' })).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
+  })
+
+  it('traverses nested object and array attribute paths', () => {
+    expect(
+      evaluateBoolean(
+        { attributePath: ['profile', 'groups', 0, 'country'] },
+        { targetingKey: 'user', profile: { groups: [{ country: 'US' }] } }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('does not traverse inherited properties in an attribute path', () => {
+    expect(
+      evaluateBoolean(
+        { conditionKind: 14, attributePath: ['profile', 'constructor'] },
+        { targetingKey: 'user', profile: {} }
+      )
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('does not traverse inherited array elements in an attribute path', () => {
+    const groups: EvaluationContext[] = []
+    Object.setPrototypeOf(groups, { 0: { country: 'US' } })
+
+    expect(
+      evaluateBoolean(
+        { attributePath: ['profile', 'groups', 0, 'country'] },
+        { targetingKey: 'user', profile: { groups } }
+      )
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('does not match a missing nested attribute path', () => {
+    expect(
+      evaluateBoolean({ attributePath: ['profile', 'country'] }, { targetingKey: 'user', profile: {} })
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('reports an attribute path that does not start with an object key', () => {
+    expectFlagConfigurationError({ attributePath: [0] })
+  })
+
+  it('reports an empty attribute path', () => {
+    expectFlagConfigurationError({ attributePath: [] })
+  })
+
+  it.each([
+    ['an absent id', { targetingKey: 'US' }, true],
+    ['a null id', { targetingKey: 'US', id: null }, true],
+    ['a present non-matching id', { targetingKey: 'US', id: 'CA' }, false],
+    ['a present matching id', { targetingKey: 'CA', id: 'US' }, true],
+  ] as const)('uses the compiler-defined targeting-key fallback for %s', (_description, context, value) => {
+    const conditionMessages = [
+      protobufCondition(9, [], [2], 0),
+      protobufCondition(9, [], [2], 1),
+      protobufCondition(13, [], [], 0),
+      protobufMessage(1, [...protobufVarint(1, 2), ...protobufVarint(1, 1)]),
+      protobufCondition(14, [], [], 0),
+      protobufMessage(1, [...protobufVarint(1, 4), ...protobufVarint(1, 0)]),
+      protobufMessage(2, [...protobufVarint(1, 3), ...protobufVarint(1, 5)]),
+    ]
+
+    expect(
+      evaluateBoolean({ attributeName: 'id', conditionMessages, targetingConditionIndex: 6 }, context)
+    ).toMatchObject({ value, reason: value ? 'TARGETING_MATCH' : 'DEFAULT' })
   })
 
   it('compares configured version components above uint64 without precision loss', () => {
@@ -1050,7 +1162,7 @@ describe('UFC protobuf decoder', () => {
     }
   )
 
-  it('rejects a nested partition attribute', () => {
+  it('rejects a composite partition attribute', () => {
     expect(
       evaluateBoolean({ shardAttribute: true, omitTargetingCondition: true }, {
         targetingKey: 'user',
@@ -1063,17 +1175,23 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('uses the separately supplied targeting key for an explicit targetingKey partition attribute', () => {
-    const result = evaluateBoolean(
-      { shardAttribute: true, attributeName: 'targetingKey', includeFallbackAllocation: true },
-      { targetingKey: 'US' }
-    )
+  it('traverses a nested partition attribute path', () => {
+    expect(
+      evaluateBoolean(
+        { shardAttribute: true, attributePath: ['profile', 'country'], omitTargetingCondition: true },
+        { profile: { country: 'US' } }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('uses an explicit targeting-key partition reference', () => {
+    const result = evaluateBoolean({ includeFallbackAllocation: true }, { targetingKey: 'US' })
 
     expect(result).toMatchObject({ value: true })
     expect(result.flagMetadata).toMatchObject({ allocationKey: 'fallback' })
   })
 
-  it('requires a targeting key for a protobuf shard without an attribute index', () => {
+  it('requires a targeting key for an explicit targeting-key partition reference', () => {
     expect(evaluateBoolean({}, { country: 'US' })).toMatchObject({
       value: false,
       reason: 'ERROR',
