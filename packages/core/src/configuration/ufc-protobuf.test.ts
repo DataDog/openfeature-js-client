@@ -827,11 +827,10 @@ describe('UFC protobuf decoder', () => {
   ] as const)(
     'reports a supported flag referencing an unspecified condition comparator in group %s',
     (unknownConditionGroup, country) => {
-      expectFlagConfigurationError(
-        { futureFlagFeatureLevel: 0, unknownConditionGroup },
-        'future-flag',
-        { targetingKey: 'user', country } as EvaluationContext
-      )
+      expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag', {
+        targetingKey: 'user',
+        country,
+      } as EvaluationContext)
     }
   )
 
@@ -841,11 +840,10 @@ describe('UFC protobuf decoder', () => {
     [9, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 2)], 'US'],
     [10, [...protobufVarint(1, 0), ...protobufBytes(2, []), ...protobufVarint(3, 99)], 'US'],
   ])('reports an unknown enum value in condition group %s', (group, fields, country) => {
-    expectFlagConfigurationError(
-      { conditionMessages: [protobufMessage(group, fields)] },
-      'test-flag',
-      { targetingKey: 'user', country } as EvaluationContext
-    )
+    expectFlagConfigurationError({ conditionMessages: [protobufMessage(group, fields)] }, 'test-flag', {
+      targetingKey: 'user',
+      country,
+    } as EvaluationContext)
   })
 
   it.each([4, 5, 6, 7] as const)('ignores an unknown field in condition group %s', (unknownConditionGroup) => {

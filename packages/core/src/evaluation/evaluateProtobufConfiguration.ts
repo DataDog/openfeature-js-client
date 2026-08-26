@@ -9,14 +9,7 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import type {
-  Allocation,
-  Condition,
-  Flag,
-  Split,
-  VariationType,
-  Version,
-} from '../configuration/generated/ufc_pb'
+import type { Allocation, Condition, Flag, Split, VariationType, Version } from '../configuration/generated/ufc_pb'
 import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
