@@ -12,12 +12,25 @@
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "rules-based": [
+        "cjs/rules-based.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./cjs/index.d.ts",
       "import": "./esm/index.js",
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
+    },
+    "./rules-based": {
+      "types": "./cjs/rules-based.d.ts",
+      "import": "./esm/rules-based.js",
+      "require": "./cjs/rules-based.js",
+      "default": "./esm/rules-based.js"
     },
     "./package.json": "./package.json"
   },

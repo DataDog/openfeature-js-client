@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'packages/*/package.json'
+      - 'packages/core/src/**'
+      - 'scripts/test-react-native-package-install.sh'
+      - 'test-app-react-native/**'
       - 'yarn.lock'
       - 'lerna.json'
       - '.github/workflows/smoke-test.yaml'
@@ -95,3 +98,6 @@ jobs:
 
           echo ""
           echo "✅ npm install smoke test passed"
+
+      - name: Test React Native Metro compatibility
+        run: yarn test:react-native-install

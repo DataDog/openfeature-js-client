@@ -1,12 +1,21 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '../time'
+import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
  * Internal flags configuration for DatadogProvider.
  */
 export type FlagsConfiguration = {
+  /** The configuration wire could not be parsed, so no capability was decoded. @internal */
+  configurationError?: string
   /** @internal */
   precomputed?: PrecomputedConfiguration
+  /** The precomputed capability could not be decoded; a valid rules capability remains usable. @internal */
+  precomputedError?: string
+  /** @internal */
+  rules?: RulesConfiguration
+  /** The rules capability could not be decoded; a valid precomputed capability remains usable. @internal */
+  rulesError?: string
 }
 
 /** @internal */
@@ -14,6 +23,16 @@ export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
   fetchedAt?: TimeStamp
+  etag?: string
+  /** Parsing errors for malformed flags, retained by flag key. */
+  flagErrors?: Record<string, string>
+}
+
+/** @internal */
+export type RulesConfiguration = {
+  response: PreparedRulesResponse
+  fetchedAt?: TimeStamp
+  etag?: string
 }
 
 // Fancy way to map FlagValueType to expected FlagValue.
@@ -45,7 +64,6 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
-  extraLogging: Record<string, unknown>
 }
 
 /** @internal */

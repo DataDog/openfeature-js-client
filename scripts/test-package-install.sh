@@ -5,6 +5,21 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Get the repo root (parent of scripts/)
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BROWSER_PACKAGE_JSON="$REPO_ROOT/packages/browser/package.json"
+BROWSER_PACKAGE_JSON_BACKUP="$BROWSER_PACKAGE_JSON.backup"
+ROOT_YARN_LOCK="$REPO_ROOT/yarn.lock"
+ROOT_YARN_LOCK_BACKUP="$ROOT_YARN_LOCK.backup"
+
+restore_package_files() {
+  if [[ -f "$BROWSER_PACKAGE_JSON_BACKUP" ]]; then
+    mv -f "$BROWSER_PACKAGE_JSON_BACKUP" "$BROWSER_PACKAGE_JSON"
+  fi
+  if [[ -f "$ROOT_YARN_LOCK_BACKUP" ]]; then
+    mv -f "$ROOT_YARN_LOCK_BACKUP" "$ROOT_YARN_LOCK"
+  fi
+}
+
+trap restore_package_files EXIT
 
 echo "Testing @datadog/openfeature-browser package installation..."
 echo "Repository root: $REPO_ROOT"
@@ -31,8 +46,8 @@ echo "Installing packed core into browser package..."
 cd "$REPO_ROOT/packages/browser"
 
 # Save original package.json and yarn.lock
-cp package.json package.json.backup
-
+cp "$BROWSER_PACKAGE_JSON" "$BROWSER_PACKAGE_JSON_BACKUP"
+cp "$ROOT_YARN_LOCK" "$ROOT_YARN_LOCK_BACKUP"
 
 # Install the tarball temporarily
 yarn add "@datadog/flagging-core@file:$TEST_APP_DIR/core.tgz" --silent
@@ -41,10 +56,10 @@ yarn add "@datadog/flagging-core@file:$TEST_APP_DIR/core.tgz" --silent
 echo "Packing @datadog/openfeature-browser..."
 yarn pack --filename "$TEST_APP_DIR/browser.tgz" > /dev/null 2>&1
 
-# Restore browser package to original state using git
+# Restore browser package to original state
 echo "Restoring browser package..."
-rm package.json
-mv package.json.backup package.json
+restore_package_files
+trap - EXIT
 
 cd "$REPO_ROOT"
 
@@ -67,8 +82,19 @@ yarn add @datadog/openfeature-browser@file:./browser.tgz --silent
 echo "Building test app..."
 yarn build
 
+# Execute the built application in a real browser runtime
+echo "Installing Chromium..."
+if [[ "${CI:-}" == "true" ]]; then
+  yarn playwright install --with-deps --only-shell chromium
+else
+  yarn playwright install --only-shell chromium
+fi
+
+echo "Running browser smoke tests..."
+yarn test:browser
+
 echo ""
-echo "✓ All tests passed! Package can be installed and the app builds successfully."
+echo "✓ All tests passed! Package can be installed and executed in Chromium."
 echo ""
 echo "To run the test app locally:"
 echo "  cd test-app"

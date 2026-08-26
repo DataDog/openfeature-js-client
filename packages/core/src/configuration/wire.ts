@@ -1,56 +1,41 @@
-import type { EvaluationContext } from '@openfeature/core'
-import type { TimeStamp } from '../time'
 import type { FlagsConfiguration } from './configuration'
+import { precomputedConfigurationFromWire, precomputedConfigurationToWire } from './precomputed-wire'
+import { rulesConfigurationFromWire } from './rules-wire'
+import { encodeUniversalFlagConfiguration } from './ufc-protobuf'
+import {
+  type ConfigurationWireContents,
+  type FlagsConfigurationWire,
+  INVALID_CONFIGURATION_WIRE_ERROR,
+  parseConfigurationWire,
+} from './wire-types'
 
-type ConfigurationWire = {
-  version: 1
-  precomputed?: {
-    context?: EvaluationContext
-    response: string
-    fetchedAt?: TimeStamp
+export type { FlagsConfigurationWire } from './wire-types'
+
+/**
+ * Parse an opaque flags configuration wire value.
+ */
+export function configurationFromString(wire: FlagsConfigurationWire): FlagsConfiguration {
+  const serialized = parseConfigurationWire(wire)
+  if (!serialized) return { configurationError: INVALID_CONFIGURATION_WIRE_ERROR }
+  return {
+    ...precomputedConfigurationFromWire(serialized),
+    ...rulesConfigurationFromWire(serialized),
   }
 }
 
 /**
- * Create configuration from a string created with `configurationToString`.
+ * Serialize a flags configuration to a string that can be deserialized with
+ * `configurationFromString`.
  */
-export function configurationFromString(s: string): FlagsConfiguration {
-  try {
-    const wire: ConfigurationWire = JSON.parse(s)
+export function configurationToString(configuration: FlagsConfiguration): FlagsConfigurationWire {
+  const wire: ConfigurationWireContents = precomputedConfigurationToWire(configuration)
 
-    if (wire.version !== 1) {
-      // Unknown version
-      return {}
-    }
-
-    const configuration: FlagsConfiguration = {}
-    if (wire.precomputed) {
-      configuration.precomputed = {
-        ...wire.precomputed,
-        response: JSON.parse(wire.precomputed.response),
-      }
-    }
-
-    return configuration
-  } catch {
-    return {}
-  }
-}
-
-/**
- * Serialize configuration to string that can be deserialized with
- * `configurationFromString`. The serialized string format is
- * unspecified.
- */
-export function configurationToString(configuration: FlagsConfiguration): string {
-  const wire: ConfigurationWire = {
-    version: 1,
-  }
-
-  if (configuration.precomputed) {
-    wire.precomputed = {
-      ...configuration.precomputed,
-      response: JSON.stringify(configuration.precomputed.response),
+  if (configuration.rules) {
+    const { response, fetchedAt, etag } = configuration.rules
+    wire.rules = {
+      response: encodeUniversalFlagConfiguration(response),
+      fetchedAt,
+      etag,
     }
   }
 
