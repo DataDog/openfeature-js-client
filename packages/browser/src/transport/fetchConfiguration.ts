@@ -15,7 +15,7 @@ type JSONAPIError = {
   }[]
 }
 
-export interface ConfigurationFetchOptions {
+interface ConfigurationRequestOptions {
   clientToken: string
   applicationId?: string
   env?: string | null
@@ -23,10 +23,20 @@ export interface ConfigurationFetchOptions {
   customHeaders?: Record<string, string>
   overwriteRequestHeaders?: boolean
   flaggingProxy?: string
+  fetch?: typeof globalThis.fetch
+  signal?: AbortSignal
+}
+
+interface ConfigurationFetchOptions {
+  clientToken: string
+  env: string
+  site?: string
+  fetch?: typeof globalThis.fetch
   signal?: AbortSignal
 }
 
 export interface PrecomputedConfigurationFetchOptions extends ConfigurationFetchOptions {
+  applicationId?: string
   context: EvaluationContext
 }
 
@@ -46,7 +56,7 @@ export async function getErrorMessage(response: Response) {
   return response.statusText || 'Unknown error'
 }
 
-export function buildConfigurationUrl(options: ConfigurationFetchOptions, endpoint: 'precomputed' | 'rules'): URL {
+export function buildConfigurationUrl(options: ConfigurationRequestOptions, endpoint: 'precomputed' | 'rules'): URL {
   let url: URL
   if (options.flaggingProxy?.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
@@ -68,7 +78,7 @@ export function buildConfigurationUrl(options: ConfigurationFetchOptions, endpoi
 }
 
 export function buildConfigurationHeaders(
-  options: ConfigurationFetchOptions,
+  options: ConfigurationRequestOptions,
   contentHeaders: Record<string, string>,
   endpoint: 'precomputed' | 'rules'
 ): Record<string, string> {
@@ -110,7 +120,8 @@ export async function fetchPrecomputedConfiguration(
     stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
 
-  const response = await fetch(url.toString(), {
+  const fetchImplementation = options.fetch ?? globalThis.fetch
+  const response = await fetchImplementation(url.toString(), {
     method: 'POST',
     headers: defaultHeaders,
     signal: options.signal,
@@ -150,6 +161,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
     return fetchPrecomputedConfiguration({
       ...initConfiguration,
+      env: initConfiguration.env || '',
       context,
       signal,
     })

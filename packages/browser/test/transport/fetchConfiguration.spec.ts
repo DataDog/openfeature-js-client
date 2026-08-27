@@ -39,6 +39,12 @@ describe('createFlagsConfigurationFetcher', () => {
     env: 'test',
   }
 
+  const baseFetchOptions = {
+    clientToken: 'test-token',
+    applicationId: 'test-app-id',
+    env: 'test',
+  }
+
   const mockContext: EvaluationContext = {
     targetingKey: 'user-123',
     customAttr: 'value',
@@ -381,8 +387,7 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const result = await fetchPrecomputedConfiguration({
-        ...baseConfig,
-        flaggingProxy: 'https://proxy.example.com',
+        ...baseFetchOptions,
         context: mockContext,
       })
 
@@ -407,8 +412,7 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const result = await fetchPrecomputedConfiguration({
-        ...baseConfig,
-        flaggingProxy: 'https://proxy.example.com',
+        ...baseFetchOptions,
         context: mockContext,
       })
 
@@ -417,30 +421,39 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     it('fetches a precomputed configuration directly', async () => {
-      const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+      })
 
-      const result = await fetchPrecomputedConfiguration({ ...config, context: mockContext })
+      const result = await fetchPrecomputedConfiguration({
+        ...baseFetchOptions,
+        context: mockContext,
+        fetch: customFetch,
+      })
 
       expect(result.precomputed?.context).toEqual(mockContext)
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(customFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
     it('decodes a rules configuration response and includes source headers', async () => {
       const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
-      mockFetch.mockResolvedValue({
+      const customFetch = jest.fn().mockResolvedValue({
         ok: true,
         headers: new Headers(),
         arrayBuffer: async () => bytes.buffer,
       })
 
-      const result = await fetchRulesConfiguration({ ...baseConfig, flaggingProxy: 'https://proxy.example.com' })
+      const result = await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch })
 
       expect(result.rules).toMatchObject({
         fetchedAt: 1234567890,
         response: { environmentName: 'prod' },
       })
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://proxy.example.com/?dd_env=test',
+      expect(customFetch).toHaveBeenCalledWith(
+        'https://ufc-client.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/client?dd_env=test',
         expect.objectContaining({
           method: 'GET',
           headers: {

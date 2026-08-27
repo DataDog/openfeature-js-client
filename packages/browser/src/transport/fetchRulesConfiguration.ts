@@ -10,7 +10,8 @@ import {
 
 export async function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration> {
   const url = buildConfigurationUrl(options, 'rules')
-  const response = await fetch(url.toString(), {
+  const fetchImplementation = options.fetch ?? globalThis.fetch
+  const response = await fetchImplementation(url.toString(), {
     method: 'GET',
     headers: buildConfigurationHeaders(
       options,
