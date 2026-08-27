@@ -502,13 +502,14 @@ describe('DatadogProvider', () => {
       const second = provider.onContextChange({}, { targetingKey: 'user-2' })
 
       // Resolve stale, reject latest
+      const networkError = new Error('network failure')
       calls[1].resolve(makeFetchResponse(makeResponse('first')))
-      calls[2].reject(new Error('network failure'))
+      calls[2].reject(networkError)
 
       // Both reject together — stale chains to latest, so both reject with the same error
       await expect(Promise.all([first, second])).rejects.toThrow('network failure')
 
-      expect(errorHandler).toHaveBeenCalledWith({ message: 'network failure' })
+      expect(errorHandler).toHaveBeenCalledWith({ error: networkError, message: 'network failure' })
       expect(provider.status).toBe(ProviderStatus.ERROR)
     })
 

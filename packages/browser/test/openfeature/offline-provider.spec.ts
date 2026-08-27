@@ -270,6 +270,10 @@ describe('DatadogOfflineProvider', () => {
     provider.setConfiguration({})
 
     expect(errorHandler).toHaveBeenCalledWith({
+      error: expect.objectContaining({
+        code: 'PARSE_ERROR',
+        message: 'Flags configuration contains no usable capability',
+      }),
       message: 'Flags configuration contains no usable capability',
       errorCode: 'PARSE_ERROR',
     })

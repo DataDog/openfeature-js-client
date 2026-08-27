@@ -1,20 +1,20 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '../time'
-import type { FlagsConfiguration as ProtobufFlagsConfiguration } from './generated/ufc_pb'
+import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
  * Internal flags configuration for DatadogProvider.
  */
 export type FlagsConfiguration = {
-  /** @internal */
+  /** The configuration wire could not be parsed, so no capability was decoded. @internal */
   configurationError?: string
   /** @internal */
   precomputed?: PrecomputedConfiguration
-  /** @internal */
+  /** The precomputed capability could not be decoded; a valid rules capability remains usable. @internal */
   precomputedError?: string
   /** @internal */
   rules?: RulesConfiguration
-  /** @internal */
+  /** The rules capability could not be decoded; a valid precomputed capability remains usable. @internal */
   rulesError?: string
 }
 
@@ -30,7 +30,7 @@ export type PrecomputedConfiguration = {
 
 /** @internal */
 export type RulesConfiguration = {
-  response: ProtobufFlagsConfiguration
+  response: PreparedRulesResponse
   fetchedAt?: TimeStamp
   etag?: string
 }
