@@ -10,6 +10,7 @@ import {
 
 export async function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration> {
   const url = buildConfigurationUrl(options, 'rules')
+  const fetchedAt = timeStampNow()
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const response = await fetchImplementation(url.toString(), {
     method: 'GET',
@@ -29,7 +30,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
 
   const configuration = configurationFromRulesBinary(new Uint8Array(await response.arrayBuffer()))
   if (configuration.rules) {
-    configuration.rules.fetchedAt = timeStampNow()
+    configuration.rules.fetchedAt = fetchedAt
   }
   return configuration
 }

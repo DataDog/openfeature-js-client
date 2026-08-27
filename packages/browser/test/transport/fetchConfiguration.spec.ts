@@ -1,4 +1,4 @@
-import type { TimeStamp } from '@datadog/js-core/time'
+import { type TimeStamp, timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
@@ -421,10 +421,13 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     it('fetches a precomputed configuration directly', async () => {
-      const customFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        headers: new Headers(),
-        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+      const customFetch = jest.fn().mockImplementation(async () => {
+        expect(timeStampNow).toHaveBeenCalledTimes(1)
+        return {
+          ok: true,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        }
       })
 
       const result = await fetchPrecomputedConfiguration({
@@ -440,10 +443,13 @@ describe('createFlagsConfigurationFetcher', () => {
 
     it('decodes a rules configuration response and includes source headers', async () => {
       const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
-      const customFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        headers: new Headers(),
-        arrayBuffer: async () => bytes.buffer,
+      const customFetch = jest.fn().mockImplementation(async () => {
+        expect(timeStampNow).toHaveBeenCalledTimes(1)
+        return {
+          ok: true,
+          headers: new Headers(),
+          arrayBuffer: async () => bytes.buffer,
+        }
       })
 
       const result = await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch })

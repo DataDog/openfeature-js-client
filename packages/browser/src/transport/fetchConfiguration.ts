@@ -102,6 +102,7 @@ export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
   const url = buildConfigurationUrl(options, 'precomputed')
+  const fetchedAt = timeStampNow()
   const defaultHeaders = buildConfigurationHeaders(
     options,
     {
@@ -150,7 +151,7 @@ export async function fetchPrecomputedConfiguration(
     precomputed: {
       ...parsed,
       context: options.context,
-      fetchedAt: timeStampNow(),
+      fetchedAt,
     },
   }
 }
