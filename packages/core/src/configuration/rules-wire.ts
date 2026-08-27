@@ -1,11 +1,11 @@
 import type { FlagsConfiguration } from './configuration'
 import { decodeUniversalFlagConfiguration, decodeUniversalFlagConfigurationBinary } from './ufc-protobuf'
 import {
+  type ConfigurationWireContents,
   decodeSafely,
   type FlagsConfigurationWire,
   INVALID_CONFIGURATION_WIRE_ERROR,
   parseConfigurationWire,
-  type SerializedConfiguration,
 } from './wire-types'
 import { isWireEntry } from './wire-validation'
 
@@ -28,7 +28,7 @@ export function configurationFromRulesBinary(response: Uint8Array): FlagsConfigu
   }
 }
 
-export function rulesConfigurationFromWire(serialized: SerializedConfiguration): FlagsConfiguration {
+export function rulesConfigurationFromWire(serialized: ConfigurationWireContents): FlagsConfiguration {
   if (serialized.rules === undefined) return {}
   if (!isWireEntry(serialized.rules)) return { rulesError: 'Invalid rules configuration wire entry' }
 

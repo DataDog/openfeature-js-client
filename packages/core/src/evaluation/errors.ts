@@ -11,3 +11,10 @@ export class FlagConfigurationError extends Error {
     this.name = 'FlagConfigurationError'
   }
 }
+
+export class InvalidContextError extends Error {
+  constructor() {
+    super('Evaluation context is missing a required partition attribute')
+    this.name = 'InvalidContextError'
+  }
+}

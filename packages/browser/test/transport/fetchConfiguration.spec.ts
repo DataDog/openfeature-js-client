@@ -389,7 +389,7 @@ describe('createFlagsConfigurationFetcher', () => {
       expect(result).toEqual({ precomputedError: error })
     })
 
-    it('preserves valid flags and records malformed flags', async () => {
+    it('preserves flags and records malformed flags', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         headers: new Headers(),
@@ -412,7 +412,7 @@ describe('createFlagsConfigurationFetcher', () => {
         context: mockContext,
       })
 
-      expect(result.precomputed?.response.data.attributes.flags).toEqual({ valid: validFlag })
+      expect(result.precomputed?.response.data.attributes.flags).toEqual({ valid: validFlag, malformed: {} })
       expect(result.precomputed?.flagErrors).toEqual({ malformed: 'Invalid precomputed flag configuration' })
     })
 
