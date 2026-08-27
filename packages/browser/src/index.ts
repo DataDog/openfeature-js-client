@@ -4,6 +4,7 @@ import { DatadogProvider } from './openfeature/provider'
 export { configurationFromString, configurationToString } from '@datadog/flagging-core'
 export type { FlaggingInitConfiguration } from './domain/configuration'
 export { DatadogDevtools } from './openfeature/devtools-provider'
+export { withRetry, withTimeout } from './transport/fetch'
 export { DatadogProvider }
 
 // Build environment placeholder for testing
