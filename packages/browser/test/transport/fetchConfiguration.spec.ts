@@ -1,7 +1,9 @@
-import type { TimeStamp } from '@datadog/js-core/time'
+import { type TimeStamp, timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
-import { createFlagsConfigurationFetcher } from '../../src/transport/fetchConfiguration'
+import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
+import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
+import rulesWire from '../data/rules-v1-wire.json'
 
 jest.mock('@datadog/js-core/time', () => ({
   timeStampNow: jest.fn(() => 1234567890),
@@ -21,7 +23,7 @@ describe('createFlagsConfigurationFetcher', () => {
           return null
         }),
       },
-      json: jest.fn().mockResolvedValue({ mockResponse: true }),
+      json: jest.fn().mockResolvedValue(validPrecomputedResponse),
     })
     global.fetch = mockFetch
   })
@@ -37,11 +39,37 @@ describe('createFlagsConfigurationFetcher', () => {
     env: 'test',
   }
 
+  const baseFetchOptions = {
+    clientToken: 'test-token',
+    applicationId: 'test-app-id',
+    env: 'test',
+  }
+
   const mockContext: EvaluationContext = {
     targetingKey: 'user-123',
     customAttr: 'value',
     numericAttr: 42,
     booleanAttr: true,
+  }
+
+  const validFlag = {
+    allocationKey: 'allocation',
+    variationKey: 'enabled',
+    variationType: 'boolean',
+    variationValue: true,
+    reason: 'TARGETING_MATCH',
+    doLog: true,
+  }
+
+  const validPrecomputedResponse = {
+    data: {
+      attributes: {
+        createdAt: '2026-08-19T00:00:00.000Z',
+        flags: {
+          'test-flag': validFlag,
+        },
+      },
+    },
   }
 
   describe('URL construction with flaggingProxy', () => {
@@ -323,7 +351,6 @@ describe('createFlagsConfigurationFetcher', () => {
 
   describe('return value', () => {
     it('should return precomputed configuration with context and timestamp', async () => {
-      const mockResponse = { flags: { 'test-flag': 'value' } }
       mockFetch.mockResolvedValue({
         ok: true,
         headers: {
@@ -332,7 +359,7 @@ describe('createFlagsConfigurationFetcher', () => {
             return null
           }),
         },
-        json: jest.fn().mockResolvedValue(mockResponse),
+        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
       })
 
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
@@ -342,11 +369,107 @@ describe('createFlagsConfigurationFetcher', () => {
 
       expect(result).toEqual({
         precomputed: {
-          response: mockResponse,
+          response: validPrecomputedResponse,
           context: mockContext,
           fetchedAt: 1234567890 as TimeStamp,
         },
       })
+    })
+
+    it.each([
+      ['null', null, 'Precomputed configuration response must be an object'],
+      ['an empty object', {}, 'Precomputed configuration response is missing data'],
+    ])('returns a parse error for %s', async (_, response, error) => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue(response),
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...baseFetchOptions,
+        context: mockContext,
+      })
+
+      expect(result).toEqual({ precomputedError: error })
+    })
+
+    it('preserves flags and records malformed flags', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({
+          data: {
+            attributes: {
+              createdAt: '2026-08-19T00:00:00.000Z',
+              flags: {
+                valid: validFlag,
+                malformed: {},
+              },
+            },
+          },
+        }),
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...baseFetchOptions,
+        context: mockContext,
+      })
+
+      expect(result.precomputed?.response.data.attributes.flags).toEqual({ valid: validFlag, malformed: {} })
+      expect(result.precomputed?.flagErrors).toEqual({ malformed: 'Invalid precomputed flag configuration' })
+    })
+
+    it('fetches a precomputed configuration directly', async () => {
+      const customFetch = jest.fn().mockImplementation(async () => {
+        expect(timeStampNow).toHaveBeenCalledTimes(1)
+        return {
+          ok: true,
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        }
+      })
+
+      const result = await fetchPrecomputedConfiguration({
+        ...baseFetchOptions,
+        context: mockContext,
+        fetch: customFetch,
+      })
+
+      expect(result.precomputed?.context).toEqual(mockContext)
+      expect(customFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('decodes a rules configuration response and includes source headers', async () => {
+      const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+      const customFetch = jest.fn().mockImplementation(async () => {
+        expect(timeStampNow).toHaveBeenCalledTimes(1)
+        return {
+          ok: true,
+          headers: new Headers(),
+          arrayBuffer: async () => bytes.buffer,
+        }
+      })
+
+      const result = await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch })
+
+      expect(result.rules).toMatchObject({
+        fetchedAt: 1234567890,
+        response: { environmentName: 'prod' },
+      })
+      expect(customFetch).toHaveBeenCalledWith(
+        'https://ufc-client.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/client?dd_env=test',
+        expect.objectContaining({
+          method: 'GET',
+          headers: {
+            Accept: 'application/protobuf',
+            'DD-Client-Library-Language': 'browser',
+            'DD-Client-Library-Version': '1.0.0-test',
+            'dd-client-token': 'test-token',
+          },
+        })
+      )
     })
   })
 })

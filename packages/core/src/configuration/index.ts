@@ -10,3 +10,4 @@ export {
   configurationToPrecomputedString as configurationToString,
 } from './precomputed-wire'
 export type { FlagsConfigurationWire } from './wire-types'
+export { parsePrecomputedConfigurationResponse } from './wire-validation'

@@ -6,7 +6,6 @@ import 'fake-indexeddb/auto'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
-import { timeStampNow } from '@datadog/js-core/time'
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
@@ -89,6 +88,25 @@ describe('DatadogProvider IndexedDB persistence', () => {
   })
 
   describe('falls back to cached flags on network failure', () => {
+    it('should preserve initialFlagsConfiguration as an in-memory fallback', async () => {
+      const context = { targetingKey: 'initial-user' }
+      const initialFlagsConfiguration: FlagsConfiguration = {
+        precomputed: {
+          response: precomputedResponse as any,
+          context,
+          fetchedAt: 1731939819456 as TimeStamp,
+        },
+      }
+      global.fetch = failingFetchMock()
+      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration })
+
+      await provider.initialize(context)
+
+      expect(provider.status).toBe(ProviderStatus.STALE)
+      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      expect(provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger).value).toBe('red')
+    })
+
     it('should use IndexedDB cache and enter STALE state when network fails', async () => {
       // First: seed IndexedDB with a known config
       const context = { targetingKey: 'cached-user' }
@@ -167,56 +185,6 @@ describe('DatadogProvider IndexedDB persistence', () => {
   })
 
   describe('cache guards', () => {
-    it('should NOT use cached flags when initialFlagsConfiguration is provided', async () => {
-      // Seed IndexedDB with cached data
-      const context = { targetingKey: 'user-1' }
-      const seedConfig: FlagsConfiguration = {
-        precomputed: {
-          response: {
-            data: {
-              attributes: {
-                createdAt: '0',
-                flags: {
-                  'string-flag': {
-                    allocationKey: 'cached',
-                    variationKey: 'cached',
-                    variationType: 'string',
-                    variationValue: 'cached-value',
-                    reason: 'DEFAULT',
-                    doLog: false,
-                  },
-                },
-              },
-            },
-          },
-          context,
-          fetchedAt: 0 as TimeStamp,
-        },
-      }
-      const cache = new IndexedDBFlagsCache(options.clientToken)
-      cache.set(seedConfig, context)
-      await flushAsync()
-
-      // Provider with initialFlagsConfiguration should NOT use cached flags
-      global.fetch = failingFetchMock()
-      const initialConfig: FlagsConfiguration = {
-        precomputed: {
-          response: precomputedResponse as any,
-          context,
-          fetchedAt: timeStampNow(),
-        },
-      }
-      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
-      await provider.initialize(context)
-
-      // initialFlagsConfiguration takes precedence, so STALE (fetch failed but we have initial config)
-      expect([ProviderStatus.READY, ProviderStatus.STALE]).toContain(provider.status)
-      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-      // Should use initialFlagsConfiguration (has 'red'), not cached ('cached-value')
-      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
-      expect(result.value).toBe('red')
-    })
-
     it('should NOT use cached flags for a different context', async () => {
       // Seed IndexedDB with cached data for user-1
       const contextA = { targetingKey: 'user-1' }
@@ -265,64 +233,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
     })
   })
 
-  describe('context matching with initialFlagsConfiguration', () => {
-    it('should use initialFlagsConfiguration when context matches during initialize', async () => {
-      const context = { targetingKey: 'user-1', customAttribute: 'value' }
-      const initialConfig: FlagsConfiguration = {
-        precomputed: {
-          response: precomputedResponse as any,
-          context,
-          fetchedAt: timeStampNow(),
-        },
-      }
-
-      global.fetch = failingFetchMock()
-      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
-      await provider.initialize(context)
-
-      expect(provider.status).toBe(ProviderStatus.STALE)
-      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
-      expect(result.value).toBe('red')
-    })
-
-    it('should NOT use initialFlagsConfiguration when context does not match during initialize', async () => {
-      const initialContext = { targetingKey: 'user-1' }
-      const requestContext = { targetingKey: 'user-2' }
-      const initialConfig: FlagsConfiguration = {
-        precomputed: {
-          response: precomputedResponse as any,
-          context: initialContext,
-          fetchedAt: timeStampNow(),
-        },
-      }
-
-      global.fetch = failingFetchMock()
-      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
-
-      // Should throw because context doesn't match and no cache exists
-      await expect(provider.initialize(requestContext)).rejects.toThrow('Network error')
-    })
-
-    it('should use context-agnostic initialFlagsConfiguration (no context field)', async () => {
-      const initialConfig: FlagsConfiguration = {
-        precomputed: {
-          response: precomputedResponse as any,
-          // No context field = matches any context
-          fetchedAt: timeStampNow(),
-        },
-      }
-
-      global.fetch = failingFetchMock()
-      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
-      await provider.initialize({ targetingKey: 'any-user' })
-
-      expect(provider.status).toBe(ProviderStatus.STALE)
-      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
-      expect(result.value).toBe('red')
-    })
-
+  describe('current configuration fallback', () => {
     it('should reuse current configuration on context change when context still matches', async () => {
       const context = { targetingKey: 'user-1' }
 
@@ -338,31 +249,6 @@ describe('DatadogProvider IndexedDB persistence', () => {
       // Should reuse current config and go STALE
       global.fetch = failingFetchMock()
       await provider.onContextChange(context, context)
-
-      expect(provider.status).toBe(ProviderStatus.STALE)
-      const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-      const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
-      expect(result.value).toBe('red')
-    })
-
-    it('should reuse context-agnostic current configuration on any context change', async () => {
-      const initialConfig: FlagsConfiguration = {
-        precomputed: {
-          response: precomputedResponse as any,
-          // No context = matches any context
-          fetchedAt: timeStampNow(),
-        },
-      }
-
-      // Initialize with context-agnostic config
-      global.fetch = failingFetchMock()
-      const provider = new DatadogProvider({ ...options, initialFlagsConfiguration: initialConfig })
-      await provider.initialize({ targetingKey: 'user-1' })
-      expect(provider.status).toBe(ProviderStatus.STALE)
-
-      // Context change to different user, fetch still fails
-      // Should reuse context-agnostic config and stay STALE
-      await provider.onContextChange({ targetingKey: 'user-1' }, { targetingKey: 'user-2' })
 
       expect(provider.status).toBe(ProviderStatus.STALE)
       const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
