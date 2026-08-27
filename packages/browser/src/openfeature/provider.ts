@@ -1,20 +1,19 @@
-import { type AssignmentCache, configMatchesContext, type FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  type AssignmentCache,
+  configMatchesContext,
+  evaluate,
+  type FlagsConfiguration,
+  type FlagTypeToValue,
+} from '@datadog/flagging-core'
 import type {
   EvaluationContext,
+  FlagValueType,
   Hook,
-  JsonValue,
   Logger,
-  Paradigm,
-  Provider,
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import {
-  OpenFeatureEventEmitter,
-  type ProviderEventEmitter,
-  ProviderEvents,
-  ProviderStatus,
-} from '@openfeature/web-sdk'
+import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
@@ -23,7 +22,8 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { evaluate } from '../evaluation'
+import { DatadogCoreProvider } from './core-provider'
+import { toProviderErrorEvent } from './error-event'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -53,13 +53,11 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider implements Provider {
+export class DatadogProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
-  readonly runsOn: Paradigm = 'client'
   hooks?: Hook[]
-  readonly events: ProviderEventEmitter<ProviderEvents>
 
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
@@ -78,7 +76,7 @@ export class DatadogProvider implements Provider {
 
   status: ProviderStatus
 
-  private flagsConfiguration: FlagsConfiguration = {}
+  private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined
@@ -104,11 +102,11 @@ export class DatadogProvider implements Provider {
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
+    super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
     // Set up provider-managed hooks and events
     this.hooks = []
-    this.events = new OpenFeatureEventEmitter()
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     if (this.isRumIntegrationEnabled) {
@@ -135,7 +133,7 @@ export class DatadogProvider implements Provider {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration || {}
+    this.flagsConfiguration = options.initialFlagsConfiguration
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -223,7 +221,7 @@ export class DatadogProvider implements Provider {
           } else {
             // Otherwise, this is a legitimate error
             this.status = ProviderStatus.ERROR
-            this.events.emit(ProviderEvents.Error, { error })
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
         }
@@ -280,51 +278,13 @@ export class DatadogProvider implements Provider {
     }
   }
 
-  resolveBooleanEvaluation(
+  protected resolve<T extends FlagValueType>(
+    type: T,
     flagKey: string,
-    defaultValue: boolean,
+    defaultValue: FlagTypeToValue<T>,
     _context: EvaluationContext,
     _logger: Logger
-  ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, this.evaluationContext)
-  }
-
-  resolveStringEvaluation(
-    flagKey: string,
-    defaultValue: string,
-    _context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, this.evaluationContext)
-  }
-
-  resolveNumberEvaluation(
-    flagKey: string,
-    defaultValue: number,
-    _context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, this.evaluationContext)
-  }
-
-  resolveObjectEvaluation<T extends JsonValue>(
-    flagKey: string,
-    defaultValue: T,
-    _context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<T> {
-    // type safety: OpenFeature interface requires us to return a
-    // specific T for *any* value of T (which could be any subtype of
-    // JsonValue). We can't even theoretically implement it in a
-    // type-sound way because there's no runtime information passed to
-    // learn what type the user expects. So it's up to the user to
-    // make sure they pass the appropriate type.
-    return evaluate(
-      this.flagsConfiguration,
-      'object',
-      flagKey,
-      defaultValue,
-      this.evaluationContext
-    ) as ResolutionDetails<T>
+  ): ResolutionDetails<FlagTypeToValue<T>> {
+    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.evaluationContext)
   }
 }
