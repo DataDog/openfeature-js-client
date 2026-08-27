@@ -57,10 +57,8 @@ const provider = new DatadogProvider({
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
 
-  // Optional request reliability settings. When omitted, requests have no SDK
-  // timeout and are not retried.
-  assignmentRequestTimeoutMs: 5000,
-  assignmentRequestRetryCount: 1,
+  // Optional Fetch-compatible implementation (for example, a timeout/retry wrapper)
+  fetch: customFetch,
 })
 ```
 

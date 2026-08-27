@@ -28,7 +28,6 @@ describe('createFlagsConfigurationFetcher', () => {
 
   afterEach(() => {
     global.fetch = originalFetch
-    jest.useRealTimers()
     jest.clearAllMocks()
   })
 
@@ -351,137 +350,41 @@ describe('createFlagsConfigurationFetcher', () => {
     })
   })
 
-  describe('request reliability', () => {
-    it('should preserve one request with no SDK timeout by default', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Server Error',
-        headers: { get: jest.fn(() => null) },
+  describe('custom fetch implementation', () => {
+    it('should use the configured fetch implementation instead of global fetch', async () => {
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: jest.fn(() => 'application/json') },
+        json: jest.fn().mockResolvedValue({ flags: {} }),
       })
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
 
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
-
-      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Server Error')
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: undefined }))
-    })
-
-    it('should retry once after a request timeout when configured', async () => {
-      jest.useFakeTimers()
-      mockFetch
-        .mockImplementationOnce((_url: string, init: RequestInit) => {
-          return new Promise((_resolve, reject) => {
-            init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-          })
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: { get: jest.fn(() => 'application/json') },
-          json: jest.fn().mockResolvedValue({ flags: {} }),
-        })
-
-      const fetcher = createFlagsConfigurationFetcher({
-        ...baseConfig,
-        assignmentRequestTimeoutMs: 1_000,
-        assignmentRequestRetryCount: 1,
-      })
-      const resultPromise = fetcher(mockContext)
-
-      await jest.advanceTimersByTimeAsync(1_000)
-
-      await expect(resultPromise).resolves.toEqual({
+      await expect(fetcher(mockContext)).resolves.toEqual({
         precomputed: {
           response: { flags: {} },
           context: mockContext,
           fetchedAt: 1234567890,
         },
       })
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(customFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should retry once after a transient response when configured', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          statusText: 'Server Error',
-          headers: { get: jest.fn(() => null) },
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: { get: jest.fn(() => 'application/json') },
-          json: jest.fn().mockResolvedValue({ flags: {} }),
-        })
-
-      const fetcher = createFlagsConfigurationFetcher({
-        ...baseConfig,
-        assignmentRequestRetryCount: 1,
-      })
-
-      await expect(fetcher(mockContext)).resolves.toBeDefined()
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-    })
-
-    it('should not retry a non-transient response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        headers: { get: jest.fn(() => null) },
-      })
-
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
-
-      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Bad Request')
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-    })
-
-    it('should not retry a rate-limited response without a retry delay', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        statusText: 'Too Many Requests',
-        headers: { get: jest.fn(() => null) },
-      })
-
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
-
-      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Too Many Requests')
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-    })
-
-    it('should use the configured retry count', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Server Error',
-        headers: { get: jest.fn(() => null) },
-      })
-      const fetcher = createFlagsConfigurationFetcher({
-        ...baseConfig,
-        assignmentRequestTimeoutMs: 2_000,
-        assignmentRequestRetryCount: 2,
-      })
-
-      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Server Error')
-      expect(mockFetch).toHaveBeenCalledTimes(3)
-    })
-
-    it('should not retry a caller abort', async () => {
+    it('should forward the caller abort signal to the configured fetch implementation', async () => {
       const controller = new AbortController()
-      mockFetch.mockImplementationOnce((_url: string, init: RequestInit) => {
-        return new Promise((_resolve, reject) => {
-          init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-        })
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: jest.fn(() => 'application/json') },
+        json: jest.fn().mockResolvedValue({ flags: {} }),
       })
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
 
-      const resultPromise = fetcher(mockContext, { signal: controller.signal })
-      controller.abort()
+      await fetcher(mockContext, { signal: controller.signal })
 
-      await expect(resultPromise).rejects.toMatchObject({ name: 'AbortError' })
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(customFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: controller.signal })
+      )
     })
   })
 })

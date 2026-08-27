@@ -74,16 +74,10 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   flaggingProxy?: string
 
   /**
-   * Optional timeout for each flag assignment request in milliseconds.
-   * When omitted, requests have no SDK-imposed timeout.
+   * Fetch implementation used for flag configuration requests. It can customize request handling,
+   * including retries, timeouts, proxying, and headers.
    */
-  assignmentRequestTimeoutMs?: number
-
-  /**
-   * Number of retries after a failed flag assignment request.
-   * When omitted, requests are not retried.
-   */
-  assignmentRequestRetryCount?: number
+  fetch?: typeof globalThis.fetch
 }
 
 export interface FlaggingConfiguration extends Configuration {
