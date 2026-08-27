@@ -156,7 +156,7 @@ import {
 
 ### Using DatadogOfflineProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
+`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration. By default it also sends no telemetry.
 
 For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
@@ -180,6 +180,21 @@ const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, add a `tracking` configuration. Providing it enables all three integrations by default; each can be disabled independently. This only enables telemetry transport—flag configuration remains fully offline.
+
+```javascript
+const provider = new DatadogOfflineProvider({
+  tracking: {
+    clientToken: 'client-token',
+    applicationId: 'application-id',
+    site: 'datadoghq.com',
+    service: 'storefront',
+    enableRumFeatureFlagTracking: false,
+  },
+})
+provider.setConfiguration(configuration)
+```
 
 ## End-user license agreement
 

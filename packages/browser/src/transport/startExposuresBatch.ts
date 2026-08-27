@@ -6,10 +6,10 @@ import {
   createIdentityEncoder,
   Observable,
 } from '@datadog/browser-core'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 
 export function startExposuresBatch(
-  configuration: FlaggingConfiguration,
+  configuration: FlaggingTrackingConfiguration,
   reportError: (error: RawError) => void,
   pageMayExitObservable: Observable<PageMayExitEvent>
 ) {

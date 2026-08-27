@@ -1,26 +1,55 @@
-import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
+import type { AssignmentCache, FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
 import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   FlagValueType,
+  Hook,
   Logger,
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
+import {
+  type FlaggingTrackingInitConfiguration,
+  validateAndBuildFlaggingTrackingConfiguration,
+} from '../domain/configuration'
 import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
+import { createProviderTracking } from './tracking'
+
+export interface DatadogOfflineProviderOptions {
+  /**
+   * Optional browser telemetry transport and tracking settings. Offline evaluation never fetches
+   * configuration. Tracking is disabled when this property is omitted; when supplied, integrations
+   * use the same defaults as DatadogProvider and can be disabled individually.
+   */
+  tracking?: FlaggingTrackingInitConfiguration
+}
 
 export class DatadogOfflineProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
     name: 'datadog-offline',
   }
+  hooks?: Hook[]
 
   private flagsConfiguration: FlagsConfiguration | undefined
   private context: EvaluationContext | undefined
+  private readonly exposureCache?: AssignmentCache
 
-  constructor() {
+  constructor(options: DatadogOfflineProviderOptions = {}) {
     super()
+    const trackingConfiguration = options.tracking
+      ? validateAndBuildFlaggingTrackingConfiguration(options.tracking)
+      : undefined
+    const tracking = createProviderTracking({
+      options: options.tracking ?? {},
+      configuration: trackingConfiguration,
+      enabledByDefault: options.tracking !== undefined,
+      getTrackingContext: (context) => context,
+      serializeExposureCacheLifecycle: true,
+    })
+    this.hooks = tracking.hooks
+    this.exposureCache = tracking.exposureCache
   }
 
   getConfiguration(): FlagsConfiguration | undefined {
@@ -30,6 +59,13 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   setConfiguration(configuration: FlagsConfiguration): void {
     const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
     this.flagsConfiguration = configuration
+    try {
+      void Promise.resolve(this.exposureCache?.clear()).catch(() => {
+        // Telemetry cache failures must not prevent configuration updates.
+      })
+    } catch {
+      // Telemetry cache failures must not prevent configuration updates.
+    }
 
     if (this.context === undefined) return
 
@@ -47,12 +83,23 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
 
   initialize(context: EvaluationContext = {}): Promise<void> {
     this.context = context
-    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
-    if (error) {
-      return Promise.reject(error)
+
+    let cacheInitialization: Promise<void>
+    try {
+      cacheInitialization = Promise.resolve(this.exposureCache?.init())
+    } catch {
+      // Telemetry cache failures must not prevent offline evaluation.
+      cacheInitialization = Promise.resolve()
     }
 
-    return Promise.resolve()
+    return cacheInitialization
+      .catch(() => {})
+      .then(() => {
+        const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, context))
+        if (error) {
+          return Promise.reject(error)
+        }
+      })
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {

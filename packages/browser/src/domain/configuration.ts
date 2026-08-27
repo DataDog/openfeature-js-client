@@ -8,16 +8,11 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
 /**
  * Init Configuration for the Flagging SDK.
  */
-export interface FlaggingInitConfiguration extends InitConfiguration {
+export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
   /**
    * The RUM application ID.
    */
   applicationId?: string
-
-  /**
-   * Initial flags configuration (precomputed flags)
-   */
-  initialFlagsConfiguration?: FlagsConfiguration
 
   /**
    * RUM integration options
@@ -57,6 +52,16 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Flag evaluation tracking interval in milliseconds (default: 10000ms)
    */
   flagEvaluationTrackingInterval?: number
+}
+
+/**
+ * Init Configuration for the online Flagging provider.
+ */
+export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfiguration {
+  /**
+   * Initial flags configuration (precomputed flags)
+   */
+  initialFlagsConfiguration?: FlagsConfiguration
 
   /**
    * Custom headers to add to the request to the Datadog API.
@@ -74,22 +79,25 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   flaggingProxy?: string
 }
 
-export interface FlaggingConfiguration extends Configuration {
+export interface FlaggingTrackingConfiguration extends Configuration {
   applicationId?: string
   flagEvaluationTrackingInterval: number
+
+  // Inherited from Configuration via TransportConfiguration.
+  // Declared explicitly here to make the contract visible to consumers of FlaggingTrackingConfiguration.
+  flagEvaluationEndpointBuilder: EndpointBuilder
+}
+
+export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
   fetchFlagsConfiguration: (
     context: EvaluationContext,
     options?: { signal?: AbortSignal }
   ) => Promise<FlagsConfiguration>
-
-  // Inherited from Configuration via TransportConfiguration.
-  // Declared explicitly here to make the contract visible to consumers of FlaggingConfiguration.
-  flagEvaluationEndpointBuilder: EndpointBuilder
 }
 
-export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration
-): FlaggingConfiguration | undefined {
+export function validateAndBuildFlaggingTrackingConfiguration(
+  initConfiguration: FlaggingTrackingInitConfiguration
+): FlaggingTrackingConfiguration | undefined {
   const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
   if (!baseConfiguration) {
     return
@@ -98,7 +106,20 @@ export function validateAndBuildFlaggingConfiguration(
   return {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,
+  }
+}
+
+export function validateAndBuildFlaggingConfiguration(
+  initConfiguration: FlaggingInitConfiguration
+): FlaggingConfiguration | undefined {
+  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration)
+  if (!trackingConfiguration) {
+    return
+  }
+
+  return {
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
+    ...trackingConfiguration,
   }
 }
