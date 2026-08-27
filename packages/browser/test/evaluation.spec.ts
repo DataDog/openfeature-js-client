@@ -1,4 +1,4 @@
-import { configurationFromString } from '@datadog/flagging-core'
+import { configurationFromString, type FlagsConfiguration } from '@datadog/flagging-core'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
@@ -76,6 +76,54 @@ describe('evaluate', () => {
         doLog: true,
         variationType: 'OBJECT',
       },
+    })
+  })
+
+  describe('serial id', () => {
+    const configurationWithSerialId = (serialId?: number | null): FlagsConfiguration => ({
+      precomputed: {
+        response: {
+          data: {
+            attributes: {
+              createdAt: '2026-08-17T00:00:00.000Z',
+              flags: {
+                'string-flag': {
+                  allocationKey: 'allocation-123',
+                  variationKey: 'variation-123',
+                  variationType: 'string',
+                  variationValue: 'red',
+                  reason: 'TARGETING_MATCH',
+                  doLog: true,
+                  extraLogging: {},
+                  ...(serialId === undefined ? {} : { serialId }),
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    it('carries the serial id from the precomputed flag onto the evaluation metadata', () => {
+      const result = evaluate(configurationWithSerialId(340132), 'string', 'string-flag', 'default', {})
+      expect(result.flagMetadata).toEqual({
+        allocationKey: 'allocation-123',
+        variationType: 'string',
+        doLog: true,
+        __dd_split_serial_id: 340132,
+      })
+    })
+
+    it('omits the serial id when the server sends null', () => {
+      const result = evaluate(configurationWithSerialId(null), 'string', 'string-flag', 'default', {})
+      expect(result.flagMetadata).not.toHaveProperty('__dd_split_serial_id')
+      expect(result.value).toBe('red')
+    })
+
+    it('omits the serial id when the server sends no such key', () => {
+      const result = evaluate(configurationWithSerialId(), 'string', 'string-flag', 'default', {})
+      expect(result.flagMetadata).not.toHaveProperty('__dd_split_serial_id')
+      expect(result.value).toBe('red')
     })
   })
 })

@@ -1,3 +1,4 @@
+import { FlagEvaluationAggregator } from '@datadog/flagging-core'
 import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
@@ -45,8 +46,6 @@ describe('createFlagEvalEVPHook', () => {
   })
 
   it('should handle evaluation tracking in after hook', () => {
-    const hook = createFlagEvalEVPHook(mockConfiguration)
-
     const mockContext: HookContext = {
       flagKey: 'test-flag',
       defaultValue: true,
@@ -89,8 +88,17 @@ describe('createFlagEvalEVPHook', () => {
       },
     }
 
+    const effectiveContext = {
+      targetingKey: 'rum-user',
+      user_email: 'rum@example.com',
+    }
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    const hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
+
     expect(() => {
       hook.after?.(mockContext, mockDetails)
     }).not.toThrow()
+    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails)
+    addEvaluationSpy.mockRestore()
   })
 })

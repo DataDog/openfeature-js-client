@@ -44,6 +44,7 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   variationValue: FlagTypeToValue<T>
   reason: ResolutionReason
   doLog: boolean
+  serialId?: number | null
   extraLogging: Record<string, unknown>
 }
 

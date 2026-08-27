@@ -1,5 +1,5 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
-import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
+import { validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
@@ -47,7 +47,8 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   enableFlagEvaluationTracking?: boolean
 
   /**
-   * Whether to include feature flag assignment details in RUM events (default: true)
+   * Whether to enable RUM integration (default: true). This includes feature flag assignment details in RUM events
+   * and flat primitive RUM user properties in the OpenFeature evaluation context.
    * See: https://docs.datadoghq.com/real_user_monitoring/feature_flag_tracking/
    */
   enableRumFeatureFlagTracking?: boolean
@@ -73,12 +74,14 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   flaggingProxy?: string
 
   /**
-   * Timeout for each flag assignment request in milliseconds (default: 1000ms).
+   * Optional timeout for each flag assignment request in milliseconds.
+   * When omitted, requests have no SDK-imposed timeout.
    */
   assignmentRequestTimeoutMs?: number
 
   /**
-   * Number of retries after a failed flag assignment request (default: 1).
+   * Number of retries after a failed flag assignment request.
+   * When omitted, requests are not retried.
    */
   assignmentRequestRetryCount?: number
 }
@@ -99,11 +102,6 @@ export interface FlaggingConfiguration extends Configuration {
 export function validateAndBuildFlaggingConfiguration(
   initConfiguration: FlaggingInitConfiguration
 ): FlaggingConfiguration | undefined {
-  if (!initConfiguration.applicationId) {
-    display.error('Application ID is not configured, no flagging data will be collected.')
-    return
-  }
-
   const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
   if (!baseConfiguration) {
     return

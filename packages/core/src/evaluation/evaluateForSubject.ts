@@ -16,6 +16,19 @@ export function evaluateForSubject<T extends FlagValueType>(
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  if (!isValidFlag(flag)) {
+    logger.debug(`returning default assignment because flag configuration is invalid`, {
+      flagKey: isRecord(flag) && typeof flag.key === 'string' ? flag.key : undefined,
+      subjectKey,
+    })
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+    }
+  }
+
   if (!flag.enabled) {
     logger.debug(`returning default assignment because flag is disabled`, {
       flagKey: flag.key,
@@ -24,18 +37,6 @@ export function evaluateForSubject<T extends FlagValueType>(
     return {
       value: defaultValue,
       reason: 'DISABLED',
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-    }
-  }
-
-  if (!isValidFlag(flag)) {
-    logger.debug(`returning default assignment because flag configuration is invalid`, {
-      flagKey: flag.key,
-      subjectKey,
-    })
-    return {
-      value: defaultValue,
-      reason: 'DEFAULT',
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
@@ -156,16 +157,84 @@ function validateTypeMatch(expectedType: FlagValueType, variantType: VariantType
   throw new Error(`Invalid expected type: ${expectedType}`)
 }
 
-function isValidFlag(flag: Flag): boolean {
-  return (
-    Array.isArray(flag.allocations) &&
-    flag.allocations.every(
-      (allocation) =>
-        Array.isArray(allocation.splits) &&
-        allocation.splits.every((split) => Array.isArray(split.shards)) &&
-        (allocation.rules === undefined ||
-          (Array.isArray(allocation.rules) && allocation.rules.every((rule) => isValidRule(rule))))
+function isValidFlag(flag: unknown): boolean {
+  if (!isRecord(flag) || typeof flag.key !== 'string' || typeof flag.enabled !== 'boolean') {
+    return false
+  }
+  if (!isVariantType(flag.variationType) || !isRecord(flag.variations) || !Array.isArray(flag.allocations)) {
+    return false
+  }
+  const variationType = flag.variationType
+  const variations = flag.variations
+  if (
+    !Object.entries(variations).every(
+      ([variationKey, variation]) =>
+        isRecord(variation) && variation.key === variationKey && isValidVariationValue(variationType, variation.value)
     )
+  ) {
+    return false
+  }
+
+  return flag.allocations.every(
+    (allocation) =>
+      isRecord(allocation) &&
+      Array.isArray(allocation.splits) &&
+      allocation.splits.every(
+        (split) =>
+          isRecord(split) &&
+          typeof split.variationKey === 'string' &&
+          Object.prototype.hasOwnProperty.call(variations, split.variationKey) &&
+          Array.isArray(split.shards) &&
+          split.shards.every(isValidShard)
+      ) &&
+      (allocation.rules === undefined ||
+        (Array.isArray(allocation.rules) && allocation.rules.every((rule) => isValidRule(rule))))
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isVariantType(value: unknown): value is VariantType {
+  return value === 'BOOLEAN' || value === 'INTEGER' || value === 'NUMERIC' || value === 'STRING' || value === 'JSON'
+}
+
+function isValidVariationValue(variationType: VariantType, value: unknown): boolean {
+  switch (variationType) {
+    case 'BOOLEAN':
+      return typeof value === 'boolean'
+    case 'INTEGER':
+      return typeof value === 'number' && Number.isSafeInteger(value)
+    case 'NUMERIC':
+      return typeof value === 'number' && Number.isFinite(value)
+    case 'STRING':
+      return typeof value === 'string'
+    case 'JSON':
+      return typeof value === 'object' && value !== null
+  }
+}
+
+function isValidShard(shard: unknown): boolean {
+  if (
+    !isRecord(shard) ||
+    typeof shard.salt !== 'string' ||
+    !Number.isInteger(shard.totalShards) ||
+    (shard.totalShards as number) <= 0 ||
+    (shard.totalShards as number) > 0xffffffff ||
+    !Array.isArray(shard.ranges)
+  ) {
+    return false
+  }
+
+  return shard.ranges.every(
+    (range) =>
+      isRecord(range) &&
+      Number.isInteger(range.start) &&
+      Number.isInteger(range.end) &&
+      (range.start as number) >= 0 &&
+      (range.end as number) >= (range.start as number) &&
+      (range.end as number) <= (shard.totalShards as number)
   )
 }
 

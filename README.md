@@ -57,8 +57,9 @@ const provider = new DatadogProvider({
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
 
-  // Assignment requests use one second per attempt and one retry by default
-  assignmentRequestTimeoutMs: 1000,
+  // Optional request reliability settings. When omitted, requests have no SDK
+  // timeout and are not retried.
+  assignmentRequestTimeoutMs: 5000,
   assignmentRequestRetryCount: 1,
 })
 ```

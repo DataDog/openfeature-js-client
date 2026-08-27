@@ -28,6 +28,7 @@ describe('createFlagsConfigurationFetcher', () => {
 
   afterEach(() => {
     global.fetch = originalFetch
+    jest.useRealTimers()
     jest.clearAllMocks()
   })
 
@@ -351,7 +352,22 @@ describe('createFlagsConfigurationFetcher', () => {
   })
 
   describe('request reliability', () => {
-    it('should retry once after a request timeout', async () => {
+    it('should preserve one request with no SDK timeout by default', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        headers: { get: jest.fn(() => null) },
+      })
+
+      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+
+      await expect(fetcher(mockContext)).rejects.toThrow('Failed to fetch flag configuration: Server Error')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: undefined }))
+    })
+
+    it('should retry once after a request timeout when configured', async () => {
       jest.useFakeTimers()
       mockFetch
         .mockImplementationOnce((_url: string, init: RequestInit) => {
@@ -365,7 +381,11 @@ describe('createFlagsConfigurationFetcher', () => {
           json: jest.fn().mockResolvedValue({ flags: {} }),
         })
 
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+      const fetcher = createFlagsConfigurationFetcher({
+        ...baseConfig,
+        assignmentRequestTimeoutMs: 1_000,
+        assignmentRequestRetryCount: 1,
+      })
       const resultPromise = fetcher(mockContext)
 
       await jest.advanceTimersByTimeAsync(1_000)
@@ -378,10 +398,9 @@ describe('createFlagsConfigurationFetcher', () => {
         },
       })
       expect(mockFetch).toHaveBeenCalledTimes(2)
-      jest.useRealTimers()
     })
 
-    it('should retry once after a transient response', async () => {
+    it('should retry once after a transient response when configured', async () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: false,
@@ -395,7 +414,10 @@ describe('createFlagsConfigurationFetcher', () => {
           json: jest.fn().mockResolvedValue({ flags: {} }),
         })
 
-      const fetcher = createFlagsConfigurationFetcher(baseConfig)
+      const fetcher = createFlagsConfigurationFetcher({
+        ...baseConfig,
+        assignmentRequestRetryCount: 1,
+      })
 
       await expect(fetcher(mockContext)).resolves.toBeDefined()
       expect(mockFetch).toHaveBeenCalledTimes(2)

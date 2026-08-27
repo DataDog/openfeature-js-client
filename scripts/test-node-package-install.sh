@@ -57,11 +57,16 @@ cat > package.json << 'PKGJSON'
   "private": true,
   "description": "Test app for validating @datadog/openfeature-node-server installation scenarios",
   "scripts": {
-    "test": "node test.js"
+    "test": "node test.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",
     "@datadog/openfeature-node-server": "file:./node-server.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "typescript": "^5.9.3"
   }
 }
 PKGJSON
@@ -127,9 +132,15 @@ fi
 
 node "$REPO_ROOT/scripts/assert-node-package-purity.js" node_modules
 
-# Run tests
+# Run TypeScript type check (verifies bundled index.d.ts compiles from a consumer perspective)
 echo ""
-echo "Running tests..."
+echo "Running TypeScript type check..."
+echo ""
+yarn typecheck
+
+# Run runtime tests
+echo ""
+echo "Running runtime tests..."
 echo ""
 yarn test
 

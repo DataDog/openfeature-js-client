@@ -15,8 +15,7 @@ type JSONAPIError = {
   }[]
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 1_000
-const DEFAULT_REQUEST_RETRY_COUNT = 1
+const DEFAULT_REQUEST_RETRY_COUNT = 0
 
 class HTTPResponseError extends Error {
   constructor(
@@ -55,12 +54,37 @@ function isRetryableError(error: unknown) {
   )
 }
 
-async function fetchWithTimeout(
+async function fetchPrecomputedConfiguration(
+  url: string,
+  init: RequestInit
+): Promise<PrecomputedConfigurationResponse> {
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    let errorMessage: string
+    try {
+      errorMessage = await getErrorMessage(response)
+    } catch (error) {
+      if (isRetryableStatus(response.status)) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        throw new HTTPResponseError(message, response.status)
+      }
+      throw error
+    }
+    throw new HTTPResponseError(`Failed to fetch flag configuration: ${errorMessage}`, response.status)
+  }
+  return (await response.json()) as PrecomputedConfigurationResponse
+}
+
+async function fetchWithOptionalTimeout(
   url: string,
   init: RequestInit,
-  timeoutMs: number,
+  timeoutMs: number | undefined,
   callerSignal?: AbortSignal
 ): Promise<PrecomputedConfigurationResponse> {
+  if (timeoutMs === undefined) {
+    return fetchPrecomputedConfiguration(url, { ...init, signal: callerSignal })
+  }
+
   const controller = new AbortController()
   let timedOut = false
   const abortFromCaller = () => controller.abort(callerSignal?.reason)
@@ -77,21 +101,7 @@ async function fetchWithTimeout(
   }, timeoutMs)
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal })
-    if (!response.ok) {
-      let errorMessage: string
-      try {
-        errorMessage = await getErrorMessage(response)
-      } catch (error) {
-        if (isRetryableStatus(response.status)) {
-          const message = error instanceof Error ? error.message : 'Unknown error'
-          throw new HTTPResponseError(message, response.status)
-        }
-        throw error
-      }
-      throw new HTTPResponseError(`Failed to fetch flag configuration: ${errorMessage}`, response.status)
-    }
-    return (await response.json()) as PrecomputedConfigurationResponse
+    return await fetchPrecomputedConfiguration(url, { ...init, signal: controller.signal })
   } catch (error) {
     if (timedOut && !callerSignal?.aborted) {
       throw new RequestTimeoutError('Flag configuration request timed out')
@@ -109,7 +119,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   const requestTimeoutMs =
     typeof configuredTimeout === 'number' && Number.isFinite(configuredTimeout) && configuredTimeout > 0
       ? configuredTimeout
-      : DEFAULT_REQUEST_TIMEOUT_MS
+      : undefined
   const requestRetryCount =
     typeof configuredRetryCount === 'number' && Number.isFinite(configuredRetryCount) && configuredRetryCount >= 0
       ? Math.floor(configuredRetryCount)
@@ -170,7 +180,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
 
     for (let attempt = 0; attempt <= requestRetryCount; attempt += 1) {
       try {
-        const precomputed = await fetchWithTimeout(url.toString(), requestInit, requestTimeoutMs, signal)
+        const precomputed = await fetchWithOptionalTimeout(url.toString(), requestInit, requestTimeoutMs, signal)
         return {
           precomputed: {
             response: precomputed,

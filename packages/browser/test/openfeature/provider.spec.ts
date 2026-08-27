@@ -1,8 +1,9 @@
-import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
+import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 
 describe('DatadogProvider', () => {
@@ -32,7 +33,6 @@ describe('DatadogProvider', () => {
   describe('configuration validation', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should throw error when ddog-gov.com site is provided', () => {
@@ -138,7 +138,6 @@ describe('DatadogProvider', () => {
   describe('metadata', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should have correct metadata', () => {
@@ -301,6 +300,36 @@ describe('DatadogProvider', () => {
           variationType: 'STRING',
         },
       })
+    })
+
+    it('should include RUM user properties in the configuration request', async () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({
+          id: 'rum-user',
+          user_email: 'rum@example.com',
+          company_name: 'Example, Inc.',
+          profile: { plan: 'enterprise' },
+        }),
+      }
+
+      try {
+        await provider.onContextChange({}, { user_email: 'explicit@example.com' })
+
+        const [, requestOptions] = fetchMock.mock.calls[0]
+        const requestBody = JSON.parse(requestOptions.body)
+        expect(requestBody.data.attributes.subject).toEqual({
+          targeting_key: 'rum-user',
+          targeting_attributes: {
+            targetingKey: 'rum-user',
+            user_email: 'explicit@example.com',
+            company_name: 'Example, Inc.',
+          },
+        })
+      } finally {
+        delete globalObject.DD_RUM
+      }
     })
   })
 
@@ -486,6 +515,31 @@ describe('DatadogProvider', () => {
       // Settle both in-flight fetches so the provider doesn't leak
       calls[0].resolve(makeFetchResponse(makeResponse('first')))
       calls[1].resolve(makeFetchResponse(makeResponse('second')))
+    })
+  })
+
+  describe('initialization without applicationId', () => {
+    it('should initialize successfully', async () => {
+      const originalFetch = global.fetch
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => precomputedResponse,
+      })
+      const testProvider = new DatadogProvider({
+        clientToken: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+
+      try {
+        await expect(testProvider.initialize()).resolves.toBeUndefined()
+        expect(testProvider.status).toBe(ProviderStatus.READY)
+      } finally {
+        global.fetch = originalFetch
+      }
     })
   })
 

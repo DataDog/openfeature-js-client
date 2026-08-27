@@ -26,7 +26,7 @@ import {
 import { evaluate } from '../evaluation'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
-import { createRumTrackingHook } from './rumIntegration'
+import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -64,6 +64,18 @@ export class DatadogProvider implements Provider {
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
 
+  /** Controls both directions of the provider's RUM integration. */
+  private readonly isRumIntegrationEnabled: boolean
+
+  // TODO: Migrate this manual context plumbing to a provider `before` hook once
+  // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
+  // Watch upstream packages/web/src/hooks/hook.ts for the before return changing from `void`,
+  // and packages/web/src/client/internal/open-feature-client.ts for `beforeHooks` merging that
+  // result before calling the resolver and subsequent hooks. Return this stored context, not a
+  // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
+  /** Effective context associated with the active flags configuration. */
+  private evaluationContext: EvaluationContext = {}
+
   status: ProviderStatus
 
   private flagsConfiguration: FlagsConfiguration = {}
@@ -98,15 +110,15 @@ export class DatadogProvider implements Provider {
     this.hooks = []
     this.events = new OpenFeatureEventEmitter()
 
-    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (isRumFeatureFlagTrackingEnabled) {
+    this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (this.isRumIntegrationEnabled) {
       this.hooks.push(createRumTrackingHook())
     }
 
     // Add EVP flag evaluation hook.
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration))
+      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
     }
 
     // Add proper exposure logging hook (creates batch internally)
@@ -116,7 +128,7 @@ export class DatadogProvider implements Provider {
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
       })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
+      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
     }
 
     if (hasIndexedDB()) {
@@ -137,6 +149,8 @@ export class DatadogProvider implements Provider {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
+    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
@@ -155,7 +169,7 @@ export class DatadogProvider implements Provider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(context, { signal })
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
@@ -184,6 +198,7 @@ export class DatadogProvider implements Provider {
           // scheduling).
 
           this.flagsConfiguration = config
+          this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
@@ -268,34 +283,34 @@ export class DatadogProvider implements Provider {
   resolveBooleanEvaluation(
     flagKey: string,
     defaultValue: boolean,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveStringEvaluation(
     flagKey: string,
     defaultValue: string,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveNumberEvaluation(
     flagKey: string,
     defaultValue: number,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
+    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, this.evaluationContext)
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
-    context: EvaluationContext,
+    _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<T> {
     // type safety: OpenFeature interface requires us to return a
@@ -304,6 +319,12 @@ export class DatadogProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
+    return evaluate(
+      this.flagsConfiguration,
+      'object',
+      flagKey,
+      defaultValue,
+      this.evaluationContext
+    ) as ResolutionDetails<T>
   }
 }
