@@ -2,6 +2,7 @@ import type { ErrorCode } from '@openfeature/web-sdk'
 import { OpenFeatureError } from '@openfeature/web-sdk'
 
 export type ProviderErrorEvent = {
+  error: unknown
   message: string
   errorCode?: ErrorCode
 }
@@ -10,7 +11,7 @@ export type ProviderErrorEvent = {
 export function toProviderErrorEvent(error: unknown): ProviderErrorEvent {
   const message = error instanceof Error ? error.message : String(error)
   if (error instanceof OpenFeatureError && 'code' in error) {
-    return { message, errorCode: error.code as ErrorCode }
+    return { error, message, errorCode: error.code as ErrorCode }
   }
-  return { message }
+  return { error, message }
 }

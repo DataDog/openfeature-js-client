@@ -154,7 +154,7 @@ import {
 
 ### Using DatadogOfflineProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It does not fetch or poll configuration.
+`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
 
 For dynamic context, the generic configuration wire should contain rules-based flag configuration. Precomputed configuration can also be evaluated, but only for the matching context it was generated for.
 
