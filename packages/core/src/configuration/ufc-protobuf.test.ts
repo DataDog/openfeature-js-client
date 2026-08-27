@@ -1,3 +1,4 @@
+import { base64Decode } from '@bufbuild/protobuf/wire'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateRulesBasedConfiguration } from '../evaluation'
 import { evaluateProtobufConfiguration } from '../evaluation/evaluateProtobufConfiguration'
@@ -314,7 +315,7 @@ const logger: Logger = {
 }
 
 function decodeRules(options: RulesResponseOptions = {}) {
-  return decodeUniversalFlagConfiguration(rulesResponse(options))
+  return decodeUniversalFlagConfiguration(base64Decode(rulesResponse(options)))
 }
 
 function evaluateBoolean(options: RulesResponseOptions, context: EvaluationContext) {
@@ -377,9 +378,12 @@ describe('UFC protobuf decoder', () => {
     expect(configuration.conditions[0].kind.case).toBe('stringMembership')
   })
 
-  it.each(['not base64', 'CA=='])('rejects malformed rules response %s', (response) => {
-    expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
-  })
+  it.each([Uint8Array.of(0x80), Uint8Array.of(0x0a, 0x02, 0x01)])(
+    'rejects malformed protobuf response %#',
+    (response) => {
+      expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
+    }
+  )
 
   it('evaluates the generated protobuf directly', () => {
     expect(evaluateBoolean({}, { targetingKey: 'user', country: 'US' })).toMatchObject({

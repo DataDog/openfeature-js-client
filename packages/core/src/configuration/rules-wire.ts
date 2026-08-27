@@ -1,5 +1,6 @@
+import { base64Decode } from '@bufbuild/protobuf/wire'
 import type { FlagsConfiguration } from './configuration'
-import { decodeUniversalFlagConfiguration, decodeUniversalFlagConfigurationBinary } from './ufc-protobuf'
+import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
 import {
   type ConfigurationWireContents,
   decodeSafely,
@@ -23,7 +24,7 @@ export function configurationFromRulesString(wire: FlagsConfigurationWire): Flag
 export function configurationFromRulesBinary(response: Uint8Array): FlagsConfiguration {
   return {
     rules: {
-      response: decodeUniversalFlagConfigurationBinary(response),
+      response: decodeUniversalFlagConfiguration(response),
     },
   }
 }
@@ -33,7 +34,7 @@ export function rulesConfigurationFromWire(serialized: ConfigurationWireContents
   if (!isWireEntry(serialized.rules)) return { rulesError: 'Invalid rules configuration wire entry' }
 
   const { rules } = serialized
-  const response = decodeSafely(() => decodeUniversalFlagConfiguration(rules.response))
+  const response = decodeSafely(() => decodeUniversalFlagConfiguration(base64Decode(rules.response)))
   if (!response) return { rulesError: 'Rules configuration response could not be decoded' }
 
   return {

@@ -1,3 +1,4 @@
+import { base64Encode } from '@bufbuild/protobuf/wire'
 import type { FlagsConfiguration } from './configuration'
 import { precomputedConfigurationFromWire, precomputedConfigurationToWire } from './precomputed-wire'
 import { rulesConfigurationFromWire } from './rules-wire'
@@ -33,7 +34,7 @@ export function configurationToString(configuration: FlagsConfiguration): FlagsC
   if (configuration.rules) {
     const { response, fetchedAt, etag } = configuration.rules
     wire.rules = {
-      response: encodeUniversalFlagConfiguration(response),
+      response: base64Encode(encodeUniversalFlagConfiguration(response)),
       fetchedAt,
       etag,
     }
