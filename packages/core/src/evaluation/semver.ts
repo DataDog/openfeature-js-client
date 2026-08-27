@@ -1,55 +1,102 @@
 const MAX_UINT64 = '18446744073709551615'
 
 /**
+ * The minimum number of dot-separated numeric core identifiers accepted by
+ * the extended SemVer parser. There is no upper bound: one- and two-part
+ * versions normalize to three parts, and any additional parts are accepted
+ * as further numeric identifiers.
+ */
+const MIN_CORE_PARTS = 1
+
+/**
  * The language-neutral SemVer representation used by the FFE evaluator.
  * Build metadata is validated while parsing but is intentionally not retained,
  * because it does not affect SemVer precedence.
  */
 export interface ParsedSemver {
-  major: string
-  minor: string
-  patch: string
+  parts: string[]
   prerelease: string
+}
+
+export interface ParsedVersion {
+  components: string[]
+  prerelease: string[]
+}
+
+const versionRegex =
+  /^((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+
+/** Parse the version syntax represented by the UFC protobuf Version message. */
+export function parseVersion(value: unknown): ParsedVersion | null {
+  if (typeof value !== 'string') return null
+  const match = versionRegex.exec(value)
+  if (!match) return null
+  return {
+    components: match[1].split('.'),
+    prerelease: match[2] ? match[2].split('.') : [],
+  }
+}
+
+/** Validate a pre-parsed version received from protobuf. */
+export function isParsedVersion(value: ParsedVersion): boolean {
+  return (
+    value.components.length > 0 &&
+    value.components.every((component) => /^(?:0|[1-9]\d*)$/.test(component)) &&
+    value.prerelease.every(
+      (identifier) =>
+        /^[0-9A-Za-z-]+$/.test(identifier) &&
+        (!/^\d+$/.test(identifier) || identifier === '0' || !identifier.startsWith('0'))
+    )
+  )
+}
+
+/** Compare versions, treating missing main components as zero. */
+export function compareVersions(left: ParsedVersion, right: ParsedVersion): number {
+  const componentCount = Math.max(left.components.length, right.components.length)
+  for (let index = 0; index < componentCount; index++) {
+    const ordering = compareNumericStrings(left.components[index] ?? '0', right.components[index] ?? '0')
+    if (ordering !== 0) return ordering
+  }
+  return compareVersionPrerelease(left.prerelease, right.prerelease)
 }
 
 /**
  * Parse the SemVer subset.
+ *
  * Core identifiers are limited to uint64; numeric prerelease identifiers may
- * be arbitrarily large.
+ * be arbitrarily large. One- and two-part core versions are accepted and
+ * normalized with missing parts treated as zero; any number of additional
+ * core parts is accepted as further numeric identifiers.
  */
 export function parseSemver(version: unknown): ParsedSemver | null {
-  if (typeof version !== 'string') {
+  if (typeof version !== 'string' || version.length === 0) {
     return null
   }
 
-  const major = parseCoreIdentifier(version, 0)
-  if (!major || major.next >= version.length || version[major.next] !== '.') {
+  // Split the numeric core from the prerelease/build metadata at the first
+  // '-' or '+' delimiter, which cannot appear inside the core.
+  let coreEnd = version.length
+  for (let i = 0; i < version.length; i++) {
+    const code = version.charCodeAt(i)
+    if (code === 45 /* - */ || code === 43 /* + */) {
+      coreEnd = i
+      break
+    }
+  }
+
+  const parts = parseCoreParts(version.slice(0, coreEnd))
+  if (parts === null) {
     return null
   }
 
-  const minor = parseCoreIdentifier(version, major.next + 1)
-  if (!minor || minor.next >= version.length || version[minor.next] !== '.') {
-    return null
-  }
+  const parsed: ParsedSemver = { parts, prerelease: '' }
 
-  const patch = parseCoreIdentifier(version, minor.next + 1)
-  if (!patch) {
-    return null
-  }
-
-  const parsed: ParsedSemver = {
-    major: major.value,
-    minor: minor.value,
-    patch: patch.value,
-    prerelease: '',
-  }
-
-  if (patch.next === version.length) {
+  let remainder = version.slice(coreEnd)
+  if (remainder === '') {
     return parsed
   }
 
-  let remainder = version.slice(patch.next)
-  if (remainder.startsWith('-')) {
+  if (remainder[0] === '-') {
     remainder = remainder.slice(1)
     const buildStart = remainder.indexOf('+')
     if (buildStart === -1) {
@@ -62,7 +109,7 @@ export function parseSemver(version: unknown): ParsedSemver | null {
     }
     parsed.prerelease = prerelease
     remainder = remainder.slice(buildStart + 1)
-  } else if (remainder.startsWith('+')) {
+  } else if (remainder[0] === '+') {
     remainder = remainder.slice(1)
   } else {
     return null
@@ -73,11 +120,10 @@ export function parseSemver(version: unknown): ParsedSemver | null {
 
 /** Compare SemVer precedence. Build metadata is intentionally ignored. */
 export function compareSemver(left: ParsedSemver, right: ParsedSemver): number {
-  for (const [leftValue, rightValue] of [
-    [left.major, right.major],
-    [left.minor, right.minor],
-    [left.patch, right.patch],
-  ]) {
+  const maxLength = Math.max(left.parts.length, right.parts.length)
+  for (let i = 0; i < maxLength; i++) {
+    const leftValue = i < left.parts.length ? left.parts[i] : '0'
+    const rightValue = i < right.parts.length ? right.parts[i] : '0'
     const ordering = compareNumericStrings(leftValue, rightValue)
     if (ordering !== 0) {
       return ordering
@@ -87,25 +133,46 @@ export function compareSemver(left: ParsedSemver, right: ParsedSemver): number {
   return compareSemverPrerelease(left.prerelease, right.prerelease)
 }
 
-function parseCoreIdentifier(version: string, start: number): { value: string; next: number } | null {
-  if (start >= version.length || !isAsciiDigit(version.charCodeAt(start))) {
+function parseCoreParts(core: string): string[] | null {
+  if (core.length === 0) {
     return null
   }
 
-  if (version[start] === '0') {
-    return { value: '0', next: start + 1 }
-  }
-
-  let end = start
-  while (end < version.length && isAsciiDigit(version.charCodeAt(end))) {
-    end++
-  }
-
-  const value = version.slice(start, end)
-  if (value.length > MAX_UINT64.length || (value.length === MAX_UINT64.length && value > MAX_UINT64)) {
+  const parts = core.split('.')
+  if (parts.length < MIN_CORE_PARTS) {
     return null
   }
-  return { value, next: end }
+
+  const parsed: string[] = []
+  for (const part of parts) {
+    const identifier = parseCoreIdentifier(part)
+    if (identifier === null) {
+      return null
+    }
+    parsed.push(identifier)
+  }
+  return parsed
+}
+
+function parseCoreIdentifier(part: string): string | null {
+  if (part.length === 0 || !isAsciiDigit(part.charCodeAt(0))) {
+    return null
+  }
+
+  if (part[0] === '0') {
+    return part.length === 1 ? '0' : null
+  }
+
+  for (let i = 1; i < part.length; i++) {
+    if (!isAsciiDigit(part.charCodeAt(i))) {
+      return null
+    }
+  }
+
+  if (part.length > MAX_UINT64.length || (part.length === MAX_UINT64.length && part > MAX_UINT64)) {
+    return null
+  }
+  return part
 }
 
 function isValidSemverIdentifiers(value: string, allowLeadingZeros: boolean): boolean {
@@ -168,6 +235,20 @@ function compareSemverPrerelease(left: string, right: string): number {
     leftRemaining = nextLeft.slice(1)
     rightRemaining = nextRight.slice(1)
   }
+}
+
+function compareVersionPrerelease(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) {
+    if (left.length === right.length) return 0
+    return left.length === 0 ? 1 : -1
+  }
+  const count = Math.min(left.length, right.length)
+  for (let index = 0; index < count; index++) {
+    const ordering = compareSemverIdentifier(left[index], right[index])
+    if (ordering !== 0) return ordering
+  }
+  if (left.length === right.length) return 0
+  return left.length < right.length ? -1 : 1
 }
 
 function nextSemverIdentifier(value: string): [string, string] {
