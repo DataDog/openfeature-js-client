@@ -1,6 +1,8 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { evaluateRulesBasedConfiguration } from '../evaluation'
+import { evaluateProtobufConfiguration } from '../evaluation/evaluateProtobufConfiguration'
 import { MD5Sharder } from '../evaluation/sharders'
+import type { TimeStamp } from '../time'
 import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
 
 function varint(input: number | bigint): number[] {
@@ -42,53 +44,124 @@ function protobufDouble(field: number, value: number): number[] {
   return protobufField(field, 1, [...new Uint8Array(buffer)])
 }
 
-// Field numbers mirror ufc.proto from dd-source PR #30526 at commit 8ccbeb1fe2696913506fb61d2e7a4598ea5ec449.
-function protobufCondition(kind: number, shaHashes: string[], membershipIndexes: number[]): number[] {
+// Field numbers mirror ufc.proto from dd-source PR #70386 at merge commit
+// 15f7187d7e8958738af06bae117895ab01ccfc03.
+function protobufCondition(
+  kind: number,
+  shaHashes: string[],
+  membershipIndexes: number[],
+  attributeIndex = 0
+): number[] {
   if (kind === 2) return protobufMessage(2, [])
   if (kind >= 3 && kind <= 6) {
-    return protobufMessage(3, [...protobufVarint(1, 0), ...protobufDouble(kind - 1, 1.5)])
+    return protobufMessage(3, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 2),
+      ...protobufDouble(3, 1.5),
+    ])
   }
   if (kind === 7 || kind === 8) {
-    return protobufMessage(4, [...protobufVarint(1, 0), ...protobufVarint(kind - 5, 0)])
+    return protobufMessage(4, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, 0),
+      ...(kind === 8 ? protobufVarint(3, 1) : []),
+    ])
   }
   if (kind === 9 || kind === 10) {
-    const indexes = protobufMessage(
-      kind - 7,
-      membershipIndexes.flatMap((index) => protobufVarint(1, index))
-    )
-    return protobufMessage(5, [...protobufVarint(1, 0), ...indexes])
+    return protobufMessage(5, [
+      ...protobufVarint(1, attributeIndex),
+      ...membershipIndexes.flatMap((index) => protobufVarint(2, index)),
+      ...(kind === 10 ? protobufVarint(3, 1) : []),
+    ])
   }
   if (kind === 11 || kind === 12) {
-    const hashes = protobufMessage(
-      kind - 8,
-      shaHashes.flatMap((hash) => protobufBytes(1, [...Buffer.from(hash, 'hex')]))
-    )
-    return protobufMessage(6, [...protobufVarint(1, 0), ...protobufBytes(2, [1, 2]), ...hashes])
+    return protobufMessage(6, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufBytes(2, [1, 2]),
+      ...shaHashes.flatMap((hash) => protobufBytes(3, [...Buffer.from(hash, 'hex')])),
+      ...(kind === 12 ? protobufVarint(4, 1) : []),
+    ])
   }
   if (kind === 13 || kind === 14) {
-    return protobufMessage(7, [...protobufVarint(1, 0), ...protobufVarint(2, kind === 13 ? 1 : 0)])
+    return protobufMessage(7, [...protobufVarint(1, attributeIndex), ...protobufVarint(2, kind === 13 ? 1 : 0)])
   }
-  return protobufMessage(8, [...protobufVarint(1, 0), ...protobufVarint(kind - 13, 0)])
+  if (kind >= 15 && kind <= 20) {
+    return protobufMessage(8, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 14),
+      ...protobufVarint(3, 0),
+    ])
+  }
+  if (kind >= 21 && kind <= 23) {
+    return protobufMessage(9, [
+      ...protobufVarint(1, attributeIndex),
+      ...protobufVarint(2, kind - 20),
+      ...protobufVarint(3, 2),
+    ])
+  }
+  return protobufMessage(10, [
+    ...protobufVarint(1, attributeIndex),
+    ...protobufBytes(2, [1, 2]),
+    ...protobufVarint(3, kind - 23),
+    ...protobufVarint(4, 2),
+    ...protobufBytes(5, [...Buffer.from(shaHashes[0], 'hex')]),
+  ])
+}
+
+function protobufVersion(value: string): number[] {
+  const withoutBuild = value.split('+', 1)[0]
+  const prereleaseStart = withoutBuild.indexOf('-')
+  const core = prereleaseStart === -1 ? withoutBuild : withoutBuild.slice(0, prereleaseStart)
+  const prerelease = prereleaseStart === -1 ? '' : withoutBuild.slice(prereleaseStart + 1)
+  return [
+    ...core.split('.').flatMap((component) => protobufString(1, component)),
+    ...(prerelease ? prerelease.split('.').flatMap((identifier) => protobufString(2, identifier)) : []),
+  ]
 }
 
 type RulesResponseOptions = {
-  conditionKind?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20
+  conditionKind?:
+    | 2
+    | 3
+    | 4
+    | 5
+    | 6
+    | 7
+    | 8
+    | 9
+    | 10
+    | 11
+    | 12
+    | 13
+    | 14
+    | 15
+    | 16
+    | 17
+    | 18
+    | 19
+    | 20
+    | 21
+    | 22
+    | 23
+    | 24
+    | 25
   shardAttribute?: boolean
   nonFiniteVariation?: boolean
   integerVariation?: bigint
   variationType?: number
   variationValueFields?: number[]
-  timeRanges?: Array<Array<{ from?: number; to?: number }>>
-  splitRanges?: Array<Array<{ from?: number; to?: number }>>
+  timeRanges?: Array<Array<{ from?: number | bigint; to?: number | bigint }>>
+  splitRanges?: Array<Array<{ from?: number | bigint; to?: number | bigint }>>
   conditionMessages?: number[][]
   targetingConditionIndex?: number
+  omitTargetingCondition?: boolean
   includeFallbackAllocation?: boolean
   minimumFeatureLevel?: number
   jsonValue?: string
   observeFullEvaluationData?: boolean
   futureFlagFeatureLevel?: number
   unknownTopLevelCondition?: boolean
-  unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8
+  unknownConditionGroup?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
   futurePartitionKeyFields?: number[]
   futureVariationValueFields?: number[]
   unusedVariationValueFields?: number[]
@@ -96,8 +169,10 @@ type RulesResponseOptions = {
   fallbackTargetingConditionIndex?: number
   splitReason?: number
   attributeName?: string
+  attributePath?: Array<string | number>
+  conditionAttributeIndex?: number
   strings?: string[]
-  semver?: string
+  version?: string
   membershipIndexes?: number[]
   shaHashes?: string[]
 }
@@ -105,7 +180,26 @@ type RulesResponseOptions = {
 function rulesResponse(options: RulesResponseOptions = {}): string {
   const conditionKind = options.conditionKind ?? 9
   const shaHashes = options.shaHashes ?? ['b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45']
-  const condition = protobufCondition(conditionKind, shaHashes, options.membershipIndexes ?? [2])
+  const condition = protobufCondition(
+    conditionKind,
+    shaHashes,
+    options.membershipIndexes ?? [2],
+    options.conditionAttributeIndex
+  )
+  const strings = options.strings ?? ['on', 'off', 'US']
+  const attributePath = options.attributePath ?? [options.attributeName ?? 'country']
+  const attributePathStrings = attributePath.filter((segment): segment is string => typeof segment === 'string')
+  let attributePathStringIndex = strings.length
+  const attributePathReference = protobufMessage(
+    2,
+    attributePath.flatMap((segment) =>
+      protobufMessage(
+        1,
+        typeof segment === 'string' ? protobufVarint(1, attributePathStringIndex++) : protobufVarint(2, segment)
+      )
+    )
+  )
+  const targetingKeyReference = protobufMessage(1, [])
   const variation = [
     ...protobufVarint(1, 0),
     ...(options.variationValueFields ??
@@ -119,7 +213,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   ]
   const md5Shard = [
     ...protobufString(1, 'salt'),
-    ...(options.shardAttribute ? protobufVarint(2, 0) : []),
+    ...protobufVarint(2, options.shardAttribute ? 0 : 1),
     ...protobufVarint(3, 100),
   ]
   const partitionKeys = options.timeRanges
@@ -139,7 +233,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   ])
   const allocation = [
     ...protobufString(1, 'allocation'),
-    ...protobufVarint(2, options.targetingConditionIndex ?? 0),
+    ...(options.omitTargetingCondition ? [] : protobufVarint(2, options.targetingConditionIndex ?? 0)),
     ...partitionKeys.flatMap((partitionKey) => protobufMessage(3, partitionKey)),
     ...splits.flatMap((split) => protobufMessage(4, split)),
     ...protobufVarint(5, 1),
@@ -197,10 +291,11 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufString(2, 'prod'),
     ...protobufMessage(3, flagEntry),
     ...(options.futureFlagFeatureLevel === undefined ? [] : protobufMessage(3, futureFlagEntry)),
-    ...protobufString(4, options.attributeName ?? 'country'),
-    ...(options.strings ?? ['on', 'off', 'US']).flatMap((value) => protobufString(5, value)),
+    ...protobufMessage(4, attributePathReference),
+    ...protobufMessage(4, targetingKeyReference),
+    ...[...strings, ...attributePathStrings].flatMap((value) => protobufString(5, value)),
     ...protobufString(6, '^US$'),
-    ...protobufString(7, options.semver ?? '1.2.3'),
+    ...protobufMessage(7, protobufVersion(options.version ?? '1.2.3')),
     ...(options.jsonValue === undefined ? [] : protobufString(8, options.jsonValue)),
     ...(
       options.conditionMessages ??
@@ -226,8 +321,11 @@ function evaluateBoolean(options: RulesResponseOptions, context: EvaluationConte
   return evaluateRulesBasedConfiguration(decodeRules(options), 'boolean', 'test-flag', false, context, logger)
 }
 
-function evaluateFlag(configuration: ReturnType<typeof decodeRules>, flagKey: string) {
-  const context = { targetingKey: 'user', country: 'US' }
+function evaluateFlag(
+  configuration: ReturnType<typeof decodeRules>,
+  flagKey: string,
+  context: EvaluationContext = { targetingKey: 'user', country: 'US' }
+) {
   const variationType = configuration.flags[flagKey]?.variationType
   if (variationType === 1) {
     return evaluateRulesBasedConfiguration(configuration, 'string', flagKey, '', context, logger)
@@ -241,11 +339,15 @@ function evaluateFlag(configuration: ReturnType<typeof decodeRules>, flagKey: st
   return evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, context, logger)
 }
 
-function expectFlagConfigurationError(options: RulesResponseOptions, flagKey = 'test-flag'): void {
+function expectFlagConfigurationError(
+  options: RulesResponseOptions,
+  flagKey = 'test-flag',
+  context?: EvaluationContext
+): void {
   const configuration = decodeRules(options)
 
   expect(configuration.flags).toHaveProperty(flagKey)
-  expect(evaluateFlag(configuration, flagKey)).toMatchObject({
+  expect(evaluateFlag(configuration, flagKey, context)).toMatchObject({
     reason: 'ERROR',
     errorCode: 'PARSE_ERROR',
   })
@@ -266,8 +368,8 @@ describe('UFC protobuf decoder', () => {
     expect(configuration).toMatchObject({
       $typeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
       environmentName: 'prod',
-      attributeNames: ['country'],
-      strings: ['on', 'off', 'US'],
+      attributes: [{ kind: { case: 'attributePath' } }, { kind: { case: 'targetingKey' } }],
+      strings: ['on', 'off', 'US', 'country'],
       observeFullEvaluationData: false,
     })
     expect(flag).toMatchObject({ variationType: 4, minimumFeatureLevel: 0 })
@@ -316,6 +418,11 @@ describe('UFC protobuf decoder', () => {
     [18, '1.2.3'],
     [19, '2.0.0'],
     [20, '1.2.3'],
+    [21, 'USA'],
+    [22, 'CAUS'],
+    [23, 'xUSy'],
+    [24, 'USA'],
+    [25, 'CAUS'],
   ] as const)('evaluates condition kind %s from interned protobuf data', (conditionKind, country) => {
     expect(
       evaluateBoolean({ conditionKind }, { targetingKey: 'user', ...(country === undefined ? {} : { country }) }).value
@@ -339,6 +446,30 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
+  it.each([
+    ['a bigint', BigInt(42), '42'],
+    ['a Date', new Date('2026-01-01T00:00:00.000Z'), String(new Date('2026-01-01T00:00:00.000Z'))],
+    ['a custom scalar-like object', { toString: () => 'custom' }, 'custom'],
+  ] as const)('coerces %s for string comparison', (_description, country, expected) => {
+    expect(
+      evaluateBoolean({ conditionKind: 9, strings: ['on', 'off', expected] }, {
+        targetingKey: 'user',
+        country,
+      } as EvaluationContext)
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    ['positive infinity', Number.POSITIVE_INFINITY, true],
+    ['a string that overflows to positive infinity', '1e400', true],
+    ['NaN', Number.NaN, false],
+  ] as const)('uses JavaScript numeric comparison semantics for %s', (_description, country, matches) => {
+    expect(evaluateBoolean({ conditionKind: 5 }, { targetingKey: 'user', country })).toMatchObject({
+      value: matches,
+      reason: matches ? 'TARGETING_MATCH' : 'DEFAULT',
+    })
+  })
+
   it.each(['constructor', '__proto__'])('does not match an inherited condition attribute named %s', (attributeName) => {
     expect(evaluateBoolean({ conditionKind: 14, attributeName }, { targetingKey: 'user' })).toMatchObject({
       value: false,
@@ -346,25 +477,124 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('reports a configured SemVer comparand above uint64', () => {
-    expect(
-      evaluateBoolean(
-        { conditionKind: 15, semver: '18446744073709551616.0.0' },
-        { targetingKey: 'user', country: '18446744073709551616.0.0' }
-      )
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+  it('evaluates a condition against an explicit targeting-key reference', () => {
+    expect(evaluateBoolean({ conditionAttributeIndex: 1 }, { targetingKey: 'US', country: 'CA' })).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
   })
 
-  it('does not match a context SemVer value above uint64', () => {
+  it('traverses nested object and array attribute paths', () => {
     expect(
-      evaluateBoolean({ conditionKind: 16 }, { targetingKey: 'user', country: '18446744073709551616.0.0' })
+      evaluateBoolean(
+        { attributePath: ['profile', 'groups', 0, 'country'] },
+        { targetingKey: 'user', profile: { groups: [{ country: 'US' }] } }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('does not traverse inherited properties in an attribute path', () => {
+    expect(
+      evaluateBoolean(
+        { conditionKind: 14, attributePath: ['profile', 'constructor'] },
+        { targetingKey: 'user', profile: {} }
+      )
     ).toMatchObject({ value: false, reason: 'DEFAULT' })
   })
 
-  it.each([9, 10] as const)('reports unsorted string membership values for condition kind %s', (conditionKind) => {
+  it('does not traverse inherited array elements in an attribute path', () => {
+    const groups: EvaluationContext[] = []
+    Object.setPrototypeOf(groups, { 0: { country: 'US' } })
+
+    expect(
+      evaluateBoolean(
+        { attributePath: ['profile', 'groups', 0, 'country'] },
+        { targetingKey: 'user', profile: { groups } }
+      )
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('does not match a missing nested attribute path', () => {
+    expect(
+      evaluateBoolean({ attributePath: ['profile', 'country'] }, { targetingKey: 'user', profile: {} })
+    ).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('reports an attribute path that does not start with an object key', () => {
+    expectFlagConfigurationError({ attributePath: [0] })
+  })
+
+  it('reports an empty attribute path', () => {
+    expectFlagConfigurationError({ attributePath: [] })
+  })
+
+  it.each([
+    ['an absent id', { targetingKey: 'US' }, true],
+    ['a null id', { targetingKey: 'US', id: null }, true],
+    ['a present non-matching id', { targetingKey: 'US', id: 'CA' }, false],
+    ['a present matching id', { targetingKey: 'CA', id: 'US' }, true],
+  ] as const)('uses the compiler-defined targeting-key fallback for %s', (_description, context, value) => {
+    const conditionMessages = [
+      protobufCondition(9, [], [2], 0),
+      protobufCondition(9, [], [2], 1),
+      protobufCondition(13, [], [], 0),
+      protobufMessage(1, [...protobufVarint(1, 2), ...protobufVarint(1, 1)]),
+      protobufCondition(14, [], [], 0),
+      protobufMessage(1, [...protobufVarint(1, 4), ...protobufVarint(1, 0)]),
+      protobufMessage(2, [...protobufVarint(1, 3), ...protobufVarint(1, 5)]),
+    ]
+
+    expect(
+      evaluateBoolean({ attributeName: 'id', conditionMessages, targetingConditionIndex: 6 }, context)
+    ).toMatchObject({ value, reason: value ? 'TARGETING_MATCH' : 'DEFAULT' })
+  })
+
+  it('compares configured version components above uint64 without precision loss', () => {
+    expect(
+      evaluateBoolean(
+        { conditionKind: 15, version: '18446744073709551616.0.0' },
+        { targetingKey: 'user', country: '18446744073709551616.0.0' }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('matches a context version component above uint64', () => {
+    expect(
+      evaluateBoolean(
+        { conditionKind: 15, version: '18446744073709551616.0.0' },
+        { targetingKey: 'user', country: '18446744073709551616.0.0' }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    ['1', '1.0.0'],
+    ['1.2', '1.2.0'],
+    ['1.2.0.0', '1.2'],
+  ])('treats missing version components as zero: %s == %s', (configured, actual) => {
+    expect(
+      evaluateBoolean({ conditionKind: 15, version: configured }, { targetingKey: 'user', country: actual })
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('does not hash a partial UTF-8 code point for prefix and suffix comparisons', () => {
+    expect(evaluateBoolean({ conditionKind: 24 }, { targetingKey: 'user', country: '😀US' })).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
+    expect(evaluateBoolean({ conditionKind: 25 }, { targetingKey: 'user', country: 'US😀' })).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
+  })
+
+  it.each([
+    [9, true, 'TARGETING_MATCH'],
+    [10, false, 'DEFAULT'],
+  ] as const)('evaluates unsorted string membership values for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean({ conditionKind, membershipIndexes: [1, 2] }, { targetingKey: 'user', country: 'US' })
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    ).toMatchObject({ value, reason })
   })
 
   it('uses Go UTF-8 ordering for string membership values', () => {
@@ -388,7 +618,10 @@ describe('UFC protobuf decoder', () => {
     }
   })
 
-  it.each([11, 12] as const)('reports unsorted SHA-256 hashes for condition kind %s', (conditionKind) => {
+  it.each([
+    [11, true, 'TARGETING_MATCH'],
+    [12, false, 'DEFAULT'],
+  ] as const)('evaluates unsorted SHA-256 hashes for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean(
         {
@@ -400,18 +633,31 @@ describe('UFC protobuf decoder', () => {
         },
         { targetingKey: 'user', country: 'US' }
       )
-    ).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    ).toMatchObject({ value, reason })
   })
 
-  it.each([11, 12] as const)('reports an invalid SHA-256 hash length for condition kind %s', (conditionKind) => {
+  it.each([
+    [11, true, 'TARGETING_MATCH'],
+    [12, false, 'DEFAULT'],
+  ] as const)('ignores an unrelated SHA-256 hash length for condition kind %s', (conditionKind, value, reason) => {
+    expect(
+      evaluateBoolean(
+        {
+          conditionKind,
+          shaHashes: ['00', 'b868928fad81eee188461dd76a72ea4279331d77063fa8802fb83c8b2bf6dc45'],
+        },
+        { targetingKey: 'user', country: 'US' }
+      )
+    ).toMatchObject({ value, reason })
+  })
+
+  it.each([
+    [11, false, 'DEFAULT'],
+    [12, true, 'TARGETING_MATCH'],
+  ] as const)('does not match a malformed SHA-256 hash for condition kind %s', (conditionKind, value, reason) => {
     expect(
       evaluateBoolean({ conditionKind, shaHashes: ['00'] }, { targetingKey: 'user', country: 'US' })
-    ).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'SHA-256 hashes must contain 32 bytes',
-    })
+    ).toMatchObject({ value, reason })
   })
 
   it('lazily compiles each regex once per configuration', () => {
@@ -427,6 +673,22 @@ describe('UFC protobuf decoder', () => {
 
     expect(evaluateFlag(configuration, 'test-flag').value).toBe(true)
     expect(evaluateFlag(configuration, 'test-flag').value).toBe(true)
+    expect(reads).toBe(1)
+  })
+
+  it('lazily parses each JSON variation once per configuration', () => {
+    const configuration = decodeRules({ jsonValue: '{"enabled":true}' })
+    const jsonStrings = configuration.jsonStrings
+    let reads = 0
+    configuration.jsonStrings = new Proxy(jsonStrings, {
+      get(target, property, receiver) {
+        if (property === '0') reads++
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    expect(evaluateFlag(configuration, 'test-flag').value).toEqual({ enabled: true })
+    expect(evaluateFlag(configuration, 'test-flag').value).toEqual({ enabled: true })
     expect(reads).toBe(1)
   })
 
@@ -669,15 +931,35 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it.each([3, 4, 5, 6, 8] as const)(
-    'reports a supported flag referencing an unknown condition comparator in group %s',
-    (unknownConditionGroup) => {
-      expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
+  it.each([
+    [3, 1],
+    [8, '1.2.3'],
+    [9, 'US'],
+    [10, 'US'],
+  ] as const)(
+    'reports a supported flag referencing an unspecified condition comparator in group %s',
+    (unknownConditionGroup, country) => {
+      expectFlagConfigurationError({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag', {
+        targetingKey: 'user',
+        country,
+      } as EvaluationContext)
     }
   )
 
-  it('ignores an unknown field in an attribute-presence condition', () => {
-    expectFlagConfigurationAccepted({ futureFlagFeatureLevel: 0, unknownConditionGroup: 7 }, 'future-flag')
+  it.each([
+    [3, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufDouble(3, 1.5)], 1],
+    [8, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 0)], '1.2.3'],
+    [9, [...protobufVarint(1, 0), ...protobufVarint(2, 99), ...protobufVarint(3, 2)], 'US'],
+    [10, [...protobufVarint(1, 0), ...protobufBytes(2, []), ...protobufVarint(3, 99)], 'US'],
+  ])('reports an unknown enum value in condition group %s', (group, fields, country) => {
+    expectFlagConfigurationError({ conditionMessages: [protobufMessage(group, fields)] }, 'test-flag', {
+      targetingKey: 'user',
+      country,
+    } as EvaluationContext)
+  })
+
+  it.each([4, 5, 6, 7] as const)('ignores an unknown field in condition group %s', (unknownConditionGroup) => {
+    expectFlagConfigurationAccepted({ futureFlagFeatureLevel: 0, unknownConditionGroup }, 'future-flag')
   })
 
   it.each([0, 1])('reports a feature-level %s flag that uses a future variation value', (futureFlagFeatureLevel) => {
@@ -705,10 +987,10 @@ describe('UFC protobuf decoder', () => {
     )
   })
 
-  it('uses the allocation-based fallback for an unknown split reason', () => {
+  it('returns UNKNOWN for an unknown split reason', () => {
     expect(evaluateBoolean({ splitReason: 99 }, { targetingKey: 'user', country: 'US' })).toMatchObject({
       value: true,
-      reason: 'TARGETING_MATCH',
+      reason: 'UNKNOWN',
     })
   })
 
@@ -728,30 +1010,58 @@ describe('UFC protobuf decoder', () => {
   })
 
   it('ignores unknown data alongside a known nested comparator', () => {
-    const numeric = protobufMessage(3, [...protobufVarint(1, 0), ...protobufMessage(99, []), ...protobufDouble(2, 1.5)])
+    const numeric = protobufMessage(3, [
+      ...protobufVarint(1, 0),
+      ...protobufVarint(2, 1),
+      ...protobufMessage(99, []),
+      ...protobufDouble(3, 1.5),
+    ])
 
     expectFlagConfigurationAccepted({ conditionMessages: [numeric] })
   })
 
-  it('accepts a finite numeric comparator that overwrites an earlier non-finite value', () => {
+  it('accepts a finite numeric comparator that overwrites an earlier NaN value', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
-      ...protobufDouble(2, Number.NaN),
-      ...protobufDouble(2, 1.5),
+      ...protobufVarint(2, 1),
+      ...protobufDouble(3, Number.NaN),
+      ...protobufDouble(3, 1.5),
     ])
 
     expect(evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: 1 }).value).toBe(true)
   })
 
-  it('reports a flag whose final numeric comparator is non-finite', () => {
+  it('reports a flag whose final numeric comparator is NaN', () => {
     const numeric = protobufMessage(3, [
       ...protobufVarint(1, 0),
-      ...protobufDouble(2, 1.5),
-      ...protobufDouble(2, Number.NaN),
+      ...protobufVarint(2, 1),
+      ...protobufDouble(3, 1.5),
+      ...protobufDouble(3, Number.NaN),
     ])
 
     expectFlagConfigurationError({ conditionMessages: [numeric] })
   })
+
+  it.each([
+    [1, Number.POSITIVE_INFINITY, 1, true, Number.POSITIVE_INFINITY, false],
+    [3, Number.NEGATIVE_INFINITY, 1, true, Number.NEGATIVE_INFINITY, false],
+  ])(
+    'supports numeric comparator %s with an infinite comparand',
+    (comparator, comparand, finiteValue, finiteResult, infiniteValue, infiniteResult) => {
+      const numeric = protobufMessage(3, [
+        ...protobufVarint(1, 0),
+        ...protobufVarint(2, comparator),
+        ...protobufDouble(3, comparand),
+      ])
+
+      expect(
+        evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: finiteValue }).value
+      ).toBe(finiteResult)
+      expect(
+        evaluateBoolean({ conditionMessages: [numeric] }, { targetingKey: 'user', country: infiniteValue }).value
+      ).toBe(infiniteResult)
+    }
+  )
 
   it('preserves composite time ranges in the protobuf representation', () => {
     const allocation = decodeRules({
@@ -797,6 +1107,41 @@ describe('UFC protobuf decoder', () => {
     ])
   })
 
+  it('treats an omitted partition range bound as unbounded', () => {
+    const configuration = decodeRules({ timeRanges: [[{ to: 0 }]] })
+
+    expect(
+      evaluateProtobufConfiguration(
+        configuration,
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'user', country: 'US' },
+        logger,
+        -1 as TimeStamp
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it.each([
+    [{ from: BigInt('9007199254740993') }, false, 'DEFAULT'],
+    [{ to: BigInt('9007199254740993') }, true, 'TARGETING_MATCH'],
+  ] as const)('compares a time coordinate with an exact BigInt range bound', (range, value, reason) => {
+    const configuration = decodeRules({ timeRanges: [[range]] })
+
+    expect(
+      evaluateProtobufConfiguration(
+        configuration,
+        'boolean',
+        'test-flag',
+        false,
+        { targetingKey: 'user', country: 'US' },
+        logger,
+        (Number.MAX_SAFE_INTEGER + 1) as TimeStamp
+      )
+    ).toMatchObject({ value, reason })
+  })
+
   it('evaluates a shard using its protobuf attribute index without requiring a targeting key', () => {
     expect(evaluateBoolean({ shardAttribute: true }, { country: 'US' })).toMatchObject({
       value: true,
@@ -807,24 +1152,46 @@ describe('UFC protobuf decoder', () => {
   it.each(['constructor', '__proto__'])(
     'does not partition on an inherited context attribute named %s',
     (attributeName) => {
-      expect(evaluateBoolean({ shardAttribute: true, attributeName }, { targetingKey: 'user' })).toMatchObject({
+      expect(
+        evaluateBoolean({ shardAttribute: true, attributeName, omitTargetingCondition: true }, { targetingKey: 'user' })
+      ).toMatchObject({
         value: false,
-        reason: 'DEFAULT',
+        reason: 'ERROR',
+        errorCode: 'INVALID_CONTEXT',
       })
     }
   )
 
-  it('uses the separately supplied targeting key for an explicit targetingKey partition attribute', () => {
-    const result = evaluateBoolean(
-      { shardAttribute: true, attributeName: 'targetingKey', includeFallbackAllocation: true },
-      { targetingKey: 'US' }
-    )
+  it('rejects a composite partition attribute', () => {
+    expect(
+      evaluateBoolean({ shardAttribute: true, omitTargetingCondition: true }, {
+        targetingKey: 'user',
+        country: {},
+      } as EvaluationContext)
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT',
+    })
+  })
+
+  it('traverses a nested partition attribute path', () => {
+    expect(
+      evaluateBoolean(
+        { shardAttribute: true, attributePath: ['profile', 'country'], omitTargetingCondition: true },
+        { profile: { country: 'US' } }
+      )
+    ).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+  })
+
+  it('uses an explicit targeting-key partition reference', () => {
+    const result = evaluateBoolean({ includeFallbackAllocation: true }, { targetingKey: 'US' })
 
     expect(result).toMatchObject({ value: true })
     expect(result.flagMetadata).toMatchObject({ allocationKey: 'fallback' })
   })
 
-  it('requires a targeting key for a protobuf shard without an attribute index', () => {
+  it('requires a targeting key for an explicit targeting-key partition reference', () => {
     expect(evaluateBoolean({}, { country: 'US' })).toMatchObject({
       value: false,
       reason: 'ERROR',
@@ -832,7 +1199,7 @@ describe('UFC protobuf decoder', () => {
     })
   })
 
-  it('computes partition coordinates once across multiple splits', () => {
+  it('computes the partition key once across multiple splits', () => {
     const getShard = jest.spyOn(MD5Sharder.prototype, 'getShard')
 
     expect(

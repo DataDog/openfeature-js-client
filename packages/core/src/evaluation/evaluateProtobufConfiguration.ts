@@ -9,32 +9,30 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import type {
-  Allocation,
-  Condition,
-  Flag,
-  FlagsConfiguration,
-  Split,
-  VariationType,
-} from '../configuration/generated/ufc_pb'
+import type { Allocation, Condition, Flag, Split, VariationType, Version } from '../configuration/generated/ufc_pb'
+import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
-import { FlagConfigurationError, TargetingKeyMissingError } from './errors'
+import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
-import { compareSemver, parseSemver } from './semver'
+import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
-import { UFC_REASON, UFC_VARIATION_TYPE } from './ufc-enums'
+import {
+  UFC_NUMERIC_COMPARATOR,
+  UFC_REASON,
+  UFC_SHA256_STRING_COMPARATOR,
+  UFC_STRING_COMPARATOR,
+  UFC_VARIATION_TYPE,
+  UFC_VERSION_COMPARATOR,
+} from './ufc-enums'
 
 const SUPPORTED_FEATURE_LEVEL = 0
-const compiledRegexCache = new WeakMap<FlagsConfiguration, Map<number, RegExp | null>>()
-const validatedSortedArrays = new WeakSet<object>()
-const validatedSha256Arrays = new WeakSet<object>()
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
-  configuration: FlagsConfiguration,
+  configuration: PreparedRulesResponse,
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
@@ -42,14 +40,10 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow()
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const { targetingKey: subjectKey, ...remainingContext } = context
-  const subjectAttributes = {
-    ...(subjectKey != null ? { id: subjectKey } : {}),
-    ...remainingContext,
-  }
+  const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
-    logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
+    logger.debug('returning default value because flag is not found', { flagKey, targetingKey })
     return {
       value: defaultValue,
       reason: 'ERROR',
@@ -66,7 +60,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (type !== flagValueType) {
       logger.debug('variant value type mismatch, returning default value', {
         flagKey,
-        subjectKey,
+        targetingKey,
         expectedType: type,
         variantType: flag.variationType,
       })
@@ -80,28 +74,20 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, subjectAttributes, conditionResults)) {
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
         continue
       }
-      if (allocation.splits.length === 0) continue
-      const coordinates = partitionCoordinates(
-        allocation,
-        configuration,
-        subjectKey,
-        subjectAttributes,
-        evaluationTimestampMs
-      )
-      if (!coordinates) continue
-      const split = allocation.splits.find((candidate) => matchesSplit(candidate, coordinates))
+      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
+      const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
       if (!split) continue
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
-      logger.debug('evaluated a flag', { flagKey, subjectKey, assignment: value })
+      logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
       return {
         value: value as FlagTypeToValue<T>,
-        reason: resolutionReason(split, allocation),
+        reason: resolutionReason(split),
         variant: variationKey,
         flagMetadata: {
           ...createEvaluationTimestampMetadata(evaluationTimestampMs),
@@ -118,7 +104,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (error instanceof FlagConfigurationError) {
       logger.error('returning default value because flag configuration is invalid', {
         flagKey,
-        subjectKey,
+        targetingKey,
         error: error.message,
       })
       return {
@@ -137,6 +123,14 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
         flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
+    if (error instanceof InvalidContextError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'INVALID_CONTEXT' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      }
+    }
     logger.error('Error evaluating flag', { error })
     return {
       value: defaultValue,
@@ -146,7 +140,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
   }
 
-  logger.debug('returning default assignment because no allocation matched', { flagKey, subjectKey })
+  logger.debug('returning default assignment because no allocation matched', { flagKey, targetingKey })
   return {
     value: defaultValue,
     reason: 'DEFAULT',
@@ -156,8 +150,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
 function matchesCondition(
   index: number | undefined,
-  configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext,
+  configuration: PreparedRulesResponse,
+  attributes: EvaluationContext,
   results: Map<number, boolean>
 ): boolean {
   if (index === undefined) return true
@@ -168,15 +162,15 @@ function matchesCondition(
   if (condition.kind.case === 'all') {
     result = condition.kind.value.conditionIndexes.every((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes, results)
+      return matchesCondition(child, configuration, attributes, results)
     })
   } else if (condition.kind.case === 'any') {
     result = condition.kind.value.conditionIndexes.some((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, subjectAttributes, results)
+      return matchesCondition(child, configuration, attributes, results)
     })
   } else {
-    result = matchesLeafCondition(condition, configuration, subjectAttributes)
+    result = matchesLeafCondition(condition, configuration, attributes)
   }
   results.set(index, result)
   return result
@@ -184,88 +178,110 @@ function matchesCondition(
 
 function matchesLeafCondition(
   condition: Condition,
-  configuration: FlagsConfiguration,
-  subjectAttributes: EvaluationContext
+  configuration: PreparedRulesResponse,
+  context: EvaluationContext
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new FlagConfigurationError('Unsupported condition')
   }
-  const attribute = atIndex(configuration.attributeNames, kind.value.attributeNameIndex, 'condition attribute')
-  const value = getOwnProperty(subjectAttributes, attribute)
+  const value = attributeValueAt(configuration, kind.value.attributeIndex, context)
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
   if (kind.case === 'numeric') {
+    const expected = kind.value.comparand
+    if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
-    const expected = kind.value.comparator.value
-    if (kind.value.comparator.case === undefined || expected === undefined || !Number.isFinite(expected)) {
-      throw new FlagConfigurationError('Invalid numeric comparator')
-    }
     if (actual === undefined) return false
-    if (kind.value.comparator.case === 'lessThan') return actual < expected
-    if (kind.value.comparator.case === 'lessThanOrEqual') return actual <= expected
-    if (kind.value.comparator.case === 'greaterThan') return actual > expected
-    if (kind.value.comparator.case === 'greaterThanOrEqual') return actual >= expected
-    return false
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL) return actual <= expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN) return actual > expected
+    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL) return actual >= expected
+    throw new FlagConfigurationError('Unsupported numeric comparator')
   }
   if (kind.case === 'regex') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Missing regex comparator')
-    }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
-    const matches = compiledRegexAt(configuration, kind.value.comparator.value).test(attributeValue) // dd-iac-scan ignore-line
-    return kind.value.comparator.case === 'matches' ? matches : !matches
+    const matches = compiledRegexAt(configuration, kind.value.regexIndex).test(attributeValue) // dd-iac-scan ignore-line
+    return kind.value.negate ? !matches : matches
   }
   if (kind.case === 'stringMembership') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Unsupported string membership comparator')
-    }
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
-    const included = containsInternedString(kind.value.comparator.value.values, attributeValue, configuration.strings)
-    return kind.value.comparator.case === 'oneOf' ? included : !included
+    const included = containsInternedString(kind.value.stringIndexes, attributeValue, configuration.strings)
+    return kind.value.negate ? !included : included
   }
   if (kind.case === 'sha256Membership') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Unsupported SHA-256 comparator')
-    }
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const included = containsBytes(kind.value.sha256, saltedSha256(kind.value.salt, encodeUtf8(attributeValue)))
+    return kind.value.negate ? !included : included
+  }
+  if (kind.case === 'version') {
+    const expected = versionAt(configuration.versions, kind.value.versionIndex)
+    if (typeof value !== 'string') return false
+    const actual = parseVersion(value)
+    if (!actual) return false
+    const comparison = compareVersions(actual, expected)
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.EQUAL) return comparison === 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL) return comparison !== 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN) return comparison < 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL) return comparison <= 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN) return comparison > 0
+    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL) return comparison >= 0
+    throw new FlagConfigurationError('Unsupported version comparator')
+  }
+  if (kind.case === 'stringComparison') {
+    const attributeValue = coerceToString(value)
+    if (attributeValue === undefined) return false
+    const expected = atIndex(configuration.strings, kind.value.stringIndex, 'condition string')
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
+    if (kind.value.comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
+    throw new FlagConfigurationError('Unsupported string comparator')
+  }
+  if (kind.case === 'sha256StringComparison') {
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const encoded = encodeUtf8(attributeValue)
-    const input = new Uint8Array(kind.value.salt.length + encoded.length)
-    input.set(kind.value.salt)
-    input.set(encoded, kind.value.salt.length)
-    const included = containsBytes(kind.value.comparator.value.hashes, sha256(input))
-    return kind.value.comparator.case === 'oneOfSha256' ? included : !included
+    const extracted = extractUtf8Bytes(encoded, kind.value.length, kind.value.comparator)
+    if (!extracted) return false
+    return compareBytes(saltedSha256(kind.value.salt, extracted), kind.value.sha256) === 0
   }
-  if (kind.case === 'semver') {
-    if (kind.value.comparator.case === undefined) {
-      throw new FlagConfigurationError('Missing SemVer comparator')
-    }
-    const expected = parseSemver(atIndex(configuration.semvers, kind.value.comparator.value, 'SemVer'))
-    if (!expected) throw new FlagConfigurationError('Invalid SemVer comparator')
-    if (typeof value !== 'string') return false
-    const actual = parseSemver(value)
-    if (!actual) return false
-    const comparison = compareSemver(actual, expected)
-    if (kind.value.comparator.case === 'semverEqual') return comparison === 0
-    if (kind.value.comparator.case === 'semverNotEqual') return comparison !== 0
-    if (kind.value.comparator.case === 'semverLessThan') return comparison < 0
-    if (kind.value.comparator.case === 'semverLessThanOrEqual') return comparison <= 0
-    if (kind.value.comparator.case === 'semverGreaterThan') return comparison > 0
-    return comparison >= 0
-  }
-  return false
+  throw new FlagConfigurationError('Unsupported condition')
 }
 
-function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegExp {
-  let cache = compiledRegexCache.get(configuration)
-  if (!cache) {
-    cache = new Map()
-    compiledRegexCache.set(configuration, cache)
-  }
+function versionAt(versions: Version[], index: number): Version {
+  const version = atIndex(versions, index, 'version')
+  if (!isParsedVersion(version)) throw new FlagConfigurationError('Invalid version comparator')
+  return version
+}
+
+function saltedSha256(salt: Uint8Array, value: Uint8Array): Uint8Array {
+  const input = new Uint8Array(salt.length + value.length)
+  input.set(salt)
+  input.set(value, salt.length)
+  return sha256(input)
+}
+
+function extractUtf8Bytes(value: Uint8Array, length: number, comparator: number): Uint8Array | undefined {
+  let start: number
+  if (comparator === UFC_SHA256_STRING_COMPARATOR.STARTS_WITH) start = 0
+  else if (comparator === UFC_SHA256_STRING_COMPARATOR.ENDS_WITH) start = value.length - length
+  else throw new FlagConfigurationError('Unsupported SHA-256 string comparator')
+  if (length > value.length) return undefined
+  const end = start + length
+  if (!isUtf8Boundary(value, start) || !isUtf8Boundary(value, end)) return undefined
+  return value.subarray(start, end)
+}
+
+function isUtf8Boundary(value: Uint8Array, index: number): boolean {
+  return index === 0 || index === value.length || (value[index] & 0xc0) !== 0x80
+}
+
+function compiledRegexAt(configuration: PreparedRulesResponse, index: number): RegExp {
+  const cache = configuration.evaluationRegexCache
   const cached = cache.get(index)
   if (cached === null) throw new FlagConfigurationError('Invalid regular expression')
   if (cached) return cached
@@ -281,70 +297,90 @@ function compiledRegexAt(configuration: FlagsConfiguration, index: number): RegE
   }
 }
 
-type PartitionCoordinate = {
-  coordinate: number
-  upperBound?: number
-}
-
-function partitionCoordinates(
+function computePartitionKey(
   allocation: Allocation,
-  configuration: FlagsConfiguration,
-  subjectKey: string | null | undefined,
-  subjectAttributes: EvaluationContext,
+  configuration: PreparedRulesResponse,
+  context: EvaluationContext,
   evaluationTimestampMs: TimeStamp
-): PartitionCoordinate[] | undefined {
-  const coordinates: PartitionCoordinate[] = []
+): number[] {
+  const partitionKey: number[] = []
   for (const partition of allocation.partitionKey) {
     if (partition.kind.case === 'time') {
-      coordinates.push({ coordinate: evaluationTimestampMs })
+      partitionKey.push(evaluationTimestampMs)
     } else if (partition.kind.case === 'shardMd5') {
-      let value: EvaluationContextValue
-      if (partition.kind.value.attributeNameIndex === undefined) {
-        if (subjectKey == null) throw new TargetingKeyMissingError()
-        value = subjectKey
-      } else {
-        const attribute = atIndex(
-          configuration.attributeNames,
-          partition.kind.value.attributeNameIndex,
-          'partition attribute'
-        )
-        const attributeValue = attribute === 'targetingKey' ? subjectKey : getOwnProperty(subjectAttributes, attribute)
-        if (attributeValue == null) return undefined
-        value = attributeValue
+      const attribute = atIndex(configuration.attributes, partition.kind.value.attributeIndex, 'partition attribute')
+      const value = attributeValue(attribute, configuration, context)
+      if (value == null) {
+        if (attribute.kind.case === 'targetingKey') throw new TargetingKeyMissingError()
+        throw new InvalidContextError()
       }
       const upperBound = safeInteger(partition.kind.value.totalShards, 'Total shards')
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
-      coordinates.push({
-        coordinate: protobufSharder.getShard(`${partition.kind.value.salt}${String(value)}`, upperBound),
-        upperBound,
-      })
+      const partitionValue = coerceToString(value)
+      if (partitionValue === undefined) throw new InvalidContextError()
+      partitionKey.push(new MD5Sharder().getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }
   }
-  return coordinates
+  return partitionKey
 }
 
-function matchesSplit(split: Split, coordinates: PartitionCoordinate[]): boolean {
-  if (split.ranges.length !== coordinates.length) {
+function attributeValueAt(
+  configuration: PreparedRulesResponse,
+  index: number,
+  context: EvaluationContext
+): EvaluationContextValue | undefined {
+  return attributeValue(atIndex(configuration.attributes, index, 'condition attribute'), configuration, context)
+}
+
+function attributeValue(
+  attribute: PreparedRulesResponse['attributes'][number],
+  configuration: PreparedRulesResponse,
+  context: EvaluationContext
+): EvaluationContextValue | undefined {
+  if (attribute.kind.case === 'targetingKey') return context.targetingKey
+  if (attribute.kind.case !== 'attributePath') throw new FlagConfigurationError('Unsupported attribute reference')
+
+  const { segments } = attribute.kind.value
+  if (segments.length === 0 || segments[0].kind.case !== 'objectKeyStringIndex') {
+    throw new FlagConfigurationError('Invalid attribute path')
+  }
+
+  let value: unknown = context
+  for (const segment of segments) {
+    if (segment.kind.case === 'objectKeyStringIndex') {
+      if (!isContextObject(value)) return undefined
+      const key = atIndex(configuration.strings, segment.kind.value, 'attribute path')
+      value = getOwnProperty(value, key)
+    } else if (segment.kind.case === 'arrayIndex') {
+      if (!Array.isArray(value)) return undefined
+      value = Object.prototype.hasOwnProperty.call(value, segment.kind.value) ? value[segment.kind.value] : undefined
+    } else {
+      throw new FlagConfigurationError('Invalid attribute path')
+    }
+  }
+  return value as EvaluationContextValue | undefined
+}
+
+function isContextObject(value: unknown): value is Record<string, EvaluationContextValue | undefined> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date)
+}
+
+function matchesSplit(split: Split, partitionKey: number[]): boolean {
+  if (split.ranges.length !== partitionKey.length) {
     throw new FlagConfigurationError('Invalid split')
   }
-  return coordinates.every(({ coordinate, upperBound }, index) => {
+  return partitionKey.every((value, index) => {
     const range = atIndex(split.ranges, index, 'partition range')
-    const from = range.from === undefined ? 0 : safeInteger(range.from, 'Partition range')
-    const to = range.to === undefined ? upperBound : safeInteger(range.to, 'Partition range')
-    if (to !== undefined && from > to) throw new FlagConfigurationError('Partition range is invalid')
-    if (upperBound !== undefined && (from > upperBound || (to !== undefined && to > upperBound))) {
-      throw new FlagConfigurationError('Shard range is out of bounds')
-    }
-    return coordinate >= from && (to === undefined || coordinate < to)
+    return (range.from === undefined || value >= range.from) && (range.to === undefined || value < range.to)
   })
 }
 
 function variationValue(
   flag: Flag,
   value: Flag['variations'][number]['value'],
-  configuration: FlagsConfiguration
+  configuration: PreparedRulesResponse
 ): FlagValue {
   const expectedCase = variationValueCase(flag.variationType)
   if (value.case !== expectedCase) {
@@ -359,29 +395,16 @@ function variationValue(
     return value.value
   }
   if (value.case === 'booleanValue') return value.value
-  if (value.case === 'jsonStringIndex') {
-    const serialized = atIndex(configuration.jsonStrings, value.value, 'JSON variation value')
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(serialized)
-    } catch {
-      throw new FlagConfigurationError('JSON variation value is invalid')
-    }
-    if (!isJsonValue(parsed)) throw new FlagConfigurationError('JSON variation value is invalid')
-    return parsed
-  }
+  if (value.case === 'jsonStringIndex') return jsonValueAt(configuration, value.value)
   throw new FlagConfigurationError('Variation value is missing')
 }
 
-function resolutionReason(split: Split, allocation: Allocation): ResolutionReason {
+function resolutionReason(split: Split): ResolutionReason {
   if (split.reason === UFC_REASON.TARGETING_MATCH) return 'TARGETING_MATCH'
   if (split.reason === UFC_REASON.SPLIT) return 'SPLIT'
   if (split.reason === UFC_REASON.STATIC) return 'STATIC'
   if (split.reason === UFC_REASON.DEFAULT) return 'DEFAULT'
-  if (allocation.targetingConditionIndex !== undefined) return 'TARGETING_MATCH'
-  if (allocation.partitionKey.some((partition) => partition.kind.case === 'shardMd5')) return 'SPLIT'
-  if (allocation.partitionKey.some((partition) => partition.kind.case === 'time')) return 'DEFAULT'
-  return 'STATIC'
+  return 'UNKNOWN'
 }
 
 function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {
@@ -404,34 +427,7 @@ function variationValueCase(
 }
 
 function containsInternedString(indexes: number[], value: string, strings: string[]): boolean {
-  const stringAt = (index: number) => atIndex(strings, index, 'condition string')
-  ensureSorted(indexes, (left, right) => compareStrings(stringAt(left), stringAt(right)), 'Condition string indexes')
-  return containsSorted(indexes, (index) => {
-    return compareStrings(stringAt(index), value)
-  })
-}
-
-function ensureSorted<T>(values: T[], compare: (left: T, right: T) => number, description: string): void {
-  if (validatedSortedArrays.has(values)) return
-  for (let index = 1; index < values.length; index++) {
-    if (compare(values[index - 1], values[index]) > 0) {
-      throw new FlagConfigurationError(`${description} must be sorted`)
-    }
-  }
-  validatedSortedArrays.add(values)
-}
-
-function containsSorted<T>(values: T[], compare: (candidate: T) => number): boolean {
-  let low = 0
-  let high = values.length - 1
-  while (low <= high) {
-    const middle = (low + high) >>> 1
-    const comparison = compare(values[middle])
-    if (comparison === 0) return true
-    if (comparison < 0) low = middle + 1
-    else high = middle - 1
-  }
-  return false
+  return indexes.some((index) => atIndex(strings, index, 'condition string') === value)
 }
 
 function safeInteger(value: bigint, description: string): number {
@@ -448,44 +444,26 @@ function atIndex<T>(items: T[], index: number, description: string): T {
   return value
 }
 
-function isJsonValue(value: unknown): value is FlagValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (Array.isArray(value)) return value.every(isJsonValue)
-  return (
-    typeof value === 'object' && value !== null && Object.values(value as Record<string, unknown>).every(isJsonValue)
-  )
+function jsonValueAt(configuration: PreparedRulesResponse, index: number): FlagValue {
+  const cache = configuration.evaluationJsonCache
+  const cached = cache.get(index)
+  if (cached && !cached.valid) throw new FlagConfigurationError('JSON variation value is invalid')
+  if (cached) return cached.value
+
+  const serialized = atIndex(configuration.jsonStrings, index, 'JSON variation value')
+  try {
+    const parsed = JSON.parse(serialized) as FlagValue
+    if (typeof parsed === 'number' && !Number.isFinite(parsed)) throw new Error()
+    cache.set(index, { valid: true, value: parsed })
+    return parsed
+  } catch {
+    cache.set(index, { valid: false })
+    throw new FlagConfigurationError('JSON variation value is invalid')
+  }
 }
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
-  validateSha256Hashes(values)
-  ensureSorted(values, compareBytes, 'SHA-256 hashes')
-  return containsSorted(values, (candidate) => compareBytes(candidate, value))
-}
-
-function validateSha256Hashes(values: Uint8Array[]): void {
-  if (validatedSha256Arrays.has(values)) return
-  if (values.some((hash) => hash.length !== 32)) {
-    throw new FlagConfigurationError('SHA-256 hashes must contain 32 bytes')
-  }
-  validatedSha256Arrays.add(values)
-}
-
-function compareStrings(left: string, right: string): number {
-  if (left === right) return 0
-  // Go sorts protobuf strings by UTF-8 bytes, whose ordering follows Unicode code points.
-  // JavaScript's relational operators compare UTF-16 code units instead.
-  let leftIndex = 0
-  let rightIndex = 0
-  while (leftIndex < left.length && rightIndex < right.length) {
-    const leftCodePoint = left.codePointAt(leftIndex) as number
-    const rightCodePoint = right.codePointAt(rightIndex) as number
-    if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1
-    leftIndex += leftCodePoint > 0xffff ? 2 : 1
-    rightIndex += rightCodePoint > 0xffff ? 2 : 1
-  }
-  if (leftIndex === left.length && rightIndex === right.length) return 0
-  return leftIndex === left.length ? -1 : 1
+  return values.some((candidate) => compareBytes(candidate, value) === 0)
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {
@@ -494,5 +472,3 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
   }
   return left.length === right.length ? 0 : left.length < right.length ? -1 : 1
 }
-
-const protobufSharder = new MD5Sharder()

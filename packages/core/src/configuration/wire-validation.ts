@@ -38,27 +38,15 @@ export function parsePrecomputedConfigurationResponse(
   }
   if (!isRecord(flags)) return { error: 'Precomputed configuration flags must be an object' }
 
-  const validFlags: Array<[string, PrecomputedFlag]> = []
   const flagErrors: Array<[string, string]> = []
   for (const [key, flag] of Object.entries(flags)) {
-    if (isPrecomputedFlag(flag)) {
-      validFlags.push([key, flag])
-    } else {
+    if (!isPrecomputedFlag(flag)) {
       flagErrors.push([key, 'Invalid precomputed flag configuration'])
     }
   }
 
   return {
-    response: {
-      ...value,
-      data: {
-        ...value.data,
-        attributes: {
-          ...value.data.attributes,
-          flags: Object.fromEntries(validFlags),
-        },
-      },
-    } as PrecomputedConfigurationResponse,
+    response: value as PrecomputedConfigurationResponse,
     ...(flagErrors.length > 0 ? { flagErrors: Object.fromEntries(flagErrors) } : {}),
   }
 }

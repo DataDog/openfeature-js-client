@@ -141,8 +141,10 @@ if (context !== undefined) {
 }
 ```
 
-Applications that use rules-based configurations can opt into the full parser
-and its Protobuf-ES dependency through the rules-based entry point:
+Rules-based configurations contain targeting rules that the SDK evaluates locally
+against the OpenFeature evaluation context, rather than assignments precomputed for one context.
+Applications that use them can opt into the full parser and its Protobuf-ES dependency
+through the rules-based entry point:
 
 ```javascript
 import {
@@ -154,7 +156,7 @@ import {
 
 ### Using DatadogOfflineProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. It never fetches or polls configuration. By default it also sends no telemetry.
+`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration. By default it also sends no telemetry.
 
 For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 

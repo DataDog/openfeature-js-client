@@ -6,17 +6,31 @@ export function compileRegex(pattern: string): RegExp {
 }
 
 export function coerceToString(value: unknown): string | undefined {
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
     return String(value)
+  }
+
+  // OpenFeature context values may include scalar-like structures, such as Date or
+  // custom classes. Coerce those while ignoring nested arrays and plain objects.
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    try {
+      if (value.toString !== Object.prototype.toString) return String(value)
+    } catch {
+      return undefined
+    }
   }
   return undefined
 }
 
 export function coerceToNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'number') return value
   if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
     return undefined
   }
-  const number = Number(value)
-  return Number.isFinite(number) ? number : undefined
+  return Number(value)
 }
