@@ -72,6 +72,12 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
    */
   flaggingProxy?: string
+
+  /**
+   * Fetch implementation used for flag configuration requests. It can customize request handling,
+   * including retries, timeouts, proxying, and headers.
+   */
+  fetch?: typeof globalThis.fetch
 }
 
 export interface FlaggingConfiguration extends Configuration {

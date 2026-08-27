@@ -56,8 +56,33 @@ const provider = new DatadogProvider({
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
+
+  // Optional Fetch-compatible implementation (for example, a timeout/retry wrapper)
+  fetch: customFetch,
 })
 ```
+
+### Request Timeouts and Retries
+
+The package provides Fetch-compatible wrappers for adding a timeout and retries. They preserve the provider's
+cancellation signal and can be composed:
+
+```javascript
+import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
+
+const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
+
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  fetch: customFetch,
+})
+```
+
+Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. `withRetry` retries
+network and timeout failures, HTTP 408, and HTTP 5xx responses. It does not retry HTTP 429 responses because doing
+so correctly requires a `Retry-After` policy. For timeout only, pass
+`withTimeout(globalThis.fetch, 5_000)` directly as `fetch`.
 
 ## Usage Examples
 

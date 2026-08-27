@@ -6,6 +6,12 @@
 
 ---
 
+## Unreleased
+
+**Features:**
+
+- Allow a custom Fetch-compatible implementation for browser flag configuration requests so applications can own timeout, retry, proxy, and header behavior. [BROWSER]
+
 ## @datadog/openfeature-node-server@2.1.0
 
 **Bug Fixes:**

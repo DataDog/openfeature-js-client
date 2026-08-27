@@ -66,7 +66,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
     }
 
-    const response = await fetch(url.toString(), {
+    const fetchImplementation = initConfiguration.fetch ?? globalThis.fetch
+    const response = await fetchImplementation(url.toString(), {
       method: 'POST',
       headers: defaultHeaders,
       signal,

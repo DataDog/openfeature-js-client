@@ -349,4 +349,42 @@ describe('createFlagsConfigurationFetcher', () => {
       })
     })
   })
+
+  describe('custom fetch implementation', () => {
+    it('should use the configured fetch implementation instead of global fetch', async () => {
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: jest.fn(() => 'application/json') },
+        json: jest.fn().mockResolvedValue({ flags: {} }),
+      })
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
+
+      await expect(fetcher(mockContext)).resolves.toEqual({
+        precomputed: {
+          response: { flags: {} },
+          context: mockContext,
+          fetchedAt: 1234567890,
+        },
+      })
+      expect(customFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should forward the caller abort signal to the configured fetch implementation', async () => {
+      const controller = new AbortController()
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: jest.fn(() => 'application/json') },
+        json: jest.fn().mockResolvedValue({ flags: {} }),
+      })
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
+
+      await fetcher(mockContext, { signal: controller.signal })
+
+      expect(customFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: controller.signal })
+      )
+    })
+  })
 })
