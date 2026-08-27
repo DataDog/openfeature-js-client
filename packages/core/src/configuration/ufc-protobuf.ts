@@ -4,10 +4,10 @@ import { fromBinary, toBinary } from '@bufbuild/protobuf'
 import { type FlagsConfiguration, FlagsConfigurationSchema } from './generated/ufc_pb'
 import { type PreparedRulesResponse, prepareRulesResponse } from './prepared-rules-response'
 
-export function decodeUniversalFlagConfiguration(response: Uint8Array): PreparedRulesResponse {
+export function decodeFlagsConfiguration(response: Uint8Array): PreparedRulesResponse {
   return prepareRulesResponse(fromBinary(FlagsConfigurationSchema, response))
 }
 
-export function encodeUniversalFlagConfiguration(configuration: FlagsConfiguration): Uint8Array {
+export function encodeFlagsConfiguration(configuration: FlagsConfiguration): Uint8Array {
   return toBinary(FlagsConfigurationSchema, configuration)
 }

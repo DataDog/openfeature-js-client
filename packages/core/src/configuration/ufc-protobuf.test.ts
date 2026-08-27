@@ -4,7 +4,7 @@ import { evaluateRulesBasedConfiguration } from '../evaluation'
 import { evaluateProtobufConfiguration } from '../evaluation/evaluateProtobufConfiguration'
 import { MD5Sharder } from '../evaluation/sharders'
 import type { TimeStamp } from '../time'
-import { decodeUniversalFlagConfiguration } from './ufc-protobuf'
+import { decodeFlagsConfiguration } from './ufc-protobuf'
 
 function varint(input: number | bigint): number[] {
   let value = BigInt(input)
@@ -315,7 +315,7 @@ const logger: Logger = {
 }
 
 function decodeRules(options: RulesResponseOptions = {}) {
-  return decodeUniversalFlagConfiguration(base64Decode(rulesResponse(options)))
+  return decodeFlagsConfiguration(base64Decode(rulesResponse(options)))
 }
 
 function evaluateBoolean(options: RulesResponseOptions, context: EvaluationContext) {
@@ -361,7 +361,7 @@ function expectFlagConfigurationAccepted(options: RulesResponseOptions, flagKey 
   expect(evaluateFlag(configuration, flagKey).errorCode).toBeUndefined()
 }
 
-describe('UFC protobuf decoder', () => {
+describe('flags configuration protobuf decoder', () => {
   it('returns the generated protobuf type without converting it to the JSON UFC shape', () => {
     const configuration = decodeRules()
     const flag = configuration.flags['test-flag']
@@ -381,7 +381,7 @@ describe('UFC protobuf decoder', () => {
   it.each([Uint8Array.of(0x80), Uint8Array.of(0x0a, 0x02, 0x01)])(
     'rejects malformed protobuf response %#',
     (response) => {
-      expect(() => decodeUniversalFlagConfiguration(response)).toThrow()
+      expect(() => decodeFlagsConfiguration(response)).toThrow()
     }
   )
 
