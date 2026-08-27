@@ -73,7 +73,8 @@ const provider = new DatadogProvider({
 ```
 
 Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. `withRetry` retries
-network and timeout failures, HTTP 408, HTTP 429, and HTTP 5xx responses. For timeout only, pass
+network and timeout failures, HTTP 408, and HTTP 5xx responses. It does not retry HTTP 429 responses because doing
+so correctly requires a `Retry-After` policy. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `fetch`.
 
 ## Usage Examples

@@ -46,13 +46,13 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
 }
 
 function isRetryableResponse(response: Response): boolean {
-  return response.status === 408 || response.status === 429 || response.status >= 500
+  return response.status === 408 || response.status >= 500
 }
 
 /**
  * Wraps a Fetch-compatible implementation with immediate retries for transient failures.
  *
- * Network errors, HTTP 408, HTTP 429, and HTTP 5xx responses are retried. Caller cancellation is never retried.
+ * Network errors, HTTP 408, and HTTP 5xx responses are retried. Caller cancellation is never retried.
  */
 export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
   validateNonNegativeInteger(retries, 'retries')

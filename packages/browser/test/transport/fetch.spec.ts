@@ -74,7 +74,7 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
-  it.each([408, 429, 500, 599])('retries an HTTP %s response', async (status) => {
+  it.each([408, 500, 599])('retries an HTTP %s response', async (status) => {
     const cancel = jest.fn().mockResolvedValue(undefined)
     const retryableResponse = { status, body: { cancel } } as unknown as Response
     const successfulResponse = new Response(null, { status: 200 })
@@ -87,6 +87,14 @@ describe('withRetry', () => {
 
   it('returns a non-retryable response without retrying', async () => {
     const response = new Response(null, { status: 400 })
+    const fetchImplementation = jest.fn().mockResolvedValue(response)
+
+    await expect(withRetry(fetchImplementation, 2)('/flags')).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry an HTTP 429 response without a Retry-After policy', async () => {
+    const response = new Response(null, { status: 429 })
     const fetchImplementation = jest.fn().mockResolvedValue(response)
 
     await expect(withRetry(fetchImplementation, 2)('/flags')).resolves.toBe(response)
