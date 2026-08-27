@@ -167,9 +167,7 @@ export class DatadogProvider extends DatadogCoreProvider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    const configurationPromise = this.retrieveFlagsConfiguration(evaluationContext, { signal })
-
-    this.latestContextUpdate = configurationPromise
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
