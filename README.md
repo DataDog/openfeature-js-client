@@ -62,6 +62,54 @@ const provider = new DatadogProvider({
 })
 ```
 
+### Request Timeouts and Retries
+
+The provider passes the standard Fetch arguments, including its cancellation signal, to `fetch`. You can compose
+small wrappers to add a per-attempt timeout and retry policy while preserving that signal:
+
+```javascript
+const withTimeout =
+  (fetchImplementation, timeoutMs) =>
+  async (input, init = {}) =>
+    fetchImplementation(input, {
+      ...init,
+      signal: init.signal
+        ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs),
+    })
+
+const withRetry =
+  (fetchImplementation, retries) =>
+  async (input, init = {}) => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const response = await fetchImplementation(input, init)
+        const retryable = response.status === 408 || response.status >= 500
+        if (!retryable || attempt === retries) {
+          return response
+        }
+        await response.body?.cancel()
+      } catch (error) {
+        if (init.signal?.aborted || attempt === retries) {
+          throw error
+        }
+      }
+    }
+  }
+
+const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
+
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  fetch: customFetch,
+})
+```
+
+Here, each attempt has a five-second timeout and `retries: 1` allows one retry after the initial request. The retry
+wrapper retries network and timeout failures, HTTP 408, and HTTP 5xx responses. For timeout only, pass
+`withTimeout(globalThis.fetch, 5_000)` directly as `fetch`.
+
 ## Usage Examples
 
 ### Flag Evaluation
