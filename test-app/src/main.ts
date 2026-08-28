@@ -1,5 +1,9 @@
 import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
 import { OpenFeature } from '@openfeature/web-sdk'
+import type { SmokeResult } from './smokeResult'
+
+const REQUEST_URL = 'https://example.test/flags'
+const REQUEST_BODY = 'configuration request'
 
 const precomputedResponse = {
   data: {
@@ -26,10 +30,27 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-async function run(): Promise<void> {
-  let configurationAttempts = 0
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
+async function getDomExceptionName(promise: Promise<unknown>): Promise<string | undefined> {
+  try {
+    await promise
+  } catch (error) {
+    return error instanceof DOMException ? error.name : undefined
+  }
+  return undefined
+}
+
+async function runProviderSmoke() {
+  let attempts = 0
   const configurationFetch: typeof fetch = async (_input, init) => {
-    configurationAttempts += 1
+    attempts += 1
     const headers = new Headers(init?.headers)
     assert(init?.method === 'POST', 'Provider did not issue a POST configuration request')
     assert(headers.get('dd-client-token') === 'test-token', 'Provider did not preserve the client token header')
@@ -38,6 +59,7 @@ async function run(): Promise<void> {
       headers: { 'content-type': 'application/vnd.api+json' },
     })
   }
+
   const provider = new DatadogProvider({
     clientToken: 'test-token',
     env: 'test',
@@ -48,8 +70,22 @@ async function run(): Promise<void> {
     flagConfigurationFetch: withRetry(withTimeout(configurationFetch, 1_000), 1),
   })
   await OpenFeature.setProviderAndWait(provider)
-  const providerDetails = OpenFeature.getClient().getBooleanDetails('packed-browser-flag', false)
+  const details = OpenFeature.getClient().getBooleanDetails('packed-browser-flag', false)
 
+  assert(attempts === 1, 'Provider used the wrong configuration request attempt count')
+  assert(details.value === true, 'Packed DatadogProvider did not evaluate the canned flag')
+  assert(details.reason === 'TARGETING_MATCH', 'Packed DatadogProvider returned the wrong evaluation reason')
+  assert(details.variant === 'variation-packed-browser', 'Packed DatadogProvider returned the wrong evaluation variant')
+
+  return {
+    value: details.value,
+    reason: details.reason,
+    variant: details.variant,
+    attempts,
+  }
+}
+
+async function runTimeoutSmoke() {
   const headersThenPendingBodyFetch: typeof fetch = async (_input, init) => {
     const signal = init?.signal
     return new Response(
@@ -65,93 +101,78 @@ async function run(): Promise<void> {
       })
     )
   }
-  let timeoutErrorName: string | undefined
-  try {
-    await withTimeout(headersThenPendingBodyFetch, 10)('https://example.test/flags')
-  } catch (error) {
-    timeoutErrorName = error instanceof DOMException ? error.name : undefined
-  }
 
-  const requestBodies: string[] = []
+  const errorName = await getDomExceptionName(withTimeout(headersThenPendingBodyFetch, 10)(REQUEST_URL))
+  assert(errorName === 'TimeoutError', 'Timeout ended before response-body download')
+  return { errorName }
+}
+
+async function runRequestReplaySmoke() {
+  const bodies: string[] = []
   const replayingFetch: typeof fetch = async (input, init) => {
     const request = new Request(input, init)
-    requestBodies.push(await request.text())
-    return new Response(null, { status: requestBodies.length === 1 ? 500 : 200 })
+    bodies.push(await request.text())
+    return new Response(null, { status: bodies.length === 1 ? 500 : 200 })
   }
+
   const response = await withRetry(
     replayingFetch,
     1
   )(
-    new Request('https://example.test/flags', {
+    new Request(REQUEST_URL, {
       method: 'POST',
-      body: 'configuration request',
+      body: REQUEST_BODY,
     })
   )
 
-  let cancelStarted: (() => void) | undefined
-  let finishCancel: (() => void) | undefined
-  const cancelStartedPromise = new Promise<void>((resolve) => {
-    cancelStarted = resolve
-  })
-  const cancelFinishedPromise = new Promise<void>((resolve) => {
-    finishCancel = resolve
-  })
+  assert(response.status === 200, 'Request body retry did not succeed')
+  assert(bodies.length === 2, 'Request body retry used the wrong attempt count')
+  assert(
+    bodies.every((body) => body === REQUEST_BODY),
+    'Request body was not replayed'
+  )
+  return { attempts: bodies.length, bodies }
+}
+
+async function runCancellationSmoke() {
+  const cancellationStarted = createDeferred<void>()
+  const cancellationFinished = createDeferred<void>()
   const retryBody = new ReadableStream({
     cancel() {
-      cancelStarted?.()
-      return cancelFinishedPromise
+      cancellationStarted.resolve()
+      return cancellationFinished.promise
     },
   })
   const controller = new AbortController()
-  let cancellationAttempts = 0
+  let attempts = 0
   const cancellationFetch: typeof fetch = async () => {
-    cancellationAttempts += 1
+    attempts += 1
     return new Response(retryBody, { status: 500 })
   }
-  const cancellationRequest = withRetry(cancellationFetch, 1)('https://example.test/flags', {
-    signal: controller.signal,
-  })
-  await cancelStartedPromise
+
+  const request = withRetry(cancellationFetch, 1)(REQUEST_URL, { signal: controller.signal })
+  await cancellationStarted.promise
   controller.abort(new DOMException('Configuration request superseded', 'AbortError'))
-  finishCancel?.()
-  let cancellationErrorName: string | undefined
-  try {
-    await cancellationRequest
-  } catch (error) {
-    cancellationErrorName = error instanceof DOMException ? error.name : undefined
-  }
+  cancellationFinished.resolve()
+  const errorName = await getDomExceptionName(request)
 
-  assert(timeoutErrorName === 'TimeoutError', 'Timeout ended before response-body download')
-  assert(configurationAttempts === 1, 'Provider used the wrong configuration request attempt count')
-  assert(providerDetails.value === true, 'Packed DatadogProvider did not evaluate the canned flag')
-  assert(providerDetails.reason === 'TARGETING_MATCH', 'Packed DatadogProvider returned the wrong evaluation reason')
-  assert(
-    providerDetails.variant === 'variation-packed-browser',
-    'Packed DatadogProvider returned the wrong evaluation variant'
-  )
-  assert(response.status === 200, 'Request body retry did not succeed')
-  assert(requestBodies.length === 2, 'Request body retry used the wrong attempt count')
-  assert(
-    requestBodies.every((body) => body === 'configuration request'),
-    'Request body was not replayed'
-  )
-  assert(cancellationErrorName === 'AbortError', 'Cancellation did not reject with the caller abort reason')
-  assert(cancellationAttempts === 1, 'Caller cancellation caused another attempt')
+  assert(errorName === 'AbortError', 'Cancellation did not reject with the caller abort reason')
+  assert(attempts === 1, 'Caller cancellation caused another attempt')
+  return { errorName, attempts }
+}
 
-  const result = {
-    providerValue: providerDetails.value,
-    providerReason: providerDetails.reason,
-    providerVariant: providerDetails.variant,
-    configurationAttempts,
-    timeoutErrorName,
-    attempts: requestBodies.length,
-    bodies: requestBodies,
-    cancellationErrorName,
-    cancellationAttempts,
+async function run(): Promise<void> {
+  const result: SmokeResult = {
+    provider: await runProviderSmoke(),
+    timeout: await runTimeoutSmoke(),
+    retry: await runRequestReplaySmoke(),
+    cancellation: await runCancellationSmoke(),
   }
 
   Object.assign(globalThis, { __OPENFEATURE_SMOKE_RESULT__: result })
-  document.querySelector<HTMLPreElement>('#app')!.textContent = JSON.stringify(result, null, 2)
+  const output = document.querySelector<HTMLPreElement>('#app')
+  assert(output, 'Smoke result output element was not found')
+  output.textContent = JSON.stringify(result, null, 2)
 }
 
 void run().catch((error) => {

@@ -1,4 +1,6 @@
 type Fetch = typeof globalThis.fetch
+type FetchInput = Parameters<Fetch>[0]
+type FetchInit = Parameters<Fetch>[1]
 
 // Browser timers convert delays to signed 32-bit integers; larger values can fire immediately.
 const MAX_SET_TIMEOUT_DELAY_MS = 2_147_483_647
@@ -8,7 +10,7 @@ const MAX_BACKOFF_MS = 30_000
 const MAX_RETRY_AFTER_MS = 30_000
 const INITIAL_BACKOFF_MS = 100
 
-function isRequest(input: Parameters<Fetch>[0]): input is Request {
+function isRequest(input: FetchInput): input is Request {
   return (
     typeof input === 'object' &&
     input !== null &&
@@ -18,7 +20,7 @@ function isRequest(input: Parameters<Fetch>[0]): input is Request {
   )
 }
 
-function getRequestSignal(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]): AbortSignal | undefined {
+function getEffectiveSignal(input: FetchInput, init?: FetchInit): AbortSignal | undefined {
   if (init?.signal === null) {
     return undefined
   }
@@ -34,7 +36,7 @@ function validateIntegerInRange(value: number, name: string, maximum: number): v
   }
 }
 
-async function bufferResponse(response: Response): Promise<void> {
+async function bufferResponseBody(response: Response): Promise<void> {
   if (response.body) {
     await response.clone().arrayBuffer()
   }
@@ -51,7 +53,7 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
 
   return async (input, init) => {
     const controller = new AbortController()
-    const requestSignal = getRequestSignal(input, init)
+    const requestSignal = getEffectiveSignal(input, init)
     const abortFromRequest = () => controller.abort(requestSignal?.reason)
 
     if (requestSignal?.aborted) {
@@ -69,7 +71,7 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
 
     try {
       const response = await fetchImplementation(input, { ...init, signal: controller.signal })
-      await bufferResponse(response)
+      await bufferResponseBody(response)
       return response
     } catch (error) {
       if (controller.signal.aborted) {
@@ -90,15 +92,15 @@ function isRetryableResponse(response: Response): boolean {
 }
 
 function isRetryableError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    ['TypeError', 'TimeoutError'].includes(String(error.name))
-  )
+  if (typeof error !== 'object' || error === null || !('name' in error)) {
+    return false
+  }
+
+  const name = String(error.name)
+  return name === 'TypeError' || name === 'TimeoutError'
 }
 
-function getRetryAfterMs(response: Response): number | undefined {
+function getRetryAfterDelayMs(response: Response): number | undefined {
   if (response.status !== 503) {
     return undefined
   }
@@ -155,6 +157,11 @@ function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+function discardResponseBody(response: Response): void {
+  // Cleanup must not delay or prevent a retry when a stream's cancellation stalls or rejects.
+  void response.body?.cancel().catch(() => undefined)
+}
+
 function validateReplayableBody(init?: RequestInit): void {
   if (
     typeof init?.body === 'object' &&
@@ -180,7 +187,7 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
     }
 
     validateReplayableBody(init)
-    const requestSignal = getRequestSignal(input, init)
+    const requestSignal = getEffectiveSignal(input, init)
     const requestTemplate = isRequest(input) && init?.body == null ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
@@ -204,12 +211,12 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
         return response
       }
 
-      const retryAfterMs = getRetryAfterMs(response)
+      const retryAfterMs = getRetryAfterDelayMs(response)
       if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_AFTER_MS) {
         return response
       }
       const delayMs = (retryAfterMs ?? 0) + getBackoffMs(attempt)
-      void response.body?.cancel().catch(() => undefined)
+      discardResponseBody(response)
       await waitForRetry(delayMs, requestSignal)
     }
   }
