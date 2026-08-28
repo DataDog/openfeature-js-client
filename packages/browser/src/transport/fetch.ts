@@ -168,9 +168,13 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
   validateIntegerInRange(retries, 'retries', MAX_RETRIES)
 
   return async (input, init) => {
+    if (retries === 0) {
+      return fetchImplementation(input, init)
+    }
+
     validateReplayableBody(init)
     const requestSignal = getRequestSignal(input, init)
-    const requestTemplate = isRequest(input) ? input.clone() : undefined
+    const requestTemplate = isRequest(input) && init?.body == null ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
       const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()

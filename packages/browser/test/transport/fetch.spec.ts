@@ -213,6 +213,26 @@ describe('withRetry', () => {
     expect(requestBodies).toEqual(['configuration request', 'configuration request'])
   })
 
+  it('replays an overriding RequestInit body without cloning a consumed Request', async () => {
+    const requestBodies: string[] = []
+    const fetchImplementation = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      requestBodies.push(await request.text())
+      return new Response(null, { status: requestBodies.length === 1 ? 500 : 200 })
+    })
+    const request = new Request('https://example.test/flags', {
+      method: 'POST',
+      body: 'original request',
+    })
+    await request.text()
+
+    await expect(withRetry(fetchImplementation, 1)(request, { body: 'replacement request' })).resolves.toMatchObject({
+      status: 200,
+    })
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    expect(requestBodies).toEqual(['replacement request', 'replacement request'])
+  })
+
   it('replays a Request-like body from another realm', async () => {
     type ForeignRequest = {
       clone: () => ForeignRequest
@@ -433,6 +453,15 @@ describe('withRetry', () => {
     expect(() => withRetry(globalThis.fetch, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
       'withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body'
     )
+  })
+
+  it('passes a RequestInit body stream through when retries are disabled', async () => {
+    const body = new ReadableStream()
+    const response = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValue(response)
+
+    await expect(withRetry(fetchImplementation, 0)('/flags', { body } as RequestInit)).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledWith('/flags', { body })
   })
 
   it('rejects a stream-like RequestInit body from another realm', () => {
