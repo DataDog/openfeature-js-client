@@ -357,7 +357,7 @@ describe('createFlagsConfigurationFetcher', () => {
         headers: { get: jest.fn(() => 'application/json') },
         json: jest.fn().mockResolvedValue({ flags: {} }),
       })
-      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagConfigurationFetch: customFetch })
 
       await expect(fetcher(mockContext)).resolves.toEqual({
         precomputed: {
@@ -377,7 +377,7 @@ describe('createFlagsConfigurationFetcher', () => {
         headers: { get: jest.fn(() => 'application/json') },
         json: jest.fn().mockResolvedValue({ flags: {} }),
       })
-      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, fetch: customFetch })
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagConfigurationFetch: customFetch })
 
       await fetcher(mockContext, { signal: controller.signal })
 

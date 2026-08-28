@@ -50,15 +50,19 @@ const provider = new DatadogProvider({
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
 
-  // Optional Fetch-compatible implementation (for example, a timeout/retry wrapper)
-  fetch: customFetch,
+  // Optional Fetch-compatible implementation for flag configuration requests
+  flagConfigurationFetch: globalThis.fetch,
 })
 ```
 
-### Request Timeouts and Retries
+The custom Fetch implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
+requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
+authentication and any configured custom headers, and may route or transform the request as needed.
 
-The package provides Fetch-compatible wrappers for adding a timeout and retries. They preserve the provider's
-cancellation signal and can be composed:
+### Request Timeouts and Retries for npm Consumers
+
+The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose
+these helpers. The wrappers preserve the provider's cancellation signal and can be composed:
 
 ```javascript
 import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
@@ -68,14 +72,18 @@ const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
 const provider = new DatadogProvider({
   clientToken: 'pub_...',
   env: 'production',
-  fetch: customFetch,
+  flagConfigurationFetch: customFetch,
 })
 ```
 
-Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. `withRetry` retries
-network and timeout failures, HTTP 408, and HTTP 5xx responses. It does not retry HTTP 429 responses because doing
-so correctly requires a `Retry-After` policy. For timeout only, pass
-`withTimeout(globalThis.fetch, 5_000)` directly as `fetch`.
+Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. The timeout includes
+response-body download. The wrapper buffers the response body and is intended for flag configuration responses. A
+timeout of `0` disables the timer. Valid timeout values end at `2_147_483_647`. Retry counts range from `0` to `10`.
+`withRetry` uses randomized exponential backoff for Fetch `TypeError` failures, timeout failures, HTTP 408, and HTTP
+5xx responses. On HTTP 503, a valid `Retry-After` value up to 30 seconds is treated as a minimum delay before jittered
+backoff is added; responses that request a longer delay are not retried. It does not retry HTTP 429. Browsers report
+network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
+`withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
 ## Usage Examples
 
