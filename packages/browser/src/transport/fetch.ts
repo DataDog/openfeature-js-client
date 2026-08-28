@@ -1,8 +1,11 @@
 type Fetch = typeof globalThis.fetch
 
-const MAX_TIMER_DELAY_MS = 2_147_483_647
+// Browser timers convert delays to signed 32-bit integers; larger values can fire immediately.
+const MAX_SET_TIMEOUT_DELAY_MS = 2_147_483_647
+// Keep retry loops operationally bounded and below the point where integer increments lose precision.
 const MAX_RETRIES = 10
 const MAX_BACKOFF_MS = 30_000
+const MAX_RETRY_AFTER_MS = 30_000
 const INITIAL_BACKOFF_MS = 100
 
 function isRequest(input: Parameters<Fetch>[0]): input is Request {
@@ -28,14 +31,10 @@ function validateIntegerInRange(value: number, name: string, maximum: number): v
   }
 }
 
-async function bufferResponse(response: Response): Promise<Response> {
-  if (!response.body) {
-    return response
+async function bufferResponse(response: Response): Promise<void> {
+  if (response.body) {
+    await response.clone().arrayBuffer()
   }
-
-  const bufferedResponse = response.clone()
-  await response.arrayBuffer()
-  return bufferedResponse
 }
 
 /**
@@ -45,7 +44,7 @@ async function bufferResponse(response: Response): Promise<Response> {
  * The response body is buffered before this wrapper resolves.
  */
 export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetch {
-  validateIntegerInRange(timeoutMs, 'timeoutMs', MAX_TIMER_DELAY_MS)
+  validateIntegerInRange(timeoutMs, 'timeoutMs', MAX_SET_TIMEOUT_DELAY_MS)
 
   return async (input, init) => {
     const controller = new AbortController()
@@ -67,7 +66,8 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
 
     try {
       const response = await fetchImplementation(input, { ...init, signal: controller.signal })
-      return await bufferResponse(response)
+      await bufferResponse(response)
+      return response
     } catch (error) {
       if (controller.signal.aborted) {
         throw controller.signal.reason ?? error
@@ -108,7 +108,7 @@ function getRetryAfterMs(response: Response): number | undefined {
   const trimmedValue = value.trim()
   if (/^\d+$/.test(trimmedValue)) {
     const seconds = Number(trimmedValue)
-    return Math.min(seconds * 1_000, MAX_TIMER_DELAY_MS)
+    return seconds * 1_000
   }
   if (trimmedValue === '' || Number.isFinite(Number(trimmedValue))) {
     return undefined
@@ -118,7 +118,7 @@ function getRetryAfterMs(response: Response): number | undefined {
   if (Number.isNaN(date)) {
     return undefined
   }
-  return Math.min(Math.max(date - Date.now(), 0), MAX_TIMER_DELAY_MS)
+  return Math.max(date - Date.now(), 0)
 }
 
 function getBackoffMs(attempt: number): number {
@@ -198,7 +198,11 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
         return response
       }
 
-      const delayMs = getRetryAfterMs(response) ?? getBackoffMs(attempt)
+      const retryAfterMs = getRetryAfterMs(response)
+      if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_AFTER_MS) {
+        return response
+      }
+      const delayMs = retryAfterMs ?? getBackoffMs(attempt)
       await response.body?.cancel()
       if (requestSignal?.aborted || !(await waitForRetry(delayMs, requestSignal))) {
         return response

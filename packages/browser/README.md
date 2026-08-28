@@ -51,13 +51,13 @@ const provider = new DatadogProvider({
   enableFlagEvaluationTracking: true,
 
   // Optional Fetch-compatible implementation for flag configuration requests
-  fetch: globalThis.fetch,
+  flagConfigurationFetch: globalThis.fetch,
 })
 ```
 
-The custom `fetch` implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
-requests use their existing transports. A custom implementation must preserve the supplied `RequestInit` headers,
-which include Datadog authentication and any configured custom headers.
+The custom Fetch implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
+requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
+authentication and any configured custom headers, and may route or transform the request as needed.
 
 ### Request Timeouts and Retries for npm Consumers
 
@@ -72,7 +72,7 @@ const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
 const provider = new DatadogProvider({
   clientToken: 'pub_...',
   env: 'production',
-  fetch: customFetch,
+  flagConfigurationFetch: customFetch,
 })
 ```
 
@@ -80,9 +80,10 @@ Here, each attempt has a five-second timeout and `1` allows one retry after the 
 response-body download. The wrapper buffers the response body and is intended for flag configuration responses. A
 timeout of `0` disables the timer. Valid timeout values end at `2_147_483_647`. Retry counts range from `0` to `10`.
 `withRetry` uses randomized exponential backoff for Fetch `TypeError` failures, timeout failures, HTTP 408, and HTTP
-5xx responses. It honors `Retry-After` on HTTP 503. It does not retry HTTP 429. Browsers report network, CORS, and CSP
-failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
-`withTimeout(globalThis.fetch, 5_000)` directly as `fetch`.
+5xx responses. It honors `Retry-After` values up to 30 seconds on HTTP 503; responses that request a longer delay are
+not retried. It does not retry HTTP 429. Browsers report network, CORS, and CSP failures as `TypeError`, so the wrapper
+cannot separate those causes. For timeout only, pass `withTimeout(globalThis.fetch, 5_000)` directly as
+`flagConfigurationFetch`.
 
 ## Usage Examples
 

@@ -118,16 +118,16 @@ describe('withTimeout', () => {
   })
 
   it('returns a readable buffered response', async () => {
-    const fetchImplementation = jest.fn().mockResolvedValue(
-      new Response('configuration', {
-        headers: { 'content-type': 'text/plain' },
-        status: 201,
-        statusText: 'Created',
-      })
-    )
+    const originalResponse = new Response('configuration', {
+      headers: { 'content-type': 'text/plain' },
+      status: 201,
+      statusText: 'Created',
+    })
+    const fetchImplementation = jest.fn().mockResolvedValue(originalResponse)
 
     const response = await withTimeout(fetchImplementation, 100)('/flags')
 
+    expect(response).toBe(originalResponse)
     expect(response.status).toBe(201)
     expect(response.statusText).toBe('Created')
     expect(response.headers.get('content-type')).toBe('text/plain')
@@ -413,6 +413,19 @@ describe('withRetry', () => {
 
     await expect(request).resolves.toBe(successfulResponse)
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry when Retry-After exceeds the supported delay', async () => {
+    const response = new Response('scheduled maintenance', {
+      headers: { 'retry-after': '31' },
+      status: 503,
+    })
+    const fetchImplementation = jest.fn().mockResolvedValue(response)
+
+    await expect(withRetry(fetchImplementation, 1)('/flags')).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+    expect(response.bodyUsed).toBe(false)
+    await expect(response.text()).resolves.toBe('scheduled maintenance')
   })
 
   it.each(['', ' ', '1.5', '1e3', '-1'])('uses backoff for malformed Retry-After value %j', async (retryAfter) => {
