@@ -6,7 +6,7 @@
 
 ---
 
-## Unreleased
+## @datadog/openfeature-browser@1.4.0
 
 **Features:**
 
