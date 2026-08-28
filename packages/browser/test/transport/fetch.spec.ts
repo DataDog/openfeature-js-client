@@ -74,6 +74,23 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
+  it('replays a Request body for each attempt', async () => {
+    const requestBodies: string[] = []
+    const fetchImplementation = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      requestBodies.push(await request.text())
+      return new Response(null, { status: requestBodies.length === 1 ? 500 : 200 })
+    })
+    const request = new Request('https://example.test/flags', {
+      method: 'POST',
+      body: 'configuration request',
+    })
+
+    await expect(withRetry(fetchImplementation, 1)(request)).resolves.toMatchObject({ status: 200 })
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    expect(requestBodies).toEqual(['configuration request', 'configuration request'])
+  })
+
   it.each([408, 500, 599])('retries an HTTP %s response', async (status) => {
     const cancel = jest.fn().mockResolvedValue(undefined)
     const retryableResponse = { status, body: { cancel } } as unknown as Response
@@ -110,6 +127,29 @@ describe('withRetry', () => {
     controller.abort(reason)
 
     await expect(request).rejects.toBe(reason)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry when cancellation races with response cleanup', async () => {
+    const controller = new AbortController()
+    const reason = new DOMException('Configuration request superseded', 'AbortError')
+    let finishCancel: (() => void) | undefined
+    const cancel = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCancel = resolve
+        })
+    )
+    const retryableResponse = { status: 500, body: { cancel } } as unknown as Response
+    const fetchImplementation = jest.fn().mockResolvedValue(retryableResponse)
+    const request = withRetry(fetchImplementation, 1)('/flags', { signal: controller.signal })
+
+    await Promise.resolve()
+    expect(cancel).toHaveBeenCalledTimes(1)
+    controller.abort(reason)
+    finishCancel?.()
+
+    await expect(request).resolves.toBe(retryableResponse)
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 

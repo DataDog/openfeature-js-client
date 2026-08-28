@@ -59,14 +59,19 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
 
   return async (input, init) => {
     const requestSignal = getRequestSignal(input, init)
+    const requestTemplate = typeof Request !== 'undefined' && input instanceof Request ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
       try {
-        const response = await fetchImplementation(input, init)
+        const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()
+        const response = await fetchImplementation(attemptInput, init)
         if (!isRetryableResponse(response) || attempt === retries || requestSignal?.aborted) {
           return response
         }
         await response.body?.cancel()
+        if (requestSignal?.aborted) {
+          return response
+        }
       } catch (error) {
         if (requestSignal?.aborted || attempt === retries) {
           throw error
