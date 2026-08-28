@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('retries a packed Request body without retrying caller cancellation', async ({ page }) => {
+test('enforces packed Fetch timeout and retry behavior', async ({ page }) => {
   const runtimeErrors: string[] = []
   page.on('console', (message) => {
     if (message.type() === 'error') runtimeErrors.push(`console.error: ${message.text()}`)
@@ -20,6 +20,7 @@ test('retries a packed Request body without retrying caller cancellation', async
       ).__OPENFEATURE_SMOKE_RESULT__
   )
   expect(result).toEqual({
+    timeoutErrorName: 'TimeoutError',
     attempts: 2,
     bodies: ['configuration request', 'configuration request'],
     cancellationAttempts: 1,

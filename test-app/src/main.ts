@@ -1,10 +1,32 @@
-import { withRetry } from '@datadog/openfeature-browser'
+import { withRetry, withTimeout } from '@datadog/openfeature-browser'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
 async function run(): Promise<void> {
+  const headersThenPendingBodyFetch: typeof fetch = async (_input, init) => {
+    const signal = init?.signal
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          const abort = () => controller.error(signal?.reason)
+          if (signal?.aborted) {
+            abort()
+          } else {
+            signal?.addEventListener('abort', abort, { once: true })
+          }
+        },
+      })
+    )
+  }
+  let timeoutErrorName: string | undefined
+  try {
+    await withTimeout(headersThenPendingBodyFetch, 10)('https://example.test/flags')
+  } catch (error) {
+    timeoutErrorName = error instanceof DOMException ? error.name : undefined
+  }
+
   const requestBodies: string[] = []
   const replayingFetch: typeof fetch = async (input, init) => {
     const request = new Request(input, init)
@@ -49,6 +71,7 @@ async function run(): Promise<void> {
   finishCancel?.()
   const cancellationResponse = await cancellationRequest
 
+  assert(timeoutErrorName === 'TimeoutError', 'Timeout ended before response-body download')
   assert(response.status === 200, 'Request body retry did not succeed')
   assert(requestBodies.length === 2, 'Request body retry used the wrong attempt count')
   assert(
@@ -59,6 +82,7 @@ async function run(): Promise<void> {
   assert(cancellationAttempts === 1, 'Caller cancellation caused another attempt')
 
   const result = {
+    timeoutErrorName,
     attempts: requestBodies.length,
     bodies: requestBodies,
     cancellationAttempts,

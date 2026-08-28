@@ -1,5 +1,10 @@
 type Fetch = typeof globalThis.fetch
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+const MAX_RETRIES = 10
+const MAX_BACKOFF_MS = 30_000
+const INITIAL_BACKOFF_MS = 100
+
 function getRequestSignal(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]): AbortSignal | undefined {
   if (init?.signal) {
     return init.signal
@@ -7,19 +12,38 @@ function getRequestSignal(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[
   return typeof Request !== 'undefined' && input instanceof Request ? input.signal : undefined
 }
 
-function validateNonNegativeInteger(value: number, name: string): void {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer`)
+function validateIntegerInRange(value: number, name: string, maximum: number): void {
+  if (!Number.isInteger(value) || value < 0 || value > maximum) {
+    throw new RangeError(`${name} must be an integer between 0 and ${maximum}`)
   }
+}
+
+async function bufferResponse(response: Response): Promise<Response> {
+  if (!response.body) {
+    return response
+  }
+
+  const bufferedResponse = new Response(await response.arrayBuffer(), {
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText,
+  })
+  Object.defineProperties(bufferedResponse, {
+    redirected: { value: response.redirected },
+    type: { value: response.type },
+    url: { value: response.url },
+  })
+  return bufferedResponse
 }
 
 /**
  * Wraps a Fetch-compatible implementation with a timeout for each request.
  *
- * The caller's AbortSignal is preserved and can still cancel the request before the timeout.
+ * The timeout includes response-body download. A timeout of zero disables the timer while preserving caller cancellation.
+ * The response body is buffered before this wrapper resolves.
  */
 export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetch {
-  validateNonNegativeInteger(timeoutMs, 'timeoutMs')
+  validateIntegerInRange(timeoutMs, 'timeoutMs', MAX_TIMER_DELAY_MS)
 
   return async (input, init) => {
     const controller = new AbortController()
@@ -32,14 +56,20 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
       requestSignal?.addEventListener('abort', abortFromRequest, { once: true })
     }
 
-    const timeout = setTimeout(() => {
-      controller.abort(new DOMException(`The request timed out after ${timeoutMs} ms`, 'TimeoutError'))
-    }, timeoutMs)
+    const timeout =
+      timeoutMs === 0
+        ? undefined
+        : setTimeout(() => {
+            controller.abort(new DOMException(`The request timed out after ${timeoutMs} ms`, 'TimeoutError'))
+          }, timeoutMs)
 
     try {
-      return await fetchImplementation(input, { ...init, signal: controller.signal })
+      const response = await fetchImplementation(input, { ...init, signal: controller.signal })
+      return await bufferResponse(response)
     } finally {
-      clearTimeout(timeout)
+      if (timeout !== undefined) {
+        clearTimeout(timeout)
+      }
       requestSignal?.removeEventListener('abort', abortFromRequest)
     }
   }
@@ -49,33 +79,107 @@ function isRetryableResponse(response: Response): boolean {
   return response.status === 408 || response.status >= 500
 }
 
+function isRetryableError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (typeof error === 'object' && error !== null && 'name' in error && error.name === 'TimeoutError')
+  )
+}
+
+function getRetryAfterMs(response: Response): number | undefined {
+  if (response.status !== 503) {
+    return undefined
+  }
+
+  const value = response.headers.get('retry-after')
+  if (value === null) {
+    return undefined
+  }
+
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1_000, MAX_TIMER_DELAY_MS)
+  }
+
+  const date = Date.parse(value)
+  if (Number.isNaN(date)) {
+    return undefined
+  }
+  return Math.min(Math.max(date - Date.now(), 0), MAX_TIMER_DELAY_MS)
+}
+
+function getBackoffMs(attempt: number): number {
+  const maximum = Math.min(INITIAL_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS)
+  return Math.floor(Math.random() * maximum)
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<boolean> {
+  if (delayMs === 0) {
+    return Promise.resolve(!signal?.aborted)
+  }
+
+  return new Promise((resolve) => {
+    const finish = (canRetry: boolean) => {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', abort)
+      resolve(canRetry)
+    }
+    const abort = () => finish(false)
+    const timeout = setTimeout(() => finish(true), delayMs)
+
+    if (signal?.aborted) {
+      finish(false)
+    } else {
+      signal?.addEventListener('abort', abort, { once: true })
+    }
+  })
+}
+
+function validateReplayableBody(init?: RequestInit): void {
+  if (typeof ReadableStream !== 'undefined' && init?.body instanceof ReadableStream) {
+    throw new TypeError('withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body')
+  }
+}
+
 /**
- * Wraps a Fetch-compatible implementation with immediate retries for transient failures.
+ * Wraps a Fetch-compatible implementation with delayed retries for transient failures.
  *
- * Network errors, HTTP 408, and HTTP 5xx responses are retried. Caller cancellation is never retried.
+ * Fetch TypeErrors, timeout errors, HTTP 408, and HTTP 5xx responses are retried. Caller cancellation is never retried.
  */
 export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
-  validateNonNegativeInteger(retries, 'retries')
+  validateIntegerInRange(retries, 'retries', MAX_RETRIES)
 
   return async (input, init) => {
+    validateReplayableBody(init)
     const requestSignal = getRequestSignal(input, init)
     const requestTemplate = typeof Request !== 'undefined' && input instanceof Request ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
+      const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()
+      let response: Response
       try {
-        const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()
-        const response = await fetchImplementation(attemptInput, init)
-        if (!isRetryableResponse(response) || attempt === retries || requestSignal?.aborted) {
-          return response
-        }
-        await response.body?.cancel()
-        if (requestSignal?.aborted) {
-          return response
-        }
+        response = await fetchImplementation(attemptInput, init)
       } catch (error) {
-        if (requestSignal?.aborted || attempt === retries) {
+        if (requestSignal?.aborted || attempt === retries || !isRetryableError(error)) {
           throw error
         }
+        if (!(await waitForRetry(getBackoffMs(attempt), requestSignal))) {
+          if (requestSignal?.aborted) {
+            throw requestSignal.reason ?? error
+          }
+          throw error
+        }
+        continue
+      }
+
+      if (!isRetryableResponse(response) || attempt === retries || requestSignal?.aborted) {
+        return response
+      }
+
+      const delayMs = getRetryAfterMs(response) ?? getBackoffMs(attempt)
+      await response.body?.cancel()
+      if (requestSignal?.aborted || !(await waitForRetry(delayMs, requestSignal))) {
+        return response
       }
     }
   }

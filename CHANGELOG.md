@@ -6,11 +6,11 @@
 
 ---
 
-## Unreleased
+## @datadog/openfeature-browser@1.3.0
 
 **Features:**
 
-- Allow a custom Fetch-compatible implementation for browser flag configuration requests so applications can own timeout, retry, proxy, and header behavior. [BROWSER]
+- Allow a custom Fetch-compatible implementation for browser flag configuration requests so applications can own timeout, retry, proxy, and header behavior ([#348](https://github.com/DataDog/openfeature-js-client/pull/348)) [BROWSER]
 
 ## @datadog/openfeature-node-server@2.1.0
 
