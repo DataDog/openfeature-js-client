@@ -5,11 +5,21 @@ const MAX_RETRIES = 10
 const MAX_BACKOFF_MS = 30_000
 const INITIAL_BACKOFF_MS = 100
 
+function isRequest(input: Parameters<Fetch>[0]): input is Request {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'clone' in input &&
+    typeof input.clone === 'function' &&
+    'signal' in input
+  )
+}
+
 function getRequestSignal(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]): AbortSignal | undefined {
   if (init?.signal) {
     return init.signal
   }
-  return typeof Request !== 'undefined' && input instanceof Request ? input.signal : undefined
+  return isRequest(input) ? input.signal : undefined
 }
 
 function validateIntegerInRange(value: number, name: string, maximum: number): void {
@@ -23,16 +33,8 @@ async function bufferResponse(response: Response): Promise<Response> {
     return response
   }
 
-  const bufferedResponse = new Response(await response.arrayBuffer(), {
-    headers: response.headers,
-    status: response.status,
-    statusText: response.statusText,
-  })
-  Object.defineProperties(bufferedResponse, {
-    redirected: { value: response.redirected },
-    type: { value: response.type },
-    url: { value: response.url },
-  })
+  const bufferedResponse = response.clone()
+  await response.arrayBuffer()
   return bufferedResponse
 }
 
@@ -86,8 +88,10 @@ function isRetryableResponse(response: Response): boolean {
 
 function isRetryableError(error: unknown): boolean {
   return (
-    error instanceof TypeError ||
-    (typeof error === 'object' && error !== null && 'name' in error && error.name === 'TimeoutError')
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    ['TypeError', 'TimeoutError'].includes(String(error.name))
   )
 }
 
@@ -101,12 +105,16 @@ function getRetryAfterMs(response: Response): number | undefined {
     return undefined
   }
 
-  const seconds = Number(value)
-  if (Number.isFinite(seconds) && seconds >= 0) {
+  const trimmedValue = value.trim()
+  if (/^\d+$/.test(trimmedValue)) {
+    const seconds = Number(trimmedValue)
     return Math.min(seconds * 1_000, MAX_TIMER_DELAY_MS)
   }
+  if (trimmedValue === '' || Number.isFinite(Number(trimmedValue))) {
+    return undefined
+  }
 
-  const date = Date.parse(value)
+  const date = Date.parse(trimmedValue)
   if (Number.isNaN(date)) {
     return undefined
   }
@@ -141,7 +149,12 @@ function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<boolean> {
 }
 
 function validateReplayableBody(init?: RequestInit): void {
-  if (typeof ReadableStream !== 'undefined' && init?.body instanceof ReadableStream) {
+  if (
+    typeof init?.body === 'object' &&
+    init.body !== null &&
+    'getReader' in init.body &&
+    typeof init.body.getReader === 'function'
+  ) {
     throw new TypeError('withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body')
   }
 }
@@ -157,7 +170,7 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
   return async (input, init) => {
     validateReplayableBody(init)
     const requestSignal = getRequestSignal(input, init)
-    const requestTemplate = typeof Request !== 'undefined' && input instanceof Request ? input.clone() : undefined
+    const requestTemplate = isRequest(input) ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
       const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()

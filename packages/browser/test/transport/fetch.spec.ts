@@ -1,5 +1,7 @@
 /** @jest-environment node */
 
+import { runInNewContext } from 'node:vm'
+
 import { withRetry, withTimeout } from '../../src/transport/fetch'
 
 function createPendingFetch() {
@@ -132,6 +134,20 @@ describe('withTimeout', () => {
     await expect(response.text()).resolves.toBe('configuration')
   })
 
+  it('preserves native response metadata when the buffered response is cloned', async () => {
+    const nativeResponse = await globalThis.fetch('data:text/plain,configuration')
+    const fetchImplementation = jest.fn().mockResolvedValue(nativeResponse)
+
+    const response = await withTimeout(fetchImplementation, 100)('/flags')
+    const clonedResponse = response.clone()
+
+    expect(response.url).toBe(nativeResponse.url)
+    expect(response.type).toBe(nativeResponse.type)
+    expect(clonedResponse.url).toBe(nativeResponse.url)
+    expect(clonedResponse.type).toBe(nativeResponse.type)
+    await expect(clonedResponse.text()).resolves.toBe('configuration')
+  })
+
   it('treats zero as no timeout', async () => {
     jest.useFakeTimers()
     const response = new Response(null, { status: 200 })
@@ -170,6 +186,16 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
+  it('retries a TypeError from another realm', async () => {
+    const error = runInNewContext('new TypeError("Network error")') as TypeError
+    const response = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(response)
+
+    expect(error).not.toBeInstanceOf(TypeError)
+    await expect(withRetry(fetchImplementation, 1)('/flags')).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
   it('replays a Request body for each attempt', async () => {
     const requestBodies: string[] = []
     const fetchImplementation = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -185,6 +211,63 @@ describe('withRetry', () => {
     await expect(withRetry(fetchImplementation, 1)(request)).resolves.toMatchObject({ status: 200 })
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
     expect(requestBodies).toEqual(['configuration request', 'configuration request'])
+  })
+
+  it('replays a Request-like body from another realm', async () => {
+    type ForeignRequest = {
+      clone: () => ForeignRequest
+      readBody: () => string
+      signal: AbortSignal
+    }
+    const signal = new AbortController().signal
+    const createRequest = runInNewContext(
+      `(() => {
+        function createRequest() {
+          let consumed = false
+          return {
+            clone: createRequest,
+            readBody() {
+              if (consumed) throw new TypeError('Body has already been consumed')
+              consumed = true
+              return 'configuration request'
+            },
+            signal,
+          }
+        }
+        return createRequest
+      })()`,
+      { signal }
+    ) as () => ForeignRequest
+    const request = createRequest()
+    const requestBodies: string[] = []
+    const fetchImplementation = jest.fn(async (input: RequestInfo | URL) => {
+      requestBodies.push((input as unknown as ForeignRequest).readBody())
+      return new Response(null, { status: requestBodies.length === 1 ? 500 : 200 })
+    })
+
+    expect(request).not.toBeInstanceOf(Request)
+    await expect(withRetry(fetchImplementation, 1)(request as unknown as Request)).resolves.toMatchObject({
+      status: 200,
+    })
+    expect(requestBodies).toEqual(['configuration request', 'configuration request'])
+  })
+
+  it('reads caller cancellation from a Request-like input from another realm', async () => {
+    const controller = new AbortController()
+    const request = {
+      clone() {
+        return this
+      },
+      signal: controller.signal,
+    } as unknown as Request
+    const response = new Response(null, { status: 500 })
+    const fetchImplementation = jest.fn().mockResolvedValue(response)
+    const result = withRetry(fetchImplementation, 1)(request)
+
+    controller.abort(new DOMException('Configuration request superseded', 'AbortError'))
+
+    await expect(result).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
   it.each([408, 500, 599])('retries an HTTP %s response', async (status) => {
@@ -312,6 +395,22 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
+  it.each(['', ' ', '1.5', '1e3', '-1'])('uses backoff for malformed Retry-After value %j', async (retryAfter) => {
+    jest.useFakeTimers()
+    jest.mocked(Math.random).mockReturnValue(0.5)
+    const retryableResponse = new Response(null, { headers: { 'retry-after': retryAfter }, status: 503 })
+    const successfulResponse = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
+    const request = withRetry(fetchImplementation, 1)('/flags')
+
+    await jest.advanceTimersByTimeAsync(49)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+    await jest.advanceTimersByTimeAsync(1)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+
+    await expect(request).resolves.toBe(successfulResponse)
+  })
+
   it('uses randomized exponential backoff without Retry-After', async () => {
     jest.useFakeTimers()
     jest.mocked(Math.random).mockReturnValue(0.5)
@@ -334,6 +433,16 @@ describe('withRetry', () => {
     expect(() => withRetry(globalThis.fetch, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
       'withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body'
     )
+  })
+
+  it('rejects a stream-like RequestInit body from another realm', () => {
+    const body = runInNewContext('new (class ForeignReadableStream { getReader() {} })()') as BodyInit
+    const fetchImplementation = jest.fn()
+
+    expect(() => withRetry(fetchImplementation, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
+      'withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body'
+    )
+    expect(fetchImplementation).not.toHaveBeenCalled()
   })
 
   it('applies a composed timeout to each attempt', async () => {
