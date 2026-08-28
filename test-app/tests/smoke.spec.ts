@@ -32,6 +32,10 @@ test('enforces packed Fetch timeout and retry behavior', async ({ page }) => {
       ).__OPENFEATURE_SMOKE_RESULT__
   )
   expect(result).toEqual({
+    providerValue: true,
+    providerReason: 'TARGETING_MATCH',
+    providerVariant: 'variation-packed-browser',
+    configurationAttempts: 1,
     timeoutErrorName: 'TimeoutError',
     attempts: 2,
     bodies: ['configuration request', 'configuration request'],

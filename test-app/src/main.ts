@@ -1,10 +1,55 @@
-import { withRetry, withTimeout } from '@datadog/openfeature-browser'
+import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const precomputedResponse = {
+  data: {
+    id: 'packed-browser-smoke',
+    type: 'precomputed-assignments',
+    attributes: {
+      createdAt: '2026-08-28T16:00:00.000Z',
+      flags: {
+        'packed-browser-flag': {
+          allocationKey: 'allocation-packed-browser',
+          variationKey: 'variation-packed-browser',
+          variationType: 'BOOLEAN',
+          variationValue: true,
+          reason: 'TARGETING_MATCH',
+          doLog: false,
+          extraLogging: {},
+        },
+      },
+    },
+  },
+}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
 async function run(): Promise<void> {
+  let configurationAttempts = 0
+  const configurationFetch: typeof fetch = async (_input, init) => {
+    configurationAttempts += 1
+    const headers = new Headers(init?.headers)
+    assert(init?.method === 'POST', 'Provider did not issue a POST configuration request')
+    assert(headers.get('dd-client-token') === 'test-token', 'Provider did not preserve the client token header')
+    assert(headers.get('x-packed-browser-smoke') === 'true', 'Provider did not preserve custom headers')
+    return new Response(JSON.stringify(precomputedResponse), {
+      headers: { 'content-type': 'application/vnd.api+json' },
+    })
+  }
+  const provider = new DatadogProvider({
+    clientToken: 'test-token',
+    env: 'test',
+    customHeaders: { 'x-packed-browser-smoke': 'true' },
+    enableExposureLogging: false,
+    enableFlagEvaluationTracking: false,
+    enableRumFeatureFlagTracking: false,
+    flagConfigurationFetch: withRetry(withTimeout(configurationFetch, 1_000), 1),
+  })
+  await OpenFeature.setProviderAndWait(provider)
+  const providerDetails = OpenFeature.getClient().getBooleanDetails('packed-browser-flag', false)
+
   const headersThenPendingBodyFetch: typeof fetch = async (_input, init) => {
     const signal = init?.signal
     return new Response(
@@ -77,6 +122,13 @@ async function run(): Promise<void> {
   }
 
   assert(timeoutErrorName === 'TimeoutError', 'Timeout ended before response-body download')
+  assert(configurationAttempts === 1, 'Provider used the wrong configuration request attempt count')
+  assert(providerDetails.value === true, 'Packed DatadogProvider did not evaluate the canned flag')
+  assert(providerDetails.reason === 'TARGETING_MATCH', 'Packed DatadogProvider returned the wrong evaluation reason')
+  assert(
+    providerDetails.variant === 'variation-packed-browser',
+    'Packed DatadogProvider returned the wrong evaluation variant'
+  )
   assert(response.status === 200, 'Request body retry did not succeed')
   assert(requestBodies.length === 2, 'Request body retry used the wrong attempt count')
   assert(
@@ -87,6 +139,10 @@ async function run(): Promise<void> {
   assert(cancellationAttempts === 1, 'Caller cancellation caused another attempt')
 
   const result = {
+    providerValue: providerDetails.value,
+    providerReason: providerDetails.reason,
+    providerVariant: providerDetails.variant,
+    configurationAttempts,
     timeoutErrorName,
     attempts: requestBodies.length,
     bodies: requestBodies,

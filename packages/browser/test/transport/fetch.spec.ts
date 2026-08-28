@@ -8,7 +8,11 @@ function createPendingFetch() {
   return jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
     return new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal
-      signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+      if (signal?.aborted) {
+        reject(signal.reason)
+      } else {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }
     })
   })
 }
@@ -62,6 +66,42 @@ describe('withTimeout', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves a caller signal that was aborted before the wrapper runs', async () => {
+    const fetchImplementation = createPendingFetch()
+    const controller = new AbortController()
+    const reason = new DOMException('Configuration request superseded', 'AbortError')
+    controller.abort(reason)
+
+    await expect(withTimeout(fetchImplementation, 100)('/flags', { signal: controller.signal })).rejects.toBe(reason)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a null init signal as overriding the input Request signal', async () => {
+    const controller = new AbortController()
+    controller.abort(new DOMException('Request signal should be ignored', 'AbortError'))
+    const input = new Request('https://example.test/flags', { signal: controller.signal })
+    const response = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      return init?.signal?.aborted ? Promise.reject(init.signal.reason) : Promise.resolve(response)
+    })
+
+    await expect(withTimeout(fetchImplementation, 100)(input, { signal: null })).resolves.toBe(response)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('inherits the input Request signal when the init signal is undefined', async () => {
+    const fetchImplementation = createPendingFetch()
+    const controller = new AbortController()
+    const reason = new DOMException('Configuration request superseded', 'AbortError')
+    const input = new Request('https://example.test/flags', { signal: controller.signal })
+    const request = withTimeout(fetchImplementation, 100)(input, { signal: undefined })
+
+    controller.abort(reason)
+
+    await expect(request).rejects.toBe(reason)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the timeout active while the response body is pending', async () => {
     jest.useFakeTimers()
     const fetchImplementation = createHeadersThenPendingBodyFetch()
@@ -107,6 +147,13 @@ describe('withTimeout', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves a fetch rejection when no timeout or caller cancellation occurred', async () => {
+    const error = new TypeError('Invalid request')
+    const fetchImplementation = jest.fn().mockRejectedValue(error)
+
+    await expect(withTimeout(fetchImplementation, 100)('/flags')).rejects.toBe(error)
+  })
+
   it('clears the timeout after the request succeeds', async () => {
     jest.useFakeTimers()
     const response = new Response(null, { status: 200 })
@@ -150,11 +197,31 @@ describe('withTimeout', () => {
 
   it('treats zero as no timeout', async () => {
     jest.useFakeTimers()
+    let resolveFetch!: (response: Response) => void
+    const fetchImplementation = jest.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        })
+    )
+    let settled = false
+    const request = withTimeout(fetchImplementation, 0)('/flags')
+    void request.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      }
+    )
+
+    await jest.advanceTimersByTimeAsync(1_000)
+
+    expect(settled).toBe(false)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
     const response = new Response(null, { status: 200 })
-    const fetchImplementation = jest.fn().mockResolvedValue(response)
-
-    await expect(withTimeout(fetchImplementation, 0)('/flags')).resolves.toBe(response)
-
+    resolveFetch(response)
+    await expect(request).resolves.toBe(response)
     expect(jest.getTimerCount()).toBe(0)
   })
 
@@ -184,6 +251,14 @@ describe('withRetry', () => {
 
     await expect(withRetry(fetchImplementation, 1)('/flags')).resolves.toBe(response)
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops after the configured number of retries', async () => {
+    const error = new TypeError('Network error')
+    const fetchImplementation = jest.fn().mockRejectedValue(error)
+
+    await expect(withRetry(fetchImplementation, 2)('/flags')).rejects.toBe(error)
+    expect(fetchImplementation).toHaveBeenCalledTimes(3)
   })
 
   it('retries a TypeError from another realm', async () => {
@@ -290,6 +365,18 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
+  it('treats a null init signal as overriding the input Request signal', async () => {
+    const controller = new AbortController()
+    controller.abort(new DOMException('Request signal should be ignored', 'AbortError'))
+    const input = new Request('https://example.test/flags', { signal: controller.signal })
+    const retryableResponse = new Response(null, { status: 500 })
+    const successfulResponse = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
+
+    await expect(withRetry(fetchImplementation, 1)(input, { signal: null })).resolves.toBe(successfulResponse)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
   it.each([408, 500, 599])('retries an HTTP %s response', async (status) => {
     let cancelled = false
     const retryableResponse = new Response(
@@ -320,6 +407,18 @@ describe('withRetry', () => {
 
     expect(response.bodyUsed).toBe(false)
     await expect(response.json()).resolves.toEqual({ errors: [{ detail: 'unavailable' }] })
+  })
+
+  it('keeps the final retryable response body readable after retries are exhausted', async () => {
+    const firstResponse = new Response('first failure', { status: 503 })
+    const finalResponse = new Response('final failure', { status: 503 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(firstResponse).mockResolvedValue(finalResponse)
+
+    await expect(withRetry(fetchImplementation, 1)('/flags')).resolves.toBe(finalResponse)
+
+    expect(firstResponse.bodyUsed).toBe(true)
+    expect(finalResponse.bodyUsed).toBe(false)
+    await expect(finalResponse.text()).resolves.toBe('final failure')
   })
 
   it('returns a non-retryable response without retrying', async () => {
@@ -396,9 +495,68 @@ describe('withRetry', () => {
     expect(jest.getTimerCount()).toBe(0)
   })
 
-  it('does not retry response cleanup failures', async () => {
+  it('rejects when response cleanup synchronously triggers caller cancellation', async () => {
+    const controller = new AbortController()
+    const reason = new DOMException('Configuration request superseded', 'AbortError')
+    const retryableResponse = new Response(
+      new ReadableStream({
+        cancel() {
+          controller.abort(reason)
+        },
+      }),
+      { status: 500 }
+    )
+    const fetchImplementation = jest.fn().mockResolvedValue(retryableResponse)
+
+    await expect(withRetry(fetchImplementation, 1)('/flags', { signal: controller.signal })).rejects.toBe(reason)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('never starts an attempt with an already-aborted caller signal', async () => {
+    for (let microtaskDepth = 0; microtaskDepth <= 5; microtaskDepth += 1) {
+      const controller = new AbortController()
+      const reason = new DOMException('Configuration request superseded', 'AbortError')
+      const abortedAtInvocation: boolean[] = []
+      const fetchImplementation = jest.fn(async () => {
+        abortedAtInvocation.push(controller.signal.aborted)
+        return new Response(null, { status: abortedAtInvocation.length === 1 ? 500 : 200 })
+      })
+      const request = withRetry(fetchImplementation, 1)('/flags', { signal: controller.signal })
+      let abortAfterMicrotasks = Promise.resolve()
+      for (let depth = 0; depth < microtaskDepth; depth += 1) {
+        abortAfterMicrotasks = abortAfterMicrotasks.then(() => undefined)
+      }
+      void abortAfterMicrotasks.then(() => controller.abort(reason))
+
+      await request.catch(() => undefined)
+
+      expect(abortedAtInvocation).not.toContain(true)
+    }
+  })
+
+  it('does not block retries on response cleanup that never settles', async () => {
+    const retryableResponse = new Response(
+      new ReadableStream({
+        cancel() {
+          return new Promise<void>(() => undefined)
+        },
+      }),
+      { status: 500 }
+    )
+    const successfulResponse = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
+    const request = withRetry(fetchImplementation, 1)('/flags')
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    await expect(request).resolves.toBe(successfulResponse)
+  })
+
+  it('continues retrying when response cleanup fails', async () => {
     const error = new Error('Stream cleanup failed')
-    const response = new Response(
+    const retryableResponse = new Response(
       new ReadableStream({
         cancel() {
           throw error
@@ -406,10 +564,11 @@ describe('withRetry', () => {
       }),
       { status: 500 }
     )
-    const fetchImplementation = jest.fn().mockResolvedValue(response)
+    const successfulResponse = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
 
-    await expect(withRetry(fetchImplementation, 1)('/flags')).rejects.toBe(error)
-    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+    await expect(withRetry(fetchImplementation, 1)('/flags')).resolves.toBe(successfulResponse)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
   it('does not retry non-Fetch errors', async () => {
@@ -422,12 +581,55 @@ describe('withRetry', () => {
 
   it('honors Retry-After on HTTP 503 responses', async () => {
     jest.useFakeTimers()
+    jest.mocked(Math.random).mockReturnValue(0.5)
     const retryableResponse = new Response(null, { headers: { 'retry-after': '1' }, status: 503 })
     const successfulResponse = new Response(null, { status: 200 })
     const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
     const request = withRetry(fetchImplementation, 1)('/flags')
 
-    await jest.advanceTimersByTimeAsync(999)
+    await jest.advanceTimersByTimeAsync(1_049)
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+    await jest.advanceTimersByTimeAsync(1)
+
+    await expect(request).resolves.toBe(successfulResponse)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['0', 'Wed, 21 Oct 2015 07:28:00 GMT'])(
+    'uses jittered backoff when Retry-After is immediate or in the past: %s',
+    async (retryAfter) => {
+      jest.useFakeTimers()
+      jest.mocked(Math.random).mockReturnValue(0.5)
+      const retryableResponse = new Response(null, { headers: { 'retry-after': retryAfter }, status: 503 })
+      const successfulResponse = new Response(null, { status: 200 })
+      const fetchImplementation = jest
+        .fn()
+        .mockResolvedValueOnce(retryableResponse)
+        .mockResolvedValue(successfulResponse)
+      const request = withRetry(fetchImplementation, 1)('/flags')
+
+      await jest.advanceTimersByTimeAsync(49)
+      expect(fetchImplementation).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(1)
+
+      await expect(request).resolves.toBe(successfulResponse)
+      expect(fetchImplementation).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('uses an HTTP-date Retry-After value as a minimum before jittered backoff', async () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-08-28T16:00:00.000Z'))
+    jest.mocked(Math.random).mockReturnValue(0.5)
+    const retryableResponse = new Response(null, {
+      headers: { 'retry-after': 'Fri, 28 Aug 2026 16:00:01 GMT' },
+      status: 503,
+    })
+    const successfulResponse = new Response(null, { status: 200 })
+    const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
+    const request = withRetry(fetchImplementation, 1)('/flags')
+
+    await jest.advanceTimersByTimeAsync(1_049)
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
     await jest.advanceTimersByTimeAsync(1)
 
@@ -448,10 +650,10 @@ describe('withRetry', () => {
     await expect(response.text()).resolves.toBe('scheduled maintenance')
   })
 
-  it.each(['', ' ', '1.5', '1e3', '-1'])('uses backoff for malformed Retry-After value %j', async (retryAfter) => {
+  it('ignores Retry-After on retryable statuses other than HTTP 503', async () => {
     jest.useFakeTimers()
     jest.mocked(Math.random).mockReturnValue(0.5)
-    const retryableResponse = new Response(null, { headers: { 'retry-after': retryAfter }, status: 503 })
+    const retryableResponse = new Response(null, { headers: { 'retry-after': '10' }, status: 500 })
     const successfulResponse = new Response(null, { status: 200 })
     const fetchImplementation = jest.fn().mockResolvedValueOnce(retryableResponse).mockResolvedValue(successfulResponse)
     const request = withRetry(fetchImplementation, 1)('/flags')
@@ -459,10 +661,32 @@ describe('withRetry', () => {
     await jest.advanceTimersByTimeAsync(49)
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
     await jest.advanceTimersByTimeAsync(1)
-    expect(fetchImplementation).toHaveBeenCalledTimes(2)
 
     await expect(request).resolves.toBe(successfulResponse)
+    expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
+
+  it.each(['', ' ', '1.5', '1e3', '-1', 'not-a-date'])(
+    'uses backoff for malformed Retry-After value %j',
+    async (retryAfter) => {
+      jest.useFakeTimers()
+      jest.mocked(Math.random).mockReturnValue(0.5)
+      const retryableResponse = new Response(null, { headers: { 'retry-after': retryAfter }, status: 503 })
+      const successfulResponse = new Response(null, { status: 200 })
+      const fetchImplementation = jest
+        .fn()
+        .mockResolvedValueOnce(retryableResponse)
+        .mockResolvedValue(successfulResponse)
+      const request = withRetry(fetchImplementation, 1)('/flags')
+
+      await jest.advanceTimersByTimeAsync(49)
+      expect(fetchImplementation).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(1)
+      expect(fetchImplementation).toHaveBeenCalledTimes(2)
+
+      await expect(request).resolves.toBe(successfulResponse)
+    }
+  )
 
   it('uses randomized exponential backoff without Retry-After', async () => {
     jest.useFakeTimers()
@@ -480,10 +704,10 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2)
   })
 
-  it('rejects a non-replayable RequestInit body stream', () => {
+  it('rejects a non-replayable RequestInit body stream', async () => {
     const body = new ReadableStream()
 
-    expect(() => withRetry(globalThis.fetch, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
+    await expect(withRetry(globalThis.fetch, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
       'withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body'
     )
   })
@@ -497,11 +721,11 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledWith('/flags', { body })
   })
 
-  it('rejects a stream-like RequestInit body from another realm', () => {
+  it('rejects a stream-like RequestInit body from another realm', async () => {
     const body = runInNewContext('new (class ForeignReadableStream { getReader() {} })()') as BodyInit
     const fetchImplementation = jest.fn()
 
-    expect(() => withRetry(fetchImplementation, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
+    await expect(withRetry(fetchImplementation, 1)('/flags', { body } as RequestInit)).rejects.toThrow(
       'withRetry cannot replay a RequestInit body stream; pass a Request with a cloneable body'
     )
     expect(fetchImplementation).not.toHaveBeenCalled()

@@ -6,11 +6,15 @@
 
 ---
 
-## @datadog/openfeature-browser@1.3.0
+## Unreleased
 
 **Features:**
 
 - Allow a custom Fetch-compatible implementation for browser flag configuration requests so applications can own timeout, retry, proxy, and header behavior ([#348](https://github.com/DataDog/openfeature-js-client/pull/348)) [BROWSER]
+
+**Bug Fixes:**
+
+- Make browser Fetch timeout and retry helpers preserve cancellation, buffer response bodies within the timeout, safely replay request bodies, bound retry inputs, and apply `Retry-After` with jittered backoff ([#376](https://github.com/DataDog/openfeature-js-client/pull/376)) [BROWSER]
 
 ## @datadog/openfeature-node-server@2.1.0
 

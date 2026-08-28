@@ -19,7 +19,10 @@ function isRequest(input: Parameters<Fetch>[0]): input is Request {
 }
 
 function getRequestSignal(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]): AbortSignal | undefined {
-  if (init?.signal) {
+  if (init?.signal === null) {
+    return undefined
+  }
+  if (init?.signal !== undefined) {
     return init.signal
   }
   return isRequest(input) ? input.signal : undefined
@@ -181,6 +184,10 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
     const requestTemplate = isRequest(input) && init?.body == null ? input.clone() : undefined
 
     for (let attempt = 0; ; attempt += 1) {
+      if (attempt > 0 && requestSignal?.aborted) {
+        throw requestSignal.reason
+      }
+
       const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()
       let response: Response
       try {
@@ -201,8 +208,8 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
       if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_AFTER_MS) {
         return response
       }
-      const delayMs = retryAfterMs ?? getBackoffMs(attempt)
-      await response.body?.cancel()
+      const delayMs = (retryAfterMs ?? 0) + getBackoffMs(attempt)
+      void response.body?.cancel().catch(() => undefined)
       await waitForRetry(delayMs, requestSignal)
     }
   }
