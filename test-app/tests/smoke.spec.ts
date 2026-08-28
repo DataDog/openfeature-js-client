@@ -8,7 +8,19 @@ test('enforces packed Fetch timeout and retry behavior', async ({ page }) => {
   page.on('pageerror', (error) => runtimeErrors.push(`page error: ${error.message}`))
 
   await page.goto('/')
-  await page.waitForFunction(() => '__OPENFEATURE_SMOKE_RESULT__' in globalThis)
+  await page.waitForFunction(
+    () => '__OPENFEATURE_SMOKE_RESULT__' in globalThis || '__OPENFEATURE_SMOKE_ERROR__' in globalThis
+  )
+
+  const smokeError = await page.evaluate(
+    () =>
+      (
+        globalThis as typeof globalThis & {
+          __OPENFEATURE_SMOKE_ERROR__?: string
+        }
+      ).__OPENFEATURE_SMOKE_ERROR__
+  )
+  expect(smokeError).toBeUndefined()
 
   expect(runtimeErrors).toEqual([])
   const result = await page.evaluate(

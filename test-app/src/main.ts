@@ -92,4 +92,8 @@ async function run(): Promise<void> {
   document.querySelector<HTMLPreElement>('#app')!.textContent = JSON.stringify(result, null, 2)
 }
 
-void run()
+void run().catch((error) => {
+  Object.assign(globalThis, {
+    __OPENFEATURE_SMOKE_ERROR__: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+  })
+})

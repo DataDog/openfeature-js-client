@@ -72,6 +72,26 @@ describe('withTimeout', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves the timeout reason when the browser converts the stream error', async () => {
+    jest.useFakeTimers()
+    const fetchImplementation = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(new TypeError('Failed to fetch')), {
+            once: true,
+          })
+        },
+      })
+      return Promise.resolve(new Response(body))
+    })
+    const request = withTimeout(fetchImplementation, 100)('/flags')
+    const expectation = expect(request).rejects.toMatchObject({ name: 'TimeoutError' })
+
+    await jest.advanceTimersByTimeAsync(100)
+
+    await expectation
+  })
+
   it('preserves caller cancellation while the response body is pending', async () => {
     const fetchImplementation = createHeadersThenPendingBodyFetch()
     const controller = new AbortController()

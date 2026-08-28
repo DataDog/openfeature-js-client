@@ -66,6 +66,11 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
     try {
       const response = await fetchImplementation(input, { ...init, signal: controller.signal })
       return await bufferResponse(response)
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw controller.signal.reason ?? error
+      }
+      throw error
     } finally {
       if (timeout !== undefined) {
         clearTimeout(timeout)
