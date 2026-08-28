@@ -126,25 +126,29 @@ function getBackoffMs(attempt: number): number {
   return Math.floor(Math.random() * maximum)
 }
 
-function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<boolean> {
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason)
+  }
   if (delayMs === 0) {
-    return Promise.resolve(!signal?.aborted)
+    return Promise.resolve()
   }
 
-  return new Promise((resolve) => {
-    const finish = (canRetry: boolean) => {
+  return new Promise((resolve, reject) => {
+    const finish = () => {
       clearTimeout(timeout)
       signal?.removeEventListener('abort', abort)
-      resolve(canRetry)
     }
-    const abort = () => finish(false)
-    const timeout = setTimeout(() => finish(true), delayMs)
+    const abort = () => {
+      finish()
+      reject(signal?.reason)
+    }
+    const timeout = setTimeout(() => {
+      finish()
+      resolve()
+    }, delayMs)
 
-    if (signal?.aborted) {
-      finish(false)
-    } else {
-      signal?.addEventListener('abort', abort, { once: true })
-    }
+    signal?.addEventListener('abort', abort, { once: true })
   })
 }
 
@@ -185,12 +189,7 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
         if (requestSignal?.aborted || attempt === retries || !isRetryableError(error)) {
           throw error
         }
-        if (!(await waitForRetry(getBackoffMs(attempt), requestSignal))) {
-          if (requestSignal?.aborted) {
-            throw requestSignal.reason ?? error
-          }
-          throw error
-        }
+        await waitForRetry(getBackoffMs(attempt), requestSignal)
         continue
       }
 
@@ -204,9 +203,7 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
       }
       const delayMs = retryAfterMs ?? getBackoffMs(attempt)
       await response.body?.cancel()
-      if (requestSignal?.aborted || !(await waitForRetry(delayMs, requestSignal))) {
-        return response
-      }
+      await waitForRetry(delayMs, requestSignal)
     }
   }
 }

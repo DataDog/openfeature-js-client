@@ -69,7 +69,12 @@ async function run(): Promise<void> {
   await cancelStartedPromise
   controller.abort(new DOMException('Configuration request superseded', 'AbortError'))
   finishCancel?.()
-  const cancellationResponse = await cancellationRequest
+  let cancellationErrorName: string | undefined
+  try {
+    await cancellationRequest
+  } catch (error) {
+    cancellationErrorName = error instanceof DOMException ? error.name : undefined
+  }
 
   assert(timeoutErrorName === 'TimeoutError', 'Timeout ended before response-body download')
   assert(response.status === 200, 'Request body retry did not succeed')
@@ -78,13 +83,14 @@ async function run(): Promise<void> {
     requestBodies.every((body) => body === 'configuration request'),
     'Request body was not replayed'
   )
-  assert(cancellationResponse.status === 500, 'Cancellation changed the received response')
+  assert(cancellationErrorName === 'AbortError', 'Cancellation did not reject with the caller abort reason')
   assert(cancellationAttempts === 1, 'Caller cancellation caused another attempt')
 
   const result = {
     timeoutErrorName,
     attempts: requestBodies.length,
     bodies: requestBodies,
+    cancellationErrorName,
     cancellationAttempts,
   }
 

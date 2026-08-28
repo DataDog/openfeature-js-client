@@ -350,7 +350,7 @@ describe('withRetry', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
   })
 
-  it('does not retry when cancellation races with response cleanup', async () => {
+  it('rejects when cancellation races with response cleanup', async () => {
     const controller = new AbortController()
     const reason = new DOMException('Configuration request superseded', 'AbortError')
     let finishCancel: (() => void) | undefined
@@ -366,14 +366,34 @@ describe('withRetry', () => {
     )
     const fetchImplementation = jest.fn().mockResolvedValue(retryableResponse)
     const request = withRetry(fetchImplementation, 1)('/flags', { signal: controller.signal })
+    const expectation = expect(request).rejects.toBe(reason)
 
     await Promise.resolve()
     expect(retryableResponse.bodyUsed).toBe(true)
     controller.abort(reason)
     finishCancel?.()
 
-    await expect(request).resolves.toBe(retryableResponse)
+    await expectation
     expect(fetchImplementation).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects when cancellation occurs during retry backoff', async () => {
+    jest.useFakeTimers()
+    jest.mocked(Math.random).mockReturnValue(0.5)
+    const controller = new AbortController()
+    const reason = new DOMException('Configuration request superseded', 'AbortError')
+    const retryableResponse = new Response('unavailable', { status: 500 })
+    const fetchImplementation = jest.fn().mockResolvedValue(retryableResponse)
+    const request = withRetry(fetchImplementation, 1)('/flags', { signal: controller.signal })
+    const expectation = expect(request).rejects.toBe(reason)
+
+    await jest.advanceTimersByTimeAsync(0)
+    expect(retryableResponse.bodyUsed).toBe(true)
+    controller.abort(reason)
+
+    await expectation
+    expect(fetchImplementation).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
   })
 
   it('does not retry response cleanup failures', async () => {

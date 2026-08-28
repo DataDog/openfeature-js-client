@@ -35,6 +35,7 @@ test('enforces packed Fetch timeout and retry behavior', async ({ page }) => {
     timeoutErrorName: 'TimeoutError',
     attempts: 2,
     bodies: ['configuration request', 'configuration request'],
+    cancellationErrorName: 'AbortError',
     cancellationAttempts: 1,
   })
 })
