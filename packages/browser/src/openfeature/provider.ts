@@ -1,8 +1,8 @@
 import {
+  type FeatureFlagsTelemetry,
   FeatureFlagsTelemetryErrorCode,
   FeatureFlagsTelemetryEventType,
   startFeatureFlagsTelemetry,
-  type FeatureFlagsTelemetry,
 } from '@datadog/browser-core'
 import {
   type AssignmentCache,
@@ -56,8 +56,8 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
   })
 }
 
-function isIntentionalAbort(error: unknown, signal: AbortSignal): boolean {
-  return signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
+function isIntentionalAbort(signal: AbortSignal): boolean {
+  return signal.aborted
 }
 
 // We need to use a class here to properly implement the OpenFeature Provider interface
@@ -74,6 +74,8 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   /** Low-volume internal lifecycle telemetry; independent from RUM and evaluation reporting. */
   private readonly lifecycleTelemetry?: FeatureFlagsTelemetry
+  private readonly stopTrackingTasks: Array<() => void> = []
+  private isClosed = false
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
@@ -137,7 +139,9 @@ export class DatadogProvider extends DatadogCoreProvider {
     // Add EVP flag evaluation hook.
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
+      const flagEvaluationHook = createFlagEvalEVPHook(this.configuration, () => this.evaluationContext)
+      this.hooks.push(flagEvaluationHook)
+      this.stopTrackingTasks.push(flagEvaluationHook.stop)
     }
 
     // Add proper exposure logging hook (creates batch internally)
@@ -147,7 +151,13 @@ export class DatadogProvider extends DatadogCoreProvider {
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
       })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
+      const exposureLoggingHook = createExposureLoggingHook(
+        this.configuration,
+        this.exposureCache,
+        () => this.evaluationContext
+      )
+      this.hooks.push(exposureLoggingHook)
+      this.stopTrackingTasks.push(exposureLoggingHook.stop)
     }
 
     if (hasIndexedDB()) {
@@ -164,6 +174,14 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   async onClose(): Promise<void> {
+    if (this.isClosed) {
+      return
+    }
+    this.isClosed = true
+    this.contextUpdateAbortController.abort(new DOMException('Feature Flags provider closed', 'AbortError'))
+    for (const stop of this.stopTrackingTasks) {
+      stop()
+    }
     this.lifecycleTelemetry?.stop()
   }
 
@@ -172,6 +190,9 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
+    if (this.isClosed) {
+      return Promise.reject(new Error('Feature Flags provider is closed'))
+    }
     const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
 
     if (this.status === ProviderStatus.NOT_READY) {
@@ -210,6 +231,9 @@ export class DatadogProvider extends DatadogCoreProvider {
       .then(
         ({ config, fromCache }) => {
           if (signal.aborted) {
+            if (this.isClosed) {
+              return
+            }
             // If signal was aborted, another setContext call has updated
             // this.latestContextUpdate, so we delegate to it.
             return this.latestContextUpdate
@@ -240,6 +264,9 @@ export class DatadogProvider extends DatadogCoreProvider {
         },
         (error) => {
           if (signal.aborted) {
+            if (this.isClosed) {
+              return
+            }
             // If signal was aborted, another setContext call has updated
             // this.latestContextUpdate, so we delegate to it.
             return this.latestContextUpdate
@@ -278,7 +305,7 @@ export class DatadogProvider extends DatadogCoreProvider {
       this.flagsCache?.set(config, context)
       return { config, fromCache: false }
     } catch (err) {
-      if (!isIntentionalAbort(err, signal)) {
+      if (!isIntentionalAbort(signal)) {
         this.lifecycleTelemetry?.add({
           eventType: FeatureFlagsTelemetryEventType.PROVIDER_ERROR,
           errorCode: FeatureFlagsTelemetryErrorCode.PRECOMPUTED_ASSIGNMENTS_FETCH_FAILED,
@@ -291,7 +318,7 @@ export class DatadogProvider extends DatadogCoreProvider {
         if (config) {
           return { config, fromCache: true }
         }
-      } catch (err) {}
+      } catch (_err) {}
 
       throw err
     }

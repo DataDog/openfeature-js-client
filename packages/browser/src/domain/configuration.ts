@@ -71,6 +71,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 
   /**
    * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
+   * This does not proxy telemetry or evaluation events; configure the inherited `proxy` option for those intakes.
    */
   flaggingProxy?: string
 

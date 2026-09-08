@@ -1,3 +1,4 @@
+import { createBatch } from '@datadog/browser-core'
 import { FlagEvaluationAggregator } from '@datadog/flagging-core'
 import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../../src/domain/configuration'
@@ -26,8 +27,10 @@ jest.mock('@datadog/browser-core', () => ({
   addTelemetryDebug: jest.fn(),
   createBatch: jest.fn(() => ({
     add: jest.fn(),
+    forceFlush: jest.fn(),
+    stop: jest.fn(),
     prepareUrgentFlushObservable: {
-      subscribe: jest.fn(),
+      subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
     },
   })),
   createFlushController: jest.fn(),
@@ -102,6 +105,28 @@ describe('createFlagEvalEVPHook', () => {
       hook.after?.(mockContext, mockDetails)
     }).not.toThrow()
     expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails)
+    addEvaluationSpy.mockRestore()
+  })
+
+  it('flushes and stops once and ignores evaluations after it is stopped', () => {
+    const stopAggregatorSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'stop')
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    const hook = createFlagEvalEVPHook(mockConfiguration)
+    const batch = jest.mocked(createBatch).mock.results.at(-1)?.value
+    expect(batch).toBeDefined()
+    if (!batch) {
+      throw new Error('Expected createBatch to return a batch')
+    }
+
+    hook.stop()
+    hook.stop()
+    hook.after?.({} as HookContext, {} as EvaluationDetails<boolean>)
+
+    expect(stopAggregatorSpy).toHaveBeenCalledTimes(1)
+    expect(batch.forceFlush).toHaveBeenCalledWith('duration_limit')
+    expect(batch.stop).toHaveBeenCalledTimes(1)
+    expect(addEvaluationSpy).not.toHaveBeenCalled()
+    stopAggregatorSpy.mockRestore()
     addEvaluationSpy.mockRestore()
   })
 })

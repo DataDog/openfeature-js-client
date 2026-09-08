@@ -786,13 +786,40 @@ describe('DatadogProvider', () => {
       expect(telemetry.add).not.toHaveBeenCalled()
     })
 
-    it('flushes and stops telemetry when the provider closes', async () => {
-      const testProvider = new DatadogProvider(options)
+    it('reports an AbortError when the provider did not abort its request', async () => {
+      const testProvider = new DatadogProvider({
+        ...options,
+        flagConfigurationFetch: jest.fn().mockRejectedValue(new DOMException('fetch timed out', 'AbortError')),
+      })
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
 
-      await testProvider.onClose()
+      await expect(testProvider.initialize()).rejects.toThrow('fetch timed out')
 
+      expect(telemetry.add).toHaveBeenCalledWith({
+        eventType: FeatureFlagsTelemetryEventType.PROVIDER_ERROR,
+        errorCode: FeatureFlagsTelemetryErrorCode.PRECOMPUTED_ASSIGNMENTS_FETCH_FAILED,
+      })
+    })
+
+    it('aborts in-flight work and flushes telemetry once when the provider closes', async () => {
+      let fetchSignal: AbortSignal | undefined
+      const flagConfigurationFetch = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        fetchSignal = init?.signal ?? undefined
+        return new Promise<Response>((_resolve, reject) => {
+          fetchSignal?.addEventListener('abort', () => reject(fetchSignal?.reason), { once: true })
+        })
+      })
+      const testProvider = new DatadogProvider({ ...options, flagConfigurationFetch })
+      const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
+      const pendingInitialization = testProvider.initialize()
+
+      await testProvider.onClose()
+      await testProvider.onClose()
+      await expect(pendingInitialization).resolves.toBeUndefined()
+
+      expect(fetchSignal?.aborted).toBe(true)
       expect(telemetry.stop).toHaveBeenCalledTimes(1)
+      await expect(testProvider.onContextChange({}, {})).rejects.toThrow('Feature Flags provider is closed')
     })
   })
 })

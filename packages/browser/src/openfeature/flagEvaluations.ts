@@ -8,7 +8,7 @@ import type { FlaggingConfiguration } from '../domain/configuration'
 export function createFlagEvalEVPHook(
   configuration: FlaggingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
-): Hook {
+): Hook & { stop: () => void } {
   const flagEvaluationBatch = createBatch({
     endpoints: [createEndpointBuilder(configuration, 'flagevaluation')],
     reportError: (message) => {
@@ -47,12 +47,16 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  flagEvaluationBatch.prepareUrgentFlushObservable.subscribe(() => {
+  const urgentFlushSubscription = flagEvaluationBatch.prepareUrgentFlushObservable.subscribe(() => {
     aggregator.stop()
   })
+  let stopped = false
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      if (stopped) {
+        return
+      }
       try {
         aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
       } catch (error) {
@@ -60,6 +64,16 @@ export function createFlagEvalEVPHook(
           'error.message': error instanceof Error ? error.message : String(error),
         })
       }
+    },
+    stop: () => {
+      if (stopped) {
+        return
+      }
+      stopped = true
+      aggregator.stop()
+      flagEvaluationBatch.forceFlush('duration_limit')
+      flagEvaluationBatch.stop()
+      urgentFlushSubscription.unsubscribe()
     },
   }
 }

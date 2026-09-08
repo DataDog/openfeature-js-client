@@ -13,13 +13,17 @@ export function createExposureLoggingHook(
   configuration: FlaggingConfiguration,
   exposureCache: AssignmentCache,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
-): Hook {
+): Hook & { stop: () => void } {
   const exposuresBatch = startExposuresBatch(configuration, (message) => {
     addTelemetryDebug('Error reported to customer', { 'error.message': message })
   })
+  let stopped = false
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      if (stopped) {
+        return
+      }
       const timestamp = timeStampNow()
       const evaluationContext = getEvaluationContext(hookContext.context)
       const exposureEvent = createExposureEvent(evaluationContext, details)
@@ -51,6 +55,14 @@ export function createExposureLoggingHook(
           'error.message': error instanceof Error ? error.message : String(error),
         })
       }
+    },
+    stop: () => {
+      if (stopped) {
+        return
+      }
+      stopped = true
+      exposuresBatch.forceFlush('duration_limit')
+      exposuresBatch.stop()
     },
   }
 }
