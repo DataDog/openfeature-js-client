@@ -770,10 +770,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/browser-core@npm:^6.33.0":
-  version: 6.33.0
-  resolution: "@datadog/browser-core@npm:6.33.0"
-  checksum: 10c0/137a504b755295eec3381445e76cd9e01c5edd92d8b308e1481a86407b8916f695e35771bd3f148f27754f01d75b808180fd9c08f4401066150527e27609309b
+"@datadog/browser-core@npm:^7.12.0":
+  version: 7.12.0
+  resolution: "@datadog/browser-core@npm:7.12.0"
+  dependencies:
+    "@datadog/js-core": "npm:0.0.13"
+  checksum: 10c0/4951e26344220b51527a3c0b47df47ff7b88b64ef09135263e193ebb8dafe964943fdf1ce51b18b6d78ac18dc05fde6acceeb2471e68fa883dd59cdace33f3e2
   languageName: node
   linkType: hard
 
@@ -797,10 +799,10 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@datadog/js-core@npm:0.0.3":
-  version: 0.0.3
-  resolution: "@datadog/js-core@npm:0.0.3"
-  checksum: 10c0/69ee20872125a8e723e23266fab5220becd47417bc3bf897753b8713cbe5f4365a801f96ba7a3ab07d3e60e10d032e494de78613d76836169e89e5b4ecdab39e
+"@datadog/js-core@npm:0.0.13":
+  version: 0.0.13
+  resolution: "@datadog/js-core@npm:0.0.13"
+  checksum: 10c0/bdfd68d962f01d6691813821f4b2489072ec3c3fe8b9ef6a0f68212af930ac9c7cb15ff3624005df60cde066bf17361d42db5508025739f96dd0ab33b4b88b5f
   languageName: node
   linkType: hard
 
@@ -808,7 +810,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
-    "@datadog/browser-core": "npm:^6.33.0"
+    "@datadog/browser-core": "npm:^7.12.0"
     "@datadog/flagging-core": "npm:2.2.0"
     "@datadog/js-core": "npm:0.0.3"
     "@openfeature/core": "npm:^1.9.2"

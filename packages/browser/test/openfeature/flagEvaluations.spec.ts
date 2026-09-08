@@ -26,6 +26,9 @@ jest.mock('@datadog/browser-core', () => ({
   addTelemetryDebug: jest.fn(),
   createBatch: jest.fn(() => ({
     add: jest.fn(),
+    prepareUrgentFlushObservable: {
+      subscribe: jest.fn(),
+    },
   })),
   createFlushController: jest.fn(),
   createHttpRequest: jest.fn(),

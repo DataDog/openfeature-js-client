@@ -1,14 +1,7 @@
-import type { Context, RawError } from '@datadog/browser-core'
-import {
-  addTelemetryDebug,
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  createPageMayExitObservable,
-  Observable,
-} from '@datadog/browser-core'
+import type { Context } from '@datadog/browser-core'
+import { addTelemetryDebug, createBatch } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
+import { createEndpointBuilder } from '@datadog/js-core/transport'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 
@@ -16,16 +9,11 @@ export function createFlagEvalEVPHook(
   configuration: FlaggingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
 ): Hook {
-  const pageMayExitObservable = createPageMayExitObservable(configuration)
   const flagEvaluationBatch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    }),
-    flushController: createFlushController({
-      pageMayExitObservable,
-      sessionExpireObservable: new Observable(),
-    }),
+    endpoints: [createEndpointBuilder(configuration, 'flagevaluation')],
+    reportError: (message) => {
+      addTelemetryDebug('Error reported to customer', { 'error.message': message })
+    },
   })
 
   const aggregator = new FlagEvaluationAggregator(
@@ -59,7 +47,7 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  pageMayExitObservable.subscribe(() => {
+  flagEvaluationBatch.prepareUrgentFlushObservable.subscribe(() => {
     aggregator.stop()
   })
 

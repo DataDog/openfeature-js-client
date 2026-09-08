@@ -1,4 +1,10 @@
 import {
+  FeatureFlagsTelemetryErrorCode,
+  FeatureFlagsTelemetryEventType,
+  startFeatureFlagsTelemetry,
+  type FeatureFlagsTelemetry,
+} from '@datadog/browser-core'
+import {
   type AssignmentCache,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
@@ -50,6 +56,10 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
   })
 }
 
+function isIntentionalAbort(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
+}
+
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
@@ -61,6 +71,9 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
+
+  /** Low-volume internal lifecycle telemetry; independent from RUM and evaluation reporting. */
+  private readonly lifecycleTelemetry?: FeatureFlagsTelemetry
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
@@ -104,6 +117,14 @@ export class DatadogProvider extends DatadogCoreProvider {
   constructor(options: FlaggingInitConfiguration) {
     super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
+    if (this.configuration) {
+      this.lifecycleTelemetry = startFeatureFlagsTelemetry(this.configuration, {
+        applicationId: options.applicationId,
+        environmentName: options.env || undefined,
+        sdkName: 'dd-openfeature-browser',
+        sdkVersion: __BUILD_ENV__SDK_VERSION__,
+      })
+    }
 
     // Set up provider-managed hooks and events
     this.hooks = []
@@ -140,6 +161,10 @@ export class DatadogProvider extends DatadogCoreProvider {
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.exposureCacheReady = this.exposureCache?.init()
     return this.setContext(context)
+  }
+
+  async onClose(): Promise<void> {
+    this.lifecycleTelemetry?.stop()
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -253,6 +278,13 @@ export class DatadogProvider extends DatadogCoreProvider {
       this.flagsCache?.set(config, context)
       return { config, fromCache: false }
     } catch (err) {
+      if (!isIntentionalAbort(err, signal)) {
+        this.lifecycleTelemetry?.add({
+          eventType: FeatureFlagsTelemetryEventType.PROVIDER_ERROR,
+          errorCode: FeatureFlagsTelemetryErrorCode.PRECOMPUTED_ASSIGNMENTS_FETCH_FAILED,
+        })
+      }
+
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)

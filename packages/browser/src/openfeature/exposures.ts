@@ -1,5 +1,5 @@
-import type { Context, RawError } from '@datadog/browser-core'
-import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
+import type { Context } from '@datadog/browser-core'
+import { addTelemetryDebug } from '@datadog/browser-core'
 import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimestamp } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
@@ -14,14 +14,9 @@ export function createExposureLoggingHook(
   exposureCache: AssignmentCache,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
 ): Hook {
-  const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const exposuresBatch = startExposuresBatch(
-    configuration,
-    (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    },
-    pageMayExitObservable
-  )
+  const exposuresBatch = startExposuresBatch(configuration, (message) => {
+    addTelemetryDebug('Error reported to customer', { 'error.message': message })
+  })
 
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {

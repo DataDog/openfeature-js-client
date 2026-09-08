@@ -1,6 +1,7 @@
-import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
-import { validateAndBuildConfiguration } from '@datadog/browser-core'
+import type { Configuration, InitConfiguration } from '@datadog/browser-core'
+import { BROWSER_CORE_SCHEMA, display } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { validateAndBuildConfiguration } from '@datadog/js-core/configuration'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
@@ -87,16 +88,12 @@ export interface FlaggingConfiguration extends Configuration {
     context: EvaluationContext,
     options?: { signal?: AbortSignal }
   ) => Promise<FlagsConfiguration>
-
-  // Inherited from Configuration via TransportConfiguration.
-  // Declared explicitly here to make the contract visible to consumers of FlaggingConfiguration.
-  flagEvaluationEndpointBuilder: EndpointBuilder
 }
 
 export function validateAndBuildFlaggingConfiguration(
   initConfiguration: FlaggingInitConfiguration
 ): FlaggingConfiguration | undefined {
-  const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
+  const baseConfiguration = validateAndBuildConfiguration(initConfiguration, BROWSER_CORE_SCHEMA, display)
   if (!baseConfiguration) {
     return
   }
