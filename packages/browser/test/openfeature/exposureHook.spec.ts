@@ -20,10 +20,7 @@ describe('createExposureLoggingHook', () => {
   })
 
   it('flushes and stops once and ignores exposures after it is stopped', () => {
-    const hook = createExposureLoggingHook(
-      {} as FlaggingConfiguration,
-      {} as AssignmentCache
-    )
+    const hook = createExposureLoggingHook({} as FlaggingConfiguration, {} as AssignmentCache)
 
     hook.stop()
     hook.stop()
