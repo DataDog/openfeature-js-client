@@ -1,7 +1,9 @@
 import {
   type FeatureFlagsTelemetry,
+  FeatureFlagsTelemetryConfigurationSource,
   FeatureFlagsTelemetryErrorCode,
   FeatureFlagsTelemetryEventType,
+  FeatureFlagsTelemetryProviderStatus,
   startFeatureFlagsTelemetry,
 } from '@datadog/browser-core'
 import {
@@ -58,6 +60,14 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 
 function isIntentionalAbort(signal: AbortSignal): boolean {
   return signal.aborted
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'TimeoutError'
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.max(0, Date.now() - startedAt)
 }
 
 // We need to use a class here to properly implement the OpenFeature Provider interface
@@ -118,6 +128,7 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     this.configuration = validateAndBuildFlaggingConfiguration(options)
     if (this.configuration) {
       this.lifecycleTelemetry = startFeatureFlagsTelemetry(this.configuration, {
@@ -125,6 +136,7 @@ export class DatadogProvider extends DatadogCoreProvider {
         environmentName: options.env || undefined,
         sdkName: 'dd-openfeature-browser',
         sdkVersion: __BUILD_ENV__SDK_VERSION__,
+        evaluationReportingEnabled: isEvaluationTrackingEnabled,
       })
     }
 
@@ -137,7 +149,6 @@ export class DatadogProvider extends DatadogCoreProvider {
     }
 
     // Add EVP flag evaluation hook.
-    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
       const flagEvaluationHook = createFlagEvalEVPHook(this.configuration, () => this.evaluationContext)
       this.hooks.push(flagEvaluationHook)
@@ -169,8 +180,41 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    const startedAt = Date.now()
+    this.lifecycleTelemetry?.add({ eventType: FeatureFlagsTelemetryEventType.SDK_INIT_STARTED })
     this.exposureCacheReady = this.exposureCache?.init()
-    return this.setContext(context)
+    try {
+      await this.setContext(context)
+      if (this.isClosed) {
+        return
+      }
+      this.lifecycleTelemetry?.add({
+        eventType: FeatureFlagsTelemetryEventType.PROVIDER_READY,
+        providerStatus:
+          this.status === ProviderStatus.STALE
+            ? FeatureFlagsTelemetryProviderStatus.STALE
+            : FeatureFlagsTelemetryProviderStatus.READY,
+        initLatencyMs: elapsedSince(startedAt),
+      })
+    } catch (error) {
+      const initLatencyMs = elapsedSince(startedAt)
+      if (isTimeoutError(error)) {
+        this.lifecycleTelemetry?.add({
+          eventType: FeatureFlagsTelemetryEventType.INIT_TIMEOUT,
+          providerStatus: FeatureFlagsTelemetryProviderStatus.ERROR,
+          errorCode: FeatureFlagsTelemetryErrorCode.INITIALIZATION_TIMEOUT,
+          initLatencyMs,
+        })
+      } else {
+        this.lifecycleTelemetry?.add({
+          eventType: FeatureFlagsTelemetryEventType.INIT_FAILED,
+          providerStatus: FeatureFlagsTelemetryProviderStatus.ERROR,
+          errorCode: FeatureFlagsTelemetryErrorCode.INITIALIZATION_FAILED,
+          initLatencyMs,
+        })
+      }
+      throw error
+    }
   }
 
   async onClose(): Promise<void> {
@@ -247,6 +291,7 @@ export class DatadogProvider extends DatadogCoreProvider {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.reportConfigurationReceived(config, fromCache)
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -337,6 +382,23 @@ export class DatadogProvider extends DatadogCoreProvider {
     }
   }
 
+  private reportConfigurationReceived(config: FlagsConfiguration, fromCache: boolean): void {
+    const createdAt = config.precomputed?.response.data.attributes.createdAt
+    const fetchedAt = config.precomputed?.fetchedAt
+    this.lifecycleTelemetry?.add({
+      eventType: FeatureFlagsTelemetryEventType.CONFIGURATION_RECEIVED,
+      configurationSource: fromCache
+        ? FeatureFlagsTelemetryConfigurationSource.CACHE
+        : FeatureFlagsTelemetryConfigurationSource.REMOTE,
+      ...(createdAt !== undefined && { configurationVersion: String(createdAt) }),
+      ...(fetchedAt !== undefined && { configurationFetchedAt: fetchedAt }),
+    })
+  }
+
+  private reportFirstEvaluation(): void {
+    this.lifecycleTelemetry?.add({ eventType: FeatureFlagsTelemetryEventType.FIRST_EVALUATION })
+  }
+
   protected resolve<T extends FlagValueType>(
     type: T,
     flagKey: string,
@@ -344,12 +406,14 @@ export class DatadogProvider extends DatadogCoreProvider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluatePrecomputedConfiguration(
+    const result = evaluatePrecomputedConfiguration(
       this.flagsConfiguration,
       type,
       flagKey,
       defaultValue,
       this.evaluationContext
     )
+    this.reportFirstEvaluation()
+    return result
   }
 }
