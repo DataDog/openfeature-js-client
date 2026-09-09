@@ -1,8 +1,12 @@
 import { expect, type Page, test } from '@playwright/test'
+import type { SmokeResult as FetchSmokeResult } from '../src/smokeResult'
 
-type SmokeResult = Record<string, unknown>
+type SmokeState<T> = {
+  error?: string
+  result?: T
+}
 
-async function runSmoke(page: Page, path: string): Promise<SmokeResult> {
+async function runSmoke<T>(page: Page, path: string): Promise<T> {
   const runtimeErrors: string[] = []
   page.on('console', (message) => {
     if (message.type() === 'error') runtimeErrors.push(`console.error: ${message.text()}`)
@@ -10,22 +14,53 @@ async function runSmoke(page: Page, path: string): Promise<SmokeResult> {
   page.on('pageerror', (error) => runtimeErrors.push(`page error: ${error.message}`))
 
   await page.goto(path)
-
-  expect(runtimeErrors).toEqual([])
-  const result = await page.evaluate(
-    () =>
-      (
-        globalThis as typeof globalThis & {
-          __OPENFEATURE_SMOKE_RESULT__?: SmokeResult
-        }
-      ).__OPENFEATURE_SMOKE_RESULT__
+  await page.waitForFunction(
+    () => '__OPENFEATURE_SMOKE_RESULT__' in globalThis || '__OPENFEATURE_SMOKE_ERROR__' in globalThis
   )
-  expect(result).toBeDefined()
-  return result!
+
+  const state = (await page.evaluate(() => {
+    const smokeGlobal = globalThis as typeof globalThis & {
+      __OPENFEATURE_SMOKE_ERROR__?: string
+      __OPENFEATURE_SMOKE_RESULT__?: unknown
+    }
+    return {
+      error: smokeGlobal.__OPENFEATURE_SMOKE_ERROR__,
+      result: smokeGlobal.__OPENFEATURE_SMOKE_RESULT__,
+    }
+  })) as SmokeState<T>
+
+  expect(state.error).toBeUndefined()
+  expect(runtimeErrors).toEqual([])
+  expect(state.result).toBeDefined()
+  return state.result as T
 }
 
+test('runs the packed provider and Fetch wrapper smoke coverage', async ({ page }) => {
+  const result = await runSmoke<FetchSmokeResult>(page, '/')
+
+  expect(result).toEqual({
+    provider: {
+      value: true,
+      reason: 'TARGETING_MATCH',
+      variant: 'variation-packed-browser',
+      attempts: 1,
+    },
+    timeout: {
+      errorName: 'TimeoutError',
+    },
+    retry: {
+      attempts: 2,
+      bodies: ['configuration request', 'configuration request'],
+    },
+    cancellation: {
+      errorName: 'AbortError',
+      attempts: 1,
+    },
+  })
+})
+
 test('decodes and evaluates packed protobuf rules in Chromium', async ({ page }) => {
-  const result = await runSmoke(page, '/')
+  const result = await runSmoke<Record<string, unknown>>(page, '/protobuf.html')
 
   expect(result).toEqual({
     entrypoint: 'protobuf',
@@ -45,7 +80,7 @@ test('decodes protobuf without native text or bigint globals', async ({ page }) 
     })
   })
 
-  const result = await runSmoke(page, '/')
+  const result = await runSmoke<Record<string, unknown>>(page, '/protobuf.html')
   expect(result.protobufTypeName).toBe('datadog.ffe.flagging.ufc.v1.FlagsConfiguration')
   expect(result.booleanValue).toBe(true)
   expect(result.integerValue).toBe(42)
@@ -53,7 +88,7 @@ test('decodes protobuf without native text or bigint globals', async ({ page }) 
 })
 
 test('executes the packed precomputed entrypoint in Chromium', async ({ page }) => {
-  const result = await runSmoke(page, '/precomputed.html')
+  const result = await runSmoke<Record<string, unknown>>(page, '/precomputed.html')
 
   expect(result).toEqual({
     entrypoint: 'precomputed',

@@ -164,6 +164,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       ...initConfiguration,
       env: initConfiguration.env || '',
       context,
+      fetch: initConfiguration.flagConfigurationFetch,
       signal,
     })
   }

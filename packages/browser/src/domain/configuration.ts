@@ -74,10 +74,10 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   flaggingProxy?: string
 
   /**
-   * Fetch implementation used for flag configuration requests. It can customize request handling,
-   * including retries, timeouts, proxying, and headers.
+   * Fetch implementation used only for flag configuration requests. It receives the provider-generated RequestInit,
+   * including authentication and configured custom headers. Exposure and flag-evaluation intake requests do not use it.
    */
-  fetch?: typeof globalThis.fetch
+  flagConfigurationFetch?: typeof globalThis.fetch
 }
 
 export interface FlaggingConfiguration extends Configuration {
