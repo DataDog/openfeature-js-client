@@ -194,10 +194,11 @@ function matchesLeafCondition(
     if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
     if (actual === undefined) return false
-    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
-    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL) return actual <= expected
-    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN) return actual > expected
-    if (kind.value.comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL) return actual >= expected
+    const comparator = kind.value.comparator as number
+    if (comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
+    if (comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN_OR_EQUAL) return actual <= expected
+    if (comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN) return actual > expected
+    if (comparator === UFC_NUMERIC_COMPARATOR.GREATER_THAN_OR_EQUAL) return actual >= expected
     throw new FlagConfigurationError('Unsupported numeric comparator')
   }
   if (kind.case === 'regex') {
@@ -224,21 +225,23 @@ function matchesLeafCondition(
     const actual = parseVersion(value)
     if (!actual) return false
     const comparison = compareVersions(actual, expected)
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.EQUAL) return comparison === 0
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL) return comparison !== 0
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN) return comparison < 0
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL) return comparison <= 0
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN) return comparison > 0
-    if (kind.value.comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL) return comparison >= 0
+    const comparator = kind.value.comparator as number
+    if (comparator === UFC_VERSION_COMPARATOR.EQUAL) return comparison === 0
+    if (comparator === UFC_VERSION_COMPARATOR.NOT_EQUAL) return comparison !== 0
+    if (comparator === UFC_VERSION_COMPARATOR.LESS_THAN) return comparison < 0
+    if (comparator === UFC_VERSION_COMPARATOR.LESS_THAN_OR_EQUAL) return comparison <= 0
+    if (comparator === UFC_VERSION_COMPARATOR.GREATER_THAN) return comparison > 0
+    if (comparator === UFC_VERSION_COMPARATOR.GREATER_THAN_OR_EQUAL) return comparison >= 0
     throw new FlagConfigurationError('Unsupported version comparator')
   }
   if (kind.case === 'stringComparison') {
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const expected = atIndex(configuration.strings, kind.value.stringIndex, 'condition string')
-    if (kind.value.comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
-    if (kind.value.comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
-    if (kind.value.comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
+    const comparator = kind.value.comparator as number
+    if (comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
+    if (comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
+    if (comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
     throw new FlagConfigurationError('Unsupported string comparator')
   }
   if (kind.case === 'sha256StringComparison') {
@@ -400,29 +403,33 @@ function variationValue(
 }
 
 function resolutionReason(split: Split): ResolutionReason {
-  if (split.reason === UFC_REASON.TARGETING_MATCH) return 'TARGETING_MATCH'
-  if (split.reason === UFC_REASON.SPLIT) return 'SPLIT'
-  if (split.reason === UFC_REASON.STATIC) return 'STATIC'
-  if (split.reason === UFC_REASON.DEFAULT) return 'DEFAULT'
+  const reason = split.reason as number
+  if (reason === UFC_REASON.TARGETING_MATCH) return 'TARGETING_MATCH'
+  if (reason === UFC_REASON.SPLIT) return 'SPLIT'
+  if (reason === UFC_REASON.STATIC) return 'STATIC'
+  if (reason === UFC_REASON.DEFAULT) return 'DEFAULT'
   return 'UNKNOWN'
 }
 
 function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {
-  if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'boolean'
-  if (variationType === UFC_VARIATION_TYPE.STRING) return 'string'
-  if (variationType === UFC_VARIATION_TYPE.INTEGER || variationType === UFC_VARIATION_TYPE.NUMERIC) return 'number'
-  if (variationType === UFC_VARIATION_TYPE.JSON) return 'object'
+  const ufcVariationType = variationType as number
+  if (ufcVariationType === UFC_VARIATION_TYPE.BOOLEAN) return 'boolean'
+  if (ufcVariationType === UFC_VARIATION_TYPE.STRING) return 'string'
+  if (ufcVariationType === UFC_VARIATION_TYPE.INTEGER || ufcVariationType === UFC_VARIATION_TYPE.NUMERIC)
+    return 'number'
+  if (ufcVariationType === UFC_VARIATION_TYPE.JSON) return 'object'
   throw new FlagConfigurationError('Unsupported variation type')
 }
 
 function variationValueCase(
   variationType: VariationType
 ): 'stringValueIndex' | 'integerValue' | 'numericValue' | 'booleanValue' | 'jsonStringIndex' {
-  if (variationType === UFC_VARIATION_TYPE.STRING) return 'stringValueIndex'
-  if (variationType === UFC_VARIATION_TYPE.INTEGER) return 'integerValue'
-  if (variationType === UFC_VARIATION_TYPE.NUMERIC) return 'numericValue'
-  if (variationType === UFC_VARIATION_TYPE.BOOLEAN) return 'booleanValue'
-  if (variationType === UFC_VARIATION_TYPE.JSON) return 'jsonStringIndex'
+  const ufcVariationType = variationType as number
+  if (ufcVariationType === UFC_VARIATION_TYPE.STRING) return 'stringValueIndex'
+  if (ufcVariationType === UFC_VARIATION_TYPE.INTEGER) return 'integerValue'
+  if (ufcVariationType === UFC_VARIATION_TYPE.NUMERIC) return 'numericValue'
+  if (ufcVariationType === UFC_VARIATION_TYPE.BOOLEAN) return 'booleanValue'
+  if (ufcVariationType === UFC_VARIATION_TYPE.JSON) return 'jsonStringIndex'
   throw new FlagConfigurationError('Unsupported variation type')
 }
 
