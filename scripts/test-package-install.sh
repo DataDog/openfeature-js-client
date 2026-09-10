@@ -82,6 +82,10 @@ yarn add @datadog/openfeature-browser@file:./browser.tgz --silent
 echo "Building test app..."
 yarn build
 
+# Report per-entrypoint bundle sizes in CI so reviewers can spot accidental growth.
+echo "Reporting entrypoint bundle sizes..."
+node "$REPO_ROOT/scripts/report-entrypoint-bundle-sizes.js" "$TEST_APP_DIR/dist"
+
 # Execute the built application in a real browser runtime
 echo "Installing Chromium..."
 if [[ "${CI:-}" == "true" ]]; then

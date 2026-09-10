@@ -44,6 +44,15 @@ The project uses **independent versioning**, meaning each package can have its o
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Entrypoint Guardrails
+
+The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
+
+Two recurring checks help keep that boundary visible:
+
+- `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
+- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`, which prints a raw/gzip JS size table for the root, precomputed, and rules-based browser entrypoints. In GitHub Actions the table is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers.
+
 ## Release Process
 
 ### Prerequisites
