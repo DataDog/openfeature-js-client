@@ -46,10 +46,20 @@ function main() {
     fs.writeFileSync(reportPath, `${report}\n`)
   }
 
-  const violations = measurements.filter((measurement) => measurement.expectNoProtobuf && measurement.hasProtobufMarker)
-  if (violations.length > 0) {
-    const labels = violations.map((measurement) => measurement.label).join(', ')
+  const prohibitedProtobufMarkers = measurements.filter(
+    (measurement) => measurement.expectNoProtobuf && measurement.hasProtobufMarker
+  )
+  if (prohibitedProtobufMarkers.length > 0) {
+    const labels = prohibitedProtobufMarkers.map((measurement) => measurement.label).join(', ')
     throw new Error(`Default/precomputed entrypoints include protobuf markers: ${labels}`)
+  }
+
+  const missingProtobufMarkers = measurements.filter(
+    (measurement) => !measurement.expectNoProtobuf && !measurement.hasProtobufMarker
+  )
+  if (missingProtobufMarkers.length > 0) {
+    const labels = missingProtobufMarkers.map((measurement) => measurement.label).join(', ')
+    throw new Error(`Rules-based entrypoints are missing protobuf markers: ${labels}`)
   }
 }
 
@@ -119,7 +129,7 @@ function renderMarkdown(measurements) {
 
   lines.push(
     '',
-    'Default and precomputed entrypoints are expected to keep Protobuf-ES out of their bundles. The marker check is a packed-artifact backstop; the source import boundary is enforced by `packages/core/test/entrypoint-boundaries.spec.ts`.'
+    'Default and precomputed entrypoints are expected to keep Protobuf-ES out of their bundles. Rules-based entrypoints are expected to include protobuf markers as a positive control. The marker check is a packed-artifact backstop; the source import boundary is enforced by `packages/core/test/entrypoint-boundaries.spec.ts`.'
   )
 
   return lines.join('\n')
