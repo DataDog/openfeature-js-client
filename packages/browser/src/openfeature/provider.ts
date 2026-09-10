@@ -1,7 +1,7 @@
 import {
   type AssignmentCache,
   configMatchesContext,
-  evaluate,
+  evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
   type FlagTypeToValue,
 } from '@datadog/flagging-core'
@@ -285,6 +285,12 @@ export class DatadogProvider extends DatadogCoreProvider {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, this.evaluationContext)
+    return evaluatePrecomputedConfiguration(
+      this.flagsConfiguration,
+      type,
+      flagKey,
+      defaultValue,
+      this.evaluationContext
+    )
   }
 }

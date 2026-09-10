@@ -194,7 +194,11 @@ import {
 For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
 ```javascript
-import { configurationFromString, getPrecomputedContext, DatadogOfflineProvider } from '@datadog/openfeature-browser'
+import {
+  configurationFromString,
+  getPrecomputedContext,
+  DatadogOfflineProvider,
+} from '@datadog/openfeature-browser/rules-based'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')

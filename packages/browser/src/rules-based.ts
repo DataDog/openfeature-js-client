@@ -1,6 +1,6 @@
-import { registerGlobal } from './register-global'
+import { registerRulesBasedGlobal } from './register-rules-based-global'
 
-registerGlobal()
+registerRulesBasedGlobal()
 
 export type { FlagsConfigurationWire } from '@datadog/flagging-core/rules-based'
 export {
@@ -8,6 +8,7 @@ export {
   configurationToString,
   getPrecomputedContext,
 } from '@datadog/flagging-core/rules-based'
+export { DatadogOfflineProvider } from './openfeature/offline-provider'
 export * from './provider-entrypoint'
 export type {
   PrecomputedConfigurationFetchOptions,

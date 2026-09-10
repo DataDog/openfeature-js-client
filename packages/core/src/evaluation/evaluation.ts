@@ -4,7 +4,6 @@ import {
   type FlagsConfiguration,
   type FlagTypeToValue,
   type PrecomputedConfiguration,
-  type PrecomputedFlagMetadata,
   type RulesConfiguration,
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
@@ -14,7 +13,7 @@ import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
-import { getOwnProperty } from './getOwnProperty'
+import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
 const NOOP_LOGGER: Logger = {
@@ -34,7 +33,7 @@ export function evaluate<T extends FlagValueType>(
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const selection = selectFlagsConfiguration(flagsConfiguration, context)
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputed(selection.configuration, type, flagKey, defaultValue)
+    return evaluatePrecomputedConfiguration(flagsConfiguration, type, flagKey, defaultValue, context)
   }
 
   if (selection.kind === 'rules') {
@@ -183,71 +182,6 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
       flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
-}
-
-function evaluatePrecomputed<T extends FlagValueType>(
-  precomputed: PrecomputedConfiguration,
-  type: T,
-  flagKey: string,
-  defaultValue: FlagTypeToValue<T>
-): ResolutionDetails<FlagTypeToValue<T>> {
-  const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, flagKey) : undefined
-  if (flagError) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: flagError,
-    }
-  }
-
-  const flag = getOwnProperty(precomputed.response.data.attributes.flags, flagKey)
-  if (!flag) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-    }
-  }
-
-  if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'TYPE_MISMATCH' as ErrorCode,
-    }
-  }
-
-  return {
-    value: flag.variationValue as FlagTypeToValue<T>,
-    variant: flag.variationKey,
-    flagMetadata: {
-      allocationKey: flag.allocationKey,
-      variationType: flag.variationType,
-      doLog: flag.doLog,
-      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
-    } as PrecomputedFlagMetadata,
-    reason: flag.reason,
-  } as ResolutionDetails<FlagTypeToValue<T>>
-}
-
-function variationTypeToOpenFeature(s: string): FlagValueType {
-  const typeMap: Record<string, FlagValueType> = {
-    string: 'string',
-    boolean: 'boolean',
-    number: 'number',
-    integer: 'number',
-    float: 'number',
-    object: 'object',
-
-    BOOLEAN: 'boolean',
-    STRING: 'string',
-    NUMERIC: 'number',
-    INTEGER: 'number',
-    JSON: 'object',
-  }
-
-  return typeMap[s] || s.toLowerCase()
 }
 
 function isProtobufConfiguration(
