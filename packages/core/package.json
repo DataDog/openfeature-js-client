@@ -13,7 +13,10 @@
     "esm/",
     "*.d.ts"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./cjs/configuration/protobuf-text-encoding.js",
+    "./esm/configuration/protobuf-text-encoding.js"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
