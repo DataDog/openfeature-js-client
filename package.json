@@ -15,6 +15,7 @@
     "test:browser-install": "scripts/test-package-install.sh",
     "test:node-install": "scripts/test-node-package-install.sh",
     "test:node-install:with-of": "scripts/test-node-package-install.sh --with-openfeature",
+    "test:react-native-install": "scripts/test-react-native-package-install.sh",
     "licenses:validate": "scripts/licenses-validate.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",

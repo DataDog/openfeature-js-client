@@ -357,7 +357,6 @@ describe('DatadogProvider', () => {
               variationKey: 'variation-123',
               variationType: 'STRING',
               variationValue: stringFlagValue,
-              extraLogging: { experiment: true },
               doLog: true,
               reason: 'TARGETING_MATCH',
             },

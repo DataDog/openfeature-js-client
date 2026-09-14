@@ -1,0 +1,58 @@
+import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
+import { configurationFromString, type FlagsConfigurationWire, getPrecomputedContext } from '../src/rules-based'
+
+function rulesWire(): FlagsConfigurationWire {
+  return JSON.stringify({
+    version: 1,
+    rules: {
+      response: 'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADKgJvbg==',
+    },
+  })
+}
+
+describe('configurationFromString browser integration', () => {
+  it('returns a configuration compatible with the core evaluator', () => {
+    const configuration = configurationFromString(rulesWire())
+    expect(configuration.rules).toBeDefined()
+    const logger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    }
+
+    expect(
+      evaluateRulesBasedConfiguration(configuration.rules?.response, 'boolean', 'browser-flag', false, {}, logger)
+    ).toMatchObject({
+      value: true,
+      variant: 'on',
+      reason: 'STATIC',
+    })
+  })
+
+  it('parses a precomputed configuration', () => {
+    const response = {
+      data: {
+        attributes: {
+          createdAt: 0,
+          flags: {},
+        },
+      },
+    }
+
+    const configuration = configurationFromString(
+      JSON.stringify({
+        version: 1,
+        precomputed: {
+          response: JSON.stringify(response),
+          context: { targetingKey: 'user-1' },
+        },
+      })
+    )
+
+    expect(configuration).toEqual({
+      precomputed: { response, context: { targetingKey: 'user-1' } },
+    })
+    expect(getPrecomputedContext(configuration)).toEqual({ targetingKey: 'user-1' })
+  })
+})

@@ -1,4 +1,5 @@
-import { configurationFromString, type FlagsConfiguration } from '@datadog/flagging-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import type { ErrorCode } from '@openfeature/web-sdk'
 import { evaluate } from '../src/evaluation'
 import configurationWire from './data/precomputed-v1-wire.json'
@@ -6,6 +7,48 @@ import configurationWire from './data/precomputed-v1-wire.json'
 const configuration = configurationFromString(
   // Adding stringify because import has parsed JSON
   JSON.stringify(configurationWire)
+)
+
+const configurationWithMalformedFlag = configurationFromString(
+  JSON.stringify({
+    version: 1,
+    precomputed: {
+      response: JSON.stringify({
+        data: {
+          attributes: {
+            createdAt: 0,
+            flags: {
+              valid: {
+                allocationKey: 'allocation',
+                variationKey: 'valid-variation',
+                variationType: 'BOOLEAN',
+                variationValue: true,
+                reason: 'STATIC',
+                doLog: false,
+              },
+              malformed: {
+                allocationKey: 'allocation',
+                variationKey: 'malformed-variation',
+                variationType: 'BOOLEAN',
+                variationValue: 'not-a-boolean',
+                reason: 'STATIC',
+                doLog: false,
+              },
+            },
+          },
+        },
+      }),
+    },
+  })
+)
+
+const configurationWithMalformedResponse = configurationFromString(
+  JSON.stringify({
+    version: 1,
+    precomputed: {
+      response: JSON.stringify({ data: {} }),
+    },
+  })
 )
 
 describe('evaluate', () => {
@@ -23,6 +66,37 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+    })
+  })
+
+  it.each(['constructor', '__proto__'])('treats inherited flag key %s as unknown', (flagKey) => {
+    expect(evaluate(configuration, 'string', flagKey, 'default', {})).toEqual({
+      value: 'default',
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+    })
+  })
+
+  it('isolates malformed precomputed flags and returns a parse error for the affected flag', () => {
+    expect(evaluate(configurationWithMalformedFlag, 'boolean', 'valid', false, {})).toMatchObject({
+      value: true,
+      variant: 'valid-variation',
+      reason: 'STATIC',
+    })
+    expect(evaluate(configurationWithMalformedFlag, 'boolean', 'malformed', false, {})).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'Invalid precomputed flag configuration',
+    })
+  })
+
+  it('returns a parse error for a malformed precomputed response', () => {
+    expect(evaluate(configurationWithMalformedResponse, 'boolean', 'flag', false, {})).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'Precomputed configuration response is missing attributes',
     })
   })
 
@@ -94,7 +168,6 @@ describe('evaluate', () => {
                   variationValue: 'red',
                   reason: 'TARGETING_MATCH',
                   doLog: true,
-                  extraLogging: {},
                   ...(serialId === undefined ? {} : { serialId }),
                 },
               },
