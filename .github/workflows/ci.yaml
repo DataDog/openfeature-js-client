@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: read
+  pull-requests: write
 
 jobs:
   build-and-test:
@@ -55,6 +56,15 @@ jobs:
 
       - name: Test browser package installation
         run: yarn test:browser-install
+        env:
+          ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/entrypoint-bundle-sizes.md
+
+      - name: Comment browser entrypoint bundle sizes
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        run: node scripts/comment-entrypoint-bundle-sizes.js "${{ runner.temp }}/entrypoint-bundle-sizes.md"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test node package installation (without OpenFeature)
         run: yarn test:node-install
