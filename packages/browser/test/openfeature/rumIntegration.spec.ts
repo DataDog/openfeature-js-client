@@ -1,7 +1,9 @@
-import { getGlobalObject } from '@datadog/browser-core'
+import { globalObject } from '@datadog/js-core/util'
 import type { EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from '../../src/openfeature/rumIntegration'
+
+const getGlobalObject = <T>() => globalObject as typeof globalThis & T
 
 describe('createRumTrackingHook', () => {
   const mockHookContext = {} as HookContext

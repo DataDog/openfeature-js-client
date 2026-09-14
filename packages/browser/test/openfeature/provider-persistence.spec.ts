@@ -3,10 +3,10 @@ if (typeof globalThis.structuredClone === 'undefined') {
   globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
 }
 import 'fake-indexeddb/auto'
-import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import { timeStampNow } from '@datadog/js-core/time'
+import { INTAKE_SITE_STAGING } from '@datadog/js-core/transport'
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'

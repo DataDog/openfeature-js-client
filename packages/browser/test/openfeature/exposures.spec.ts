@@ -1,9 +1,12 @@
-import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { INTAKE_SITE_STAGING } from '@datadog/js-core/transport'
+import { globalObject } from '@datadog/js-core/util'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedServerResponse from '../data/precomputed-v1.json'
+
+const getGlobalObject = <T>() => globalObject as typeof globalThis & T
 
 describe('Exposures End-to-End', () => {
   let fetchMock: jest.Mock

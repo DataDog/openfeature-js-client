@@ -77,13 +77,28 @@ function getSdkSetup() {
 }
 
 function getOpenFeatureVersion() {
-  // For fixed versioning, we'll use the version from lerna.json
+  // Package scripts run with their package as cwd. Read that package's released version so this
+  // remains correct for both fixed and independent Lerna versioning.
+  try {
+    const packageJsonPath = path.join(process.cwd(), 'package.json')
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+    if (typeof packageJson.version === 'string') {
+      return packageJson.version
+    }
+  } catch (error) {
+    console.warn('Could not read the package version from package.json', error)
+  }
+
   try {
     const lernaJsonPath = path.join(__dirname, '../../lerna.json')
     const lernaJson = JSON.parse(readFileSync(lernaJsonPath, 'utf8'))
-    return lernaJson.version
+    if (typeof lernaJson.version === 'string' && lernaJson.version !== 'independent') {
+      return lernaJson.version
+    }
   } catch (error) {
-    console.warn('Could not read lerna.json version, using "0.1.0-alpha.2"', error)
-    return '0.1.0-alpha.2'
+    console.warn('Could not read the fallback version from lerna.json', error)
   }
+
+  console.warn('Could not determine the SDK version, using "0.1.0-alpha.2"')
+  return '0.1.0-alpha.2'
 }

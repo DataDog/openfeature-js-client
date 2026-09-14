@@ -1,4 +1,5 @@
-import { type Context, getGlobalObject } from '@datadog/browser-core'
+import type { Context } from '@datadog/browser-core'
+import { globalObject } from '@datadog/js-core/util'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 
 export interface DDRum {
@@ -9,8 +10,7 @@ export interface DDRum {
 
 export function enrichEvaluationContextWithRumUser(context: EvaluationContext): EvaluationContext {
   try {
-    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-    const user = globalObject.DD_RUM?.getUser?.()
+    const user = (globalObject as typeof globalThis & { DD_RUM?: DDRum }).DD_RUM?.getUser?.()
     if (!user) {
       return context
     }
@@ -44,8 +44,10 @@ export function createRumTrackingHook(): Hook {
       if (details.variant == null) {
         return
       }
-      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-      globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+      ;(globalObject as typeof globalThis & { DD_RUM?: DDRum }).DD_RUM?.addFeatureFlagEvaluation?.(
+        details.flagKey,
+        details.variant
+      )
     },
   }
 }
