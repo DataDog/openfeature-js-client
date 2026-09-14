@@ -746,16 +746,13 @@ describe('DatadogProvider', () => {
 
       await expect(testProvider.initialize()).resolves.toBeUndefined()
 
-      expect(startFeatureFlagsTelemetry).toHaveBeenCalledWith(
-        expect.anything(),
-        {
-          applicationId,
-          environmentName: 'test',
-          sdkName: 'dd-openfeature-browser',
-          sdkVersion: expect.any(String),
-          evaluationReportingEnabled: true,
-        }
-      )
+      expect(startFeatureFlagsTelemetry).toHaveBeenCalledWith(expect.anything(), {
+        applicationId,
+        environmentName: 'test',
+        sdkName: 'dd-openfeature-browser',
+        sdkVersion: expect.any(String),
+        evaluationReportingEnabled: true,
+      })
       expect(telemetry.add).toHaveBeenNthCalledWith(1, {
         eventType: FeatureFlagsTelemetryEventType.SDK_INIT_STARTED,
       })
