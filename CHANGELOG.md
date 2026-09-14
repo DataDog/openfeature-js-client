@@ -6,6 +6,18 @@
 
 ---
 
+## @datadog/flagging-core@2.2.0
+
+**Internal Changes:**
+
+- fix(core): support canonical FFE validation and extended SemVer version parts ([#370](https://github.com/DataDog/openfeature-js-client/pull/370)) [CORE] [NODE-SERVER]
+
+## @datadog/openfeature-node-server@2.3.0
+
+**Internal Changes:**
+
+- fix(core): support canonical FFE validation and extended SemVer version parts ([#370](https://github.com/DataDog/openfeature-js-client/pull/370)) [CORE] [NODE-SERVER]
+
 ## @datadog/openfeature-browser@1.4.0
 
 **Features:**
