@@ -24,6 +24,7 @@ export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWire
   return isWireEntry(value) && (!('context' in value) || isEvaluationContext(value.context))
 }
 
+/** @internal */
 export function parsePrecomputedConfigurationResponse(
   value: unknown
 ): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | { error: string } {

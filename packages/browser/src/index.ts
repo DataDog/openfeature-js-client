@@ -1,5 +1,8 @@
 import { registerGlobal } from './register-global'
 
+export type { PrecomputedConfigurationFetchOptions } from './transport/fetchConfiguration'
+export { fetchPrecomputedConfiguration } from './transport/fetchConfiguration'
+
 registerGlobal()
 
 export type { FlagsConfigurationWire } from '@datadog/flagging-core'

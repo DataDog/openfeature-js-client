@@ -565,6 +565,56 @@ describe('DatadogProvider', () => {
     })
   })
 
+  describe('custom configuration fetch implementation', () => {
+    let originalFetch: typeof global.fetch
+
+    beforeAll(() => {
+      originalFetch = global.fetch
+    })
+
+    afterAll(() => {
+      global.fetch = originalFetch
+    })
+
+    it('uses flagConfigurationFetch during provider initialization', async () => {
+      const globalFetch = jest.fn(() => {
+        throw new Error('global fetch should not be called')
+      })
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: jest.fn(),
+        },
+        json: async () => precomputedResponse,
+      })
+      global.fetch = globalFetch
+      mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+
+      const testProvider = new DatadogProvider({
+        ...options,
+        flagConfigurationFetch: customFetch,
+      })
+      const context = { targetingKey: 'custom-fetch-user' }
+
+      await expect(testProvider.initialize(context)).resolves.toBeUndefined()
+
+      expect(globalFetch).not.toHaveBeenCalled()
+      expect(customFetch).toHaveBeenCalledWith(
+        'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'dd-client-token': options.clientToken,
+            'dd-application-id': options.applicationId,
+          },
+        })
+      )
+      expect(testProvider.status).toBe(ProviderStatus.READY)
+      expect(testProvider.resolveStringEvaluation('string-flag', 'default', context, mockLogger).value).toBe('red')
+    })
+  })
+
   describe('error handling integration', () => {
     let originalFetch: (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>
     let isolatedFetchMock: jest.Mock
