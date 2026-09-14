@@ -121,6 +121,10 @@ describe('DatadogProvider', () => {
       })
       // Should have 2 hooks: exposure logging + auto RUM tracking
       expect(providerWithoutEvalTracking.hooks).toHaveLength(2)
+      expect(startFeatureFlagsTelemetry).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ evaluationReportingEnabled: false })
+      )
     })
 
     it('should have auto RUM tracking hook even when both other tracking options are disabled', () => {
@@ -728,8 +732,10 @@ describe('DatadogProvider', () => {
 
   describe('lifecycle telemetry', () => {
     it('reports successful initialization, remote configuration, readiness, and the first evaluation', async () => {
+      const applicationId = '565ec7ef-a5ab-46ec-9518-adf8a0cede23'
       const testProvider = new DatadogProvider({
         ...options,
+        applicationId,
         flagConfigurationFetch: jest.fn().mockResolvedValue({
           ok: true,
           headers: new Headers({ 'content-type': 'application/vnd.api+json' }),
@@ -742,7 +748,13 @@ describe('DatadogProvider', () => {
 
       expect(startFeatureFlagsTelemetry).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ evaluationReportingEnabled: true })
+        {
+          applicationId,
+          environmentName: 'test',
+          sdkName: 'dd-openfeature-browser',
+          sdkVersion: expect.any(String),
+          evaluationReportingEnabled: true,
+        }
       )
       expect(telemetry.add).toHaveBeenNthCalledWith(1, {
         eventType: FeatureFlagsTelemetryEventType.SDK_INIT_STARTED,

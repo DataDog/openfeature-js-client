@@ -6,7 +6,7 @@ import {
   startFeatureFlagsTelemetry,
 } from '@datadog/browser-core'
 
-describe('browser-core lifecycle telemetry contract', () => {
+describe('browser-core flagtelemetry contract', () => {
   it('is available from the installed browser-core package', () => {
     expect(typeof startFeatureFlagsTelemetry).toBe('function')
     expect(Object.values(FeatureFlagsTelemetryEventType)).toEqual([

@@ -82,7 +82,7 @@ export class DatadogProvider extends DatadogCoreProvider {
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
 
-  /** Low-volume internal lifecycle telemetry; independent from RUM and evaluation reporting. */
+  /** Low-volume lifecycle events sent through the dedicated flagtelemetry track. */
   private readonly lifecycleTelemetry?: FeatureFlagsTelemetry
   private readonly stopTrackingTasks: Array<() => void> = []
   private isClosed = false

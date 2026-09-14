@@ -812,7 +812,7 @@ __metadata:
   dependencies:
     "@datadog/browser-core": "npm:^7.12.0"
     "@datadog/flagging-core": "npm:2.2.0"
-    "@datadog/js-core": "npm:0.0.3"
+    "@datadog/js-core": "npm:0.0.13"
     "@openfeature/core": "npm:^1.9.2"
     "@openfeature/web-sdk": "npm:^1.5.0"
     "@types/chrome": "npm:^0.1.18"
