@@ -12,6 +12,11 @@ describe('default entry point', () => {
     expect(DatadogProvider).toBeDefined()
   })
 
+  it('does not export or register the offline provider', () => {
+    expect('DatadogOfflineProvider' in jest.requireActual('../src')).toBe(false)
+    expect((globalThis as { DD_FLAGGING?: { OfflineProvider?: unknown } }).DD_FLAGGING?.OfflineProvider).toBeUndefined()
+  })
+
   it('parses and serializes precomputed configuration while ignoring rules', () => {
     const response = {
       data: {
