@@ -6,6 +6,21 @@
 
 ---
 
+## @datadog/flagging-core@3.0.0
+
+**Breaking Changes:**
+
+- Remove the deprecated `extraLogging` field from `PrecomputedFlag` metadata ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [CORE] [BROWSER]
+
+**Features:**
+
+- Add portable flags configuration wire parsing and serialization APIs, including the opt-in `@datadog/flagging-core/rules-based` entrypoint for rules-based configuration parsing ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#351](https://github.com/DataDog/openfeature-js-client/pull/351)) [CORE] [BROWSER]
+- Move browser precomputed evaluation onto shared core evaluation APIs so browser and Node can share the same evaluator surface ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [CORE] [BROWSER]
+
+**Internal Changes:**
+
+- Add protobuf-based UFC decoding, evaluation fixtures, and entrypoint guardrails to keep rules-based parsing isolated from default/precomputed entrypoints ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#382](https://github.com/DataDog/openfeature-js-client/pull/382)) [CORE] [BROWSER]
+
 ## @datadog/flagging-core@2.2.0
 
 **Internal Changes:**
