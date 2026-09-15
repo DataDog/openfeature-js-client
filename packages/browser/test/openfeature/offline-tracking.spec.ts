@@ -52,15 +52,20 @@ const tracking = {
 }
 
 function createAllDatadogTrackingHooks() {
+  const exposureLogging = createDatadogExposureLoggingHook(tracking)
   return createDatadogTrackingHooks(
     createDatadogRumTrackingHook(),
     createDatadogEvaluationLoggingHook(tracking),
-    createDatadogExposureLoggingHook(tracking)
+    exposureLogging
   )
 }
 
-function createExposureOnlyTrackingHooks() {
-  return createDatadogTrackingHooks(createDatadogExposureLoggingHook(tracking))
+function createExposureOnlyTracking() {
+  const exposureLogging = createDatadogExposureLoggingHook(tracking)
+  return {
+    exposureLogging,
+    trackingHooks: createDatadogTrackingHooks(exposureLogging),
+  }
 }
 
 describe('DatadogOfflineProvider tracking', () => {
@@ -173,22 +178,21 @@ describe('DatadogOfflineProvider tracking', () => {
   it('supports composing individual tracking hooks', () => {
     expect(createDatadogTrackingHooks(createDatadogRumTrackingHook()).hooks).toHaveLength(1)
     expect(createDatadogTrackingHooks(createDatadogEvaluationLoggingHook(tracking)).hooks).toHaveLength(1)
-    expect(createExposureOnlyTrackingHooks().hooks).toHaveLength(1)
+    expect(createExposureOnlyTracking().trackingHooks.hooks).toHaveLength(1)
     expect(createDatadogTrackingHooks().hooks).toHaveLength(0)
   })
 
-  it('keeps exposure cache lifecycle methods as no-ops when exposure logging is omitted', async () => {
+  it('keeps tracking initialization as a no-op when hooks have no lifecycle', async () => {
     const trackingHooks = createDatadogTrackingHooks(
       createDatadogRumTrackingHook(),
       createDatadogEvaluationLoggingHook(tracking)
     )
 
     await expect(trackingHooks.initialize()).resolves.toBeUndefined()
-    await expect(trackingHooks.resetExposureCache()).resolves.toBeUndefined()
   })
 
   it('does not emit exposures when evaluation returns a default', async () => {
-    const trackingHooks = createExposureOnlyTrackingHooks()
+    const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -204,7 +208,7 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('clears exposure deduplication when resetExposureCache is called after replacing configuration', async () => {
-    const trackingHooks = createExposureOnlyTrackingHooks()
+    const { exposureLogging, trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -217,7 +221,7 @@ describe('DatadogOfflineProvider tracking', () => {
     jest.advanceTimersByTime(31_000)
 
     provider.setConfiguration(precomputedConfiguration)
-    await trackingHooks.resetExposureCache()
+    await exposureLogging.resetExposureCache()
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
@@ -255,10 +259,10 @@ describe('DatadogOfflineProvider tracking', () => {
       value: { storage: { local: storage } },
     })
 
-    const trackingHooks = createExposureOnlyTrackingHooks()
+    const { exposureLogging, trackingHooks } = createExposureOnlyTracking()
     const trackingInitialization = trackingHooks.initialize()
     await readStarted
-    const exposureCacheReset = trackingHooks.resetExposureCache()
+    const exposureCacheReset = exposureLogging.resetExposureCache()
     resolveInitialRead(staleEntries)
     await trackingInitialization
     await exposureCacheReset

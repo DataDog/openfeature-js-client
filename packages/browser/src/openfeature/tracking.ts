@@ -12,13 +12,11 @@ export type DatadogTrackingHooksOptions = Omit<FlaggingTrackingInitConfiguration
 export interface DatadogTrackingHooks {
   hooks: Hook[]
   initialize(): Promise<void>
-  resetExposureCache(): Promise<void>
 }
 
 export interface DatadogTrackingHook {
   hooks: Hook[]
   initialize?(): Promise<void> | void
-  resetExposureCache?(): Promise<void> | void
 }
 
 export function createDatadogTrackingHooks(...trackingHooks: DatadogTrackingHook[]): DatadogTrackingHooks {
@@ -30,11 +28,6 @@ export function createDatadogTrackingHooks(...trackingHooks: DatadogTrackingHook
     initialize: async () => {
       await Promise.all(
         trackingHooks.map((trackingHook) => runTrackingLifecycleOperation(() => trackingHook.initialize?.()))
-      )
-    },
-    resetExposureCache: async () => {
-      await Promise.all(
-        trackingHooks.map((trackingHook) => runTrackingLifecycleOperation(() => trackingHook.resetExposureCache?.()))
       )
     },
   }

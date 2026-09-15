@@ -12,6 +12,11 @@ import { startExposuresBatch } from '../transport/startExposuresBatch'
 import type { DatadogTrackingHook, DatadogTrackingHooksOptions } from './tracking'
 import { runTrackingLifecycleOperation } from './tracking'
 
+export interface DatadogExposureLoggingHook extends DatadogTrackingHook {
+  initialize(): Promise<void>
+  resetExposureCache(): Promise<void>
+}
+
 /**
  * Create hook for exposure logging.
  */
@@ -65,10 +70,14 @@ export function createExposureLoggingHook(
   }
 }
 
-export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHook {
+export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOptions): DatadogExposureLoggingHook {
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   if (!configuration) {
-    return { hooks: [] }
+    return {
+      hooks: [],
+      initialize: () => Promise.resolve(),
+      resetExposureCache: () => Promise.resolve(),
+    }
   }
 
   const exposureCache = new ResettableAssignmentCache(
