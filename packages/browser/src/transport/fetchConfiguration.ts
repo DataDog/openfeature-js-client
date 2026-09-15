@@ -3,6 +3,9 @@ import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
+import { withTimeout } from './fetch'
+
+const DEFAULT_FLAG_CONFIGURATION_REQUEST_TIMEOUT_MS = 30_000
 
 const sourcePayload = {
   sdk_name: 'browser',
@@ -66,7 +69,10 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
     }
 
-    const fetchImplementation = initConfiguration.flagConfigurationFetch ?? globalThis.fetch
+    const fetchImplementation = withTimeout(
+      initConfiguration.flagConfigurationFetch ?? globalThis.fetch,
+      initConfiguration.flagConfigurationRequestTimeoutMs ?? DEFAULT_FLAG_CONFIGURATION_REQUEST_TIMEOUT_MS
+    )
     const response = await fetchImplementation(url.toString(), {
       method: 'POST',
       headers: defaultHeaders,

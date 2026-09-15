@@ -60,12 +60,16 @@ const provider = new DatadogProvider({
 
   // Optional Fetch-compatible implementation for flag configuration requests
   flagConfigurationFetch: globalThis.fetch,
+
+  // Timeout for each flag configuration request; zero disables it (default: 30000ms)
+  flagConfigurationRequestTimeoutMs: 30_000,
 })
 ```
 
-The custom Fetch implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
-requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
-authentication and any configured custom headers, and may route or transform the request as needed.
+Flag configuration requests time out after 30 seconds by default. The custom Fetch implementation applies only to
+those requests. Exposure and flag-evaluation intake requests use their existing transports. It receives the
+provider-generated `RequestInit`, including Datadog authentication and any configured custom headers, and may route or
+transform the request as needed.
 
 ### Request Timeouts and Retries for npm Consumers
 

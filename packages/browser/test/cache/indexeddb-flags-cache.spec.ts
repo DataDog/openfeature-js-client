@@ -145,6 +145,25 @@ describe('IndexedDBFlagsCache', () => {
       expect(result!.precomputed!.response.data.attributes.flags['updated-flag'].variationValue).toBe('hello')
       expect(result!.precomputed!.response.data.attributes.flags['test-flag']).toBeUndefined()
     })
+
+    it.each([-1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+      'should omit an invalid persisted fetchedAt value of %s',
+      async (fetchedAt) => {
+        cache.set(
+          {
+            ...testConfig,
+            precomputed: { ...testConfig.precomputed!, fetchedAt: fetchedAt as TimeStamp },
+          },
+          context
+        )
+        await flushAsync()
+
+        const result = await cache.get(context)
+
+        expect(result?.precomputed).toBeDefined()
+        expect(result?.precomputed?.fetchedAt).toBeUndefined()
+      }
+    )
   })
 
   describe('client token isolation', () => {

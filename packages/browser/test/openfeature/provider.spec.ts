@@ -872,14 +872,23 @@ describe('DatadogProvider', () => {
       })
     })
 
-    it('reports an initialization timeout when the provider did not abort its request', async () => {
+    it('reports an initialization timeout when the configuration request hangs', async () => {
+      jest.useFakeTimers()
       const testProvider = new DatadogProvider({
         ...options,
-        flagConfigurationFetch: jest.fn().mockRejectedValue(new DOMException('fetch timed out', 'TimeoutError')),
+        flagConfigurationRequestTimeoutMs: 50,
+        flagConfigurationFetch: jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+          })
+        }),
       })
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
 
-      await expect(testProvider.initialize()).rejects.toThrow('fetch timed out')
+      const initialization = testProvider.initialize()
+      const rejection = expect(initialization).rejects.toMatchObject({ name: 'TimeoutError' })
+      await jest.advanceTimersByTimeAsync(50)
+      await rejection
 
       expect(telemetry.add).toHaveBeenNthCalledWith(1, {
         eventType: FeatureFlagsTelemetryEventType.SDK_INIT_STARTED,
@@ -894,6 +903,7 @@ describe('DatadogProvider', () => {
         errorCode: FeatureFlagsTelemetryErrorCode.INITIALIZATION_TIMEOUT,
         initLatencyMs: expect.any(Number),
       })
+      jest.useRealTimers()
     })
 
     it('aborts in-flight work and flushes telemetry once when the provider closes', async () => {
@@ -908,7 +918,11 @@ describe('DatadogProvider', () => {
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
       const pendingInitialization = testProvider.initialize()
 
-      await testProvider.onClose()
+      telemetry.stop.mockImplementationOnce(() => {
+        throw new Error('telemetry stop failed')
+      })
+
+      await expect(testProvider.onClose()).resolves.toBeUndefined()
       await testProvider.onClose()
       await expect(pendingInitialization).resolves.toBeUndefined()
 

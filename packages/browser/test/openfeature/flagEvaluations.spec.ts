@@ -129,4 +129,19 @@ describe('createFlagEvalEVPHook', () => {
     stopAggregatorSpy.mockRestore()
     addEvaluationSpy.mockRestore()
   })
+
+  it('continues cleanup when flushing throws', () => {
+    const hook = createFlagEvalEVPHook(mockConfiguration)
+    const batch = jest.mocked(createBatch).mock.results.at(-1)?.value
+    expect(batch).toBeDefined()
+    if (!batch) {
+      throw new Error('Expected createBatch to return a batch')
+    }
+    batch.forceFlush.mockImplementationOnce(() => {
+      throw new Error('flush failed')
+    })
+
+    expect(() => hook.stop()).not.toThrow()
+    expect(batch.stop).toHaveBeenCalledTimes(1)
+  })
 })

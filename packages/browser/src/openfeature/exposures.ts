@@ -61,8 +61,15 @@ export function createExposureLoggingHook(
         return
       }
       stopped = true
-      exposuresBatch.forceFlush('duration_limit')
-      exposuresBatch.stop()
+      for (const cleanup of [() => exposuresBatch.forceFlush('duration_limit'), () => exposuresBatch.stop()]) {
+        try {
+          cleanup()
+        } catch (error) {
+          addTelemetryDebug('Error stopping exposure tracking', {
+            'error.message': error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     },
   }
 }

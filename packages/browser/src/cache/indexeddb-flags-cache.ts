@@ -51,7 +51,15 @@ export class IndexedDBFlagsCache {
         if (!config || typeof config !== 'object') {
           return undefined
         }
-        return config.precomputed ? config : undefined
+        if (!config.precomputed) {
+          return undefined
+        }
+        const fetchedAt = config.precomputed.fetchedAt
+        if (fetchedAt !== undefined && (!Number.isSafeInteger(fetchedAt) || fetchedAt < 0)) {
+          const { fetchedAt: _invalidFetchedAt, ...precomputed } = config.precomputed
+          return { ...config, precomputed }
+        }
+        return config
       } finally {
         db.close()
       }

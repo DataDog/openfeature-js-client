@@ -80,6 +80,12 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * including authentication and configured custom headers. Exposure and flag-evaluation intake requests do not use it.
    */
   flagConfigurationFetch?: typeof globalThis.fetch
+
+  /**
+   * Timeout for each flag configuration request in milliseconds (default: 30000ms).
+   * A value of zero disables the timeout.
+   */
+  flagConfigurationRequestTimeoutMs?: number
 }
 
 export interface FlaggingConfiguration extends Configuration {

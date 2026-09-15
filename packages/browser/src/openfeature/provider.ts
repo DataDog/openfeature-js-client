@@ -224,9 +224,17 @@ export class DatadogProvider extends DatadogCoreProvider {
     this.isClosed = true
     this.contextUpdateAbortController.abort(new DOMException('Feature Flags provider closed', 'AbortError'))
     for (const stop of this.stopTrackingTasks) {
-      stop()
+      try {
+        stop()
+      } catch {
+        // Cleanup failures must not prevent the remaining transports from stopping.
+      }
     }
-    this.lifecycleTelemetry?.stop()
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Lifecycle telemetry must never affect provider shutdown.
+    }
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {

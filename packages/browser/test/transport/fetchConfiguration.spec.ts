@@ -370,21 +370,45 @@ describe('createFlagsConfigurationFetcher', () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should forward the caller abort signal to the configured fetch implementation', async () => {
+    it('should forward caller cancellation through the request timeout wrapper', async () => {
       const controller = new AbortController()
-      const customFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: jest.fn(() => 'application/json') },
-        json: jest.fn().mockResolvedValue({ flags: {} }),
+      let requestSignal: AbortSignal | undefined
+      const customFetch = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        requestSignal = init?.signal ?? undefined
+        return new Promise<Response>((_resolve, reject) => {
+          requestSignal?.addEventListener('abort', () => reject(requestSignal?.reason), { once: true })
+        })
       })
       const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagConfigurationFetch: customFetch })
+      const reason = new DOMException('superseded', 'AbortError')
 
-      await fetcher(mockContext, { signal: controller.signal })
+      const request = fetcher(mockContext, { signal: controller.signal })
+      controller.abort(reason)
 
-      expect(customFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ signal: controller.signal })
-      )
+      await expect(request).rejects.toBe(reason)
+      expect(requestSignal?.aborted).toBe(true)
+    })
+
+    it('times out a pending flag configuration request', async () => {
+      jest.useFakeTimers()
+      const customFetch = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+        })
+      })
+      const fetcher = createFlagsConfigurationFetcher({
+        ...baseConfig,
+        flagConfigurationFetch: customFetch,
+        flagConfigurationRequestTimeoutMs: 50,
+      })
+
+      const request = fetcher(mockContext)
+      const rejection = expect(request).rejects.toMatchObject({ name: 'TimeoutError' })
+      await jest.advanceTimersByTimeAsync(50)
+
+      await rejection
+      expect(jest.getTimerCount()).toBe(0)
+      jest.useRealTimers()
     })
   })
 })

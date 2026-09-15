@@ -70,10 +70,20 @@ export function createFlagEvalEVPHook(
         return
       }
       stopped = true
-      aggregator.stop()
-      flagEvaluationBatch.forceFlush('duration_limit')
-      flagEvaluationBatch.stop()
-      urgentFlushSubscription.unsubscribe()
+      for (const cleanup of [
+        () => aggregator.stop(),
+        () => flagEvaluationBatch.forceFlush('duration_limit'),
+        () => flagEvaluationBatch.stop(),
+        () => urgentFlushSubscription.unsubscribe(),
+      ]) {
+        try {
+          cleanup()
+        } catch (error) {
+          addTelemetryDebug('Error stopping flag evaluation tracking', {
+            'error.message': error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     },
   }
 }
