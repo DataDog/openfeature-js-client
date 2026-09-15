@@ -3,7 +3,11 @@ import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
 import { ResettableAssignmentCache } from '../cache/resettable-assignment-cache'
-import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
+import {
+  type FlaggingTrackingConfiguration,
+  type FlaggingTrackingInitConfiguration,
+  validateAndBuildFlaggingTrackingConfiguration,
+} from '../domain/configuration'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
@@ -11,6 +15,30 @@ import { createRumTrackingHook } from './rumIntegration'
 export interface ProviderTracking {
   hooks: Hook[]
   exposureCache?: AssignmentCache
+}
+
+export type DatadogTrackingHooksOptions = FlaggingTrackingInitConfiguration
+
+export interface DatadogTrackingHooks {
+  hooks: Hook[]
+  initialize(): Promise<void>
+  resetExposureCache(): Promise<void>
+}
+
+export function createDatadogTrackingHooks(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
+  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
+  const tracking = createProviderTracking({
+    options,
+    configuration,
+    enabledByDefault: true,
+    serializeExposureCacheLifecycle: true,
+  })
+
+  return {
+    hooks: tracking.hooks,
+    initialize: () => runExposureCacheOperation(() => tracking.exposureCache?.init()),
+    resetExposureCache: () => runExposureCacheOperation(() => tracking.exposureCache?.clear()),
+  }
 }
 
 export function createProviderTracking({
@@ -51,6 +79,14 @@ export function createProviderTracking({
   return {
     hooks: getTrackingContext ? hooks.map((hook) => withTrackingContext(hook, getTrackingContext)) : hooks,
     exposureCache,
+  }
+}
+
+function runExposureCacheOperation(operation: () => Promise<void> | void | undefined): Promise<void> {
+  try {
+    return Promise.resolve(operation()).catch(() => {})
+  } catch {
+    return Promise.resolve()
   }
 }
 

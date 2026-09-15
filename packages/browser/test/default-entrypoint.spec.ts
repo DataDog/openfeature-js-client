@@ -5,11 +5,18 @@ jest.mock('@bufbuild/protobuf/wire', () => {
   throw new Error('The default entry point loaded Protobuf-ES wire helpers')
 })
 
-import { configurationFromString, configurationToString, DatadogProvider, getPrecomputedContext } from '../src'
+import {
+  configurationFromString,
+  configurationToString,
+  createDatadogTrackingHooks,
+  DatadogProvider,
+  getPrecomputedContext,
+} from '../src'
 
 describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
     expect(DatadogProvider).toBeDefined()
+    expect(createDatadogTrackingHooks).toBeDefined()
   })
 
   it('does not export or register the offline provider', () => {

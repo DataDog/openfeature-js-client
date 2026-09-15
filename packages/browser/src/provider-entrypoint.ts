@@ -1,3 +1,5 @@
 export type { FlaggingInitConfiguration, FlaggingTrackingInitConfiguration } from './domain/configuration'
 export { DatadogDevtools } from './openfeature/devtools-provider'
 export { DatadogProvider } from './openfeature/provider'
+export type { DatadogTrackingHooks, DatadogTrackingHooksOptions } from './openfeature/tracking'
+export { createDatadogTrackingHooks } from './openfeature/tracking'

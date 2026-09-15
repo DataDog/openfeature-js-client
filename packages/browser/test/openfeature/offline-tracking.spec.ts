@@ -5,13 +5,13 @@ import {
   type ExposureEvent,
   type FlagsConfiguration,
 } from '@datadog/flagging-core'
-import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import { OpenFeature } from '@openfeature/web-sdk'
-import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
+import { configurationFromString, createDatadogTrackingHooks, DatadogOfflineProvider } from '../../src/rules-based'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
+const DOMAIN = 'datadog-offline-tracking'
 
 const precomputedConfiguration: FlagsConfiguration = {
   precomputed: {
@@ -69,6 +69,8 @@ describe('DatadogOfflineProvider tracking', () => {
     await OpenFeature.clearContext()
     OpenFeature.clearHandlers()
     OpenFeature.clearHooks()
+    OpenFeature.getClient().clearHooks()
+    OpenFeature.getClient(DOMAIN).clearHooks()
   })
 
   afterEach(() => {
@@ -79,10 +81,9 @@ describe('DatadogOfflineProvider tracking', () => {
   it('does not track or create network activity by default', async () => {
     const provider = new DatadogOfflineProvider()
     provider.setConfiguration(precomputedConfiguration)
-    expect(provider.hooks).toEqual([])
 
-    await OpenFeature.setProviderAndWait(provider, { targetingKey: 'static-user', plan: 'free' })
-    OpenFeature.getClient().getStringValue('static-flag', 'default')
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+    OpenFeature.getClient(DOMAIN).getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
     expect(rumEvaluation).not.toHaveBeenCalled()
@@ -90,12 +91,17 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('uses the matching OpenFeature context for all opt-in tracking', async () => {
-    const provider = new DatadogOfflineProvider({ tracking })
-    provider.setConfiguration(precomputedConfiguration)
-    expect(provider.hooks).toHaveLength(3)
+    const trackingHooks = createDatadogTrackingHooks(tracking)
+    await trackingHooks.initialize()
 
-    await OpenFeature.setProviderAndWait(provider, { targetingKey: 'static-user', plan: 'free' })
-    OpenFeature.getClient().getStringValue('static-flag', 'default')
+    const provider = new DatadogOfflineProvider()
+    provider.setConfiguration(precomputedConfiguration)
+    expect(trackingHooks.hooks).toHaveLength(3)
+
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+    client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
     expect(rumEvaluation).toHaveBeenCalledWith('static-flag', 'static-variation')
@@ -113,12 +119,16 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('tracks rules-based evaluations with the supplied context', async () => {
-    const provider = new DatadogOfflineProvider({ tracking })
-    provider.setConfiguration(rulesConfiguration)
-    await OpenFeature.setContext({ targetingKey: 'rules-user', country: 'US' })
-    await OpenFeature.setProviderAndWait(provider)
+    const trackingHooks = createDatadogTrackingHooks(tracking)
+    await trackingHooks.initialize()
 
-    OpenFeature.getClient().getBooleanValue('test-flag', false)
+    const provider = new DatadogOfflineProvider()
+    provider.setConfiguration(rulesConfiguration)
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'rules-user', country: 'US' })
+
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+    client.getBooleanValue('test-flag', false)
     jest.advanceTimersByTime(31_000)
 
     expect(rumEvaluation).toHaveBeenCalledWith('test-flag', 'on')
@@ -141,38 +151,77 @@ describe('DatadogOfflineProvider tracking', () => {
     })
   })
 
-  it('does not emit exposures when evaluation returns a default', async () => {
-    const provider = new DatadogOfflineProvider({
-      tracking: {
+  it('supports opting out of individual tracking hooks', () => {
+    expect(
+      createDatadogTrackingHooks({
+        ...tracking,
+        enableRumFeatureFlagTracking: false,
+        enableExposureLogging: false,
+      }).hooks
+    ).toHaveLength(1)
+    expect(
+      createDatadogTrackingHooks({
+        ...tracking,
+        enableFlagEvaluationTracking: false,
+        enableExposureLogging: false,
+      }).hooks
+    ).toHaveLength(1)
+    expect(
+      createDatadogTrackingHooks({
         ...tracking,
         enableFlagEvaluationTracking: false,
         enableRumFeatureFlagTracking: false,
-      },
-    })
-    provider.setConfiguration(precomputedConfiguration)
-    await OpenFeature.setProviderAndWait(provider, { targetingKey: 'static-user', plan: 'free' })
+      }).hooks
+    ).toHaveLength(1)
+    expect(
+      createDatadogTrackingHooks({
+        ...tracking,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      }).hooks
+    ).toHaveLength(0)
+  })
 
-    OpenFeature.getClient().getStringValue('missing-flag', 'default')
+  it('does not emit exposures when evaluation returns a default', async () => {
+    const trackingHooks = createDatadogTrackingHooks({
+      ...tracking,
+      enableFlagEvaluationTracking: false,
+      enableRumFeatureFlagTracking: false,
+    })
+    await trackingHooks.initialize()
+
+    const provider = new DatadogOfflineProvider()
+    provider.setConfiguration(precomputedConfiguration)
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+    client.getStringValue('missing-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes('exposures'))).toBe(false)
   })
 
-  it('clears exposure deduplication when configuration is replaced', async () => {
-    const provider = new DatadogOfflineProvider({
-      tracking: {
-        ...tracking,
-        enableFlagEvaluationTracking: false,
-        enableRumFeatureFlagTracking: false,
-      },
+  it('clears exposure deduplication when resetExposureCache is called after replacing configuration', async () => {
+    const trackingHooks = createDatadogTrackingHooks({
+      ...tracking,
+      enableFlagEvaluationTracking: false,
+      enableRumFeatureFlagTracking: false,
     })
+    await trackingHooks.initialize()
+
+    const provider = new DatadogOfflineProvider()
     provider.setConfiguration(precomputedConfiguration)
-    await OpenFeature.setProviderAndWait(provider, { targetingKey: 'static-user', plan: 'free' })
-    const client = OpenFeature.getClient()
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
 
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
+
     provider.setConfiguration(precomputedConfiguration)
+    await trackingHooks.resetExposureCache()
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
@@ -210,22 +259,25 @@ describe('DatadogOfflineProvider tracking', () => {
       value: { storage: { local: storage } },
     })
 
-    const provider = new DatadogOfflineProvider({
-      tracking: {
-        ...tracking,
-        enableFlagEvaluationTracking: false,
-        enableRumFeatureFlagTracking: false,
-      },
+    const trackingHooks = createDatadogTrackingHooks({
+      ...tracking,
+      enableFlagEvaluationTracking: false,
+      enableRumFeatureFlagTracking: false,
     })
-    provider.setConfiguration(precomputedConfiguration)
-    const registration = OpenFeature.setProviderAndWait(provider, { targetingKey: 'static-user', plan: 'free' })
+    const trackingInitialization = trackingHooks.initialize()
     await readStarted
-
-    provider.setConfiguration(precomputedConfiguration)
+    const exposureCacheReset = trackingHooks.resetExposureCache()
     resolveInitialRead(staleEntries)
-    await registration
+    await trackingInitialization
+    await exposureCacheReset
 
-    OpenFeature.getClient().getStringValue('static-flag', 'default')
+    const provider = new DatadogOfflineProvider()
+    provider.setConfiguration(precomputedConfiguration)
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+    client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)

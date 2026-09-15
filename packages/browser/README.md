@@ -218,19 +218,31 @@ const enabled = client.getBooleanValue('new-checkout', false)
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
-To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, add a `tracking` configuration. Providing it enables all three integrations by default; each can be disabled independently. This only enables telemetry transport—flag configuration remains fully offline.
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, create Datadog tracking hooks and register them with OpenFeature. This only enables telemetry transport—flag configuration remains fully offline. All three integrations are enabled by default and can be disabled independently.
 
 ```javascript
-const provider = new DatadogOfflineProvider({
-  tracking: {
-    clientToken: 'client-token',
-    applicationId: 'application-id',
-    site: 'datadoghq.com',
-    service: 'storefront',
-    enableRumFeatureFlagTracking: false,
-  },
+import { createDatadogTrackingHooks } from '@datadog/openfeature-browser/rules-based'
+
+const tracking = createDatadogTrackingHooks({
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  service: 'storefront',
+  enableRumFeatureFlagTracking: false,
 })
+
+await tracking.initialize()
+
+const provider = new DatadogOfflineProvider()
 provider.setConfiguration(configuration)
+
+await OpenFeature.setProviderAndWait('datadog-offline', provider, context)
+const client = OpenFeature.getClient('datadog-offline')
+client.addHooks(...tracking.hooks)
+
+// Later, when replacing the active flag configuration before another evaluation:
+provider.setConfiguration(nextConfiguration)
+await tracking.resetExposureCache()
 ```
 
 ## End-user license agreement
