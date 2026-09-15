@@ -189,7 +189,7 @@ import {
 
 ### Using DatadogOfflineProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
+`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration. By default it also sends no telemetry.
 
 For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
@@ -217,6 +217,48 @@ const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains fully offline. Import only the hook factories your application uses.
+
+```javascript
+import {
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  createDatadogTrackingHooks,
+} from '@datadog/openfeature-browser/rules-based'
+
+const trackingOptions = {
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  service: 'storefront',
+}
+
+const exposureLogging = createDatadogExposureLoggingHook(trackingOptions)
+const tracking = createDatadogTrackingHooks(
+  exposureLogging,
+  createDatadogEvaluationLoggingHook(trackingOptions),
+  createDatadogRumTrackingHook()
+)
+
+await tracking.initialize()
+
+const provider = new DatadogOfflineProvider()
+provider.setConfiguration(configuration)
+
+await OpenFeature.setProviderAndWait('datadog-offline', provider, context)
+const client = OpenFeature.getClient('datadog-offline')
+client.addHooks(...tracking.hooks)
+
+// Later, when replacing the active flag configuration before another evaluation:
+provider.setConfiguration(nextConfiguration)
+await exposureLogging.resetExposureCache()
+```
+
+`tracking.initialize()` initializes resources for the included tracking hooks. `exposureLogging.resetExposureCache()` clears exposure deduplication state when the active offline configuration is replaced.
+
+To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 
 ## End-user license agreement
 
