@@ -3,8 +3,14 @@ import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser
 import { type AssignmentCache, createExposureEvent, type ExposureEventWithTimestamp } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
+import { chromeStorageIfAvailable } from '../cache/helpers'
+import { ResettableAssignmentCache } from '../cache/resettable-assignment-cache'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
+import type { DatadogTrackingHook, DatadogTrackingHooksOptions } from './tracking'
+import { runTrackingLifecycleOperation } from './tracking'
 
 /**
  * Create hook for exposure logging.
@@ -56,5 +62,25 @@ export function createExposureLoggingHook(
         })
       }
     },
+  }
+}
+
+export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHook {
+  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
+  if (!configuration) {
+    return { hooks: [] }
+  }
+
+  const exposureCache = new ResettableAssignmentCache(
+    assignmentCacheFactory({
+      chromeStorage: chromeStorageIfAvailable(),
+      storageKeySuffix: 'dd-of-browser',
+    })
+  )
+
+  return {
+    hooks: [createExposureLoggingHook(configuration, exposureCache)],
+    initialize: () => runTrackingLifecycleOperation(() => exposureCache.init()),
+    resetExposureCache: () => runTrackingLifecycleOperation(() => exposureCache.clear()),
   }
 }

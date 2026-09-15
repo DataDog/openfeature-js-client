@@ -1,23 +1,13 @@
-import type { AssignmentCache } from '@datadog/flagging-core'
-import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable } from '../cache/helpers'
-import { ResettableAssignmentCache } from '../cache/resettable-assignment-cache'
-import {
-  type FlaggingTrackingConfiguration,
-  type FlaggingTrackingInitConfiguration,
-  validateAndBuildFlaggingTrackingConfiguration,
-} from '../domain/configuration'
-import { createExposureLoggingHook } from './exposures'
-import { createFlagEvalEVPHook } from './flagEvaluations'
-import { createRumTrackingHook } from './rumIntegration'
+import type { Hook } from '@openfeature/web-sdk'
+import type { FlaggingTrackingInitConfiguration } from '../domain/configuration'
 
-export interface ProviderTracking {
-  hooks: Hook[]
-  exposureCache?: AssignmentCache
-}
+type TrackingToggleOptions =
+  | 'enableExposureLogging'
+  | 'enableFlagEvaluationTracking'
+  | 'enableRumFeatureFlagTracking'
+  | 'rum'
 
-export type DatadogTrackingHooksOptions = FlaggingTrackingInitConfiguration
+export type DatadogTrackingHooksOptions = Omit<FlaggingTrackingInitConfiguration, TrackingToggleOptions>
 
 export interface DatadogTrackingHooks {
   hooks: Hook[]
@@ -25,86 +15,35 @@ export interface DatadogTrackingHooks {
   resetExposureCache(): Promise<void>
 }
 
-export function createDatadogTrackingHooks(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
-  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
-  const tracking = createProviderTracking({
-    options,
-    configuration,
-    enabledByDefault: true,
-    serializeExposureCacheLifecycle: true,
-  })
+export interface DatadogTrackingHook {
+  hooks: Hook[]
+  initialize?(): Promise<void> | void
+  resetExposureCache?(): Promise<void> | void
+}
 
+export function createDatadogTrackingHooks(...trackingHooks: DatadogTrackingHook[]): DatadogTrackingHooks {
   return {
-    hooks: tracking.hooks,
-    initialize: () => runExposureCacheOperation(() => tracking.exposureCache?.init()),
-    resetExposureCache: () => runExposureCacheOperation(() => tracking.exposureCache?.clear()),
+    hooks: trackingHooks.reduce<Hook[]>((hooks, trackingHook) => {
+      hooks.push(...trackingHook.hooks)
+      return hooks
+    }, []),
+    initialize: async () => {
+      await Promise.all(
+        trackingHooks.map((trackingHook) => runTrackingLifecycleOperation(() => trackingHook.initialize?.()))
+      )
+    },
+    resetExposureCache: async () => {
+      await Promise.all(
+        trackingHooks.map((trackingHook) => runTrackingLifecycleOperation(() => trackingHook.resetExposureCache?.()))
+      )
+    },
   }
 }
 
-export function createProviderTracking({
-  options,
-  configuration,
-  enabledByDefault,
-  getTrackingContext,
-  serializeExposureCacheLifecycle = false,
-}: {
-  options: Partial<FlaggingTrackingInitConfiguration>
-  configuration?: FlaggingTrackingConfiguration
-  enabledByDefault: boolean
-  getTrackingContext?: (context: EvaluationContext) => EvaluationContext
-  serializeExposureCacheLifecycle?: boolean
-}): ProviderTracking {
-  const hooks: Hook[] = []
-
-  if (options.enableRumFeatureFlagTracking ?? enabledByDefault) {
-    hooks.push(createRumTrackingHook())
-  }
-
-  if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    hooks.push(createFlagEvalEVPHook(configuration))
-  }
-
-  let exposureCache: AssignmentCache | undefined
-  if ((options.enableExposureLogging ?? enabledByDefault) && configuration) {
-    exposureCache = assignmentCacheFactory({
-      chromeStorage: chromeStorageIfAvailable(),
-      storageKeySuffix: 'dd-of-browser',
-    })
-    if (serializeExposureCacheLifecycle) {
-      exposureCache = new ResettableAssignmentCache(exposureCache)
-    }
-    hooks.push(createExposureLoggingHook(configuration, exposureCache))
-  }
-
-  return {
-    hooks: getTrackingContext ? hooks.map((hook) => withTrackingContext(hook, getTrackingContext)) : hooks,
-    exposureCache,
-  }
-}
-
-function runExposureCacheOperation(operation: () => Promise<void> | void | undefined): Promise<void> {
+export function runTrackingLifecycleOperation(operation: () => Promise<void> | void | undefined): Promise<void> {
   try {
     return Promise.resolve(operation()).catch(() => {})
   } catch {
     return Promise.resolve()
-  }
-}
-
-function withTrackingContext(hook: Hook, getTrackingContext: (context: EvaluationContext) => EvaluationContext): Hook {
-  if (!hook.after) {
-    return hook
-  }
-
-  return {
-    ...hook,
-    after: (hookContext, details, hookHints) =>
-      hook.after?.(
-        {
-          ...hookContext,
-          context: getTrackingContext(hookContext.context),
-        } as HookContext,
-        details,
-        hookHints
-      ),
   }
 }

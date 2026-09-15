@@ -23,8 +23,8 @@ import {
 } from '../domain/configuration'
 import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
+import { createProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
-import { createProviderTracking } from './tracking'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead

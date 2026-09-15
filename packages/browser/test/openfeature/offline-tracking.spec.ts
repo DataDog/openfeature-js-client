@@ -7,7 +7,14 @@ import {
 } from '@datadog/flagging-core'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
-import { configurationFromString, createDatadogTrackingHooks, DatadogOfflineProvider } from '../../src/rules-based'
+import {
+  configurationFromString,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  createDatadogTrackingHooks,
+  DatadogOfflineProvider,
+} from '../../src/rules-based'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
@@ -42,6 +49,18 @@ const tracking = {
   env: 'test',
   site: INTAKE_SITE_STAGING,
   flagEvaluationTrackingInterval: 1000,
+}
+
+function createAllDatadogTrackingHooks() {
+  return createDatadogTrackingHooks(
+    createDatadogRumTrackingHook(),
+    createDatadogEvaluationLoggingHook(tracking),
+    createDatadogExposureLoggingHook(tracking)
+  )
+}
+
+function createExposureOnlyTrackingHooks() {
+  return createDatadogTrackingHooks(createDatadogExposureLoggingHook(tracking))
 }
 
 describe('DatadogOfflineProvider tracking', () => {
@@ -91,7 +110,7 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('uses the matching OpenFeature context for all opt-in tracking', async () => {
-    const trackingHooks = createDatadogTrackingHooks(tracking)
+    const trackingHooks = createAllDatadogTrackingHooks()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -119,7 +138,7 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('tracks rules-based evaluations with the supplied context', async () => {
-    const trackingHooks = createDatadogTrackingHooks(tracking)
+    const trackingHooks = createAllDatadogTrackingHooks()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -151,54 +170,25 @@ describe('DatadogOfflineProvider tracking', () => {
     })
   })
 
-  it('supports opting out of individual tracking hooks', () => {
-    expect(
-      createDatadogTrackingHooks({
-        ...tracking,
-        enableRumFeatureFlagTracking: false,
-        enableExposureLogging: false,
-      }).hooks
-    ).toHaveLength(1)
-    expect(
-      createDatadogTrackingHooks({
-        ...tracking,
-        enableFlagEvaluationTracking: false,
-        enableExposureLogging: false,
-      }).hooks
-    ).toHaveLength(1)
-    expect(
-      createDatadogTrackingHooks({
-        ...tracking,
-        enableFlagEvaluationTracking: false,
-        enableRumFeatureFlagTracking: false,
-      }).hooks
-    ).toHaveLength(1)
-    expect(
-      createDatadogTrackingHooks({
-        ...tracking,
-        enableExposureLogging: false,
-        enableFlagEvaluationTracking: false,
-        enableRumFeatureFlagTracking: false,
-      }).hooks
-    ).toHaveLength(0)
+  it('supports composing individual tracking hooks', () => {
+    expect(createDatadogTrackingHooks(createDatadogRumTrackingHook()).hooks).toHaveLength(1)
+    expect(createDatadogTrackingHooks(createDatadogEvaluationLoggingHook(tracking)).hooks).toHaveLength(1)
+    expect(createExposureOnlyTrackingHooks().hooks).toHaveLength(1)
+    expect(createDatadogTrackingHooks().hooks).toHaveLength(0)
   })
 
-  it('keeps exposure cache lifecycle methods as no-ops when exposure logging is disabled', async () => {
-    const trackingHooks = createDatadogTrackingHooks({
-      ...tracking,
-      enableExposureLogging: false,
-    })
+  it('keeps exposure cache lifecycle methods as no-ops when exposure logging is omitted', async () => {
+    const trackingHooks = createDatadogTrackingHooks(
+      createDatadogRumTrackingHook(),
+      createDatadogEvaluationLoggingHook(tracking)
+    )
 
     await expect(trackingHooks.initialize()).resolves.toBeUndefined()
     await expect(trackingHooks.resetExposureCache()).resolves.toBeUndefined()
   })
 
   it('does not emit exposures when evaluation returns a default', async () => {
-    const trackingHooks = createDatadogTrackingHooks({
-      ...tracking,
-      enableFlagEvaluationTracking: false,
-      enableRumFeatureFlagTracking: false,
-    })
+    const trackingHooks = createExposureOnlyTrackingHooks()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -214,11 +204,7 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('clears exposure deduplication when resetExposureCache is called after replacing configuration', async () => {
-    const trackingHooks = createDatadogTrackingHooks({
-      ...tracking,
-      enableFlagEvaluationTracking: false,
-      enableRumFeatureFlagTracking: false,
-    })
+    const trackingHooks = createExposureOnlyTrackingHooks()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -269,11 +255,7 @@ describe('DatadogOfflineProvider tracking', () => {
       value: { storage: { local: storage } },
     })
 
-    const trackingHooks = createDatadogTrackingHooks({
-      ...tracking,
-      enableFlagEvaluationTracking: false,
-      enableRumFeatureFlagTracking: false,
-    })
+    const trackingHooks = createExposureOnlyTrackingHooks()
     const trackingInitialization = trackingHooks.initialize()
     await readStarted
     const exposureCacheReset = trackingHooks.resetExposureCache()

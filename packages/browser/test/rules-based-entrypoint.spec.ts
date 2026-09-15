@@ -1,4 +1,7 @@
 import {
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
   createDatadogTrackingHooks,
   DatadogOfflineProvider,
   DatadogProvider,
@@ -10,6 +13,9 @@ describe('rules-based entry point', () => {
     expect(DatadogProvider).toBeDefined()
     expect(DatadogOfflineProvider).toBeDefined()
     expect(createDatadogTrackingHooks).toBeDefined()
+    expect(createDatadogExposureLoggingHook).toBeDefined()
+    expect(createDatadogEvaluationLoggingHook).toBeDefined()
+    expect(createDatadogRumTrackingHook).toBeDefined()
     expect(fetchRulesConfiguration).toBeDefined()
     expect((globalThis as { DD_FLAGGING?: { OfflineProvider?: unknown } }).DD_FLAGGING?.OfflineProvider).toBe(
       DatadogOfflineProvider

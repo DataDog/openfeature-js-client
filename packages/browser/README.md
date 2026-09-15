@@ -218,18 +218,28 @@ const enabled = client.getBooleanValue('new-checkout', false)
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
-To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, create Datadog tracking hooks and register them with OpenFeature. This only enables telemetry transport—flag configuration remains fully offline. All three integrations are enabled by default and can be disabled independently.
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains fully offline. Import only the hook factories your application uses.
 
 ```javascript
-import { createDatadogTrackingHooks } from '@datadog/openfeature-browser/rules-based'
+import {
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  createDatadogTrackingHooks,
+} from '@datadog/openfeature-browser/rules-based'
 
-const tracking = createDatadogTrackingHooks({
+const trackingOptions = {
   clientToken: 'client-token',
   applicationId: 'application-id',
   site: 'datadoghq.com',
   service: 'storefront',
-  enableRumFeatureFlagTracking: false,
-})
+}
+
+const tracking = createDatadogTrackingHooks(
+  createDatadogExposureLoggingHook(trackingOptions),
+  createDatadogEvaluationLoggingHook(trackingOptions),
+  createDatadogRumTrackingHook()
+)
 
 await tracking.initialize()
 
@@ -244,6 +254,10 @@ client.addHooks(...tracking.hooks)
 provider.setConfiguration(nextConfiguration)
 await tracking.resetExposureCache()
 ```
+
+`initialize()` initializes exposure deduplication when `createDatadogExposureLoggingHook()` is included. `resetExposureCache()` clears that deduplication state when the active offline configuration is replaced. If no exposure hook is included, both methods resolve successfully as no-ops.
+
+To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 
 ## End-user license agreement
 
