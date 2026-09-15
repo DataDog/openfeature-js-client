@@ -183,6 +183,16 @@ describe('DatadogOfflineProvider tracking', () => {
     ).toHaveLength(0)
   })
 
+  it('keeps exposure cache lifecycle methods as no-ops when exposure logging is disabled', async () => {
+    const trackingHooks = createDatadogTrackingHooks({
+      ...tracking,
+      enableExposureLogging: false,
+    })
+
+    await expect(trackingHooks.initialize()).resolves.toBeUndefined()
+    await expect(trackingHooks.resetExposureCache()).resolves.toBeUndefined()
+  })
+
   it('does not emit exposures when evaluation returns a default', async () => {
     const trackingHooks = createDatadogTrackingHooks({
       ...tracking,
