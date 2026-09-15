@@ -51,7 +51,8 @@ function protobufCondition(
   kind: number,
   shaHashes: string[],
   membershipIndexes: number[],
-  attributeIndex = 0
+  attributeIndex = 0,
+  negateStringComparison = false
 ): number[] {
   if (kind === 2) return protobufMessage(2, [])
   if (kind >= 3 && kind <= 6) {
@@ -98,6 +99,7 @@ function protobufCondition(
       ...protobufVarint(1, attributeIndex),
       ...protobufVarint(2, kind - 20),
       ...protobufVarint(3, 2),
+      ...(negateStringComparison ? protobufVarint(4, 1) : []),
     ])
   }
   return protobufMessage(10, [
@@ -106,6 +108,7 @@ function protobufCondition(
     ...protobufVarint(3, kind - 23),
     ...protobufVarint(4, 2),
     ...protobufBytes(5, [...Buffer.from(shaHashes[0], 'hex')]),
+    ...(negateStringComparison ? protobufVarint(6, 1) : []),
   ])
 }
 
@@ -176,6 +179,7 @@ type RulesResponseOptions = {
   version?: string
   membershipIndexes?: number[]
   shaHashes?: string[]
+  negateStringComparison?: boolean
 }
 
 function rulesResponse(options: RulesResponseOptions = {}): string {
@@ -185,7 +189,8 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     conditionKind,
     shaHashes,
     options.membershipIndexes ?? [2],
-    options.conditionAttributeIndex
+    options.conditionAttributeIndex,
+    options.negateStringComparison
   )
   const strings = options.strings ?? ['on', 'off', 'US']
   const attributePath = options.attributePath ?? [options.attributeName ?? 'country']
@@ -431,6 +436,50 @@ describe('flags configuration protobuf decoder', () => {
     expect(
       evaluateBoolean({ conditionKind }, { targetingKey: 'user', ...(country === undefined ? {} : { country }) }).value
     ).toBe(true)
+  })
+
+  it.each([
+    [21, 'stringComparison'],
+    [24, 'sha256StringComparison'],
+  ] as const)('decodes negate for condition kind %s', (conditionKind, conditionCase) => {
+    expect(decodeRules({ conditionKind, negateStringComparison: true }).conditions[0].kind).toMatchObject({
+      case: conditionCase,
+      value: { negate: true },
+    })
+  })
+
+  it.each([
+    [21, 'USA', false, 'DEFAULT'],
+    [21, 'CA', true, 'TARGETING_MATCH'],
+    [22, 'CAUS', false, 'DEFAULT'],
+    [22, 'USCA', true, 'TARGETING_MATCH'],
+    [23, 'xUSy', false, 'DEFAULT'],
+    [23, 'CA', true, 'TARGETING_MATCH'],
+    [24, 'USA', false, 'DEFAULT'],
+    [24, 'CA', true, 'TARGETING_MATCH'],
+    [25, 'CAUS', false, 'DEFAULT'],
+    [25, 'USCA', true, 'TARGETING_MATCH'],
+    [24, 'U', true, 'TARGETING_MATCH'],
+    [24, '😀US', true, 'TARGETING_MATCH'],
+    [25, 'US😀', true, 'TARGETING_MATCH'],
+  ] as const)('negates string comparison condition kind %s for %s', (conditionKind, country, value, reason) => {
+    expect(
+      evaluateBoolean({ conditionKind, negateStringComparison: true }, { targetingKey: 'user', country })
+    ).toMatchObject({ value, reason })
+  })
+
+  it.each([
+    [21, { targetingKey: 'user' }],
+    [21, { targetingKey: 'user', country: ['US'] }],
+    [24, { targetingKey: 'user' }],
+    [24, { targetingKey: 'user', country: ['US'] }],
+  ] as const)('does not negate an unavailable context value for condition kind %s', (conditionKind, context) => {
+    expect(
+      evaluateBoolean({ conditionKind, negateStringComparison: true }, context as EvaluationContext)
+    ).toMatchObject({
+      value: false,
+      reason: 'DEFAULT',
+    })
   })
 
   it.each([
