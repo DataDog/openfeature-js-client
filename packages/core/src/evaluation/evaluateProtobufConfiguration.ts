@@ -239,18 +239,21 @@ function matchesLeafCondition(
     if (attributeValue === undefined) return false
     const expected = atIndex(configuration.strings, kind.value.stringIndex, 'condition string')
     const comparator = kind.value.comparator as number
-    if (comparator === UFC_STRING_COMPARATOR.STARTS_WITH) return attributeValue.startsWith(expected)
-    if (comparator === UFC_STRING_COMPARATOR.ENDS_WITH) return attributeValue.endsWith(expected)
-    if (comparator === UFC_STRING_COMPARATOR.CONTAINS) return attributeValue.includes(expected)
-    throw new FlagConfigurationError('Unsupported string comparator')
+    let matches: boolean
+    if (comparator === UFC_STRING_COMPARATOR.STARTS_WITH) matches = attributeValue.startsWith(expected)
+    else if (comparator === UFC_STRING_COMPARATOR.ENDS_WITH) matches = attributeValue.endsWith(expected)
+    else if (comparator === UFC_STRING_COMPARATOR.CONTAINS) matches = attributeValue.includes(expected)
+    else throw new FlagConfigurationError('Unsupported string comparator')
+    return kind.value.negate ? !matches : matches
   }
   if (kind.case === 'sha256StringComparison') {
     const attributeValue = coerceToString(value)
     if (attributeValue === undefined) return false
     const encoded = encodeUtf8(attributeValue)
     const extracted = extractUtf8Bytes(encoded, kind.value.length, kind.value.comparator)
-    if (!extracted) return false
-    return compareBytes(saltedSha256(kind.value.salt, extracted), kind.value.sha256) === 0
+    const matches =
+      extracted !== undefined && compareBytes(saltedSha256(kind.value.salt, extracted), kind.value.sha256) === 0
+    return kind.value.negate ? !matches : matches
   }
   throw new FlagConfigurationError('Unsupported condition')
 }
