@@ -147,7 +147,7 @@ If the RUM user changes after provider initialization, call
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
 
-## Offline configuration parsing
+## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
 the Protobuf-ES dependency. Rules-based entries are ignored:
