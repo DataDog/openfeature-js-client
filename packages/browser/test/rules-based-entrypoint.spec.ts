@@ -3,7 +3,7 @@ import {
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
   createDatadogTrackingHooks,
-  DatadogOfflineProvider,
+  DatadogCoreProvider,
   DatadogProvider,
   fetchRulesConfiguration,
 } from '../src/rules-based'
@@ -11,14 +11,14 @@ import {
 describe('rules-based entry point', () => {
   it('exports and registers rules-based browser APIs', () => {
     expect(DatadogProvider).toBeDefined()
-    expect(DatadogOfflineProvider).toBeDefined()
+    expect(DatadogCoreProvider).toBeDefined()
     expect(createDatadogTrackingHooks).toBeDefined()
     expect(createDatadogExposureLoggingHook).toBeDefined()
     expect(createDatadogEvaluationLoggingHook).toBeDefined()
     expect(createDatadogRumTrackingHook).toBeDefined()
     expect(fetchRulesConfiguration).toBeDefined()
-    expect((globalThis as { DD_FLAGGING?: { OfflineProvider?: unknown } }).DD_FLAGGING?.OfflineProvider).toBe(
-      DatadogOfflineProvider
+    expect((globalThis as { DD_FLAGGING?: { CoreProvider?: unknown } }).DD_FLAGGING?.CoreProvider).toBe(
+      DatadogCoreProvider
     )
   })
 })

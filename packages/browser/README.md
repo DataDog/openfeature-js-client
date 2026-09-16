@@ -187,22 +187,22 @@ import {
 } from '@datadog/openfeature-browser/rules-based'
 ```
 
-### Using DatadogOfflineProvider with portable configuration
+### Using DatadogCoreProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration. By default it also sends no telemetry.
+`DatadogCoreProvider` is a minimal evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or local init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration, and the provider does not install tracking hooks or send telemetry.
 
-For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
+For static initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
 ```javascript
 import {
   configurationFromString,
   getPrecomputedContext,
-  DatadogOfflineProvider,
+  DatadogCoreProvider,
 } from '@datadog/openfeature-browser/rules-based'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
-const provider = new DatadogOfflineProvider()
+const provider = new DatadogCoreProvider()
 provider.setConfiguration(configuration)
 const context = getPrecomputedContext(configuration)
 
@@ -218,10 +218,11 @@ const enabled = client.getBooleanValue('new-checkout', false)
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
-To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains fully offline. Import only the hook factories your application uses.
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains application-managed. Import only the hook factories your application uses.
 
 ```javascript
 import {
+  DatadogCoreProvider,
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
@@ -243,18 +244,18 @@ const tracking = createDatadogTrackingHooks(
 
 await tracking.initialize()
 
-const provider = new DatadogOfflineProvider()
+const provider = new DatadogCoreProvider()
 provider.setConfiguration(configuration)
 
-await OpenFeature.setProviderAndWait('datadog-offline', provider, context)
-const client = OpenFeature.getClient('datadog-offline')
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
 client.addHooks(...tracking.hooks)
 
 // Later, when replacing the active flag configuration before another evaluation:
 provider.setConfiguration(nextConfiguration)
 ```
 
-`tracking.initialize()` initializes resources for the included tracking hooks. Exposure deduplication is tied to the active `DatadogOfflineProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
+`tracking.initialize()` initializes resources for the included tracking hooks. Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 

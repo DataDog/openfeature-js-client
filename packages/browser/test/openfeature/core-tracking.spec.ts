@@ -13,12 +13,12 @@ import {
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
   createDatadogTrackingHooks,
-  DatadogOfflineProvider,
+  DatadogCoreProvider,
 } from '../../src/rules-based'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
-const DOMAIN = 'datadog-offline-tracking'
+const DOMAIN = 'datadog-core-tracking'
 
 const precomputedConfiguration: FlagsConfiguration = {
   precomputed: {
@@ -67,7 +67,7 @@ function createExposureOnlyTracking() {
   }
 }
 
-describe('DatadogOfflineProvider tracking', () => {
+describe('DatadogCoreProvider tracking', () => {
   const rumEvaluation = jest.fn()
   let fetchMock: jest.Mock
   let originalFetch: typeof global.fetch
@@ -102,7 +102,7 @@ describe('DatadogOfflineProvider tracking', () => {
   })
 
   it('does not track or create network activity by default', async () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
 
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
@@ -117,7 +117,7 @@ describe('DatadogOfflineProvider tracking', () => {
     const trackingHooks = createAllDatadogTrackingHooks()
     await trackingHooks.initialize()
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     expect(trackingHooks.hooks).toHaveLength(3)
 
@@ -145,7 +145,7 @@ describe('DatadogOfflineProvider tracking', () => {
     const trackingHooks = createAllDatadogTrackingHooks()
     await trackingHooks.initialize()
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(rulesConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'rules-user', country: 'US' })
 
@@ -194,7 +194,7 @@ describe('DatadogOfflineProvider tracking', () => {
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
 
@@ -206,11 +206,11 @@ describe('DatadogOfflineProvider tracking', () => {
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes('exposures'))).toBe(false)
   })
 
-  it('emits exposures again when the offline provider configuration identity changes', async () => {
+  it('emits exposures again when the core provider configuration identity changes', async () => {
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
     const client = OpenFeature.getClient(DOMAIN)
@@ -226,11 +226,11 @@ describe('DatadogOfflineProvider tracking', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
   })
 
-  it('keeps exposure deduplication when the offline provider configuration identity is unchanged', async () => {
+  it('keeps exposure deduplication when the core provider configuration identity is unchanged', async () => {
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
     const client = OpenFeature.getClient(DOMAIN)
@@ -246,7 +246,7 @@ describe('DatadogOfflineProvider tracking', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
   })
 
-  it('does not let legacy exposure cache entries suppress offline provider exposures', async () => {
+  it('does not let legacy exposure cache entries suppress core provider exposures', async () => {
     const staleExposure: ExposureEvent = {
       allocation: { key: 'static-allocation' },
       flag: { key: 'static-flag' },
@@ -283,7 +283,7 @@ describe('DatadogOfflineProvider tracking', () => {
     resolveInitialRead(staleEntries)
     await trackingInitialization
 
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
 

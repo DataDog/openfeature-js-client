@@ -1,8 +1,8 @@
 import type { EvaluationDetails, FlagValue, ResolutionDetails } from '@openfeature/web-sdk'
 
-const OFFLINE_CONFIGURATION_ID_METADATA_KEY = '__dd_offline_configuration_id'
+const CORE_CONFIGURATION_ID_METADATA_KEY = '__dd_core_configuration_id'
 
-export function withOfflineConfigurationId<T extends FlagValue>(
+export function withCoreConfigurationId<T extends FlagValue>(
   details: ResolutionDetails<T>,
   configurationId: string | undefined
 ): ResolutionDetails<T> {
@@ -20,12 +20,12 @@ export function withOfflineConfigurationId<T extends FlagValue>(
     ...details,
     flagMetadata: {
       ...details.flagMetadata,
-      [OFFLINE_CONFIGURATION_ID_METADATA_KEY]: configurationId,
+      [CORE_CONFIGURATION_ID_METADATA_KEY]: configurationId,
     },
   }
 }
 
-export function getOfflineConfigurationId(details: EvaluationDetails<FlagValue>): string | undefined {
-  const configurationId = details.flagMetadata?.[OFFLINE_CONFIGURATION_ID_METADATA_KEY]
+export function getCoreConfigurationId(details: EvaluationDetails<FlagValue>): string | undefined {
+  const configurationId = details.flagMetadata?.[CORE_CONFIGURATION_ID_METADATA_KEY]
   return typeof configurationId === 'string' ? configurationId : undefined
 }

@@ -21,8 +21,8 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
+import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
 
@@ -51,7 +51,7 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider extends DatadogCoreProvider {
+export class DatadogProvider extends DatadogProviderBase {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }

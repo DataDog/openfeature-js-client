@@ -13,7 +13,7 @@ import { chromeStorageIfAvailable } from '../cache/helpers'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
-import { getOfflineConfigurationId } from './offline-provider-metadata'
+import { getCoreConfigurationId } from './core-provider-metadata'
 import type { DatadogTrackingHook, DatadogTrackingHooksOptions } from './tracking'
 import { runTrackingLifecycleOperation } from './tracking'
 
@@ -22,7 +22,7 @@ export interface DatadogExposureLoggingHook extends DatadogTrackingHook {
 }
 
 type ExposureCacheEntry = ExposureEvent & {
-  __dd_offline_configuration_id?: string
+  __dd_core_configuration_id?: string
 }
 
 /**
@@ -103,11 +103,11 @@ function getExposureCacheEntry(
   exposureEvent: ExposureEvent,
   details: EvaluationDetails<FlagValue>
 ): ExposureCacheEntry {
-  const offlineConfigurationId = getOfflineConfigurationId(details)
-  return offlineConfigurationId === undefined
+  const coreConfigurationId = getCoreConfigurationId(details)
+  return coreConfigurationId === undefined
     ? exposureEvent
     : {
         ...exposureEvent,
-        __dd_offline_configuration_id: offlineConfigurationId,
+        __dd_core_configuration_id: coreConfigurationId,
       }
 }
