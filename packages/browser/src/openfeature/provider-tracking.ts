@@ -2,7 +2,6 @@ import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
-import { ResettableAssignmentCache } from '../cache/resettable-assignment-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
@@ -18,13 +17,11 @@ export function createProviderTracking({
   configuration,
   enabledByDefault,
   getTrackingContext,
-  serializeExposureCacheLifecycle = false,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
-  serializeExposureCacheLifecycle?: boolean
 }): ProviderTracking {
   const hooks: Hook[] = []
 
@@ -42,9 +39,6 @@ export function createProviderTracking({
       chromeStorage: chromeStorageIfAvailable(),
       storageKeySuffix: 'dd-of-browser',
     })
-    if (serializeExposureCacheLifecycle) {
-      exposureCache = new ResettableAssignmentCache(exposureCache)
-    }
     hooks.push(createExposureLoggingHook(configuration, exposureCache))
   }
 
