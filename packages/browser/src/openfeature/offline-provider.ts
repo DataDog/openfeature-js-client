@@ -1,5 +1,6 @@
 import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError } from '@datadog/flagging-core'
+import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError, getMD5Hash } from '@datadog/flagging-core'
+import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
   EvaluationContext,
   FlagValueType,
@@ -10,6 +11,7 @@ import type {
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
+import { withOfflineConfigurationId } from './offline-provider-metadata'
 
 export class DatadogOfflineProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
@@ -17,6 +19,8 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   }
 
   private flagsConfiguration: FlagsConfiguration | undefined
+  private flagsConfigurationId: string | undefined
+  private fallbackConfigurationSequence = 0
   private context: EvaluationContext | undefined
 
   constructor() {
@@ -30,6 +34,7 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
   setConfiguration(configuration: FlagsConfiguration): void {
     const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
     this.flagsConfiguration = configuration
+    this.flagsConfigurationId = this.computeConfigurationId(configuration)
 
     if (this.context === undefined) return
 
@@ -67,11 +72,23 @@ export class DatadogOfflineProvider extends DatadogCoreProvider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
+    return withOfflineConfigurationId(
+      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+      this.flagsConfigurationId
+    )
   }
 
   private canEvaluateCurrentContext(): boolean {
     return this.context !== undefined && !getFlagsConfigurationError(this.flagsConfiguration, this.context)
+  }
+
+  private computeConfigurationId(configuration: FlagsConfiguration): string {
+    try {
+      return getMD5Hash(configurationToString(configuration))
+    } catch {
+      this.fallbackConfigurationSequence += 1
+      return `offline-configuration-${this.fallbackConfigurationSequence}`
+    }
   }
 }
 

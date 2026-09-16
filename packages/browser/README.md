@@ -235,9 +235,8 @@ const trackingOptions = {
   service: 'storefront',
 }
 
-const exposureLogging = createDatadogExposureLoggingHook(trackingOptions)
 const tracking = createDatadogTrackingHooks(
-  exposureLogging,
+  createDatadogExposureLoggingHook(trackingOptions),
   createDatadogEvaluationLoggingHook(trackingOptions),
   createDatadogRumTrackingHook()
 )
@@ -253,10 +252,9 @@ client.addHooks(...tracking.hooks)
 
 // Later, when replacing the active flag configuration before another evaluation:
 provider.setConfiguration(nextConfiguration)
-await exposureLogging.resetExposureCache()
 ```
 
-`tracking.initialize()` initializes resources for the included tracking hooks. `exposureLogging.resetExposureCache()` clears exposure deduplication state when the active offline configuration is replaced.
+`tracking.initialize()` initializes resources for the included tracking hooks. Exposure deduplication is tied to the active `DatadogOfflineProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 

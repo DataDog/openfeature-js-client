@@ -63,7 +63,6 @@ function createAllDatadogTrackingHooks() {
 function createExposureOnlyTracking() {
   const exposureLogging = createDatadogExposureLoggingHook(tracking)
   return {
-    exposureLogging,
     trackingHooks: createDatadogTrackingHooks(exposureLogging),
   }
 }
@@ -207,8 +206,8 @@ describe('DatadogOfflineProvider tracking', () => {
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes('exposures'))).toBe(false)
   })
 
-  it('clears exposure deduplication when resetExposureCache is called after replacing configuration', async () => {
-    const { exposureLogging, trackingHooks } = createExposureOnlyTracking()
+  it('emits exposures again when the offline provider configuration identity changes', async () => {
+    const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
     const provider = new DatadogOfflineProvider()
@@ -220,15 +219,34 @@ describe('DatadogOfflineProvider tracking', () => {
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
-    provider.setConfiguration(precomputedConfiguration)
-    await exposureLogging.resetExposureCache()
+    provider.setConfiguration(precomputedConfigurationWithCreatedAt('2026-07-07T00:00:00.000Z'))
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
   })
 
-  it('does not rehydrate stale exposures when configuration is replaced during cache initialization', async () => {
+  it('keeps exposure deduplication when the offline provider configuration identity is unchanged', async () => {
+    const { trackingHooks } = createExposureOnlyTracking()
+    await trackingHooks.initialize()
+
+    const provider = new DatadogOfflineProvider()
+    provider.setConfiguration(precomputedConfiguration)
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+
+    client.getStringValue('static-flag', 'default')
+    jest.advanceTimersByTime(31_000)
+
+    provider.setConfiguration(precomputedConfigurationWithCreatedAt('2026-07-06T23:01:56.822Z'))
+    client.getStringValue('static-flag', 'default')
+    jest.advanceTimersByTime(31_000)
+
+    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
+  })
+
+  it('does not let legacy exposure cache entries suppress offline provider exposures', async () => {
     const staleExposure: ExposureEvent = {
       allocation: { key: 'static-allocation' },
       flag: { key: 'static-flag' },
@@ -259,13 +277,11 @@ describe('DatadogOfflineProvider tracking', () => {
       value: { storage: { local: storage } },
     })
 
-    const { exposureLogging, trackingHooks } = createExposureOnlyTracking()
+    const { trackingHooks } = createExposureOnlyTracking()
     const trackingInitialization = trackingHooks.initialize()
     await readStarted
-    const exposureCacheReset = exposureLogging.resetExposureCache()
     resolveInitialRead(staleEntries)
     await trackingInitialization
-    await exposureCacheReset
 
     const provider = new DatadogOfflineProvider()
     provider.setConfiguration(precomputedConfiguration)
@@ -278,6 +294,23 @@ describe('DatadogOfflineProvider tracking', () => {
 
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
   })
+
+  function precomputedConfigurationWithCreatedAt(createdAt: string): FlagsConfiguration {
+    const precomputed = precomputedConfiguration.precomputed!
+    return {
+      precomputed: {
+        ...precomputed,
+        response: {
+          data: {
+            attributes: {
+              ...precomputed.response.data.attributes,
+              createdAt,
+            },
+          },
+        },
+      },
+    }
+  }
 
   function findRequest(endpoint: string): RequestInit {
     const call = fetchMock.mock.calls.find(([url]) => url.toString().includes(endpoint))

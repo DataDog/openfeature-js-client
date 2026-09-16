@@ -13,5 +13,4 @@ const tracking = createDatadogTrackingHooks(
   createDatadogRumTrackingHook()
 )
 
-void exposureLogging.resetExposureCache()
 reportTrackingScenario('tracking-all', tracking)
