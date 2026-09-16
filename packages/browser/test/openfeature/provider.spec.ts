@@ -3,6 +3,7 @@ import {
   FeatureFlagsTelemetryErrorCode,
   FeatureFlagsTelemetryEventType,
   FeatureFlagsTelemetryProviderStatus,
+  display,
   startFeatureFlagsTelemetry,
 } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
@@ -55,6 +56,10 @@ describe('DatadogProvider', () => {
 
   beforeEach(() => {
     jest.mocked(startFeatureFlagsTelemetry).mockClear()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
   describe('configuration validation', () => {
@@ -118,6 +123,7 @@ describe('DatadogProvider', () => {
         env: 'test',
         site: INTAKE_SITE_STAGING,
         enableFlagEvaluationTracking: false,
+        debugMode: true,
       })
       // Should have 2 hooks: exposure logging + auto RUM tracking
       expect(providerWithoutEvalTracking.hooks).toHaveLength(2)
@@ -731,11 +737,37 @@ describe('DatadogProvider', () => {
   })
 
   describe('lifecycle telemetry', () => {
+    let debugLog: jest.SpiedFunction<typeof display.log>
+    let debugError: jest.SpiedFunction<typeof display.error>
+
+    beforeEach(() => {
+      debugLog = jest.spyOn(display, 'log').mockImplementation(() => undefined)
+      debugError = jest.spyOn(display, 'error').mockImplementation(() => undefined)
+    })
+
+    it('does not start lifecycle telemetry or write diagnostics by default', async () => {
+      const testProvider = new DatadogProvider({
+        ...options,
+        flagConfigurationFetch: jest.fn().mockResolvedValue({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/vnd.api+json' }),
+          json: async () => precomputedResponse,
+        }),
+      })
+
+      await expect(testProvider.initialize()).resolves.toBeUndefined()
+
+      expect(startFeatureFlagsTelemetry).not.toHaveBeenCalled()
+      expect(debugLog).not.toHaveBeenCalled()
+      expect(debugError).not.toHaveBeenCalled()
+    })
+
     it('reports successful initialization, remote configuration, readiness, and the first evaluation', async () => {
       const applicationId = '565ec7ef-a5ab-46ec-9518-adf8a0cede23'
       const testProvider = new DatadogProvider({
         ...options,
         applicationId,
+        debugMode: true,
         flagConfigurationFetch: jest.fn().mockResolvedValue({
           ok: true,
           headers: new Headers({ 'content-type': 'application/vnd.api+json' }),
@@ -759,7 +791,6 @@ describe('DatadogProvider', () => {
       expect(telemetry.add).toHaveBeenNthCalledWith(2, {
         eventType: FeatureFlagsTelemetryEventType.CONFIGURATION_RECEIVED,
         configurationSource: FeatureFlagsTelemetryConfigurationSource.REMOTE,
-        configurationVersion: String(precomputedResponse.data.attributes.createdAt),
         configurationFetchedAt: expect.any(Number),
       })
       expect(telemetry.add).toHaveBeenNthCalledWith(3, {
@@ -783,11 +814,14 @@ describe('DatadogProvider', () => {
       expect(telemetry.add).toHaveBeenNthCalledWith(4, {
         eventType: FeatureFlagsTelemetryEventType.FIRST_EVALUATION,
       })
+      expect(debugLog).toHaveBeenCalledWith(expect.stringContaining('"event_type":"flag_evaluated"'))
+      expect(debugLog).toHaveBeenCalledWith(expect.stringContaining('"details":'))
     })
 
     it('reports a failed network fetch before successfully falling back to initial assignments', async () => {
       const testProvider = new DatadogProvider({
         ...options,
+        debugMode: true,
         flagConfigurationFetch: jest.fn().mockRejectedValue(new TypeError('Failed to fetch')),
         initialFlagsConfiguration: {
           precomputed: {
@@ -812,7 +846,6 @@ describe('DatadogProvider', () => {
       expect(telemetry.add).toHaveBeenNthCalledWith(3, {
         eventType: FeatureFlagsTelemetryEventType.CONFIGURATION_RECEIVED,
         configurationSource: FeatureFlagsTelemetryConfigurationSource.CACHE,
-        configurationVersion: String(precomputedResponse.data.attributes.createdAt),
         configurationFetchedAt: 1,
       })
       expect(telemetry.add).toHaveBeenNthCalledWith(4, {
@@ -825,6 +858,7 @@ describe('DatadogProvider', () => {
     it('reports a failed network fetch when no cached assignments are available', async () => {
       const testProvider = new DatadogProvider({
         ...options,
+        debugMode: true,
         flagConfigurationFetch: jest.fn().mockRejectedValue(new TypeError('Failed to fetch')),
       })
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
@@ -859,7 +893,11 @@ describe('DatadogProvider', () => {
           })
         })
         .mockResolvedValueOnce(successfulResponse)
-      const testProvider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchConfiguration })
+      const testProvider = new DatadogProvider({
+        ...options,
+        debugMode: true,
+        flagConfigurationFetch: fetchConfiguration,
+      })
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
 
       const initialization = testProvider.initialize({ targetingKey: 'first' })
@@ -876,6 +914,7 @@ describe('DatadogProvider', () => {
       jest.useFakeTimers()
       const testProvider = new DatadogProvider({
         ...options,
+        debugMode: true,
         flagConfigurationRequestTimeoutMs: 50,
         flagConfigurationFetch: jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
           return new Promise<Response>((_resolve, reject) => {
@@ -914,7 +953,7 @@ describe('DatadogProvider', () => {
           fetchSignal?.addEventListener('abort', () => reject(fetchSignal?.reason), { once: true })
         })
       })
-      const testProvider = new DatadogProvider({ ...options, flagConfigurationFetch })
+      const testProvider = new DatadogProvider({ ...options, debugMode: true, flagConfigurationFetch })
       const telemetry = jest.mocked(startFeatureFlagsTelemetry).mock.results[0].value
       const pendingInitialization = testProvider.initialize()
 

@@ -45,6 +45,9 @@ const provider = new DatadogProvider({
   version: '1.0.0', // Application version
   applicationId: 'app-id', // Your application ID for RUM attribution
 
+  // Temporarily enable local diagnostics and lifecycle telemetry while troubleshooting
+  debugMode: true,
+
   // Enable exposure logging
   enableExposureLogging: true,
 
@@ -58,6 +61,10 @@ const provider = new DatadogProvider({
   flagConfigurationRequestTimeoutMs: 30_000,
 })
 ```
+
+`debugMode` is disabled by default. When enabled, the provider writes detailed initialization, configuration-fetch,
+provider-state, and evaluation results to the browser developer console. It also sends low-volume, customer-safe
+lifecycle telemetry to Datadog. Disable it after onboarding or troubleshooting is complete.
 
 Flag configuration requests time out after 30 seconds by default. The custom Fetch implementation applies only to
 those requests. Exposure and flag-evaluation intake requests use their existing transports. It receives the

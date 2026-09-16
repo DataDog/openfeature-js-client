@@ -1,3 +1,4 @@
+import { display } from '@datadog/browser-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
@@ -28,6 +29,7 @@ describe('createFlagsConfigurationFetcher', () => {
 
   afterEach(() => {
     global.fetch = originalFetch
+    jest.restoreAllMocks()
     jest.clearAllMocks()
   })
 
@@ -43,6 +45,34 @@ describe('createFlagsConfigurationFetcher', () => {
     numericAttr: 42,
     booleanAttr: true,
   }
+
+  describe('debug diagnostics', () => {
+    it('logs request failures locally without logging credentials', async () => {
+      const log = jest.spyOn(display, 'log').mockImplementation(() => undefined)
+      const error = jest.spyOn(display, 'error').mockImplementation(() => undefined)
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: { get: jest.fn(() => 'application/json') },
+        json: jest.fn().mockResolvedValue({ errors: [{ detail: 'Invalid client token' }] }),
+      })
+      const fetcher = createFlagsConfigurationFetcher({
+        ...baseConfig,
+        debugMode: true,
+        flaggingProxy: 'https://proxy.example.com/precomputed?secret=query-value',
+      })
+
+      await expect(fetcher(mockContext)).rejects.toThrow('Invalid client token')
+
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('"event_type":"configuration_fetch_started"'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('"error_code":"authentication_failed"'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('"http_status_code":401'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('Invalid client token'))
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining('test-token'))
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining('query-value'))
+    })
+  })
 
   describe('URL construction with flaggingProxy', () => {
     describe('when flaggingProxy has protocol', () => {

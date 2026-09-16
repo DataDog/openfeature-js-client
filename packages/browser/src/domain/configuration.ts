@@ -11,6 +11,13 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
  */
 export interface FlaggingInitConfiguration extends InitConfiguration {
   /**
+   * Enables local diagnostic logging and lifecycle telemetry for onboarding and troubleshooting.
+   * Rich diagnostic details are written only to the browser console. Lifecycle telemetry contains
+   * a bounded set of customer-safe fields. Disabled by default.
+   */
+  debugMode?: boolean
+
+  /**
    * The RUM application ID.
    */
   applicationId?: string
@@ -90,6 +97,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
 
 export interface FlaggingConfiguration extends Configuration {
   applicationId?: string
+  debugMode: boolean
   flagEvaluationTrackingInterval: number
   fetchFlagsConfiguration: (
     context: EvaluationContext,
@@ -107,6 +115,7 @@ export function validateAndBuildFlaggingConfiguration(
 
   return {
     applicationId: initConfiguration.applicationId,
+    debugMode: initConfiguration.debugMode ?? false,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
     fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,

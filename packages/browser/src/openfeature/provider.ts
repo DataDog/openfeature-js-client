@@ -31,6 +31,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { DatadogCoreProvider } from './core-provider'
+import { logFeatureFlagsDebug, logFeatureFlagsDebugError } from './debug'
 import { toProviderErrorEvent } from './error-event'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
@@ -82,6 +83,8 @@ export class DatadogProvider extends DatadogCoreProvider {
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
 
+  private readonly debugMode: boolean
+
   /** Low-volume lifecycle events sent through the dedicated flagtelemetry track. */
   private readonly lifecycleTelemetry?: FeatureFlagsTelemetry
   private readonly stopTrackingTasks: Array<() => void> = []
@@ -128,9 +131,10 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    this.debugMode = options.debugMode ?? false
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     this.configuration = validateAndBuildFlaggingConfiguration(options)
-    if (this.configuration) {
+    if (this.configuration && this.debugMode) {
       this.lifecycleTelemetry = startFeatureFlagsTelemetry(this.configuration, {
         applicationId: options.applicationId,
         environmentName: options.env || undefined,
@@ -181,6 +185,10 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
     const startedAt = Date.now()
+    logFeatureFlagsDebug(this.debugMode, 'sdk_init_started', {
+      site: this.configuration?.site,
+      environment: this.configuration?.env,
+    })
     this.lifecycleTelemetry?.add({ eventType: FeatureFlagsTelemetryEventType.SDK_INIT_STARTED })
     this.exposureCacheReady = this.exposureCache?.init()
     try {
@@ -196,6 +204,10 @@ export class DatadogProvider extends DatadogCoreProvider {
             : FeatureFlagsTelemetryProviderStatus.READY,
         initLatencyMs: elapsedSince(startedAt),
       })
+      logFeatureFlagsDebug(this.debugMode, 'provider_ready', {
+        provider_status: this.status,
+        init_latency_ms: elapsedSince(startedAt),
+      })
     } catch (error) {
       const initLatencyMs = elapsedSince(startedAt)
       if (isTimeoutError(error)) {
@@ -205,6 +217,7 @@ export class DatadogProvider extends DatadogCoreProvider {
           errorCode: FeatureFlagsTelemetryErrorCode.INITIALIZATION_TIMEOUT,
           initLatencyMs,
         })
+        logFeatureFlagsDebugError(this.debugMode, 'init_timeout', error, { init_latency_ms: initLatencyMs })
       } else {
         this.lifecycleTelemetry?.add({
           eventType: FeatureFlagsTelemetryEventType.INIT_FAILED,
@@ -212,6 +225,7 @@ export class DatadogProvider extends DatadogCoreProvider {
           errorCode: FeatureFlagsTelemetryErrorCode.INITIALIZATION_FAILED,
           initLatencyMs,
         })
+        logFeatureFlagsDebugError(this.debugMode, 'init_failed', error, { init_latency_ms: initLatencyMs })
       }
       throw error
     }
@@ -326,6 +340,9 @@ export class DatadogProvider extends DatadogCoreProvider {
           } else {
             // Otherwise, this is a legitimate error
             this.status = ProviderStatus.ERROR
+            logFeatureFlagsDebugError(this.debugMode, 'provider_error', error, {
+              error_code: FeatureFlagsTelemetryErrorCode.PRECOMPUTED_ASSIGNMENTS_FETCH_FAILED,
+            })
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
@@ -369,6 +386,7 @@ export class DatadogProvider extends DatadogCoreProvider {
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
         if (config) {
+          logFeatureFlagsDebug(this.debugMode, 'configuration_cache_fallback', { status: 'succeeded' })
           return { config, fromCache: true }
         }
       } catch (_err) {}
@@ -391,15 +409,19 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   private reportConfigurationReceived(config: FlagsConfiguration, fromCache: boolean): void {
-    const createdAt = config.precomputed?.response.data.attributes.createdAt
     const fetchedAt = config.precomputed?.fetchedAt
+    const configurationSource = fromCache
+      ? FeatureFlagsTelemetryConfigurationSource.CACHE
+      : FeatureFlagsTelemetryConfigurationSource.REMOTE
     this.lifecycleTelemetry?.add({
       eventType: FeatureFlagsTelemetryEventType.CONFIGURATION_RECEIVED,
-      configurationSource: fromCache
-        ? FeatureFlagsTelemetryConfigurationSource.CACHE
-        : FeatureFlagsTelemetryConfigurationSource.REMOTE,
-      ...(createdAt !== undefined && { configurationVersion: String(createdAt) }),
+      configurationSource,
       ...(fetchedAt !== undefined && { configurationFetchedAt: fetchedAt }),
+    })
+    logFeatureFlagsDebug(this.debugMode, 'configuration_received', {
+      configuration_source: configurationSource,
+      ...(fetchedAt !== undefined && { configuration_fetched_at: fetchedAt }),
+      configuration: config,
     })
   }
 
@@ -421,6 +443,11 @@ export class DatadogProvider extends DatadogCoreProvider {
       defaultValue,
       this.evaluationContext
     )
+    logFeatureFlagsDebug(this.debugMode, 'flag_evaluated', {
+      flag_key: flagKey,
+      flag_type: type,
+      details: result,
+    })
     this.reportFirstEvaluation()
     return result
   }
