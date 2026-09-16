@@ -130,9 +130,11 @@ describe('DatadogCoreProvider tracking', () => {
     expect(rumEvaluation).toHaveBeenCalledWith('static-flag', 'static-variation')
 
     const exposureRequest = findRequest('exposures')
-    expect(parseRequestBody(exposureRequest)).toMatchObject({
+    const exposureRequestBody = parseRequestBody(exposureRequest)
+    expect(exposureRequestBody).toMatchObject({
       subject: { id: 'static-user', attributes: { plan: 'free' } },
     })
+    expect(JSON.stringify(exposureRequestBody)).not.toContain('__dd_core_configuration_id')
 
     const evaluationRequest = findRequest('flagevaluation')
     expect(parseRequestBody(evaluationRequest)).toMatchObject({

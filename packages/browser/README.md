@@ -255,7 +255,9 @@ client.addHooks(...tracking.hooks)
 provider.setConfiguration(nextConfiguration)
 ```
 
-`tracking.initialize()` initializes resources for the included tracking hooks. Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
+`tracking.initialize()` runs asynchronous setup required by the included hooks, such as loading the exposure deduplication cache. Hook factories may also allocate lightweight browser transport or aggregation resources when they are created, so applications should create tracking hooks when they intend to register them.
+
+Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 
