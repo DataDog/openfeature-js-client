@@ -355,7 +355,8 @@ describe('DatadogProvider', () => {
       }
     })
 
-    it('should not add RUM user properties unless the context is explicitly enriched', async () => {
+    it.each([true, false])('should respect automatic RUM enrichment enabled=%s without the helper', async (enabled) => {
+      provider = new DatadogProvider({ ...options, enableRumFeatureFlagTracking: enabled })
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
         addFeatureFlagEvaluation: jest.fn(),
@@ -368,8 +369,10 @@ describe('DatadogProvider', () => {
         const [, requestOptions] = fetchMock.mock.calls[0]
         const requestBody = JSON.parse(requestOptions.body)
         expect(requestBody.data.attributes.subject).toEqual({
-          targeting_key: '',
-          targeting_attributes: { region: 'us-east-1' },
+          targeting_key: enabled ? 'rum-user' : '',
+          targeting_attributes: enabled
+            ? { targetingKey: 'rum-user', user_email: 'rum@example.com', region: 'us-east-1' }
+            : { region: 'us-east-1' },
         })
       } finally {
         delete globalObject.DD_RUM

@@ -11,6 +11,35 @@ type RumContextInput = {
   [Key in keyof EvaluationContext]: EvaluationContext[Key] | undefined
 }
 
+// Preserve the provider's existing merge semantics, including explicit undefined values.
+// The public helper separately normalizes undefined values out of its returned context.
+export function enrichEvaluationContextWithRumUser(context: EvaluationContext): EvaluationContext {
+  try {
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    const user = globalObject.DD_RUM?.getUser?.()
+    if (!user) {
+      return context
+    }
+
+    const { id, ...attributes } = user
+    const rumUserContext: EvaluationContext = {}
+
+    if (typeof id === 'string') {
+      rumUserContext.targetingKey = id
+    }
+
+    for (const [key, value] of Object.entries(attributes)) {
+      if (isSupportedAttribute(value)) {
+        rumUserContext[key] = value
+      }
+    }
+
+    return { ...rumUserContext, ...context }
+  } catch {
+    return context
+  }
+}
+
 /**
  * Explicitly add the current RUM user to an OpenFeature evaluation context.
  *
@@ -18,7 +47,8 @@ type RumContextInput = {
  * the OpenFeature context synchronized when the RUM user changes. The RUM user ID supplies the
  * targeting key, while flat primitive user properties supply attributes. Application fields take
  * precedence, and an explicitly undefined application field removes the corresponding RUM value
- * from the returned context.
+ * from the returned context. The provider's existing automatic enrichment may add omitted RUM
+ * values back to the effective context used for flag configuration and telemetry.
  */
 export function enrichRumContext(context: RumContextInput): EvaluationContext {
   const effectiveContext = new Map(getRumContextEntries())

@@ -126,11 +126,13 @@ console.log(result.reason) // Evaluation reason
 
 ### RUM User Context
 
-Use `enrichRumContext()` when you explicitly want to use the current RUM user as part of an OpenFeature evaluation
-context. The provider does not enrich context automatically. The helper maps the RUM user ID to `targetingKey` and
-maps flat string, number, or boolean user properties to evaluation attributes. Values in the application context take
-precedence over RUM values. Nested RUM user properties are not included. An application field set to `undefined`
-removes the corresponding RUM value from the enriched context.
+The provider continues to automatically enrich its effective evaluation context with the RUM user during initialization
+and context changes when `enableRumFeatureFlagTracking` is enabled (the default). Existing applications do not need to
+call `enrichRumContext()` to retain this behavior for flag configuration, evaluation tracking, and exposure logging.
+
+Use `enrichRumContext()` to also make the current RUM user part of the context visible through OpenFeature. The helper
+maps the RUM user ID to `targetingKey` and flat string, number, or boolean user properties to evaluation attributes.
+Values in the application context take precedence over RUM values. Nested RUM user properties are not included.
 
 Keep the original application-owned context and enrich it before passing it to OpenFeature:
 
@@ -165,9 +167,25 @@ await OpenFeature.setContext(enrichRumContext(applicationContext))
 
 Do not pass `OpenFeature.getContext()` back to `enrichRumContext()`. That context already contains values from the
 previous RUM user, so those values would be treated as application-owned overrides and could prevent the new RUM user
-from replacing them. `enableRumFeatureFlagTracking` only controls whether feature flag evaluations are sent to RUM; it
-does not enable or disable `enrichRumContext()`. For asynchronous CDN initialization, call the helper after
-`DD_RUM.onReady()` runs.
+from replacing them. `enableRumFeatureFlagTracking` controls the provider's automatic enrichment and whether feature
+flag evaluations are sent to RUM; it does not enable or disable `enrichRumContext()`. For asynchronous CDN
+initialization, call the helper after `DD_RUM.onReady()` runs.
+
+An application field set to `undefined` is omitted from the helper's returned context, even if RUM has a value for it.
+However, the provider's automatic enrichment can add that RUM value back to its effective context:
+
+```javascript
+datadogRum.setUser({ id: 'user-123', myKey: 'rum-value' })
+await OpenFeature.setContext(enrichRumContext({ myKey: undefined }))
+
+// OpenFeature.getContext() has no myKey property.
+// With automatic enrichment enabled, the provider still uses myKey: 'rum-value'
+// in flag configuration requests, evaluation tracking, and exposure logging.
+```
+
+The same applies to `targetingKey: undefined`. Removing a field with the helper does not prevent the provider from
+using or reporting that RUM field. Supply a concrete application value to override the RUM default. This preserves
+the provider's existing behavior; its effective context may contain RUM defaults absent from OpenFeature's context.
 
 ## Offline configuration parsing
 

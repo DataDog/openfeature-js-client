@@ -1,7 +1,11 @@
 import { getGlobalObject } from '@datadog/browser-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
-import { createRumTrackingHook, enrichRumContext } from '../../src/openfeature/rumIntegration'
+import {
+  createRumTrackingHook,
+  enrichEvaluationContextWithRumUser,
+  enrichRumContext,
+} from '../../src/openfeature/rumIntegration'
 
 describe('createRumTrackingHook', () => {
   const mockHookContext = {} as HookContext
@@ -82,6 +86,33 @@ describe('createRumTrackingHook', () => {
     hook.after!(mockHookContext, details)
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('my-flag', 'variant-key-a')
+  })
+
+  describe('existing provider enrichment', () => {
+    it('should preserve explicit undefined fields instead of restoring their RUM defaults', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
+      }
+      // Existing JavaScript callers can pass undefined directly to OpenFeature, without the helper.
+      const context = { targetingKey: undefined, user_email: undefined } as unknown as EvaluationContext
+
+      expect(enrichEvaluationContextWithRumUser(context)).toStrictEqual(context)
+    })
+
+    it('should retain the existing precedence of a RUM targetingKey property', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', targetingKey: 'custom-rum-key' }),
+      }
+
+      expect(enrichEvaluationContextWithRumUser({})).toStrictEqual({ targetingKey: 'custom-rum-key' })
+      expect(enrichEvaluationContextWithRumUser({ targetingKey: 'application-key' })).toStrictEqual({
+        targetingKey: 'application-key',
+      })
+    })
   })
 
   describe('enrichRumContext', () => {
