@@ -26,7 +26,7 @@ import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
-import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
+import { createRumTrackingHook } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -62,15 +62,6 @@ export class DatadogProvider extends DatadogCoreProvider {
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
 
-  /** Controls both directions of the provider's RUM integration. */
-  private readonly isRumIntegrationEnabled: boolean
-
-  // TODO: Migrate this manual context plumbing to a provider `before` hook once
-  // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
-  // Watch upstream packages/web/src/hooks/hook.ts for the before return changing from `void`,
-  // and packages/web/src/client/internal/open-feature-client.ts for `beforeHooks` merging that
-  // result before calling the resolver and subsequent hooks. Return this stored context, not a
-  // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
   /** Effective context associated with the active flags configuration. */
   private evaluationContext: EvaluationContext = {}
 
@@ -108,8 +99,8 @@ export class DatadogProvider extends DatadogCoreProvider {
     // Set up provider-managed hooks and events
     this.hooks = []
 
-    this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (this.isRumIntegrationEnabled) {
+    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (isRumFeatureFlagTrackingEnabled) {
       this.hooks.push(createRumTrackingHook())
     }
 
@@ -147,8 +138,6 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
-    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
-
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
@@ -167,7 +156,7 @@ export class DatadogProvider extends DatadogCoreProvider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(context, { signal })
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
@@ -196,7 +185,7 @@ export class DatadogProvider extends DatadogCoreProvider {
           // scheduling).
 
           this.flagsConfiguration = config
-          this.evaluationContext = evaluationContext
+          this.evaluationContext = context
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           this.events.emit(ProviderEvents.ConfigurationChanged)
 

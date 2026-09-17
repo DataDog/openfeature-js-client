@@ -47,8 +47,7 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   enableFlagEvaluationTracking?: boolean
 
   /**
-   * Whether to enable RUM integration (default: true). This includes feature flag assignment details in RUM events
-   * and flat primitive RUM user properties in the OpenFeature evaluation context.
+   * Whether to include feature flag assignment details in RUM events (default: true).
    * See: https://docs.datadoghq.com/real_user_monitoring/feature_flag_tracking/
    */
   enableRumFeatureFlagTracking?: boolean

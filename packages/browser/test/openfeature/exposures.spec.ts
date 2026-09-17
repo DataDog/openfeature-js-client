@@ -3,6 +3,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
+import { enrichRumContext } from '../../src/openfeature/rumIntegration'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
@@ -189,7 +190,7 @@ describe('Exposures End-to-End', () => {
       }),
     }
 
-    await OpenFeature.setContext({ user_email: 'explicit@example.com' })
+    await OpenFeature.setContext(enrichRumContext({ user_email: 'explicit@example.com' }))
     await OpenFeature.setProviderAndWait(
       new DatadogProvider({
         ...baseProviderConfig,
@@ -231,6 +232,8 @@ describe('Exposures End-to-End', () => {
       getUser: () => rumUser,
     }
 
+    const applicationContext = {}
+    await OpenFeature.setContext(enrichRumContext(applicationContext))
     await OpenFeature.setProviderAndWait(
       new DatadogProvider({
         ...baseProviderConfig,
@@ -248,7 +251,7 @@ describe('Exposures End-to-End', () => {
       attributes: { user_email: 'a@example.com' },
     })
 
-    await OpenFeature.setContext(OpenFeature.getContext())
+    await OpenFeature.setContext(enrichRumContext(applicationContext))
     OpenFeature.getClient().getStringValue('string-flag', 'default')
     triggerBatch()
 
@@ -259,7 +262,7 @@ describe('Exposures End-to-End', () => {
     })
   })
 
-  it('should not include RUM user properties when RUM integration is disabled', async () => {
+  it('should include explicitly enriched RUM user properties when RUM feature flag tracking is disabled', async () => {
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('exposures')) {
         return Promise.resolve({ ok: true, status: 200 })
@@ -279,7 +282,7 @@ describe('Exposures End-to-End', () => {
       getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
     }
 
-    await OpenFeature.setContext({ targetingKey: 'explicit-user' })
+    await OpenFeature.setContext(enrichRumContext({ targetingKey: 'explicit-user' }))
     await OpenFeature.setProviderAndWait(
       new DatadogProvider({
         ...baseProviderConfig,
@@ -294,7 +297,7 @@ describe('Exposures End-to-End', () => {
     const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
     expect(exposureEvents[0].subject).toEqual({
       id: 'explicit-user',
-      attributes: {},
+      attributes: { user_email: 'rum@example.com' },
     })
   })
 
