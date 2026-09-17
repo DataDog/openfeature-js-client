@@ -126,8 +126,11 @@ console.log(result.reason) // Evaluation reason
 
 ### RUM User Context
 
-Use `enrichRumContext()` to combine the current RUM user with your application's OpenFeature context. After initializing
-RUM, set the user and pass the enriched context to OpenFeature:
+`DatadogProvider` adds RUM defaults internally during initialization and context changes. This automatic enrichment is
+enabled by default and does not modify the context stored in OpenFeature.
+
+If you want to populate your OpenFeature context with values set on the RUM user, use `enrichRumContext()`. After
+initializing RUM, set the user and pass the enriched context to OpenFeature:
 
 ```javascript
 import { datadogRum } from '@datadog/browser-rum'
@@ -166,8 +169,7 @@ which would act as application overrides and could prevent the new user's values
 
 #### Notes
 
-`DatadogProvider` also adds RUM defaults internally during initialization and context changes. This is enabled by
-default through `enableRumFeatureFlagTracking`, which also controls sending flag evaluations to RUM. The helper works
+`enableRumFeatureFlagTracking` controls automatic enrichment and sending flag evaluations to RUM. The helper works
 independently of this setting.
 
 `undefined` removes a field from the helper's result, but automatic enrichment can add it back for flag configuration
