@@ -7,6 +7,10 @@ export interface DDRum {
   getUser?: () => Context
 }
 
+type RumContextInput = {
+  [Key in keyof EvaluationContext]: EvaluationContext[Key] | undefined
+}
+
 /**
  * Explicitly add the current RUM user to an OpenFeature evaluation context.
  *
@@ -16,7 +20,7 @@ export interface DDRum {
  * precedence, and an explicitly undefined application field removes the corresponding RUM value
  * from the returned context.
  */
-export function enrichRumContext(context: EvaluationContext): EvaluationContext {
+export function enrichRumContext(context: RumContextInput): EvaluationContext {
   const effectiveContext = new Map(getRumContextEntries())
 
   try {
@@ -30,11 +34,17 @@ export function enrichRumContext(context: EvaluationContext): EvaluationContext 
 
     const enrichedContext: Record<string, unknown> = {}
     for (const [key, value] of effectiveContext) {
-      enrichedContext[key] = value
+      // Treat arbitrary attribute names, including __proto__, as own data properties.
+      Object.defineProperty(enrichedContext, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
     }
     return enrichedContext as EvaluationContext
   } catch {
-    return context
+    return context as EvaluationContext
   }
 }
 

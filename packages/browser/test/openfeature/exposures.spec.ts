@@ -1,4 +1,4 @@
-import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { type Context, getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
@@ -211,7 +211,7 @@ describe('Exposures End-to-End', () => {
     })
   })
 
-  it('should keep exposure identity aligned with the active configuration until context is reconciled', async () => {
+  it('should reconcile exposure identity after switching users and clearing the RUM user', async () => {
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('exposures')) {
         return Promise.resolve({ ok: true, status: 200 })
@@ -225,14 +225,14 @@ describe('Exposures End-to-End', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
     })
 
-    let rumUser = { id: 'rum-user-a', user_email: 'a@example.com' }
+    let rumUser: Context = { id: 'rum-user-a', user_email: 'a@example.com' }
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
     globalObject.DD_RUM = {
       addFeatureFlagEvaluation: jest.fn(),
       getUser: () => rumUser,
     }
 
-    const applicationContext = {}
+    const applicationContext = { region: 'us' }
     await OpenFeature.setContext(enrichRumContext(applicationContext))
     await OpenFeature.setProviderAndWait(
       new DatadogProvider({
@@ -248,7 +248,7 @@ describe('Exposures End-to-End', () => {
     let exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
     expect(exposureEvents[0].subject).toEqual({
       id: 'rum-user-a',
-      attributes: { user_email: 'a@example.com' },
+      attributes: { user_email: 'a@example.com', region: 'us' },
     })
 
     await OpenFeature.setContext(enrichRumContext(applicationContext))
@@ -258,8 +258,26 @@ describe('Exposures End-to-End', () => {
     exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
     expect(exposureEvents.at(-1)?.subject).toEqual({
       id: 'rum-user-b',
-      attributes: { user_email: 'b@example.com' },
+      attributes: { user_email: 'b@example.com', region: 'us' },
     })
+
+    // DD_RUM.clearUser() makes getUser() return an empty context.
+    rumUser = {}
+    await OpenFeature.setContext(enrichRumContext(applicationContext))
+    expect(OpenFeature.getContext()).toStrictEqual({ region: 'us' })
+    expect(applicationContext).toStrictEqual({ region: 'us' })
+
+    const configurationRequests = fetchMock.mock.calls.filter(([url]) => url.includes('precompute-assignments'))
+    const lastRequest = configurationRequests[configurationRequests.length - 1][1]
+    expect(JSON.parse(lastRequest.body).data.attributes.subject).toEqual({
+      targeting_key: '',
+      targeting_attributes: { region: 'us' },
+    })
+
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+    exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
+    expect(exposureEvents.at(-1)?.subject).toEqual({ id: '', attributes: { region: 'us' } })
   })
 
   it('should include explicitly enriched RUM user properties when RUM feature flag tracking is disabled', async () => {

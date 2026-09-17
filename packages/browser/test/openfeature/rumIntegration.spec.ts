@@ -130,6 +130,22 @@ describe('createRumTrackingHook', () => {
       expect(enrichRumContext({})).toEqual({ targetingKey: 'rum-user' })
     })
 
+    it('should preserve __proto__ as an own attribute without inheriting a targeting key', () => {
+      const context: EvaluationContext = JSON.parse('{"__proto__":{"targetingKey":"unexpected-user"},"region":"us"}')
+
+      const enrichedContext = enrichRumContext(context)
+
+      expect(Object.getPrototypeOf(enrichedContext)).toBe(Object.prototype)
+      expect(enrichedContext.targetingKey).toBeUndefined()
+      expect(Object.getOwnPropertyDescriptor(enrichedContext, '__proto__')).toEqual({
+        value: { targetingKey: 'unexpected-user' },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+      expect(JSON.stringify(enrichedContext)).toBe(JSON.stringify(context))
+    })
+
     it('should remove RUM defaults explicitly set to undefined by the application', () => {
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
@@ -141,13 +157,14 @@ describe('createRumTrackingHook', () => {
         targetingKey: undefined,
         user_email: undefined,
         region: 'us-east-1',
-      } as unknown as EvaluationContext
-      expect(enrichRumContext(context)).toEqual({ region: 'us-east-1' })
+      }
+      const enrichedContext: EvaluationContext = enrichRumContext(context)
+      expect(enrichedContext).toStrictEqual({ region: 'us-east-1' })
     })
 
     it('should normalize application context when RUM user lookup is unavailable', () => {
-      const context = { targetingKey: 'explicit-user', user_email: undefined } as unknown as EvaluationContext
-      expect(enrichRumContext(context)).toEqual({ targetingKey: 'explicit-user' })
+      const context = { targetingKey: 'explicit-user', user_email: undefined }
+      expect(enrichRumContext(context)).toStrictEqual({ targetingKey: 'explicit-user' })
 
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
@@ -156,7 +173,7 @@ describe('createRumTrackingHook', () => {
           throw new Error('RUM is not initialized')
         },
       }
-      expect(enrichRumContext(context)).toEqual({ targetingKey: 'explicit-user' })
+      expect(enrichRumContext(context)).toStrictEqual({ targetingKey: 'explicit-user' })
     })
   })
 })
