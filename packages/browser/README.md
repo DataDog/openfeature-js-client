@@ -133,6 +133,7 @@ call `enrichRumContext()` to retain this behavior for flag configuration, evalua
 Use `enrichRumContext()` to also make the current RUM user part of the context visible through OpenFeature. The helper
 maps the RUM user ID to `targetingKey` and flat string, number, or boolean user properties to evaluation attributes.
 Values in the application context take precedence over RUM values. Nested RUM user properties are not included.
+If the RUM user has both `id` and a custom `targetingKey`, the helper prefers `id`, while automatic enrichment prefers the custom `targetingKey`; adopting the helper can therefore change the targeting identity unless the application supplies its own `targetingKey`.
 
 Keep the original application-owned context and enrich it before passing it to OpenFeature:
 
