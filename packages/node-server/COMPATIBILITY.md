@@ -17,7 +17,7 @@ The provider interface requires features introduced in `@openfeature/server-sdk@
 
 ### Installation
 
-For most users, install the latest versions:
+Install the OpenFeature SDK if your application uses this package as an OpenFeature provider:
 
 ```bash
 npm install @openfeature/server-sdk @openfeature/core
@@ -25,8 +25,8 @@ npm install @openfeature/server-sdk @openfeature/core
 yarn add @openfeature/server-sdk @openfeature/core
 ```
 
-The packages will resolve compatible versions automatically.
+`@datadog/openfeature-node-server` does not install either OpenFeature package as a runtime dependency.
 
 ### For dd-trace Users
 
-If you're using `dd-trace` and don't need OpenFeature functionality directly, you don't need to install these packages. The `@datadog/openfeature-node-server` peer dependency is optional.
+If you're using `dd-trace` and don't need OpenFeature functionality directly, you don't need to install these packages.

@@ -8,8 +8,9 @@ This is a monorepo managed with Lerna that contains multiple packages:
 
 - **`@datadog/flagging-core`** - Runtime-agnostic flag-evaluation logic
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
+- **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **fixed versioning**, meaning all packages share the same version number and are released together. The version is managed centrally in `lerna.json`.
+The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions on release (via `command.version.exact` in `lerna.json`) to prevent version skew.
 
 ## Development Setup
 
@@ -42,6 +43,15 @@ The project uses **fixed versioning**, meaning all packages share the same versi
    yarn lint
    yarn lint:fix  # Auto-fix issues
    ```
+
+## Entrypoint Guardrails
+
+The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
+
+Two recurring checks help keep that boundary visible:
+
+- `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
+- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`, which prints a raw/gzip JS size table for the root, precomputed, and rules-based browser entrypoints. In GitHub Actions the table is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers.
 
 ## Release Process
 
@@ -91,13 +101,44 @@ All packages are published with the `latest` npm tag.
 #### Step 1: Prepare for Release
 
 1. **Switch to a feature branch:**
+
    ```bash
+   # For independent releases (describe what's being released)
+   git checkout -b release/node-server-1.3.0
+   git checkout -b release/browser-and-node-server-1.3.0
+
+   # For unified releases (all packages with same version)
    git checkout -b release/v1.2.3
    ```
 
-#### Step 2: Prepare Package Dependencies
+#### Step 2: Pin Internal Dependencies
 
-2. **Update the version using the CLI:**
+2. **Ensure internal dependencies use exact versions:**
+
+   ```bash
+   yarn node ./scripts/release/update-peer-dependency-versions.js
+   ```
+
+   This script reads each package's current version and updates internal dependencies (like `@datadog/flagging-core`) to use exact versions without the `^` prefix. This prevents version skew between packages.
+
+   After running, verify the changes:
+
+   ```bash
+   git diff packages/*/package.json
+   ```
+
+   You should see changes like:
+
+   ```diff
+   -    "@datadog/flagging-core": "^1.2.1"
+   +    "@datadog/flagging-core": "1.2.1"
+   ```
+
+#### Step 3: Version the Package(s)
+
+3. **Update the version using the CLI:**
+
+   **For independent releases (recommended):**
 
    ```bash
    yarn release
@@ -105,29 +146,48 @@ All packages are published with the `latest` npm tag.
 
    This command:
    - Validates you're not on the `main` branch
-   - Runs `lerna version --exact --force-publish` to update the version
-   - Prompts for the new version number (applied to all packages)
-   - Creates version commits and tags
-   - Updates all package versions to match
-   - Pushes version tag to Github
+   - Runs `lerna version --exact`
+   - Prompts for version updates only for **changed** packages
+   - Creates version commits and tags per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
+   - Pushes version tags to Github
 
-#### Step 3: Publish via GitHub Release
+   **For unified releases (all packages with same version):**
+
+   ```bash
+   yarn release:all
+   ```
+
+   This command:
+   - Same as above, but uses `--force-publish` to prompt for **all** packages
+   - Use this when you want to release all packages together with the same version
+
+#### Step 4: Open and Merge the Release PR
+
+4. **Open a PR from your release branch and merge it with a merge commit — not a squash.**
+
+   `yarn release` pushes the version tag onto your branch commit. Squashing creates a new commit on `main` and orphans that tag, which breaks change detection on the _next_ release (Lerna falls back to an old tag and prompts to version packages that never changed). A merge commit keeps the tag reachable.
+
+#### Step 5: Publish via GitHub Release
 
 **Publishing is fully automated via GitHub workflows!**
 
 1. **Create a GitHub Release:**
    - Go to the GitHub repository
    - Click "Releases" → "Create a new release"
-   - Set the tag to match your version (e.g., `v1.1.0`)
+   - Set the tag to match your version:
+     - Independent: `@datadog/openfeature-node-server@1.3.0` (publishes only that package)
+     - Unified: `v1.2.1` (publishes all packages)
    - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
+
+   **For multiple independent releases:** Create a separate GitHub release for each package tag (e.g., one for `@datadog/openfeature-browser@1.3.0` and one for `@datadog/openfeature-node-server@1.3.0`).
 
 2. **Automated Publishing Workflow:**
 
    The `release.yaml` workflow will automatically trigger and:
 
    **Validation Phase:**
-   - Checks that the GitHub release tag matches the version in `lerna.json`
+   - Checks that the GitHub release tag matches the corresponding package version
    - Fails fast if validation doesn't pass
 
    **Build and Publish Phase:**
@@ -136,13 +196,16 @@ All packages are published with the `latest` npm tag.
    - Creates package tarballs with `yarn lerna run pack --stream`
 
    **Publishing Sequence:**
-   1. **Publishes core package first** (`@datadog/flagging-core`)
-   2. **Waits for npm registry propagation**
-      - Polls npm registry for up to 5 minutes
-      - Ensures core package is available before proceeding
-      - Prevents dependency resolution issues
-   3. **Publishes browser package** (`@datadog/openfeature-browser`)
-   4. **Publishes node-server package** (`@datadog/openfeature-node-server`)
+
+   _For independent releases_ (`@datadog/pkg@x.y.z`):
+   - Publishes only the specified package
+   - If publishing `browser` or `node-server`, waits for `flagging-core` to be available on npm first
+
+   _For unified releases_ (`vX.Y.Z`):
+   1. Publishes `@datadog/flagging-core` first
+   2. Waits for npm registry propagation (up to 5 minutes)
+   3. Publishes `@datadog/openfeature-browser`
+   4. Publishes `@datadog/openfeature-node-server`
 
 ### Package-Specific Build Commands
 
@@ -196,21 +259,26 @@ yarn pack
 
 ### Version Management
 
-Since this project uses **fixed versioning**:
+Since this project uses **independent versioning**:
 
-- All packages share the same version number (managed in `lerna.json`)
-- When running `yarn release`, Lerna will prompt for a single version update
-- All package versions are automatically synchronized
-- Peer dependencies are automatically updated to match the fixed version
-- A single version commit and tag is created for the entire project
+- Each package has its own version number (stored in its `package.json`)
+- `yarn release` prompts for version updates only for **changed** packages (independent releases)
+- `yarn release:all` prompts for **all** packages (unified releases)
+- Internal dependencies are pinned to exact versions (configured via `command.version.exact` in `lerna.json`)
+- Version commits and tags are created per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
+
+> ⚠️ **Version policy for `@datadog/flagging-core`:** Internal dependencies are pinned to **exact** versions (enforced by `scripts/internal-deps-validate.sh`), so our packages never pull a core update implicitly. From `2.0.0` onward, `flagging-core` follows normal semver — minor/patch for backward-compatible changes, major for breaking ones. Two rules still apply:
+>
+> 1. **Do not publish new `1.x` versions of `flagging-core`.** Legacy consumers still on `^1.2.1` would pull them and risk version skew; the `2.0.0` major bump exists to cap those consumers below `2.x`.
+> 2. **Bumping core does not reach dependents automatically.** Because `openfeature-browser` and `openfeature-node-server` pin core exactly, you must update each dependent's pin and re-release it (see [Step 2](#step-2-pin-internal-dependencies)) for consumers to pick up the new core.
 
 ### Automated Release Workflow Details
 
 The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
 1. **Version Consistency Check:**
-   - Compares GitHub release tag with `lerna.json` version
-   - Ensures tags and versions are synchronized
+   - Compares GitHub release tag with the corresponding package version
+   - Ensures tags and package versions are synchronized
 
 2. **Dependency Coordination:**
    - Core package is published first
@@ -252,7 +320,7 @@ The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
 5. **Package creation test:**
    ```bash
-   yarn version  # Test dependency updates and package creation
+   yarn version  # Pins internal dependencies and creates package tarballs
    ```
 
 ### Troubleshooting
@@ -272,8 +340,8 @@ The GitHub Actions workflow (`release.yaml`) includes several safety measures:
    - Check that all dependencies are installed
 
 4. **Version synchronization issues:**
-   - Run `yarn version` to update peer dependencies
-   - Check that all package versions match the version in `lerna.json`
+   - Run `yarn node ./scripts/release/update-peer-dependency-versions.js` to pin internal dependencies
+   - Verify internal dependencies use exact versions (no `^` prefix)
 
 5. **GitHub workflow failures:**
    - Check the Actions tab for detailed error logs
@@ -297,7 +365,7 @@ The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 - Check the [README.md](README.md) for basic project information
 - Review the scripts in the `scripts/` directory for implementation details
 - Check the GitHub Actions tab for workflow status and logs
-- Examine the `scripts/cli` script for available commands (`release`, `version`, `typecheck`, `lint`)
+- Examine the `scripts/cli` script for available commands (`release`, `release_all`, `version`, `typecheck`, `lint`)
 - Open an issue on GitHub for bugs or feature requests
 
 #### Manual Publishing (Emergency Only)
