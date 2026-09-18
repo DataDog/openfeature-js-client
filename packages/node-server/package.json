@@ -41,8 +41,8 @@
     "@datadog/flagging-core": "3.0.0"
   },
   "devDependencies": {
-    "@openfeature/core": "1.9.2",
-    "@openfeature/server-sdk": "1.20.2",
+    "@openfeature/core": "1.11.0",
+    "@openfeature/server-sdk": "1.22.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.19.130",
     "dts-bundle-generator": "^9.0.0",
