@@ -4,6 +4,7 @@ if (typeof globalThis.structuredClone === 'undefined') {
 }
 import 'fake-indexeddb/auto'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { TimeStamp } from '@datadog/js-core/time'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 
@@ -21,14 +22,13 @@ const testConfig: FlagsConfiguration = {
               variationValue: true,
               reason: 'TARGETING_MATCH',
               doLog: true,
-              extraLogging: {},
             },
           },
         },
       },
     },
     context: { targetingKey: 'user-123' },
-    fetchedAt: 1731939819456,
+    fetchedAt: 1731939819456 as TimeStamp,
   },
 }
 
@@ -130,13 +130,12 @@ describe('IndexedDBFlagsCache', () => {
                     variationValue: 'hello',
                     reason: 'DEFAULT',
                     doLog: false,
-                    extraLogging: {},
                   },
                 },
               },
             },
           },
-          fetchedAt: 9999999999,
+          fetchedAt: 9999999999 as TimeStamp,
         },
       }
       cache.set(updatedConfig, context)
@@ -195,13 +194,12 @@ describe('IndexedDBFlagsCache', () => {
                     variationValue: 'b-value',
                     reason: 'DEFAULT',
                     doLog: false,
-                    extraLogging: {},
                   },
                 },
               },
             },
           },
-          fetchedAt: 999,
+          fetchedAt: 999 as TimeStamp,
         },
       }
 

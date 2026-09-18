@@ -33,17 +33,20 @@ cmd_lint () {
 
 cmd_release () {
   [[ `git branch --show-current` != "main" ]] || fail 'please do not release from `main` branch'
+  fetch_release_tags
   # Independent versioning: only prompts for changed packages
   yarn lerna version --exact
 }
 
 cmd_release_all () {
   [[ `git branch --show-current` != "main" ]] || fail 'please do not release from `main` branch'
+  fetch_release_tags
   # Unified versioning: prompts for all packages (use when releasing all packages with same version)
   yarn lerna version --exact --force-publish
 }
 
 cmd_version () {
+  fetch_release_tags
   EDITOR=cat node ./scripts/release/generate-changelog
   yarn node ./scripts/release/update-peer-dependency-versions.js
   lerna run pack --stream
@@ -51,6 +54,10 @@ cmd_version () {
 
 cmd_generate_changelog () {
   yarn node ./scripts/release/generate-changelog
+}
+
+fetch_release_tags () {
+  git fetch --no-tags origin 'refs/tags/*:refs/tags/*'
 }
 
 fail () {

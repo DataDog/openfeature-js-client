@@ -29,6 +29,11 @@ describe('buildEndpointHost', () => {
         expected: 'preview.ff-cdn.ap2.datadoghq.com',
       },
       {
+        description: 'for uk1.datadoghq.com site',
+        site: 'uk1.datadoghq.com',
+        expected: 'preview.ff-cdn.uk1.datadoghq.com',
+      },
+      {
         description: 'for datadoghq.eu site',
         site: 'datadoghq.eu',
         expected: 'preview.ff-cdn.datadoghq.eu',
@@ -91,13 +96,13 @@ describe('buildEndpointHost', () => {
         description: 'for unsupported site',
         site: 'unsupported.example.com',
         expectedError:
-          'Unsupported site: unsupported.example.com. Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu',
+          'Unsupported site: unsupported.example.com. Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, uk1.datadoghq.com, datadoghq.eu',
       },
       {
         description: 'for empty string site',
         site: '',
         expectedError:
-          'Unsupported site: . Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, datadoghq.eu',
+          'Unsupported site: . Supported sites: datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, ap1.datadoghq.com, ap2.datadoghq.com, uk1.datadoghq.com, datadoghq.eu',
       },
     ]
 

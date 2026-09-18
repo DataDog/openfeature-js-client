@@ -44,6 +44,15 @@ The project uses **independent versioning**, meaning each package can have its o
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Entrypoint Guardrails
+
+The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
+
+Two recurring checks help keep that boundary visible:
+
+- `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
+- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`, which prints a raw/gzip JS size table for the root, precomputed, and rules-based browser entrypoints. In GitHub Actions the table is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers.
+
 ## Release Process
 
 ### Prerequisites
@@ -152,7 +161,13 @@ All packages are published with the `latest` npm tag.
    - Same as above, but uses `--force-publish` to prompt for **all** packages
    - Use this when you want to release all packages together with the same version
 
-#### Step 4: Publish via GitHub Release
+#### Step 4: Open and Merge the Release PR
+
+4. **Open a PR from your release branch and merge it with a merge commit — not a squash.**
+
+   `yarn release` pushes the version tag onto your branch commit. Squashing creates a new commit on `main` and orphans that tag, which breaks change detection on the _next_ release (Lerna falls back to an old tag and prompts to version packages that never changed). A merge commit keeps the tag reachable.
+
+#### Step 5: Publish via GitHub Release
 
 **Publishing is fully automated via GitHub workflows!**
 
@@ -252,7 +267,10 @@ Since this project uses **independent versioning**:
 - Internal dependencies are pinned to exact versions (configured via `command.version.exact` in `lerna.json`)
 - Version commits and tags are created per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
 
-> ⚠️ **Warning:** `@datadog/flagging-core` cannot be safely updated within the 1.x range. Users on `openfeature-node-server@1.2.1` have a `^1.2.1` constraint and would pull any new 1.x version, causing version skew. A major bump to `2.0.0` is required for any future `flagging-core` changes.
+> ⚠️ **Version policy for `@datadog/flagging-core`:** Internal dependencies are pinned to **exact** versions (enforced by `scripts/internal-deps-validate.sh`), so our packages never pull a core update implicitly. From `2.0.0` onward, `flagging-core` follows normal semver — minor/patch for backward-compatible changes, major for breaking ones. Two rules still apply:
+>
+> 1. **Do not publish new `1.x` versions of `flagging-core`.** Legacy consumers still on `^1.2.1` would pull them and risk version skew; the `2.0.0` major bump exists to cap those consumers below `2.x`.
+> 2. **Bumping core does not reach dependents automatically.** Because `openfeature-browser` and `openfeature-node-server` pin core exactly, you must update each dependent's pin and re-release it (see [Step 2](#step-2-pin-internal-dependencies)) for consumers to pick up the new core.
 
 ### Automated Release Workflow Details
 
