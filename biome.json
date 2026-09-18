@@ -37,7 +37,9 @@
       "!**/bundle",
       "!**/coverage",
       "!**/*.tgz",
-      "!test-app/node_modules"
+      "!test-app/node_modules",
+      "!packages/core/test/ffe-system-test-data",
+      "!packages/core/src/configuration/generated"
     ]
   }
 }

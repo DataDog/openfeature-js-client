@@ -1,5 +1,5 @@
-import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/core'
+import type { TimeStamp } from '../time'
 
 export interface ExposureEvent {
   allocation: {
@@ -11,6 +11,7 @@ export interface ExposureEvent {
   variant: {
     key: string
   }
+  serial_id?: number
   subject: {
     id: string
     attributes: EvaluationContext
