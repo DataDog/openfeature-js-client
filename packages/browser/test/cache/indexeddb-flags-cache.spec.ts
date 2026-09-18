@@ -2,6 +2,7 @@
 if (typeof globalThis.structuredClone === 'undefined') {
   globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
 }
+
 import 'fake-indexeddb/auto'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
@@ -22,7 +23,6 @@ const testConfig: FlagsConfiguration = {
               variationValue: true,
               reason: 'TARGETING_MATCH',
               doLog: true,
-              extraLogging: {},
             },
           },
         },
@@ -131,7 +131,6 @@ describe('IndexedDBFlagsCache', () => {
                     variationValue: 'hello',
                     reason: 'DEFAULT',
                     doLog: false,
-                    extraLogging: {},
                   },
                 },
               },
@@ -196,7 +195,6 @@ describe('IndexedDBFlagsCache', () => {
                     variationValue: 'b-value',
                     reason: 'DEFAULT',
                     doLog: false,
-                    extraLogging: {},
                   },
                 },
               },

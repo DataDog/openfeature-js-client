@@ -1,16 +1,20 @@
 const fs = require('node:fs')
+const path = require('node:path')
+
 const { packagesDirectoryNames } = require('../../../lib/packagesDirectoryNames')
 const { commandSync } = require('../../../lib/executionUtils')
 
-const PACKAGE_NAME_TO_DIRECTORY = {
-  '@datadog/openfeature-browser': 'browser',
-  '@datadog/flagging-core': 'core',
-}
+const PACKAGE_NAME_TO_DIRECTORY = Object.fromEntries(
+  packagesDirectoryNames.map((packageDirectoryName) => [
+    getPackageJson(packageDirectoryName).name,
+    packageDirectoryName,
+  ])
+)
 
 const PACKAGES_REVERSE_DEPENDENCIES = (() => {
   const result = new Map()
   packagesDirectoryNames.forEach((packageDirectoryName) => {
-    for (const dependency of getDepenciesRecursively(packageDirectoryName)) {
+    for (const dependency of getDependenciesRecursively(packageDirectoryName)) {
       if (!result.has(dependency)) {
         result.set(dependency, new Set())
       }
@@ -26,53 +30,54 @@ exports.getAffectedPackages = (hash) => {
 
   changedFiles.forEach((filePath) => {
     const packageDirectoryName = getPackageDirectoryNameFromFilePath(filePath)
-    if (packageDirectoryName) {
-      if (!isToplevelPackage(packageDirectoryName)) {
-        PACKAGES_REVERSE_DEPENDENCIES.get(packageDirectoryName).forEach((dependentPackageDirectoryName) => {
-          if (isToplevelPackage(dependentPackageDirectoryName)) {
-            affectedPackages.add(dependentPackageDirectoryName)
-          }
-        })
-      } else {
-        affectedPackages.add(packageDirectoryName)
-      }
+    if (!packageDirectoryName) {
+      return
+    }
+
+    affectedPackages.add(packageDirectoryName)
+    for (const dependentPackageDirectoryName of PACKAGES_REVERSE_DEPENDENCIES.get(packageDirectoryName) || []) {
+      affectedPackages.add(dependentPackageDirectoryName)
     }
   })
 
-  return Array.from(affectedPackages)
+  return Array.from(affectedPackages).sort()
 }
 
 function getPackageDirectoryNameFromFilePath(filePath) {
-  if (filePath.startsWith('packages/')) {
-    return filePath.split('/')[1]
+  if (!filePath.startsWith('packages/')) {
+    return
   }
+
+  const packageDirectoryName = filePath.split('/')[1]
+  return packagesDirectoryNames.includes(packageDirectoryName) ? packageDirectoryName : undefined
 }
 
-function isToplevelPackage(packageDirectoryName) {
-  return !PACKAGES_REVERSE_DEPENDENCIES.has(packageDirectoryName)
-}
-
-function getPackageDirectoryNameFromPackageName(packageName) {
-  return PACKAGE_NAME_TO_DIRECTORY[packageName]
-}
-
-function getDepenciesRecursively(packageDirectoryName) {
-  const packageDirectoryNameJson = JSON.parse(
-    fs.readFileSync(`packages/${packageDirectoryName}/package.json`, {
+function getPackageJson(packageDirectoryName) {
+  return JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../../..', 'packages', packageDirectoryName, 'package.json'), {
       encoding: 'utf-8',
     })
   )
+}
+
+function getDependenciesRecursively(packageDirectoryName, visited = new Set()) {
+  if (visited.has(packageDirectoryName)) {
+    return new Set()
+  }
+  visited.add(packageDirectoryName)
+
   const dependencies = new Set()
-  if (packageDirectoryNameJson.dependencies) {
-    for (const dependencyPackageName of Object.keys(packageDirectoryNameJson.dependencies)) {
-      const packageDirectoryName = getPackageDirectoryNameFromPackageName(dependencyPackageName)
-      if (packageDirectoryName) {
-        dependencies.add(packageDirectoryName)
-        for (const transitiveDependency of getDepenciesRecursively(packageDirectoryName)) {
-          dependencies.add(transitiveDependency)
-        }
-      }
+  for (const dependencyPackageName of Object.keys(getPackageJson(packageDirectoryName).dependencies || {})) {
+    const dependencyPackageDirectoryName = PACKAGE_NAME_TO_DIRECTORY[dependencyPackageName]
+    if (!dependencyPackageDirectoryName) {
+      continue
+    }
+
+    dependencies.add(dependencyPackageDirectoryName)
+    for (const transitiveDependency of getDependenciesRecursively(dependencyPackageDirectoryName, visited)) {
+      dependencies.add(transitiveDependency)
     }
   }
+
   return dependencies
 }

@@ -1,6 +1,11 @@
-import type { TimeStamp } from '@datadog/js-core/time'
 import type { EvaluationContext, Logger } from '@openfeature/core'
-import { evaluateForSubject, type Flag } from '../../src/evaluation'
+import {
+  evaluateForSubject,
+  evaluateRulesBasedConfiguration,
+  type Flag,
+  type UniversalFlagConfigurationV1,
+} from '../../src/evaluation'
+import type { TimeStamp } from '../../src/time'
 
 describe('evaluateForSubject', () => {
   let logger: Logger
@@ -92,7 +97,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'boolean', 'user-123', context, false, logger)
 
       expect(result.value).toBe(true)
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBe(serialId)
     })
 
@@ -129,7 +134,7 @@ describe('evaluateForSubject', () => {
       const result = evaluateForSubject(flag, 'string', 'user-456', context, 'default', logger)
 
       expect(result.value).toBe('value-a')
-      expect(result.reason).toBe('TARGETING_MATCH')
+      expect(result.reason).toBe('SPLIT')
       expect(result.flagMetadata?.__dd_split_serial_id).toBeUndefined()
     })
 
@@ -201,6 +206,73 @@ describe('evaluateForSubject', () => {
       expect(result.flagMetadata?.__dd_eval_timestamp_ms).toBe(evaluationTimestampMs)
       expect(result.variant).toBeUndefined()
       expect(result.flagMetadata?.allocationKey).toBeUndefined()
+    })
+  })
+
+  describe('malformed flag configuration', () => {
+    it('returns a parse error for a present null flag definition', () => {
+      const config = {
+        createdAt: '2026-08-19T00:00:00Z',
+        format: 'SERVER',
+        environment: { name: 'test' },
+        flags: { malformed: null },
+      } as unknown as UniversalFlagConfigurationV1
+
+      const result = evaluateRulesBasedConfiguration(
+        config,
+        'string',
+        'malformed',
+        'default',
+        { targetingKey: 'user-123' },
+        logger
+      )
+
+      expect(result).toMatchObject({
+        value: 'default',
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
+    })
+
+    it('rejects an array used as the variations map', () => {
+      const flag = {
+        key: 'array-variations',
+        enabled: true,
+        variationType: 'STRING',
+        variations: [],
+        allocations: [],
+      } as unknown as Flag
+
+      const result = evaluateForSubject(flag, 'string', 'user-123', {}, 'default', logger)
+
+      expect(result).toMatchObject({
+        value: 'default',
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
+    })
+
+    it('rejects split variation keys inherited from Object.prototype', () => {
+      const flag: Flag = {
+        key: 'inherited-variation',
+        enabled: true,
+        variationType: 'STRING',
+        variations: {},
+        allocations: [
+          {
+            key: 'allocation',
+            splits: [{ variationKey: 'constructor', shards: [] }],
+          },
+        ],
+      }
+
+      const result = evaluateForSubject(flag, 'string', 'user-123', {}, 'default', logger)
+
+      expect(result).toMatchObject({
+        value: 'default',
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
     })
   })
 
