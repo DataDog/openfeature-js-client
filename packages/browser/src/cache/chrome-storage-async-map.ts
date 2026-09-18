@@ -10,7 +10,7 @@ export default class ChromeStorageAsyncMap<T> implements AsyncMap<string, T> {
   }
 
   async get(key: string): Promise<T | undefined> {
-    const subset = await this.storage.get(key)
+    const subset = await this.storage.get<Record<string, T>>(key)
     return subset?.[key] ?? undefined
   }
 

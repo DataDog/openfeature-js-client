@@ -1,13 +1,11 @@
-import { defineGlobal, getGlobalObject } from '@datadog/browser-core'
-import { DatadogProvider } from './openfeature/provider'
+import { registerGlobal } from './register-global'
 
-export { configurationFromString, configurationToString } from '@datadog/flagging-core'
-export type { FlaggingInitConfiguration } from './domain/configuration'
-export { DatadogDevtools } from './openfeature/devtools-provider'
+export type { PrecomputedConfigurationFetchOptions } from './transport/fetchConfiguration'
+export { fetchPrecomputedConfiguration } from './transport/fetchConfiguration'
+
+registerGlobal()
+
+export type { FlagsConfigurationWire } from '@datadog/flagging-core'
+export { configurationFromString, configurationToString, getPrecomputedContext } from '@datadog/flagging-core'
+export * from './provider-entrypoint'
 export { withRetry, withTimeout } from './transport/fetch'
-export { DatadogProvider }
-
-// Build environment placeholder for testing
-const _SDK_VERSION = __BUILD_ENV__SDK_VERSION__
-
-defineGlobal(getGlobalObject(), 'DD_FLAGGING' as keyof typeof globalThis, { Provider: DatadogProvider })

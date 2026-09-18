@@ -253,7 +253,7 @@ describe('Exposures End-to-End', () => {
     triggerBatch()
 
     exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
-    expect(exposureEvents.at(-1)?.subject).toEqual({
+    expect(exposureEvents[exposureEvents.length - 1]?.subject).toEqual({
       id: 'rum-user-b',
       attributes: { user_email: 'b@example.com' },
     })
@@ -641,7 +641,6 @@ describe('Exposures End-to-End', () => {
                 variationKey: 'variation-a',
                 variationType: 'STRING',
                 variationValue: 'red',
-                extraLogging: {},
                 doLog: true,
                 reason: 'TARGETING_MATCH',
               },
@@ -662,7 +661,6 @@ describe('Exposures End-to-End', () => {
                 variationKey: 'variation-b',
                 variationType: 'STRING',
                 variationValue: 'blue',
-                extraLogging: {},
                 doLog: true,
                 reason: 'TARGETING_MATCH',
               },
