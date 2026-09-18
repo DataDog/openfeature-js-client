@@ -9,10 +9,13 @@ import {
   Observable,
 } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
-import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../domain/configuration'
 
-export function createFlagEvaluationTrackingHook(configuration: FlaggingConfiguration): Hook {
+export function createFlagEvalEVPHook(
+  configuration: FlaggingConfiguration,
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const flagEvaluationBatch = createBatch({
     encoder: createIdentityEncoder(),
@@ -63,7 +66,7 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
   return {
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
-        aggregator.addEvaluation(hookContext.context, details)
+        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
       } catch (error) {
         addTelemetryDebug('Error adding evaluation to aggregator', {
           'error.message': error instanceof Error ? error.message : String(error),

@@ -1,20 +1,19 @@
-import { type AssignmentCache, configMatchesContext, type FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  type AssignmentCache,
+  configMatchesContext,
+  evaluatePrecomputedConfiguration,
+  type FlagsConfiguration,
+  type FlagTypeToValue,
+} from '@datadog/flagging-core'
 import type {
   EvaluationContext,
+  FlagValueType,
   Hook,
-  JsonValue,
   Logger,
-  Paradigm,
-  Provider,
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import {
-  OpenFeatureEventEmitter,
-  type ProviderEventEmitter,
-  ProviderEvents,
-  ProviderStatus,
-} from '@openfeature/web-sdk'
+import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
@@ -23,10 +22,11 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { evaluate } from '../evaluation'
+import { DatadogCoreProvider } from './core-provider'
+import { toProviderErrorEvent } from './error-event'
 import { createExposureLoggingHook } from './exposures'
-import { createFlagEvaluationTrackingHook } from './flagEvaluations'
-import { createRumTrackingHook } from './rumIntegration'
+import { createFlagEvalEVPHook } from './flagEvaluations'
+import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -53,20 +53,30 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider implements Provider {
+export class DatadogProvider extends DatadogCoreProvider {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
-  readonly runsOn: Paradigm = 'client'
   hooks?: Hook[]
-  readonly events: ProviderEventEmitter<ProviderEvents>
 
   /** Provider-level configuration */
   private readonly configuration?: FlaggingConfiguration
 
+  /** Controls both directions of the provider's RUM integration. */
+  private readonly isRumIntegrationEnabled: boolean
+
+  // TODO: Migrate this manual context plumbing to a provider `before` hook once
+  // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
+  // Watch upstream packages/web/src/hooks/hook.ts for the before return changing from `void`,
+  // and packages/web/src/client/internal/open-feature-client.ts for `beforeHooks` merging that
+  // result before calling the resolver and subsequent hooks. Return this stored context, not a
+  // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
+  /** Effective context associated with the active flags configuration. */
+  private evaluationContext: EvaluationContext = {}
+
   status: ProviderStatus
 
-  private flagsConfiguration: FlagsConfiguration = {}
+  private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined
@@ -92,21 +102,21 @@ export class DatadogProvider implements Provider {
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
+    super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
     // Set up provider-managed hooks and events
     this.hooks = []
-    this.events = new OpenFeatureEventEmitter()
 
-    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (isRumFeatureFlagTrackingEnabled) {
+    this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
+    if (this.isRumIntegrationEnabled) {
       this.hooks.push(createRumTrackingHook())
     }
 
-    // Add flag evaluation tracking hook
+    // Add EVP flag evaluation hook.
     const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
     if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvaluationTrackingHook(this.configuration))
+      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
     }
 
     // Add proper exposure logging hook (creates batch internally)
@@ -116,14 +126,14 @@ export class DatadogProvider implements Provider {
         chromeStorage: chromeStorageIfAvailable(),
         storageKeySuffix: 'dd-of-browser',
       })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
+      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
     }
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration || {}
+    this.flagsConfiguration = options.initialFlagsConfiguration
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -137,6 +147,8 @@ export class DatadogProvider implements Provider {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
+    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
@@ -145,7 +157,9 @@ export class DatadogProvider implements Provider {
     }
 
     // abort any previous setContext operation
-    this.contextUpdateAbortController.abort()
+    this.contextUpdateAbortController.abort(
+      new DOMException('Flag configuration fetch superseded by a newer context update', 'AbortError')
+    )
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
@@ -153,7 +167,7 @@ export class DatadogProvider implements Provider {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(context, { signal })
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
         // New configuration might require clearing exposure
         // cache. One example of this is updating experiment
@@ -182,6 +196,7 @@ export class DatadogProvider implements Provider {
           // scheduling).
 
           this.flagsConfiguration = config
+          this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
@@ -206,7 +221,7 @@ export class DatadogProvider implements Provider {
           } else {
             // Otherwise, this is a legitimate error
             this.status = ProviderStatus.ERROR
-            this.events.emit(ProviderEvents.Error, { error })
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
         }
@@ -263,45 +278,19 @@ export class DatadogProvider implements Provider {
     }
   }
 
-  resolveBooleanEvaluation(
+  protected resolve<T extends FlagValueType>(
+    type: T,
     flagKey: string,
-    defaultValue: boolean,
-    context: EvaluationContext,
+    defaultValue: FlagTypeToValue<T>,
+    _context: EvaluationContext,
     _logger: Logger
-  ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
-  }
-
-  resolveStringEvaluation(
-    flagKey: string,
-    defaultValue: string,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
-  }
-
-  resolveNumberEvaluation(
-    flagKey: string,
-    defaultValue: number,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
-  }
-
-  resolveObjectEvaluation<T extends JsonValue>(
-    flagKey: string,
-    defaultValue: T,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<T> {
-    // type safety: OpenFeature interface requires us to return a
-    // specific T for *any* value of T (which could be any subtype of
-    // JsonValue). We can't even theoretically implement it in a
-    // type-sound way because there's no runtime information passed to
-    // learn what type the user expects. So it's up to the user to
-    // make sure they pass the appropriate type.
-    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
+  ): ResolutionDetails<FlagTypeToValue<T>> {
+    return evaluatePrecomputedConfiguration(
+      this.flagsConfiguration,
+      type,
+      flagKey,
+      defaultValue,
+      this.evaluationContext
+    )
   }
 }
