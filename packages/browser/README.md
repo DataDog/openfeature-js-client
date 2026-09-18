@@ -126,26 +126,70 @@ console.log(result.reason) // Evaluation reason
 
 ### RUM User Context
 
-When RUM integration is enabled (the default), the provider includes flat primitive properties returned by
-`DD_RUM.getUser()` in the OpenFeature evaluation context. The RUM user ID is used as the targeting key, while fields
-set explicitly through `OpenFeature.setContext()` take precedence.
+`DatadogProvider` adds RUM defaults internally during initialization and context changes. This automatic enrichment is
+enabled by default and does not modify the context stored in OpenFeature.
 
-Initialize the RUM user before registering the provider:
+If you want to populate your OpenFeature context with values set on the RUM user, use `enrichRumContext()`. After
+initializing RUM, set the user and pass the enriched context to OpenFeature:
 
 ```javascript
-DD_RUM.setUser({
+import { datadogRum } from '@datadog/browser-rum'
+import { DatadogProvider, enrichRumContext } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+datadogRum.setUser({
   id: 'user-123',
   email: 'user@example.com',
   company_name: 'Example, Inc.',
 })
 
+const applicationContext = {
+  someStuffAboutUser: 1,
+  otherThing: 2,
+}
+
+await OpenFeature.setContext(enrichRumContext(applicationContext))
 await OpenFeature.setProviderAndWait(new DatadogProvider(configuration))
 ```
 
-If the RUM user changes after provider initialization, call
-`await OpenFeature.setContext(OpenFeature.getContext())` to reconcile the provider with the latest user while
-preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
-evaluation context.
+The helper maps the RUM user ID to `targetingKey` and flat string, number, or boolean user properties to attributes.
+Application values take precedence over RUM values; nested RUM properties are omitted.
+
+The helper reads RUM once per call. After a login, logout, or account switch, update the RUM user and enrich the original
+application context again:
+
+```javascript
+datadogRum.setUser(newUser) // Use datadogRum.clearUser() on logout.
+await OpenFeature.setContext(enrichRumContext(applicationContext))
+```
+
+Do not pass `OpenFeature.getContext()` back to `enrichRumContext()`. It already contains the previous RUM user's values,
+which would act as application overrides and could prevent the new user's values from replacing them. Keep
+`applicationContext` separately, as shown above.
+
+#### Notes
+
+`enableRumFeatureFlagTracking` controls automatic enrichment and sending flag evaluations to RUM. The helper works
+independently of this setting.
+
+`undefined` removes a field from the helper's result, but automatic enrichment can add it back for flag configuration
+requests, evaluation tracking, and exposure logging:
+
+```javascript
+datadogRum.setUser({ id: 'user-123', myKey: 'rum-value' })
+await OpenFeature.setContext(enrichRumContext({ myKey: undefined }))
+
+// OpenFeature.getContext() has no myKey property, but automatic enrichment
+// supplies myKey: 'rum-value' to the provider.
+```
+
+This also applies to `targetingKey: undefined`. Use a concrete application value to override a RUM default; omitting a
+field from the helper's result does not exclude it from targeting or reporting.
+
+If the RUM user has both `id` and a custom `targetingKey`, the helper prefers `id`, while automatic enrichment prefers
+the custom `targetingKey`. Set `targetingKey` in your application context to choose the identity explicitly.
+
+For asynchronous CDN initialization, call the helper inside `DD_RUM.onReady()` after setting the RUM user.
 
 ## Offline configuration parsing
 

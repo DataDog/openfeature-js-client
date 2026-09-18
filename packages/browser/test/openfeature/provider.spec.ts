@@ -4,6 +4,7 @@ import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sd
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
+import { enrichRumContext } from '../../src/openfeature/rumIntegration'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 
 describe('DatadogProvider', () => {
@@ -56,7 +57,7 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         // enableExposureLogging not specified - should default to true
       })
-      // Should have 3 hooks: EVP flag evaluation (default true) + exposure logging (default true) + auto RUM tracking
+      // Should have 3 hooks: EVP flag evaluation (default true) + exposure logging (default true) + RUM tracking
       expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
@@ -68,7 +69,7 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableExposureLogging: false,
       })
-      // Should have 2 hooks: EVP flag evaluation + auto RUM tracking
+      // Should have 2 hooks: EVP flag evaluation + RUM tracking
       expect(providerWithoutExposures.hooks).toHaveLength(2)
     })
 
@@ -80,7 +81,7 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         // enableFlagEvaluationTracking not specified - should default to true
       })
-      // Should have 3 hooks: EVP flag evaluation (default true) + exposure logging (default true) + auto RUM tracking
+      // Should have 3 hooks: EVP flag evaluation (default true) + exposure logging (default true) + RUM tracking
       expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
@@ -92,11 +93,11 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableFlagEvaluationTracking: false,
       })
-      // Should have 2 hooks: exposure logging + auto RUM tracking
+      // Should have 2 hooks: exposure logging + RUM tracking
       expect(providerWithoutEvalTracking.hooks).toHaveLength(2)
     })
 
-    it('should have auto RUM tracking hook even when both other tracking options are disabled', () => {
+    it('should have a RUM tracking hook even when both other tracking options are disabled', () => {
       const providerWithMinHooks = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -105,11 +106,11 @@ describe('DatadogProvider', () => {
         enableExposureLogging: false,
         enableFlagEvaluationTracking: false,
       })
-      // Should have 1 hook: auto RUM tracking only
+      // Should have 1 hook: RUM tracking only
       expect(providerWithMinHooks.hooks).toHaveLength(1)
     })
 
-    it('should not add auto RUM tracking hook when enableRumFeatureFlagTracking is false', () => {
+    it('should not add a RUM tracking hook when enableRumFeatureFlagTracking is false', () => {
       const providerWithoutRum = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -324,7 +325,7 @@ describe('DatadogProvider', () => {
       })
     })
 
-    it('should include RUM user properties in the configuration request', async () => {
+    it('should include explicitly enriched RUM user properties in the configuration request', async () => {
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
         addFeatureFlagEvaluation: jest.fn(),
@@ -337,7 +338,7 @@ describe('DatadogProvider', () => {
       }
 
       try {
-        await provider.onContextChange({}, { user_email: 'explicit@example.com' })
+        await provider.onContextChange({}, enrichRumContext({ user_email: 'explicit@example.com' }))
 
         const [, requestOptions] = fetchMock.mock.calls[0]
         const requestBody = JSON.parse(requestOptions.body)
@@ -348,6 +349,30 @@ describe('DatadogProvider', () => {
             user_email: 'explicit@example.com',
             company_name: 'Example, Inc.',
           },
+        })
+      } finally {
+        delete globalObject.DD_RUM
+      }
+    })
+
+    it.each([true, false])('should respect automatic RUM enrichment enabled=%s without the helper', async (enabled) => {
+      provider = new DatadogProvider({ ...options, enableRumFeatureFlagTracking: enabled })
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
+      }
+
+      try {
+        await provider.onContextChange({}, { region: 'us-east-1' })
+
+        const [, requestOptions] = fetchMock.mock.calls[0]
+        const requestBody = JSON.parse(requestOptions.body)
+        expect(requestBody.data.attributes.subject).toEqual({
+          targeting_key: enabled ? 'rum-user' : '',
+          targeting_attributes: enabled
+            ? { targetingKey: 'rum-user', user_email: 'rum@example.com', region: 'us-east-1' }
+            : { region: 'us-east-1' },
         })
       } finally {
         delete globalObject.DD_RUM

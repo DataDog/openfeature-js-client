@@ -1,7 +1,11 @@
 import { getGlobalObject } from '@datadog/browser-core'
-import type { EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
-import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from '../../src/openfeature/rumIntegration'
+import {
+  createRumTrackingHook,
+  enrichEvaluationContextWithRumUser,
+  enrichRumContext,
+} from '../../src/openfeature/rumIntegration'
 
 describe('createRumTrackingHook', () => {
   const mockHookContext = {} as HookContext
@@ -84,27 +88,57 @@ describe('createRumTrackingHook', () => {
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('my-flag', 'variant-key-a')
   })
 
-  describe('RUM user context', () => {
-    it('should add flat primitive user properties to the evaluation context', () => {
+  describe('existing provider enrichment', () => {
+    it('should preserve explicit undefined fields instead of restoring their RUM defaults', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
+      }
+      // Existing JavaScript callers can pass undefined directly to OpenFeature, without the helper.
+      const context = { targetingKey: undefined, user_email: undefined } as unknown as EvaluationContext
+
+      expect(enrichEvaluationContextWithRumUser(context)).toStrictEqual(context)
+    })
+
+    it('should retain the existing precedence of a RUM targetingKey property', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', targetingKey: 'custom-rum-key' }),
+      }
+
+      expect(enrichEvaluationContextWithRumUser({})).toStrictEqual({ targetingKey: 'custom-rum-key' })
+      expect(enrichEvaluationContextWithRumUser({ targetingKey: 'application-key' })).toStrictEqual({
+        targetingKey: 'application-key',
+      })
+    })
+  })
+
+  describe('enrichRumContext', () => {
+    it('should add flat primitive user properties while preserving application context precedence', () => {
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
         addFeatureFlagEvaluation: jest.fn(),
         getUser: () => ({
           id: 'rum-user',
+          targetingKey: 'rum-custom-targeting-key',
           user_email: 'rum@example.com',
           company_name: 'Example, Inc.',
           age: 42,
           active: true,
+          empty: null,
           profile: { plan: 'enterprise' },
           roles: ['admin'],
         }),
       }
 
       expect(
-        enrichEvaluationContextWithRumUser({
+        enrichRumContext({
           targetingKey: 'explicit-user',
           user_email: 'explicit@example.com',
           request_attribute: 'request-value',
+          request_metadata: { source: 'application' },
         })
       ).toEqual({
         targetingKey: 'explicit-user',
@@ -113,12 +147,55 @@ describe('createRumTrackingHook', () => {
         age: 42,
         active: true,
         request_attribute: 'request-value',
+        request_metadata: { source: 'application' },
       })
     })
 
-    it('should preserve context when RUM user lookup is unavailable', () => {
-      const context = { targetingKey: 'explicit-user' }
-      expect(enrichEvaluationContextWithRumUser(context)).toBe(context)
+    it('should use the RUM user ID instead of a RUM targetingKey property', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', targetingKey: 'rum-custom-targeting-key' }),
+      }
+
+      expect(enrichRumContext({})).toEqual({ targetingKey: 'rum-user' })
+    })
+
+    it('should preserve __proto__ as an own attribute without inheriting a targeting key', () => {
+      const context: EvaluationContext = JSON.parse('{"__proto__":{"targetingKey":"unexpected-user"},"region":"us"}')
+
+      const enrichedContext = enrichRumContext(context)
+
+      expect(Object.getPrototypeOf(enrichedContext)).toBe(Object.prototype)
+      expect(enrichedContext.targetingKey).toBeUndefined()
+      expect(Object.getOwnPropertyDescriptor(enrichedContext, '__proto__')).toEqual({
+        value: { targetingKey: 'unexpected-user' },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+      expect(JSON.stringify(enrichedContext)).toBe(JSON.stringify(context))
+    })
+
+    it('should remove RUM defaults explicitly set to undefined by the application', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
+      }
+
+      const context = {
+        targetingKey: undefined,
+        user_email: undefined,
+        region: 'us-east-1',
+      }
+      const enrichedContext: EvaluationContext = enrichRumContext(context)
+      expect(enrichedContext).toStrictEqual({ region: 'us-east-1' })
+    })
+
+    it('should normalize application context when RUM user lookup is unavailable', () => {
+      const context = { targetingKey: 'explicit-user', user_email: undefined }
+      expect(enrichRumContext(context)).toStrictEqual({ targetingKey: 'explicit-user' })
 
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
@@ -127,7 +204,7 @@ describe('createRumTrackingHook', () => {
           throw new Error('RUM is not initialized')
         },
       }
-      expect(enrichEvaluationContextWithRumUser(context)).toBe(context)
+      expect(enrichRumContext(context)).toStrictEqual({ targetingKey: 'explicit-user' })
     })
   })
 })
