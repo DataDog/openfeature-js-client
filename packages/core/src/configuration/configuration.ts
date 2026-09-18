@@ -1,18 +1,38 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
+import type { TimeStamp } from '../time'
+import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
  * Internal flags configuration for DatadogProvider.
  */
 export type FlagsConfiguration = {
+  /** The configuration wire could not be parsed, so no capability was decoded. @internal */
+  configurationError?: string
   /** @internal */
   precomputed?: PrecomputedConfiguration
+  /** The precomputed capability could not be decoded; a valid rules capability remains usable. @internal */
+  precomputedError?: string
+  /** @internal */
+  rules?: RulesConfiguration
+  /** The rules capability could not be decoded; a valid precomputed capability remains usable. @internal */
+  rulesError?: string
 }
 
 /** @internal */
 export type PrecomputedConfiguration = {
   response: PrecomputedConfigurationResponse
   context?: EvaluationContext
-  fetchedAt?: UnixTimestamp
+  fetchedAt?: TimeStamp
+  etag?: string
+  /** Parsing errors for malformed flags, retained by flag key. */
+  flagErrors?: Record<string, string>
+}
+
+/** @internal */
+export type RulesConfiguration = {
+  response: PreparedRulesResponse
+  fetchedAt?: TimeStamp
+  etag?: string
 }
 
 // Fancy way to map FlagValueType to expected FlagValue.
@@ -23,11 +43,6 @@ export type FlagTypeToValue<T extends FlagValueType> = {
   number: number
   object: JsonValue
 }[T]
-
-/** @internal
- * Timestamp in milliseconds since Unix Epoch.
- */
-export type UnixTimestamp = number
 
 /** @internal */
 export type PrecomputedConfigurationResponse = {
@@ -48,20 +63,23 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   variationValue: FlagTypeToValue<T>
   reason: ResolutionReason
   doLog: boolean
-  extraLogging: Record<string, unknown>
+  serialId?: number | null
 }
 
 /** @internal */
 export type PrecomputedFlagMetadata = {
+  // Metadata carried on OpenFeature evaluation details. The type name is kept
+  // for package API compatibility; server fallback/error results also use it.
   // Primary keys (used by browser and core readers)
-  allocationKey: string
-  variationType: FlagValueType
-  doLog: boolean
+  allocationKey?: string
+  variationType?: FlagValueType
+  doLog?: boolean
 
   // Server-side tracing keys (consumed by dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
+  __dd_eval_timestamp_ms?: TimeStamp
 }
 
 /**
