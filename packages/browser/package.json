@@ -57,7 +57,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/browser-core": "^6.33.0",
+    "@datadog/browser-core": "7.1.0",
     "@datadog/flagging-core": "3.0.0",
     "@datadog/js-core": "0.0.3"
   },
