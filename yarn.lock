@@ -770,7 +770,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/browser-core@npm:^7.1.0":
+"@datadog/browser-core@npm:7.1.0":
   version: 7.1.0
   resolution: "@datadog/browser-core@npm:7.1.0"
   checksum: 10c0/3c11fbd45cfb7c962358e5d2343d0d01a4dc4abeb14514b0204e46d155acab009de6dbbebc62ac0bc6d7909e717c30182140c40e16a712eadcab43e3590c7f15
@@ -808,7 +808,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
-    "@datadog/browser-core": "npm:^7.1.0"
+    "@datadog/browser-core": "npm:7.1.0"
     "@datadog/flagging-core": "npm:3.0.0"
     "@datadog/js-core": "npm:0.0.3"
     "@openfeature/core": "npm:^1.9.2"
