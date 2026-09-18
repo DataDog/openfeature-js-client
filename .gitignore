@@ -15,6 +15,7 @@ esm/
 bundle/
 *.tgz
 *.tar.gz
+packages/node-server/src/.dts-entry.ts
 
 # IDEs
 .idea/

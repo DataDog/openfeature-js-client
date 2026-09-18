@@ -1,7 +1,6 @@
-import type { TimeStamp } from '@datadog/js-core/time'
-import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
+import { type TimeStamp, timeStampNow } from '../time'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 

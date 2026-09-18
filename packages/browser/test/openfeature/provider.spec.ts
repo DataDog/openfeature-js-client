@@ -1,8 +1,9 @@
-import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { type EvaluationContext, type Logger, StandardResolutionReasons } from '@openfeature/core'
+import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import type { EvaluationContext, Logger } from '@openfeature/core'
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
+import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedResponse from '../../test/data/precomputed-v1.json'
 
 describe('DatadogProvider', () => {
@@ -32,7 +33,6 @@ describe('DatadogProvider', () => {
   describe('configuration validation', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should throw error when ddog-gov.com site is provided', () => {
@@ -138,7 +138,6 @@ describe('DatadogProvider', () => {
   describe('metadata', () => {
     beforeEach(() => {
       setupProvider()
-      OpenFeature.setProvider(provider)
     })
 
     it('should have correct metadata', () => {
@@ -157,11 +156,27 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
       expect(result).toEqual({
         value: true,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
+      })
+    })
+
+    it('should preserve configuration parse errors', () => {
+      provider = new DatadogProvider({
+        ...options,
+        initialFlagsConfiguration: { rulesError: 'Malformed rules data' },
+      })
+
+      expect(provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)).toEqual({
+        value: true,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+        errorMessage: 'Malformed rules data',
       })
     })
   })
@@ -171,11 +186,13 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
       expect(result).toEqual({
         value: 'default',
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
@@ -185,11 +202,13 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
       expect(result).toEqual({
         value: 42,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
@@ -199,12 +218,14 @@ describe('DatadogProvider', () => {
       setupProvider()
     })
 
-    it('should return default value with DEFAULT reason', () => {
+    it('should return provider not ready before configuration is available', () => {
       const defaultValue = { key: 'value' }
       const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
       expect(result).toEqual({
         value: defaultValue,
-        reason: StandardResolutionReasons.DEFAULT,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY',
+        errorMessage: 'No flags configuration has been set',
       })
     })
   })
@@ -302,6 +323,36 @@ describe('DatadogProvider', () => {
         },
       })
     })
+
+    it('should include RUM user properties in the configuration request', async () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({
+          id: 'rum-user',
+          user_email: 'rum@example.com',
+          company_name: 'Example, Inc.',
+          profile: { plan: 'enterprise' },
+        }),
+      }
+
+      try {
+        await provider.onContextChange({}, { user_email: 'explicit@example.com' })
+
+        const [, requestOptions] = fetchMock.mock.calls[0]
+        const requestBody = JSON.parse(requestOptions.body)
+        expect(requestBody.data.attributes.subject).toEqual({
+          targeting_key: 'rum-user',
+          targeting_attributes: {
+            targetingKey: 'rum-user',
+            user_email: 'explicit@example.com',
+            company_name: 'Example, Inc.',
+          },
+        })
+      } finally {
+        delete globalObject.DD_RUM
+      }
+    })
   })
 
   describe('concurrent request ordering', () => {
@@ -328,7 +379,6 @@ describe('DatadogProvider', () => {
               variationKey: 'variation-123',
               variationType: 'STRING',
               variationValue: stringFlagValue,
-              extraLogging: { experiment: true },
               doLog: true,
               reason: 'TARGETING_MATCH',
             },
@@ -452,13 +502,14 @@ describe('DatadogProvider', () => {
       const second = provider.onContextChange({}, { targetingKey: 'user-2' })
 
       // Resolve stale, reject latest
+      const networkError = new Error('network failure')
       calls[1].resolve(makeFetchResponse(makeResponse('first')))
-      calls[2].reject(new Error('network failure'))
+      calls[2].reject(networkError)
 
       // Both reject together — stale chains to latest, so both reject with the same error
       await expect(Promise.all([first, second])).rejects.toThrow('network failure')
 
-      expect(errorHandler).toHaveBeenCalledTimes(1)
+      expect(errorHandler).toHaveBeenCalledWith({ error: networkError, message: 'network failure' })
       expect(provider.status).toBe(ProviderStatus.ERROR)
     })
 
@@ -486,6 +537,81 @@ describe('DatadogProvider', () => {
       // Settle both in-flight fetches so the provider doesn't leak
       calls[0].resolve(makeFetchResponse(makeResponse('first')))
       calls[1].resolve(makeFetchResponse(makeResponse('second')))
+    })
+  })
+
+  describe('initialization without applicationId', () => {
+    it('should initialize successfully', async () => {
+      const originalFetch = global.fetch
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => precomputedResponse,
+      })
+      const testProvider = new DatadogProvider({
+        clientToken: 'xxx',
+        env: 'test',
+        site: INTAKE_SITE_STAGING,
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+
+      try {
+        await expect(testProvider.initialize()).resolves.toBeUndefined()
+        expect(testProvider.status).toBe(ProviderStatus.READY)
+      } finally {
+        global.fetch = originalFetch
+      }
+    })
+  })
+
+  describe('custom configuration fetch implementation', () => {
+    let originalFetch: typeof global.fetch
+
+    beforeAll(() => {
+      originalFetch = global.fetch
+    })
+
+    afterAll(() => {
+      global.fetch = originalFetch
+    })
+
+    it('uses flagConfigurationFetch during provider initialization', async () => {
+      const globalFetch = jest.fn(() => {
+        throw new Error('global fetch should not be called')
+      })
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: jest.fn(),
+        },
+        json: async () => precomputedResponse,
+      })
+      global.fetch = globalFetch
+      mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+
+      const testProvider = new DatadogProvider({
+        ...options,
+        flagConfigurationFetch: customFetch,
+      })
+      const context = { targetingKey: 'custom-fetch-user' }
+
+      await expect(testProvider.initialize(context)).resolves.toBeUndefined()
+
+      expect(globalFetch).not.toHaveBeenCalled()
+      expect(customFetch).toHaveBeenCalledWith(
+        'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            'dd-client-token': options.clientToken,
+            'dd-application-id': options.applicationId,
+          },
+        })
+      )
+      expect(testProvider.status).toBe(ProviderStatus.READY)
+      expect(testProvider.resolveStringEvaluation('string-flag', 'default', context, mockLogger).value).toBe('red')
     })
   })
 
@@ -586,9 +712,7 @@ describe('DatadogProvider', () => {
 
         expect(errorHandler).toHaveBeenCalledWith(
           expect.objectContaining({
-            error: expect.objectContaining({
-              message: 'Context change fetch failed',
-            }),
+            message: 'Context change fetch failed',
             providerName: 'datadog',
           })
         )

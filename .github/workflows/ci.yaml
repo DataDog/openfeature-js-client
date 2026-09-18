@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: read
+  pull-requests: write
 
 jobs:
   build-and-test:
@@ -24,6 +25,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -53,9 +56,21 @@ jobs:
 
       - name: Test browser package installation
         run: yarn test:browser-install
+        env:
+          ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/entrypoint-bundle-sizes.md
+
+      - name: Comment browser entrypoint bundle sizes
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        run: node scripts/comment-entrypoint-bundle-sizes.js "${{ runner.temp }}/entrypoint-bundle-sizes.md"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test node package installation (without OpenFeature)
         run: yarn test:node-install
 
       - name: Test node package installation (with OpenFeature)
         run: yarn test:node-install:with-of
+
+      - name: Test node package installation (with minimum OpenFeature)
+        run: OF_SERVER_SDK_VERSION=1.15.0 OF_CORE_VERSION=1.3.0 yarn test:node-install:with-of
