@@ -80,6 +80,8 @@ export type PrecomputedFlagMetadata = {
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
+  /** Privacy consent captured from the configuration used for this evaluation. @internal */
+  __dd_observe_full_evaluation_data?: boolean
 }
 
 /**
