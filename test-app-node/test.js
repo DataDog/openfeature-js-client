@@ -88,12 +88,34 @@ async function runTests() {
     }
   })
 
+  await testAsync('Preserve evaluation consent in the installed provider', async () => {
+    const assert = require('node:assert/strict')
+    const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: diagnostics_channel.channel('dd-trace:openfeature:privacy-test'),
+    })
+    const logger = { debug() {}, info() {}, warn() {}, error() {} }
+    for (const consent of [undefined, false, true, 'true']) {
+      provider.setConfiguration({
+        createdAt: '',
+        format: 'SERVER',
+        environment: { name: 'test' },
+        observeFullEvaluationData: consent,
+        flags: {},
+      })
+      const result = await provider.resolveBooleanEvaluation('missing', false, {}, logger)
+      assert.equal(result.errorCode, 'FLAG_NOT_FOUND')
+      assert.equal(result.flagMetadata.__dd_observe_full_evaluation_data, consent === true)
+    }
+  })
+
   // Summary
   console.log('\n=== Summary ===')
   const passed = results.filter((r) => r.status === 'pass').length
   const failed = results.filter((r) => r.status === 'fail').length
   console.log(`Passed: ${passed}/${results.length}`)
   console.log(`Failed: ${failed}/${results.length}`)
+  if (failed > 0) process.exitCode = 1
 }
 
 runTests().catch((e) => {

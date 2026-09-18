@@ -1293,4 +1293,42 @@ describe('flags configuration protobuf decoder', () => {
   it('propagates observeFullEvaluationData on the protobuf configuration', () => {
     expect(decodeRules({ observeFullEvaluationData: true }).observeFullEvaluationData).toBe(true)
   })
+
+  describe.each([true, false])('evaluation consent %p', (consent) => {
+    it.each([
+      ['success', {}, { targetingKey: 'user', country: 'US' }, undefined],
+      ['default', {}, { targetingKey: 'user', country: 'CA' }, undefined],
+      ['missing targeting key', {}, { country: 'US' }, 'TARGETING_KEY_MISSING'],
+      ['malformed flag', { minimumFeatureLevel: 1 }, { targetingKey: 'user', country: 'US' }, 'PARSE_ERROR'],
+    ] as const)('stamps %s results', (_name, options, context, errorCode) => {
+      const result = evaluateBoolean({ ...options, observeFullEvaluationData: consent }, context)
+      expect(result.errorCode).toBe(errorCode)
+      expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
+      expect(result.flagMetadata?.__dd_eval_timestamp_ms).toEqual(expect.any(Number))
+    })
+
+    it('stamps not-found and type-mismatch results', () => {
+      const config = decodeRules({ observeFullEvaluationData: consent })
+      const missing = evaluateRulesBasedConfiguration(config, 'boolean', 'missing', false, {}, logger)
+      const mismatch = evaluateRulesBasedConfiguration(config, 'string', 'test-flag', '', {}, logger)
+      expect(missing.errorCode).toBe('FLAG_NOT_FOUND')
+      expect(mismatch.errorCode).toBe('TYPE_MISMATCH')
+      for (const result of [missing, mismatch]) {
+        expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
+      }
+    })
+
+    it('retains consent when protobuf evaluation throws', () => {
+      const config = decodeRules({ observeFullEvaluationData: consent })
+      Object.defineProperty(config.flags['test-flag'], 'minimumFeatureLevel', {
+        get() {
+          throw new Error('pii-canary')
+        },
+      })
+      const result = evaluateRulesBasedConfiguration(config, 'boolean', 'test-flag', false, {}, logger)
+      expect(result.errorCode).toBe('GENERAL')
+      expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
+      expect(JSON.stringify(result)).not.toContain('pii-canary')
+    })
+  })
 })
