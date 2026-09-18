@@ -16,6 +16,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 
 // Initialize the provider
 const provider = new DatadogProvider({
+  applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
   enableExposureLogging: true,
   enableFlagEvaluationTracking: true,
@@ -23,7 +24,7 @@ const provider = new DatadogProvider({
 })
 
 // Set the provider
-await OpenFeature.setProvider(provider)
+await OpenFeature.setProviderAndWait(provider)
 
 // Get a client and evaluate flags
 const client = OpenFeature.getClient()
@@ -49,8 +50,41 @@ const provider = new DatadogProvider({
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
+
+  // Optional Fetch-compatible implementation for flag configuration requests
+  flagConfigurationFetch: globalThis.fetch,
 })
 ```
+
+The custom Fetch implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
+requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
+authentication and any configured custom headers, and may route or transform the request as needed.
+
+### Request Timeouts and Retries for npm Consumers
+
+The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose
+these helpers. The wrappers preserve the provider's cancellation signal and can be composed:
+
+```javascript
+import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
+
+const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
+
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  flagConfigurationFetch: customFetch,
+})
+```
+
+Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. The timeout includes
+response-body download. The wrapper buffers the response body and is intended for flag configuration responses. A
+timeout of `0` disables the timer. Valid timeout values end at `2_147_483_647`. Retry counts range from `0` to `10`.
+`withRetry` uses randomized exponential backoff for Fetch `TypeError` failures, timeout failures, HTTP 408, and HTTP
+5xx responses. On HTTP 503, a valid `Retry-After` value up to 30 seconds is treated as a minimum delay before jittered
+backoff is added; responses that request a longer delay are not retried. It does not retry HTTP 429. Browsers report
+network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
+`withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
 ## Usage Examples
 
@@ -112,6 +146,77 @@ If the RUM user changes after provider initialization, call
 `await OpenFeature.setContext(OpenFeature.getContext())` to reconcile the provider with the latest user while
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
+
+## Offline configuration parsing
+
+The default entry point supports precomputed configurations without including
+the Protobuf-ES dependency. Rules-based entries are ignored:
+
+```javascript
+import { configurationFromString, DatadogProvider, getPrecomputedContext } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const configuration = configurationFromString(wire)
+const context = getPrecomputedContext(configuration)
+
+const provider = new DatadogProvider({
+  applicationId: 'app-id',
+  clientToken: 'pub_...',
+  site: 'datadoghq.com',
+  env: 'production',
+  initialFlagsConfiguration: configuration,
+})
+
+if (context !== undefined) {
+  await OpenFeature.setProviderAndWait(provider, context)
+} else {
+  await OpenFeature.setProviderAndWait(provider)
+}
+```
+
+Rules-based configurations contain targeting rules that the SDK evaluates locally
+against the OpenFeature evaluation context, rather than assignments precomputed for one context.
+Applications that use them can opt into the full parser and its Protobuf-ES dependency
+through the rules-based entry point:
+
+```javascript
+import {
+  configurationFromString,
+  DatadogProvider,
+  getPrecomputedContext,
+} from '@datadog/openfeature-browser/rules-based'
+```
+
+### Using DatadogOfflineProvider with portable configuration
+
+`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
+
+For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
+
+```javascript
+import {
+  configurationFromString,
+  getPrecomputedContext,
+  DatadogOfflineProvider,
+} from '@datadog/openfeature-browser/rules-based'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const configuration = configurationFromString('...flags configuration string...')
+const provider = new DatadogOfflineProvider()
+provider.setConfiguration(configuration)
+const context = getPrecomputedContext(configuration)
+
+if (context === undefined) {
+  await OpenFeature.setProviderAndWait(provider)
+} else {
+  await OpenFeature.setProviderAndWait(provider, context)
+}
+
+const client = OpenFeature.getClient()
+const enabled = client.getBooleanValue('new-checkout', false)
+```
+
+For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
 
 ## End-user license agreement
 

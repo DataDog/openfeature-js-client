@@ -81,6 +81,14 @@ describe('Universal Flag Configuration V1', () => {
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
   }
 
+  it.each(['constructor', '__proto__'])('treats inherited JSON flag key %s as missing', (flagKey) => {
+    expect(evaluateRulesBasedConfiguration(getUFC(), 'boolean', flagKey, false, {}, logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND',
+    })
+  })
+
   describe.each(getTestCaseFileNames())('should evaluate for %s', (testCaseFileName) => {
     const testCases = getTestCases(testCaseFileName)
     const testCasesWithContext = testCases.map((testCase) => ({
@@ -96,6 +104,9 @@ describe('Universal Flag Configuration V1', () => {
       const details = evaluateDetails(testCase, context)
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
+      if (testCase.result.errorCode !== undefined) {
+        expect(details.errorCode).toEqual(testCase.result.errorCode)
+      }
     })
   })
 })

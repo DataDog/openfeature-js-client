@@ -11,6 +11,7 @@ export interface ExposureEvent {
   variant: {
     key: string
   }
+  serial_id?: number
   subject: {
     id: string
     attributes: EvaluationContext

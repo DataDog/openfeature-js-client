@@ -11,6 +11,7 @@ export interface TestCase {
   result: {
     value: FlagValue
     reason: string
+    errorCode?: string
     variant?: string
     flagMetadata?: PrecomputedFlagMetadata
   }

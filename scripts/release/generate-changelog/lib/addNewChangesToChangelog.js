@@ -1,9 +1,10 @@
 const { readFile } = require('node:fs/promises')
 const fs = require('node:fs')
+const path = require('node:path')
 
 const emojiNameMap = require('emoji-name-map')
 
-const { openfeatureVersion } = require('../../../lib/openfeatureVersion')
+const { packagesDirectoryNames } = require('../../../lib/packagesDirectoryNames')
 const { commandSync } = require('../../../lib/executionUtils')
 const { getAffectedPackages } = require('./getAffectedPackages')
 const { CHANGELOG_FILE, CONTRIBUTING_FILE, PUBLIC_EMOJI_PRIORITY, INTERNAL_EMOJI_PRIORITY } = require('./constants')
@@ -16,7 +17,9 @@ const FIRST_EMOJI_REGEX = /\p{Extended_Pictographic}/u
  */
 exports.addNewChangesToChangelog = async (previousContent) => {
   const emojisLegend = await getEmojisLegend()
-  const changeLists = getChangeLists()
+  const sections = packagesDirectoryNames
+    .map((packageDirectoryName) => getPackageChangelogSection(packageDirectoryName, previousContent))
+    .filter(Boolean)
 
   return `\
 # Changelog
@@ -25,9 +28,7 @@ ${emojisLegend}
 
 ---
 
-## v${openfeatureVersion}
-
-${changeLists}
+${sections.join('\n\n')}
 ${previousContent.slice(previousContent.indexOf('\n##'))}`
 }
 
@@ -54,10 +55,35 @@ async function getEmojisLegend() {
   return lines.join('\n')
 }
 
-function getChangeLists() {
-  const lastTagName = getLastReleaseTagName()
-  const commits = commandSync`git log ${lastTagName}..HEAD --pretty=format:"%H %s"`.run().split('\n')
+function getPackageChangelogSection(packageDirectoryName, previousContent) {
+  const packageJson = getPackageJson(packageDirectoryName)
+  const header = `## ${packageJson.name}@${packageJson.version}`
+  if (previousContent.includes(header)) {
+    return ''
+  }
 
+  const changeLists = getChangeLists(getLastReleaseTagName(packageJson.name), packageDirectoryName)
+  if (!changeLists) {
+    return ''
+  }
+
+  return `${header}\n\n${changeLists}`
+}
+
+function getPackageJson(packageDirectoryName) {
+  return JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../../..', 'packages', packageDirectoryName, 'package.json'), {
+      encoding: 'utf-8',
+    })
+  )
+}
+
+function getLastReleaseTagName(packageName) {
+  return commandSync`git tag --merged HEAD --list '${packageName}@*' --sort=-version:refname`.run().split('\n')[0]
+}
+
+function getChangeLists(lastTagName, packageDirectoryName) {
+  const commits = getCommitsSince(lastTagName)
   const internalChanges = []
   const publicChanges = []
 
@@ -65,7 +91,11 @@ function getChangeLists() {
     const spaceIndex = commit.indexOf(' ')
     const hash = commit.slice(0, spaceIndex)
     const message = commit.slice(spaceIndex + 1)
-    if (isVersionMessage(message) || isStagingBumpMessage(message)) {
+    if (
+      isVersionMessage(message) ||
+      isStagingBumpMessage(message) ||
+      !getAffectedPackages(hash).includes(packageDirectoryName)
+    ) {
       return
     }
 
@@ -86,14 +116,10 @@ function getChangeLists() {
     .join('\n\n')
 }
 
-function getLastReleaseTagName() {
-  const changelog = fs.readFileSync(CHANGELOG_FILE, { encoding: 'utf-8' })
-  const match = changelog.match(/^## (v\d+\.\d+\.\d+.*)/m)
-  if (!match) {
-    throw new Error('Could not find the last release version in the changelog')
-  }
-  console.log(match[1])
-  return match[1]
+function getCommitsSince(lastTagName) {
+  const range = lastTagName ? `${lastTagName}..HEAD` : 'HEAD'
+  const output = commandSync`git log ${range} --pretty=format:"%H %s"`.run()
+  return output ? output.split('\n') : []
 }
 
 function sortByEmojiPriority(a, b, priorityList) {
