@@ -10,10 +10,12 @@ import {
 } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import type { DatadogTrackingHook, DatadogTrackingHooksOptions } from './tracking'
 
 export function createFlagEvalEVPHook(
-  configuration: FlaggingConfiguration,
+  configuration: FlaggingTrackingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
 ): Hook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
@@ -73,5 +75,12 @@ export function createFlagEvalEVPHook(
         })
       }
     },
+  }
+}
+
+export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHook {
+  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
+  return {
+    hooks: configuration ? [createFlagEvalEVPHook(configuration)] : [],
   }
 }

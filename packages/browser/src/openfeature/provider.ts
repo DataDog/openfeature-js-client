@@ -14,19 +14,17 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
+import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
-import { createExposureLoggingHook } from './exposures'
-import { createFlagEvalEVPHook } from './flagEvaluations'
-import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
+import { DatadogProviderBase } from './provider-base'
+import { createProviderTracking } from './provider-tracking'
+import { enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -53,7 +51,7 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider extends DatadogCoreProvider {
+export class DatadogProvider extends DatadogProviderBase {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
@@ -105,29 +103,15 @@ export class DatadogProvider extends DatadogCoreProvider {
     super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
-    // Set up provider-managed hooks and events
-    this.hooks = []
-
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (this.isRumIntegrationEnabled) {
-      this.hooks.push(createRumTrackingHook())
-    }
-
-    // Add EVP flag evaluation hook.
-    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
-    if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
-    }
-
-    // Add proper exposure logging hook (creates batch internally)
-    const isExposureLoggingEnabled = options.enableExposureLogging ?? true
-    if (isExposureLoggingEnabled && this.configuration) {
-      this.exposureCache = assignmentCacheFactory({
-        chromeStorage: chromeStorageIfAvailable(),
-        storageKeySuffix: 'dd-of-browser',
-      })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
-    }
+    const tracking = createProviderTracking({
+      options,
+      configuration: this.configuration,
+      enabledByDefault: true,
+      getTrackingContext: () => this.evaluationContext,
+    })
+    this.hooks = tracking.hooks
+    this.exposureCache = tracking.exposureCache
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
