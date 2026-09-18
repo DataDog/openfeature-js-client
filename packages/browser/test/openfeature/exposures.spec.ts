@@ -253,7 +253,7 @@ describe('Exposures End-to-End', () => {
     triggerBatch()
 
     exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
-    expect(exposureEvents.at(-1)?.subject).toEqual({
+    expect(exposureEvents[exposureEvents.length - 1]?.subject).toEqual({
       id: 'rum-user-b',
       attributes: { user_email: 'b@example.com' },
     })
