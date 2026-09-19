@@ -84,7 +84,22 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   private computeConfigurationId(configuration: FlagsConfiguration): string {
     try {
-      return getMD5Hash(configurationToString(configuration))
+      // Retrieval metadata can change even when the evaluated configuration is unchanged.
+      return getMD5Hash(
+        configurationToString({
+          ...configuration,
+          precomputed: configuration.precomputed && {
+            ...configuration.precomputed,
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+          rules: configuration.rules && {
+            ...configuration.rules,
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+        })
+      )
     } catch {
       this.fallbackConfigurationSequence += 1
       return `core-configuration-${this.fallbackConfigurationSequence}`

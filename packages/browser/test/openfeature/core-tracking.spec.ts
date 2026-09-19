@@ -5,6 +5,7 @@ import {
   type ExposureEvent,
   type FlagsConfiguration,
 } from '@datadog/flagging-core'
+import { timeStampNow } from '@datadog/js-core/time'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
@@ -247,6 +248,56 @@ describe('DatadogCoreProvider tracking', () => {
 
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
   })
+
+  it.each(['precomputed', 'rules'] as const)(
+    'keeps %s exposures deduplicated when only retrieval metadata changes',
+    async (kind) => {
+      const { trackingHooks } = createExposureOnlyTracking()
+      await trackingHooks.initialize()
+      const configuration = kind === 'rules' ? rulesConfiguration : precomputedConfiguration
+      const withRetrievalMetadata = (etag: string): FlagsConfiguration => ({
+        ...configuration,
+        precomputed: configuration.precomputed && {
+          ...configuration.precomputed,
+          fetchedAt: timeStampNow(),
+          etag,
+        },
+        rules: configuration.rules && { ...configuration.rules, fetchedAt: timeStampNow(), etag },
+      })
+      const initialConfiguration = withRetrievalMetadata('first')
+      const provider = new DatadogCoreProvider()
+      provider.setConfiguration(initialConfiguration)
+      await OpenFeature.setProviderAndWait(
+        DOMAIN,
+        provider,
+        kind === 'rules' ? { targetingKey: 'rules-user', country: 'US' } : { targetingKey: 'static-user', plan: 'free' }
+      )
+      const client = OpenFeature.getClient(DOMAIN)
+      client.addHooks(...trackingHooks.hooks)
+      const evaluate = () =>
+        kind === 'rules'
+          ? client.getBooleanDetails('test-flag', false)
+          : client.getStringDetails('static-flag', 'default')
+      const firstDetails = evaluate()
+      jest.advanceTimersByTime(31_000)
+
+      const refetchedConfiguration = withRetrievalMetadata('first')
+      expect(refetchedConfiguration[kind]!.fetchedAt).not.toBe(initialConfiguration[kind]!.fetchedAt)
+      provider.setConfiguration(refetchedConfiguration)
+      expect(evaluate().flagMetadata.__dd_core_configuration_id).toBe(
+        firstDetails.flagMetadata.__dd_core_configuration_id
+      )
+      jest.advanceTimersByTime(31_000)
+
+      provider.setConfiguration(withRetrievalMetadata('second'))
+      evaluate()
+      jest.advanceTimersByTime(31_000)
+
+      expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
+      expect(provider.getConfiguration()![kind]!.etag).toBe('second')
+      expect(initialConfiguration[kind]!.etag).toBe('first')
+    }
+  )
 
   it('does not let legacy exposure cache entries suppress core provider exposures', async () => {
     const staleExposure: ExposureEvent = {
