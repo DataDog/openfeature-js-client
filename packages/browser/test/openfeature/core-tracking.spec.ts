@@ -186,12 +186,10 @@ describe('DatadogCoreProvider tracking', () => {
   })
 
   it('keeps tracking initialization as a no-op when hooks have no lifecycle', async () => {
-    const trackingHooks = createDatadogTrackingHooks(
-      createDatadogRumTrackingHook(),
-      createDatadogEvaluationLoggingHook(tracking)
-    )
+    const trackingHooks = createDatadogTrackingHooks(createDatadogRumTrackingHook())
 
     await expect(trackingHooks.initialize()).resolves.toBeUndefined()
+    await expect(trackingHooks.shutdown()).resolves.toBeUndefined()
   })
 
   it('does not emit exposures when evaluation returns a default', async () => {

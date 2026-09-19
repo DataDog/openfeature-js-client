@@ -23,7 +23,7 @@ import {
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
 import { DatadogProviderBase } from './provider-base'
-import { createProviderTracking } from './provider-tracking'
+import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
@@ -79,6 +79,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   private exposureCache: AssignmentCache | undefined
   private exposureCacheReady: Promise<void> | undefined
+  private readonly tracking: ProviderTracking
 
   /**
    * Concurrency control for initialize/onContextChange:
@@ -104,14 +105,14 @@ export class DatadogProvider extends DatadogProviderBase {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
-    const tracking = createProviderTracking({
+    this.tracking = createProviderTracking({
       options,
       configuration: this.configuration,
       enabledByDefault: true,
       getTrackingContext: () => this.evaluationContext,
     })
-    this.hooks = tracking.hooks
-    this.exposureCache = tracking.exposureCache
+    this.hooks = this.tracking.hooks
+    this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
@@ -122,8 +123,14 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
-    this.exposureCacheReady = this.exposureCache?.init()
+    this.exposureCacheReady = this.tracking.initialize()
     return this.setContext(context)
+  }
+
+  async onClose(): Promise<void> {
+    this.contextUpdateAbortController.abort()
+    await this.tracking.shutdown()
+    this.status = ProviderStatus.NOT_READY
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
