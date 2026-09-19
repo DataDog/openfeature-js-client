@@ -96,6 +96,40 @@ describe('tracking resource lifecycle', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['exposure', 'evaluation'] as const)(
+    'cleans up %s resources when the final proxy call throws',
+    async (kind) => {
+      const addListener = jest.spyOn(EventTarget.prototype, 'addEventListener')
+      const removeListener = jest.spyOn(EventTarget.prototype, 'removeEventListener')
+      const proxy = jest.fn(() => {
+        throw new Error('proxy unavailable')
+      })
+      const trackingOptions = { ...options, proxy }
+      const controller =
+        kind === 'exposure'
+          ? createDatadogExposureLoggingHook(trackingOptions)
+          : createDatadogEvaluationLoggingHook(trackingOptions)
+      controllers.push(controller)
+      const client = await createClient()
+      client.addHooks(...controller.hooks)
+
+      for (const lifecycleCount of [1, 2]) {
+        await controller.initialize()
+        await OpenFeature.setContext(domain, { targetingKey: `rules-user-${lifecycleCount}`, country: 'US' })
+        expect(client.getBooleanDetails('test-flag', false).errorCode).toBeUndefined()
+        await expect(controller.shutdown()).resolves.toBeUndefined()
+        await controller.shutdown()
+
+        expect(proxy).toHaveBeenCalledTimes(lifecycleCount)
+        expect(addListener).toHaveBeenCalledTimes(3 * lifecycleCount)
+        expect(removeListener.mock.calls).toEqual(addListener.mock.calls)
+        expect(jest.getTimerCount()).toBe(0)
+      }
+      jest.advanceTimersByTime(60_000)
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
+
   it('waits for pending exposure initialization before completing shutdown', async () => {
     let resolveRead!: (entries: Record<string, string>) => void
     let notifyRead!: () => void
