@@ -10,8 +10,8 @@ import type { BulkReadAssignmentCache } from './hybrid-assignment-cache'
 export default class ChromeStorageAssignmentCache implements BulkReadAssignmentCache {
   private readonly storage: ChromeStorageAsyncMap<string>
 
-  constructor(chromeStorage: chrome.storage.StorageArea) {
-    this.storage = new ChromeStorageAsyncMap(chromeStorage)
+  constructor(chromeStorage: chrome.storage.StorageArea, storageKeySuffix: string) {
+    this.storage = new ChromeStorageAsyncMap(chromeStorage, `datadog-assignment-${storageKeySuffix}`)
   }
 
   init(): Promise<void> {

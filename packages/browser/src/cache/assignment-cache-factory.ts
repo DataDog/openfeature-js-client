@@ -21,7 +21,7 @@ export function assignmentCacheFactory({
   }
 
   if (chromeStorage) {
-    const chromeStorageCache = new ChromeStorageAssignmentCache(chromeStorage)
+    const chromeStorageCache = new ChromeStorageAssignmentCache(chromeStorage, storageKeySuffix)
     return new HybridAssignmentCache(simpleCache, chromeStorageCache)
   } else {
     if (hasWindowLocalStorage()) {
