@@ -259,6 +259,8 @@ provider.setConfiguration(nextConfiguration)
 
 Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 
+Refetching identical content does not invalidate deduplication when only retrieval metadata (`fetchedAt` or `etag`) changes. For rules-based configurations, the server's `createdAt` build timestamp is also excluded from the identity, matching the backend's semantic fingerprint behavior. These fields remain available on the configuration and in its portable wire representation.
+
 To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 
 ## End-user license agreement

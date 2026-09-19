@@ -84,7 +84,24 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   private computeConfigurationId(configuration: FlagsConfiguration): string {
     try {
-      return getMD5Hash(configurationToString(configuration))
+      // Retrieval metadata and the UFC build timestamp can change without changing rules.
+      // The backend's semantic Fingerprint() also excludes the rules' CreatedAt.
+      return getMD5Hash(
+        configurationToString({
+          ...configuration,
+          precomputed: configuration.precomputed && {
+            ...configuration.precomputed,
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+          rules: configuration.rules && {
+            ...configuration.rules,
+            response: { ...configuration.rules.response, createdAt: undefined },
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+        })
+      )
     } catch {
       this.fallbackConfigurationSequence += 1
       return `core-configuration-${this.fallbackConfigurationSequence}`
