@@ -7,18 +7,19 @@ import {
   type ExposureEventWithTimestamp,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
-import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
 import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
 import { chromeStorageIfAvailable } from '../cache/helpers'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
-import type { DatadogTrackingHook, DatadogTrackingHooksOptions } from './tracking'
-import { runTrackingLifecycleOperation } from './tracking'
+import type { DatadogTrackingHook, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
+import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
 export interface DatadogExposureLoggingHook extends DatadogTrackingHook {
   initialize(): Promise<void>
+  shutdown(): Promise<void>
 }
 
 type ExposureCacheEntry = ExposureEvent & {
@@ -32,7 +33,7 @@ export function createExposureLoggingHook(
   configuration: FlaggingTrackingConfiguration,
   exposureCache: AssignmentCache,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
-): Hook {
+): ManagedTrackingHook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const exposuresBatch = startExposuresBatch(
     configuration,
@@ -43,6 +44,7 @@ export function createExposureLoggingHook(
   )
 
   return {
+    shutdown: () => exposuresBatch.stop(),
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       const timestamp = timeStampNow()
       const exposureEvent = createExposureEvent(getEvaluationContext(hookContext.context), details)
@@ -85,6 +87,7 @@ export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOp
     return {
       hooks: [],
       initialize: () => Promise.resolve(),
+      shutdown: () => Promise.resolve(),
     }
   }
 
@@ -93,10 +96,10 @@ export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOp
     storageKeySuffix: 'dd-of-browser',
   })
 
-  return {
-    hooks: [createExposureLoggingHook(configuration, exposureCache)],
-    initialize: () => runTrackingLifecycleOperation(() => exposureCache.init()),
-  }
+  return createTrackingHookController(async () => {
+    await runTrackingLifecycleOperation(() => exposureCache.init())
+    return createExposureLoggingHook(configuration, exposureCache)
+  })
 }
 
 function getExposureCacheEntry(

@@ -253,9 +253,17 @@ client.addHooks(...tracking.hooks)
 
 // Later, when replacing the active flag configuration before another evaluation:
 provider.setConfiguration(nextConfiguration)
+
+// When this client no longer needs tracking:
+client.clearHooks()
+await tracking.shutdown()
 ```
 
-`tracking.initialize()` runs asynchronous setup required by the included hooks, such as loading the exposure deduplication cache. Hook factories may also allocate lightweight browser transport or aggregation resources when they are created, so applications should create tracking hooks when they intend to register them.
+`tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
+
+`tracking.shutdown()` flushes pending exposure/evaluation events and stops their timers and subscriptions. Requests already handed to the browser transport may still complete or retry. Both lifecycle methods are idempotent, and initialization after shutdown starts tracking again without clearing persisted exposure deduplication. Individual exposure and evaluation controllers also expose these methods. Lifecycle failures do not interrupt flag evaluation.
+
+The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
 
 Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 

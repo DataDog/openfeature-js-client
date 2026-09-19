@@ -13,14 +13,22 @@ export function startExposuresBatch(
   reportError: (error: RawError) => void,
   pageMayExitObservable: Observable<PageMayExitEvent>
 ) {
+  const sessionExpireObservable = new Observable<void>()
   const batch = createBatch({
     encoder: createIdentityEncoder(),
     request: createHttpRequest([configuration.exposuresEndpointBuilder], reportError),
     flushController: createFlushController({
       pageMayExitObservable,
-      sessionExpireObservable: new Observable(),
+      sessionExpireObservable,
     }),
   })
 
-  return batch
+  return {
+    ...batch,
+    stop: () => {
+      // Flush pending exposures and cancel the batch timeout before removing subscriptions.
+      sessionExpireObservable.notify()
+      batch.stop()
+    },
+  }
 }

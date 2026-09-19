@@ -6,9 +6,10 @@ import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration }
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
+import type { DatadogTrackingHook, DatadogTrackingHooks } from './tracking'
+import { createDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
-export interface ProviderTracking {
-  hooks: Hook[]
+export interface ProviderTracking extends DatadogTrackingHooks {
   exposureCache?: AssignmentCache
 }
 
@@ -23,27 +24,37 @@ export function createProviderTracking({
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
 }): ProviderTracking {
-  const hooks: Hook[] = []
+  const trackingHooks: DatadogTrackingHook[] = []
 
   if (options.enableRumFeatureFlagTracking ?? enabledByDefault) {
-    hooks.push(createRumTrackingHook())
+    trackingHooks.push({ hooks: [createRumTrackingHook()] })
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    hooks.push(createFlagEvalEVPHook(configuration))
+    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration)))
   }
 
   let exposureCache: AssignmentCache | undefined
   if ((options.enableExposureLogging ?? enabledByDefault) && configuration) {
-    exposureCache = assignmentCacheFactory({
+    const cache = assignmentCacheFactory({
       chromeStorage: chromeStorageIfAvailable(),
       storageKeySuffix: 'dd-of-browser',
     })
-    hooks.push(createExposureLoggingHook(configuration, exposureCache))
+    exposureCache = cache
+    trackingHooks.push(
+      createTrackingHookController(async () => {
+        await runTrackingLifecycleOperation(() => cache.init())
+        return createExposureLoggingHook(configuration, cache)
+      })
+    )
   }
 
+  const tracking = createDatadogTrackingHooks(...trackingHooks)
   return {
-    hooks: getTrackingContext ? hooks.map((hook) => withTrackingContext(hook, getTrackingContext)) : hooks,
+    ...tracking,
+    hooks: getTrackingContext
+      ? tracking.hooks.map((hook) => withTrackingContext(hook, getTrackingContext))
+      : tracking.hooks,
     exposureCache,
   }
 }
