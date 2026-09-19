@@ -1,7 +1,6 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable } from '../cache/helpers'
+import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
@@ -36,10 +35,7 @@ export function createProviderTracking({
 
   let exposureCache: AssignmentCache | undefined
   if ((options.enableExposureLogging ?? enabledByDefault) && configuration) {
-    const cache = assignmentCacheFactory({
-      chromeStorage: chromeStorageIfAvailable(),
-      storageKeySuffix: 'dd-of-browser',
-    })
+    const cache = createExposureCache(options, configuration)
     exposureCache = cache
     trackingHooks.push(
       createTrackingHookController(async () => {

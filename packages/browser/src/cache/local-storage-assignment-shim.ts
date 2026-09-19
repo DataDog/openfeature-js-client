@@ -13,7 +13,7 @@ export class LocalStorageAssignmentShim {
   }
 
   clear(): void {
-    this.getCache().clear()
+    window.localStorage.removeItem(this.localStorageKey)
   }
 
   delete(key: string): boolean {

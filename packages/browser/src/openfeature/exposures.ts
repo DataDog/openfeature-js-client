@@ -8,8 +8,7 @@ import {
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable } from '../cache/helpers'
+import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
@@ -91,10 +90,7 @@ export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOp
     }
   }
 
-  const exposureCache = assignmentCacheFactory({
-    chromeStorage: chromeStorageIfAvailable(),
-    storageKeySuffix: 'dd-of-browser',
-  })
+  const exposureCache = createExposureCache(options, configuration)
 
   return createTrackingHookController(async () => {
     await runTrackingLifecycleOperation(() => exposureCache.init())

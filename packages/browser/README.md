@@ -267,6 +267,8 @@ The application owns manually registered hooks: clearing client hooks or removin
 
 Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
 
+Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
+
 To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
 
 ## End-user license agreement
