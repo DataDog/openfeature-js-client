@@ -6,6 +6,31 @@
 
 ---
 
+## @datadog/openfeature-browser@2.0.0
+
+**Breaking Changes:**
+
+- Remove the inherited, deprecated `allowFallbackToLocalStorage` initialization option through the upgrade to `@datadog/browser-core@7.1.0`. Applications that specify this option should remove it ([#286](https://github.com/DataDog/openfeature-js-client/pull/286)) [BROWSER]
+- Adopt `@datadog/flagging-core@3.0.1`, including removal of the deprecated `PrecomputedFlag.extraLogging` field. Applications constructing typed precomputed configurations should omit this field ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [BROWSER]
+
+**Features:**
+
+- Add the evaluation-only `DatadogCoreProvider` through the opt-in `@datadog/openfeature-browser/rules-based` entrypoint. Applications supply precomputed or rules-based configurations and can evaluate rules locally as the OpenFeature context changes, without built-in fetching or telemetry ([#336](https://github.com/DataDog/openfeature-js-client/pull/336), [#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+- Support portable configuration wire formats and opt-in rules-based parsing, and expose `getPrecomputedContext` for restoring the context associated with precomputed configurations ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#353](https://github.com/DataDog/openfeature-js-client/pull/353), [#346](https://github.com/DataDog/openfeature-js-client/pull/346)) [BROWSER]
+- Add standalone `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers with custom Fetch support, and reuse matching precomputed bootstrap configurations when initializing `DatadogProvider` ([#351](https://github.com/DataDog/openfeature-js-client/pull/351)) [BROWSER]
+- Add opt-in exposure, evaluation, and RUM tracking hook factories and `composeDatadogTrackingHooks`. Applications register hooks with OpenFeature and explicitly initialize and shut down their tracking resources ([#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+
+**Bug Fixes:**
+
+- Scope persistent exposure deduplication to the telemetry destination and configuration for both `DatadogProvider` and standalone exposure hooks. Existing unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication ([#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+- Preserve exposure deduplication across equivalent configuration refreshes, clean up tracking resources even if the final flush fails, and settle pending context updates during provider shutdown ([#349](https://github.com/DataDog/openfeature-js-client/pull/349), [#391](https://github.com/DataDog/openfeature-js-client/pull/391)) [BROWSER]
+- Include the core fix for negated string and SHA-256 string comparisons in local rules-based evaluation ([#386](https://github.com/DataDog/openfeature-js-client/pull/386)) [BROWSER]
+
+**Internal Changes:**
+
+- Share precomputed evaluation with core and keep generated protobuf code isolated from the default/precomputed entrypoints, with packed-package dependency-boundary and bundle-size guardrails ([#336](https://github.com/DataDog/openfeature-js-client/pull/336), [#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#382](https://github.com/DataDog/openfeature-js-client/pull/382)) [BROWSER]
+- Use the already-published exact `@datadog/flagging-core@3.0.1` dependency. Core and Node.js package versions are unchanged by this release.
+
 ## @datadog/flagging-core@3.0.1
 
 **Bug Fixes:**
