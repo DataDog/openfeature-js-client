@@ -123,8 +123,10 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
-  // Capture before evaluating: callbacks may replace or mutate the configuration.
-  const metadata = createEvaluationMetadata(evaluationTimestampMs, config?.observeFullEvaluationData)
+  // Snapshot consent once at the start of this evaluation. The provider can receive a new
+  // configuration later, but hooks must see the consent from the configuration that produced this result.
+  const observeFullEvaluationData = config?.observeFullEvaluationData === true
+  const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
   let details: ResolutionDetails<FlagTypeToValue<T>>
   try {
     details = evaluateRules(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs)

@@ -75,12 +75,11 @@ export type PrecomputedFlagMetadata = {
   variationType?: FlagValueType
   doLog?: boolean
 
-  // Server-side tracing keys (consumed by dd-trace-js)
+  // Server-side evaluation metadata (consumed by dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
-  /** Privacy consent captured from the configuration used for this evaluation. @internal */
   __dd_observe_full_evaluation_data?: boolean
 }
 

@@ -27,9 +27,11 @@ async function testAsync(name, fn) {
     await fn()
     results.push({ name, status: 'pass' })
     console.log(`PASS: ${name}`)
+    return true
   } catch (e) {
     results.push({ name, status: 'fail', error: e.message })
     console.log(`FAIL: ${name}: ${e.message}`)
+    return false
   }
 }
 
@@ -88,7 +90,7 @@ async function runTests() {
     }
   })
 
-  await testAsync('Preserve evaluation consent in the installed provider', async () => {
+  const consentTestPassed = await testAsync('Preserve evaluation consent in the installed provider', async () => {
     const assert = require('node:assert/strict')
     const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
     const provider = new DatadogNodeServerProvider({
@@ -115,7 +117,7 @@ async function runTests() {
   const failed = results.filter((r) => r.status === 'fail').length
   console.log(`Passed: ${passed}/${results.length}`)
   console.log(`Failed: ${failed}/${results.length}`)
-  if (failed > 0) process.exitCode = 1
+  if (!consentTestPassed) process.exitCode = 1
 }
 
 runTests().catch((e) => {
