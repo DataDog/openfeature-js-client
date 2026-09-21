@@ -1,4 +1,4 @@
-import { OpenFeature } from '@openfeature/web-sdk'
+import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import {
   composeDatadogTrackingHooks,
   configurationFromString,
@@ -195,6 +195,67 @@ describe('tracking resource lifecycle', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     jest.advanceTimersByTime(60_000)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  describe.each(['replacing', 'clearing'] as const)('%s a provider during a context update', (action) => {
+    it.each(['rejects on abort', 'resolves after close'] as const)(
+      'settles without an error when the pending fetch %s',
+      async (outcome) => {
+        let completeFetch!: () => void
+        const configurationFetch = jest
+          .fn()
+          .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+          .mockImplementation(
+            (_url: string, request?: RequestInit) =>
+              new Promise((resolve, reject) => {
+                completeFetch = () => resolve({ ok: true, json: async () => precomputedResponse })
+                if (outcome === 'rejects on abort') {
+                  request?.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true })
+                }
+              })
+          )
+        const provider = new DatadogProvider({
+          ...options,
+          enableRumFeatureFlagTracking: false,
+          flagConfigurationFetch: configurationFetch,
+        })
+        await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'online-user' })
+        const client = OpenFeature.getClient(domain)
+        const errorHandler = jest.fn()
+        const configurationChanged = jest.fn()
+        client.addHandler(ProviderEvents.Error, errorHandler)
+        provider.events.addHandler(ProviderEvents.ConfigurationChanged, configurationChanged)
+        const close = jest.spyOn(provider, 'onClose')
+
+        try {
+          const contextUpdate = OpenFeature.setContext(domain, { targetingKey: 'next-user' })
+          expect(configurationFetch).toHaveBeenCalledTimes(2)
+          expect(client.providerStatus).toBe(ProviderStatus.RECONCILING)
+
+          if (action === 'replacing') {
+            await createClient()
+          } else {
+            await OpenFeature.clearProviders()
+          }
+          expect(close).toHaveBeenCalledTimes(1)
+          await close.mock.results[0].value
+          expect(configurationFetch.mock.calls[1][1].signal.aborted).toBe(true)
+          completeFetch()
+          await contextUpdate
+
+          expect(errorHandler).not.toHaveBeenCalled()
+          expect(configurationChanged).not.toHaveBeenCalled()
+          expect(provider.status).toBe(ProviderStatus.NOT_READY)
+          expect(jest.getTimerCount()).toBe(0)
+          if (action === 'replacing') {
+            expect(client.providerStatus).toBe(ProviderStatus.READY)
+            expect(client.getBooleanDetails('test-flag', false).errorCode).toBeUndefined()
+          }
+        } finally {
+          client.removeHandler(ProviderEvents.Error, errorHandler)
+        }
+      }
+    )
   })
 
   async function createClient() {

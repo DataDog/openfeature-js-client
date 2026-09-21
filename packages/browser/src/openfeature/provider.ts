@@ -92,10 +92,9 @@ export class DatadogProvider extends DatadogProviderBase {
    * Solution:
    * 1. `contextUpdateAbortController`: allows aborting previous operation.
    * 2. `latestContextUpdate`: the last-called context update
-   *    operation. When context updates finish, they check if they
-   *    were aborted (meaning there's a newer context update) and
-   *    delegate to it. This makes sure that all concurrent context
-   *    updates resolve to the same result.
+   *    operation. Aborted updates delegate to it so all concurrent
+   *    updates resolve to the same result. On close, it is replaced
+   *    with a settled promise so aborted updates can finish.
    */
   private latestContextUpdate: Promise<void> = Promise.resolve()
   private contextUpdateAbortController: AbortController = new AbortController()
@@ -128,6 +127,8 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async onClose(): Promise<void> {
+    // Aborted updates must not delegate to their own pending promise during shutdown.
+    this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
     await this.tracking.shutdown()
     this.status = ProviderStatus.NOT_READY
@@ -176,8 +177,7 @@ export class DatadogProvider extends DatadogProviderBase {
       .then(
         ({ config, fromCache }) => {
           if (signal.aborted) {
-            // If signal was aborted, another setContext call has updated
-            // this.latestContextUpdate, so we delegate to it.
+            // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           }
 
@@ -206,8 +206,7 @@ export class DatadogProvider extends DatadogProviderBase {
         },
         (error) => {
           if (signal.aborted) {
-            // If signal was aborted, another setContext call has updated
-            // this.latestContextUpdate, so we delegate to it.
+            // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
