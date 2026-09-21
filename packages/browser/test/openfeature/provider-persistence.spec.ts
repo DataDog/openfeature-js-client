@@ -2,6 +2,7 @@
 if (typeof globalThis.structuredClone === 'undefined') {
   globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
 }
+
 import 'fake-indexeddb/auto'
 import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
