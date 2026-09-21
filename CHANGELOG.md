@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/flagging-core@3.0.1
+
+**Bug Fixes:**
+
+- Honor negated string and SHA-256 string comparisons in protobuf rules-based configurations. Missing or unsupported context values continue to fail the condition rather than becoming matches through negation ([#386](https://github.com/DataDog/openfeature-js-client/pull/386)) [CORE]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.0.1`. Browser and Node.js package versions are unchanged and will be released separately.
+
 ## @datadog/flagging-core@3.0.0
 
 **Breaking Changes:**
