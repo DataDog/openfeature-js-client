@@ -9,14 +9,18 @@ import {
   Observable,
 } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
-import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
+import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
 export function createFlagEvalEVPHook(
-  configuration: FlaggingConfiguration,
+  configuration: FlaggingTrackingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
-): Hook {
+): ManagedTrackingHook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
+  const sessionExpireObservable = new Observable<void>()
   const flagEvaluationBatch = createBatch({
     encoder: createIdentityEncoder(),
     request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
@@ -24,7 +28,7 @@ export function createFlagEvalEVPHook(
     }),
     flushController: createFlushController({
       pageMayExitObservable,
-      sessionExpireObservable: new Observable(),
+      sessionExpireObservable,
     }),
   })
 
@@ -59,11 +63,20 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  pageMayExitObservable.subscribe(() => {
+  const pageExitSubscription = pageMayExitObservable.subscribe(() => {
     aggregator.stop()
   })
 
   return {
+    shutdown: () => {
+      try {
+        aggregator.stop()
+        sessionExpireObservable.notify()
+      } finally {
+        pageExitSubscription.unsubscribe()
+        flagEvaluationBatch.stop()
+      }
+    },
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
         aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
@@ -74,4 +87,11 @@ export function createFlagEvalEVPHook(
       }
     },
   }
+}
+
+export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
+  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
+  return configuration
+    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration))
+    : composeDatadogTrackingHooks()
 }

@@ -9,11 +9,11 @@ export class LocalStorageAssignmentShim {
       throw new Error('LocalStorage is not available')
     }
     const keySuffix = storageKeySuffix ? `-${storageKeySuffix}` : ''
-    this.localStorageKey = `eppo-assignment${keySuffix}`
+    this.localStorageKey = `datadog-assignment${keySuffix}`
   }
 
   clear(): void {
-    this.getCache().clear()
+    window.localStorage.removeItem(this.localStorageKey)
   }
 
   delete(key: string): boolean {

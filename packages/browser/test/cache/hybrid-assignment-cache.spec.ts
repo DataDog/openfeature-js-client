@@ -30,7 +30,7 @@ describe('HybridStorageAssignmentCache', () => {
   }) as jest.Mock
 
   const mockChromeStorage = { get, set } as unknown as StorageArea
-  const chromeStorageCache = new ChromeStorageAssignmentCache(mockChromeStorage)
+  const chromeStorageCache = new ChromeStorageAssignmentCache(mockChromeStorage, 'test')
   const localStorageCache = new LocalStorageAssignmentCache('test')
   const hybridCache = new HybridAssignmentCache(localStorageCache, chromeStorageCache)
 

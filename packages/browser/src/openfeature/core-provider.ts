@@ -1,69 +1,117 @@
-import type { FlagTypeToValue } from '@datadog/flagging-core'
+import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
+import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError, getMD5Hash } from '@datadog/flagging-core'
+import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
   EvaluationContext,
   FlagValueType,
-  JsonValue,
   Logger,
-  Paradigm,
-  Provider,
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { OpenFeatureEventEmitter, type ProviderEventEmitter, ProviderEvents } from '@openfeature/web-sdk'
+import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
+import { withCoreConfigurationId } from './core-provider-metadata'
+import { toProviderErrorEvent } from './error-event'
+import { DatadogProviderBase } from './provider-base'
 
-/** Shared OpenFeature evaluation surface for Datadog's browser providers. */
-export abstract class DatadogCoreProvider implements Provider {
-  abstract readonly metadata: ProviderMetadata
-  readonly runsOn: Paradigm = 'client'
-  readonly events: ProviderEventEmitter<ProviderEvents>
-
-  protected constructor() {
-    this.events = new OpenFeatureEventEmitter()
+export class DatadogCoreProvider extends DatadogProviderBase {
+  readonly metadata: ProviderMetadata = {
+    name: 'datadog-core',
   }
 
-  resolveBooleanEvaluation(
-    flagKey: string,
-    defaultValue: boolean,
-    context: EvaluationContext,
-    logger: Logger
-  ): ResolutionDetails<boolean> {
-    return this.resolve('boolean', flagKey, defaultValue, context, logger)
+  private flagsConfiguration: FlagsConfiguration | undefined
+  private flagsConfigurationId: string | undefined
+  private fallbackConfigurationSequence = 0
+  private context: EvaluationContext | undefined
+
+  constructor() {
+    super()
   }
 
-  resolveStringEvaluation(
-    flagKey: string,
-    defaultValue: string,
-    context: EvaluationContext,
-    logger: Logger
-  ): ResolutionDetails<string> {
-    return this.resolve('string', flagKey, defaultValue, context, logger)
+  getConfiguration(): FlagsConfiguration | undefined {
+    return this.flagsConfiguration
   }
 
-  resolveNumberEvaluation(
-    flagKey: string,
-    defaultValue: number,
-    context: EvaluationContext,
-    logger: Logger
-  ): ResolutionDetails<number> {
-    return this.resolve('number', flagKey, defaultValue, context, logger)
+  setConfiguration(configuration: FlagsConfiguration): void {
+    const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
+    this.flagsConfiguration = configuration
+    this.flagsConfigurationId = this.computeConfigurationId(configuration)
+
+    if (this.context === undefined) return
+
+    const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
+    if (error) {
+      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+      return
+    }
+
+    if (!hadEvaluatableConfiguration) {
+      this.events.emit(ProviderEvents.Ready)
+    }
+    this.events.emit(ProviderEvents.ConfigurationChanged)
   }
 
-  resolveObjectEvaluation<T extends JsonValue>(
-    flagKey: string,
-    defaultValue: T,
-    context: EvaluationContext,
-    logger: Logger
-  ): ResolutionDetails<T> {
-    // OpenFeature requires a specific subtype of JsonValue without providing runtime type information.
-    // Callers are responsible for passing a default value with the expected object shape.
-    return this.resolve('object', flagKey, defaultValue, context, logger) as ResolutionDetails<T>
+  initialize(context: EvaluationContext = {}): Promise<void> {
+    this.context = context
+
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, context))
+    return error ? Promise.reject(error) : Promise.resolve()
   }
 
-  protected abstract resolve<T extends FlagValueType>(
+  onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
+    this.context = newContext
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
+    if (error) {
+      throw error
+    }
+  }
+
+  protected resolve<T extends FlagValueType>(
     type: T,
     flagKey: string,
     defaultValue: FlagTypeToValue<T>,
     context: EvaluationContext,
     logger: Logger
-  ): ResolutionDetails<FlagTypeToValue<T>>
+  ): ResolutionDetails<FlagTypeToValue<T>> {
+    return withCoreConfigurationId(
+      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+      this.flagsConfigurationId
+    )
+  }
+
+  private canEvaluateCurrentContext(): boolean {
+    return this.context !== undefined && !getFlagsConfigurationError(this.flagsConfiguration, this.context)
+  }
+
+  private computeConfigurationId(configuration: FlagsConfiguration): string {
+    try {
+      // Retrieval metadata and the UFC build timestamp can change without changing rules.
+      // The backend's semantic Fingerprint() also excludes the rules' CreatedAt.
+      return getMD5Hash(
+        configurationToString({
+          ...configuration,
+          precomputed: configuration.precomputed && {
+            ...configuration.precomputed,
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+          rules: configuration.rules && {
+            ...configuration.rules,
+            response: { ...configuration.rules.response, createdAt: undefined },
+            fetchedAt: undefined,
+            etag: undefined,
+          },
+        })
+      )
+    } catch {
+      this.fallbackConfigurationSequence += 1
+      return `core-configuration-${this.fallbackConfigurationSequence}`
+    }
+  }
+}
+
+function toOpenFeatureError(error: FlagsConfigurationError | undefined): Error | undefined {
+  if (!error) return undefined
+  if (error.errorCode === 'PARSE_ERROR') return new ParseError(error.errorMessage)
+  if (error.errorCode === 'INVALID_CONTEXT') return new InvalidContextError(error.errorMessage)
+  return new ProviderNotReadyError(error.errorMessage)
 }

@@ -1,0 +1,267 @@
+import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import {
+  composeDatadogTrackingHooks,
+  configurationFromString,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  DatadogCoreProvider,
+  DatadogProvider,
+  type DatadogTrackingHooks,
+} from '../../src/rules-based'
+import precomputedResponse from '../data/precomputed-v1.json'
+import rulesWire from '../data/rules-v1-wire.json'
+
+const options = { clientToken: 'tracking-token', env: 'test', flagEvaluationTrackingInterval: 1000 }
+const domain = 'tracking-lifecycle'
+
+describe('tracking resource lifecycle', () => {
+  const controllers: DatadogTrackingHooks[] = []
+  let originalFetch: typeof globalThis.fetch
+  let fetchMock: jest.Mock
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    localStorage.clear()
+    originalFetch = globalThis.fetch
+    fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 })
+    globalThis.fetch = fetchMock
+  })
+
+  afterEach(async () => {
+    await Promise.all(controllers.splice(0).map((controller) => controller.shutdown()))
+    await OpenFeature.clearProviders()
+    Reflect.deleteProperty(globalThis, 'chrome')
+    globalThis.fetch = originalFetch
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  it.each(['exposure', 'evaluation'] as const)('owns the %s hook resources until explicit shutdown', async (kind) => {
+    const addListener = jest.spyOn(EventTarget.prototype, 'addEventListener')
+    const removeListener = jest.spyOn(EventTarget.prototype, 'removeEventListener')
+    const controller =
+      kind === 'exposure' ? createDatadogExposureLoggingHook(options) : createDatadogEvaluationLoggingHook(options)
+    controllers.push(controller)
+    const client = await createClient()
+    client.addHooks(...controller.hooks)
+
+    client.getBooleanValue('test-flag', false)
+    expect(jest.getTimerCount()).toBe(0)
+    expect(addListener).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await Promise.all([controller.initialize(), controller.initialize()])
+    expect(addListener).toHaveBeenCalledTimes(3)
+    client.getBooleanValue('test-flag', false)
+    expect(jest.getTimerCount()).toBeGreaterThan(0)
+
+    client.clearHooks()
+    await OpenFeature.clearProviders()
+    await controller.shutdown()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+    expect(removeListener).toHaveBeenCalledTimes(3)
+
+    await controller.shutdown()
+    window.dispatchEvent(new Event('beforeunload'))
+    jest.advanceTimersByTime(60_000)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+    expect(removeListener).toHaveBeenCalledTimes(3)
+
+    await controller.initialize()
+    expect(addListener).toHaveBeenCalledTimes(6)
+    await controller.shutdown()
+    expect(removeListener).toHaveBeenCalledTimes(6)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('disables registered evaluation hooks after shutdown and can initialize them again', async () => {
+    const controller = createDatadogEvaluationLoggingHook(options)
+    controllers.push(controller)
+    const client = await createClient()
+    client.addHooks(...controller.hooks)
+    await controller.initialize()
+    client.getBooleanValue('test-flag', false)
+    await controller.shutdown()
+    fetchMock.mockClear()
+
+    client.getBooleanValue('test-flag', false)
+    jest.advanceTimersByTime(60_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await controller.initialize()
+    client.getBooleanValue('test-flag', false)
+    jest.advanceTimersByTime(31_000)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['exposure', 'evaluation'] as const)(
+    'cleans up %s resources when the final proxy call throws',
+    async (kind) => {
+      const addListener = jest.spyOn(EventTarget.prototype, 'addEventListener')
+      const removeListener = jest.spyOn(EventTarget.prototype, 'removeEventListener')
+      const proxy = jest.fn(() => {
+        throw new Error('proxy unavailable')
+      })
+      const trackingOptions = { ...options, proxy }
+      const controller =
+        kind === 'exposure'
+          ? createDatadogExposureLoggingHook(trackingOptions)
+          : createDatadogEvaluationLoggingHook(trackingOptions)
+      controllers.push(controller)
+      const client = await createClient()
+      client.addHooks(...controller.hooks)
+
+      for (const lifecycleCount of [1, 2]) {
+        await controller.initialize()
+        await OpenFeature.setContext(domain, { targetingKey: `rules-user-${lifecycleCount}`, country: 'US' })
+        expect(client.getBooleanDetails('test-flag', false).errorCode).toBeUndefined()
+        await expect(controller.shutdown()).resolves.toBeUndefined()
+        await controller.shutdown()
+
+        expect(proxy).toHaveBeenCalledTimes(lifecycleCount)
+        expect(addListener).toHaveBeenCalledTimes(3 * lifecycleCount)
+        expect(removeListener.mock.calls).toEqual(addListener.mock.calls)
+        expect(jest.getTimerCount()).toBe(0)
+      }
+      jest.advanceTimersByTime(60_000)
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it('waits for pending exposure initialization before completing shutdown', async () => {
+    let resolveRead!: (entries: Record<string, string>) => void
+    let notifyRead!: () => void
+    const readStarted = new Promise<void>((resolve) => {
+      notifyRead = resolve
+    })
+    const storage = {
+      get: jest.fn(
+        () =>
+          new Promise<Record<string, string>>((resolve) => {
+            resolveRead = resolve
+            notifyRead()
+          })
+      ),
+    }
+    Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { storage: { local: storage } } })
+    const controller = createDatadogExposureLoggingHook(options)
+    controllers.push(controller)
+    const initialize = controller.initialize()
+    await readStarted
+    const shutdown = controller.shutdown()
+    resolveRead({})
+    await Promise.all([initialize, shutdown])
+
+    const client = await createClient()
+    client.addHooks(...controller.hooks)
+    client.getBooleanValue('test-flag', false)
+    jest.advanceTimersByTime(60_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('shuts down all composed hooks even if another hook fails', async () => {
+    const shutdown = jest.fn()
+    const controller = composeDatadogTrackingHooks(
+      {
+        hooks: [],
+        shutdown: () => {
+          throw new Error('synchronous failure')
+        },
+      },
+      { hooks: [], shutdown: () => Promise.reject(new Error('asynchronous failure')) },
+      { hooks: [], shutdown }
+    )
+    await expect(controller.shutdown()).resolves.toBeUndefined()
+    expect(shutdown).toHaveBeenCalledTimes(1)
+  })
+
+  it('shuts down provider-owned tracking when OpenFeature clears the online provider', async () => {
+    const provider = new DatadogProvider({
+      ...options,
+      enableRumFeatureFlagTracking: false,
+      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+    })
+    expect(jest.getTimerCount()).toBe(0)
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'online-user' })
+    const client = OpenFeature.getClient(domain)
+    expect(client.getStringValue('string-flag', 'default')).toBe('red')
+    expect(jest.getTimerCount()).toBeGreaterThan(0)
+
+    await OpenFeature.clearProviders()
+    expect(jest.getTimerCount()).toBe(0)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    jest.advanceTimersByTime(60_000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  describe.each(['replacing', 'clearing'] as const)('%s a provider during a context update', (action) => {
+    it.each(['rejects on abort', 'resolves after close'] as const)(
+      'settles without an error when the pending fetch %s',
+      async (outcome) => {
+        let completeFetch!: () => void
+        const configurationFetch = jest
+          .fn()
+          .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+          .mockImplementation(
+            (_url: string, request?: RequestInit) =>
+              new Promise((resolve, reject) => {
+                completeFetch = () => resolve({ ok: true, json: async () => precomputedResponse })
+                if (outcome === 'rejects on abort') {
+                  request?.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true })
+                }
+              })
+          )
+        const provider = new DatadogProvider({
+          ...options,
+          enableRumFeatureFlagTracking: false,
+          flagConfigurationFetch: configurationFetch,
+        })
+        await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'online-user' })
+        const client = OpenFeature.getClient(domain)
+        const errorHandler = jest.fn()
+        const configurationChanged = jest.fn()
+        client.addHandler(ProviderEvents.Error, errorHandler)
+        provider.events.addHandler(ProviderEvents.ConfigurationChanged, configurationChanged)
+        const close = jest.spyOn(provider, 'onClose')
+
+        try {
+          const contextUpdate = OpenFeature.setContext(domain, { targetingKey: 'next-user' })
+          expect(configurationFetch).toHaveBeenCalledTimes(2)
+          expect(client.providerStatus).toBe(ProviderStatus.RECONCILING)
+
+          if (action === 'replacing') {
+            await createClient()
+          } else {
+            await OpenFeature.clearProviders()
+          }
+          expect(close).toHaveBeenCalledTimes(1)
+          await close.mock.results[0].value
+          expect(configurationFetch.mock.calls[1][1].signal.aborted).toBe(true)
+          completeFetch()
+          await contextUpdate
+
+          expect(errorHandler).not.toHaveBeenCalled()
+          expect(configurationChanged).not.toHaveBeenCalled()
+          expect(provider.status).toBe(ProviderStatus.NOT_READY)
+          expect(jest.getTimerCount()).toBe(0)
+          if (action === 'replacing') {
+            expect(client.providerStatus).toBe(ProviderStatus.READY)
+            expect(client.getBooleanDetails('test-flag', false).errorCode).toBeUndefined()
+          }
+        } finally {
+          client.removeHandler(ProviderEvents.Error, errorHandler)
+        }
+      }
+    )
+  })
+
+  async function createClient() {
+    const provider = new DatadogCoreProvider()
+    provider.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'rules-user', country: 'US' })
+    return OpenFeature.getClient(domain)
+  }
+})

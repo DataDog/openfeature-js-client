@@ -147,7 +147,7 @@ If the RUM user changes after provider initialization, call
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
 
-## Offline configuration parsing
+## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
 the Protobuf-ES dependency. Rules-based entries are ignored:
@@ -187,22 +187,22 @@ import {
 } from '@datadog/openfeature-browser/rules-based'
 ```
 
-### Using DatadogOfflineProvider with portable configuration
+### Using DatadogCoreProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
+`DatadogCoreProvider` is a minimal evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or local init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration, and the provider does not install tracking hooks or send telemetry.
 
-For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
+For static initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
 ```javascript
 import {
   configurationFromString,
   getPrecomputedContext,
-  DatadogOfflineProvider,
+  DatadogCoreProvider,
 } from '@datadog/openfeature-browser/rules-based'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
-const provider = new DatadogOfflineProvider()
+const provider = new DatadogCoreProvider()
 provider.setConfiguration(configuration)
 const context = getPrecomputedContext(configuration)
 
@@ -217,6 +217,63 @@ const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains application-managed. Import only the hook factories your application uses.
+
+```javascript
+import {
+  DatadogCoreProvider,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  composeDatadogTrackingHooks,
+} from '@datadog/openfeature-browser/rules-based'
+
+const trackingOptions = {
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  service: 'storefront',
+}
+
+const tracking = composeDatadogTrackingHooks(
+  createDatadogExposureLoggingHook(trackingOptions),
+  createDatadogEvaluationLoggingHook(trackingOptions),
+  createDatadogRumTrackingHook()
+)
+
+await tracking.initialize()
+
+const provider = new DatadogCoreProvider()
+provider.setConfiguration(configuration)
+
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
+client.addHooks(...tracking.hooks)
+
+// Later, when replacing the active flag configuration before another evaluation:
+provider.setConfiguration(nextConfiguration)
+
+// When this client no longer needs tracking:
+client.clearHooks()
+await tracking.shutdown()
+```
+
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+
+`tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
+
+`tracking.shutdown()` flushes pending exposure/evaluation events and stops their timers and subscriptions. Requests already handed to the browser transport may still complete or retry. Both lifecycle methods are idempotent, and initialization after shutdown starts tracking again without clearing persisted exposure deduplication. Individual exposure and evaluation controllers also expose these methods. Lifecycle failures do not interrupt flag evaluation.
+
+The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
+
+Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
+
+Refetching identical content does not invalidate deduplication when only retrieval metadata (`fetchedAt` or `etag`) changes. For rules-based configurations, the server's `createdAt` build timestamp is also excluded from the identity, matching the backend's semantic fingerprint behavior. These fields remain available on the configuration and in its portable wire representation.
+
+Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
+
+To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
 
 ## End-user license agreement
 
