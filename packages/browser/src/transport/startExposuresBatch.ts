@@ -27,8 +27,11 @@ export function startExposuresBatch(
     ...batch,
     stop: () => {
       // Flush pending exposures and cancel the batch timeout before removing subscriptions.
-      sessionExpireObservable.notify()
-      batch.stop()
+      try {
+        sessionExpireObservable.notify()
+      } finally {
+        batch.stop()
+      }
     },
   }
 }

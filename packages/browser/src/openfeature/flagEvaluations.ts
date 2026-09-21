@@ -69,10 +69,13 @@ export function createFlagEvalEVPHook(
 
   return {
     shutdown: () => {
-      aggregator.stop()
-      sessionExpireObservable.notify()
-      pageExitSubscription.unsubscribe()
-      flagEvaluationBatch.stop()
+      try {
+        aggregator.stop()
+        sessionExpireObservable.notify()
+      } finally {
+        pageExitSubscription.unsubscribe()
+        flagEvaluationBatch.stop()
+      }
     },
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
