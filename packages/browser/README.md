@@ -226,7 +226,7 @@ import {
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
-  createDatadogTrackingHooks,
+  composeDatadogTrackingHooks,
 } from '@datadog/openfeature-browser/rules-based'
 
 const trackingOptions = {
@@ -236,7 +236,7 @@ const trackingOptions = {
   service: 'storefront',
 }
 
-const tracking = createDatadogTrackingHooks(
+const tracking = composeDatadogTrackingHooks(
   createDatadogExposureLoggingHook(trackingOptions),
   createDatadogEvaluationLoggingHook(trackingOptions),
   createDatadogRumTrackingHook()
@@ -259,6 +259,8 @@ client.clearHooks()
 await tracking.shutdown()
 ```
 
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+
 `tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
 
 `tracking.shutdown()` flushes pending exposure/evaluation events and stops their timers and subscriptions. Requests already handed to the browser transport may still complete or retry. Both lifecycle methods are idempotent, and initialization after shutdown starts tracking again without clearing persisted exposure deduplication. Individual exposure and evaluation controllers also expose these methods. Lifecycle failures do not interrupt flag evaluation.
@@ -271,7 +273,7 @@ Refetching identical content does not invalidate deduplication when only retriev
 
 Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 
-To exclude one of these integrations, omit that hook factory from both the import list and `createDatadogTrackingHooks()` call.
+To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
 
 ## End-user license agreement
 

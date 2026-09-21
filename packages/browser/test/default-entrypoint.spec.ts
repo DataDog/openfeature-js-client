@@ -6,12 +6,12 @@ jest.mock('@bufbuild/protobuf/wire', () => {
 })
 
 import {
+  composeDatadogTrackingHooks,
   configurationFromString,
   configurationToString,
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
-  createDatadogTrackingHooks,
   DatadogProvider,
   getPrecomputedContext,
 } from '../src'
@@ -19,7 +19,7 @@ import {
 describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
     expect(DatadogProvider).toBeDefined()
-    expect(createDatadogTrackingHooks).toBeDefined()
+    expect(composeDatadogTrackingHooks).toBeDefined()
     expect(createDatadogExposureLoggingHook).toBeDefined()
     expect(createDatadogEvaluationLoggingHook).toBeDefined()
     expect(createDatadogRumTrackingHook).toBeDefined()

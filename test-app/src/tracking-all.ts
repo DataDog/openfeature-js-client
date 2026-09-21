@@ -1,13 +1,13 @@
 import {
+  composeDatadogTrackingHooks,
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
-  createDatadogTrackingHooks,
 } from '@datadog/openfeature-browser/rules-based'
 import { reportTrackingScenario, trackingOptions } from './trackingScenario'
 
 const exposureLogging = createDatadogExposureLoggingHook(trackingOptions)
-const tracking = createDatadogTrackingHooks(
+const tracking = composeDatadogTrackingHooks(
   exposureLogging,
   createDatadogEvaluationLoggingHook(trackingOptions),
   createDatadogRumTrackingHook()

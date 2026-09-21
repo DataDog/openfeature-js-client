@@ -6,4 +6,4 @@ export { createDatadogEvaluationLoggingHook } from './openfeature/flagEvaluation
 export { DatadogProvider } from './openfeature/provider'
 export { createDatadogRumTrackingHook } from './openfeature/rumIntegration'
 export type { DatadogTrackingHook, DatadogTrackingHooks, DatadogTrackingHooksOptions } from './openfeature/tracking'
-export { createDatadogTrackingHooks } from './openfeature/tracking'
+export { composeDatadogTrackingHooks } from './openfeature/tracking'

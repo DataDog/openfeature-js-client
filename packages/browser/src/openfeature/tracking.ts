@@ -52,7 +52,7 @@ export function createTrackingHookController(
   }
 }
 
-export function createDatadogTrackingHooks(...trackingHooks: DatadogTrackingHook[]): DatadogTrackingHooks {
+export function composeDatadogTrackingHooks(...trackingHooks: DatadogTrackingHook[]): DatadogTrackingHooks {
   return {
     hooks: trackingHooks.reduce<Hook[]>((hooks, trackingHook) => {
       hooks.push(...trackingHook.hooks)

@@ -9,12 +9,12 @@ import { timeStampNow } from '@datadog/js-core/time'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
+  composeDatadogTrackingHooks,
   configurationFromString,
   configurationToString,
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
-  createDatadogTrackingHooks,
   DatadogCoreProvider,
 } from '../../src/rules-based'
 import rulesWire from '../data/rules-v1-wire.json'
@@ -55,7 +55,7 @@ const tracking = {
 
 function createAllDatadogTrackingHooks() {
   const exposureLogging = createDatadogExposureLoggingHook(tracking)
-  return createDatadogTrackingHooks(
+  return composeDatadogTrackingHooks(
     createDatadogRumTrackingHook(),
     createDatadogEvaluationLoggingHook(tracking),
     exposureLogging
@@ -65,7 +65,7 @@ function createAllDatadogTrackingHooks() {
 function createExposureOnlyTracking() {
   const exposureLogging = createDatadogExposureLoggingHook(tracking)
   return {
-    trackingHooks: createDatadogTrackingHooks(exposureLogging),
+    trackingHooks: composeDatadogTrackingHooks(exposureLogging),
   }
 }
 
@@ -179,14 +179,14 @@ describe('DatadogCoreProvider tracking', () => {
   })
 
   it('supports composing individual tracking hooks', () => {
-    expect(createDatadogTrackingHooks(createDatadogRumTrackingHook()).hooks).toHaveLength(1)
-    expect(createDatadogTrackingHooks(createDatadogEvaluationLoggingHook(tracking)).hooks).toHaveLength(1)
+    expect(composeDatadogTrackingHooks(createDatadogRumTrackingHook()).hooks).toHaveLength(1)
+    expect(composeDatadogTrackingHooks(createDatadogEvaluationLoggingHook(tracking)).hooks).toHaveLength(1)
     expect(createExposureOnlyTracking().trackingHooks.hooks).toHaveLength(1)
-    expect(createDatadogTrackingHooks().hooks).toHaveLength(0)
+    expect(composeDatadogTrackingHooks().hooks).toHaveLength(0)
   })
 
   it('keeps tracking initialization as a no-op when hooks have no lifecycle', async () => {
-    const trackingHooks = createDatadogTrackingHooks(createDatadogRumTrackingHook())
+    const trackingHooks = composeDatadogTrackingHooks(createDatadogRumTrackingHook())
 
     await expect(trackingHooks.initialize()).resolves.toBeUndefined()
     await expect(trackingHooks.shutdown()).resolves.toBeUndefined()

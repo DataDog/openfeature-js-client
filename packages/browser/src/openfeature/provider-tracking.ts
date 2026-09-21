@@ -6,7 +6,7 @@ import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
 import type { DatadogTrackingHook, DatadogTrackingHooks } from './tracking'
-import { createDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
+import { composeDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
 export interface ProviderTracking extends DatadogTrackingHooks {
   exposureCache?: AssignmentCache
@@ -45,7 +45,7 @@ export function createProviderTracking({
     )
   }
 
-  const tracking = createDatadogTrackingHooks(...trackingHooks)
+  const tracking = composeDatadogTrackingHooks(...trackingHooks)
   return {
     ...tracking,
     hooks: getTrackingContext

@@ -13,7 +13,7 @@ import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } fro
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
-import { createDatadogTrackingHooks, createTrackingHookController } from './tracking'
+import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
 export function createFlagEvalEVPHook(
   configuration: FlaggingTrackingConfiguration,
@@ -93,5 +93,5 @@ export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooks
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   return configuration
     ? createTrackingHookController(() => createFlagEvalEVPHook(configuration))
-    : createDatadogTrackingHooks()
+    : composeDatadogTrackingHooks()
 }

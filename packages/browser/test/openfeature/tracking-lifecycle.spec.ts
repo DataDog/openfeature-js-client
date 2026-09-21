@@ -1,9 +1,9 @@
 import { OpenFeature } from '@openfeature/web-sdk'
 import {
+  composeDatadogTrackingHooks,
   configurationFromString,
   createDatadogEvaluationLoggingHook,
   createDatadogExposureLoggingHook,
-  createDatadogTrackingHooks,
   DatadogCoreProvider,
   DatadogProvider,
   type DatadogTrackingHooks,
@@ -164,7 +164,7 @@ describe('tracking resource lifecycle', () => {
 
   it('shuts down all composed hooks even if another hook fails', async () => {
     const shutdown = jest.fn()
-    const controller = createDatadogTrackingHooks(
+    const controller = composeDatadogTrackingHooks(
       {
         hooks: [],
         shutdown: () => {
