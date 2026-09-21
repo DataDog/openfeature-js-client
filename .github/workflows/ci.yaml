@@ -48,6 +48,9 @@ jobs:
       - name: Validate package versions
         run: bash scripts/versions-validate.sh
 
+      - name: Test build environment
+        run: yarn test:build
+
       - name: Build packages
         run: yarn build
 
@@ -57,6 +60,7 @@ jobs:
       - name: Test browser package installation
         run: yarn test:browser-install
         env:
+          BUILD_MODE: release
           ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/entrypoint-bundle-sizes.md
 
       - name: Comment browser entrypoint bundle sizes

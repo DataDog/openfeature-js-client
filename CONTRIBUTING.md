@@ -78,14 +78,20 @@ The project supports different build modes that affect how the SDK version is de
 #### 2. Release Mode (`release`)
 
 - Used for public releases
-- SDK version uses the actual version from `lerna.json`
+- SDK version uses the version from the package's `package.json`
 - This is the mode used for production releases
 
 #### 3. Canary Mode (`canary`)
 
 - Used on staging and production Datadog web app
-- SDK version format: `{lerna-version}-{commit-sha}`
+- SDK version format: `{package-version}-{commit-sha}`
 - Example: `0.1.0-alpha.2-a1b2c3d4`
+
+Run builds through `yarn build`, `yarn workspace <package-name> build`, or from the package directory. The build scripts read `package.json` from their working directory; release and canary builds fail if the package version cannot be read. Development builds continue to use `dev`.
+
+`yarn test:build` verifies package-specific version stamping and runs in regular CI.
+
+The publishing job sets `BUILD_MODE=release` for all steps, including the `prepack` rebuilds triggered by packing and publishing. CI also runs the packed-browser smoke test in release mode and verifies that configuration requests report the installed package's version.
 
 ### SDK Setups
 

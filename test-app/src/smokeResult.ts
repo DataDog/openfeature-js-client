@@ -4,6 +4,7 @@ export type SmokeResult = {
     reason: string
     variant: string
     attempts: number
+    sdkVersion: string
   }
   timeout: {
     errorName: string

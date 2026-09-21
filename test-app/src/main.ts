@@ -49,12 +49,15 @@ async function getDomExceptionName(promise: Promise<unknown>): Promise<string | 
 
 async function runProviderSmoke() {
   let attempts = 0
+  let sdkVersion = ''
   const configurationFetch: typeof fetch = async (_input, init) => {
     attempts += 1
     const headers = new Headers(init?.headers)
     assert(init?.method === 'POST', 'Provider did not issue a POST configuration request')
     assert(headers.get('dd-client-token') === 'test-token', 'Provider did not preserve the client token header')
     assert(headers.get('x-packed-browser-smoke') === 'true', 'Provider did not preserve custom headers')
+    assert(typeof init?.body === 'string', 'Provider did not send a JSON configuration request')
+    sdkVersion = JSON.parse(init.body).data.attributes.source.sdk_version
     return new Response(JSON.stringify(precomputedResponse), {
       headers: { 'content-type': 'application/vnd.api+json' },
     })
@@ -82,6 +85,7 @@ async function runProviderSmoke() {
     reason: details.reason,
     variant: details.variant,
     attempts,
+    sdkVersion,
   }
 }
 
