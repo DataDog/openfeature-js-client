@@ -60,6 +60,7 @@ jobs:
       - name: Test browser package installation
         run: yarn test:browser-install
         env:
+          BUILD_MODE: release
           ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/entrypoint-bundle-sizes.md
 
       - name: Comment browser entrypoint bundle sizes

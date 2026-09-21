@@ -91,6 +91,8 @@ Run builds through `yarn build`, `yarn workspace <package-name> build`, or from 
 
 `yarn test:build` verifies package-specific version stamping and runs in regular CI.
 
+The publishing job sets `BUILD_MODE=release` for all steps, including the `prepack` rebuilds triggered by packing and publishing. CI also runs the packed-browser smoke test in release mode and verifies that configuration requests report the installed package's version.
+
 ### SDK Setups
 
 The project also supports different SDK setups:

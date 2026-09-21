@@ -1,5 +1,15 @@
+import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { expect, type Page, test } from '@playwright/test'
 import type { SmokeResult as FetchSmokeResult } from '../src/smokeResult'
+
+const { version } = createRequire(import.meta.url)('@datadog/openfeature-browser/package.json')
+const expectedSdkVersion =
+  process.env.BUILD_MODE === 'release'
+    ? version
+    : process.env.BUILD_MODE === 'canary'
+      ? `${version}-${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}`
+      : 'dev'
 
 type SmokeState<T> = {
   error?: string
@@ -44,6 +54,7 @@ test('runs the packed provider and Fetch wrapper smoke coverage', async ({ page 
       reason: 'TARGETING_MATCH',
       variant: 'variation-packed-browser',
       attempts: 1,
+      sdkVersion: expectedSdkVersion,
     },
     timeout: {
       errorName: 'TimeoutError',
