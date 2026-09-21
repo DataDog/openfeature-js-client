@@ -1,5 +1,6 @@
-import type { ExposureEvent } from '@datadog/flagging-core'
+import { assignmentCacheKeyToString, type ExposureEvent } from '@datadog/flagging-core'
 import { assignmentCacheFactory } from '../../src/cache/assignment-cache-factory'
+import ChromeStorageAsyncMap from '../../src/cache/chrome-storage-async-map'
 import { createExposureCache } from '../../src/cache/exposure-cache'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 
@@ -13,6 +14,26 @@ const exposure: ExposureEvent = {
 describe('exposure cache storage boundaries', () => {
   beforeEach(() => {
     localStorage.clear()
+  })
+
+  it('reads Chrome storage entries only from its own namespace', async () => {
+    const stored: Record<string, string> = {
+      'scope-a:assignment': 'first',
+      'scope-b:assignment': 'second',
+      assignment: 'legacy',
+      'scope-b:other': 'other-scope-only',
+    }
+    const get = jest.fn(async (key: string) => ({ [key]: stored[key] }))
+    const storage = { get } as unknown as chrome.storage.StorageArea
+    const first = new ChromeStorageAsyncMap<string>(storage, 'scope-a')
+    const second = new ChromeStorageAsyncMap<string>(storage, 'scope-b')
+
+    expect(await first.get('assignment')).toBe('first')
+    expect(get).toHaveBeenLastCalledWith('scope-a:assignment')
+    expect(await second.get('assignment')).toBe('second')
+    expect(get).toHaveBeenLastCalledWith('scope-b:assignment')
+    expect(await first.get('other')).toBeUndefined()
+    expect(get).toHaveBeenLastCalledWith('scope-a:other')
   })
 
   it.each(['localStorage', 'chrome'] as const)(
@@ -38,6 +59,14 @@ describe('exposure cache storage boundaries', () => {
       const second = createCache('scope-b')
       first.set(exposure)
       second.set(exposure)
+
+      const storageKeys = Object.keys(kind === 'chrome' ? stored : localStorage).filter((key) => key !== 'unrelated')
+      const entrySuffix = kind === 'chrome' ? `:${assignmentCacheKeyToString(exposure)}` : ''
+      expect(storageKeys.sort()).toEqual([
+        `datadog-assignment-scope-a${entrySuffix}`,
+        `datadog-assignment-scope-b${entrySuffix}`,
+      ])
+
       await first.clear()
 
       const reloadedFirst = createCache('scope-a')

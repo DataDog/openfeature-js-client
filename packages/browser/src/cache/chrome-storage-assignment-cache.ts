@@ -11,7 +11,7 @@ export default class ChromeStorageAssignmentCache implements BulkReadAssignmentC
   private readonly storage: ChromeStorageAsyncMap<string>
 
   constructor(chromeStorage: chrome.storage.StorageArea, storageKeySuffix: string) {
-    this.storage = new ChromeStorageAsyncMap(chromeStorage, `eppo-assignment-${storageKeySuffix}`)
+    this.storage = new ChromeStorageAsyncMap(chromeStorage, `datadog-assignment-${storageKeySuffix}`)
   }
 
   init(): Promise<void> {

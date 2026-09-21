@@ -84,7 +84,8 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   private computeConfigurationId(configuration: FlagsConfiguration): string {
     try {
-      // Retrieval metadata can change even when the evaluated configuration is unchanged.
+      // Retrieval metadata and the UFC build timestamp can change without changing rules.
+      // The backend's semantic Fingerprint() also excludes the rules' CreatedAt.
       return getMD5Hash(
         configurationToString({
           ...configuration,
@@ -95,6 +96,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
           },
           rules: configuration.rules && {
             ...configuration.rules,
+            response: { ...configuration.rules.response, createdAt: undefined },
             fetchedAt: undefined,
             etag: undefined,
           },

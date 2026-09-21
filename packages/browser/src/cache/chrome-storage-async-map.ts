@@ -18,12 +18,12 @@ export default class ChromeStorageAsyncMap<T> implements AsyncMap<string, T> {
 
   async get(key: string): Promise<T | undefined> {
     const storageKey = this.prefix + key
-    const subset = await this.storage.get(storageKey)
+    const subset = await this.storage.get<Record<string, T>>(storageKey)
     return subset?.[storageKey] ?? undefined
   }
 
   async entries(): Promise<{ [p: string]: T }> {
-    const entries = await this.storage.get(null)
+    const entries = await this.storage.get<Record<string, T>>(null)
     const scopedEntries: Record<string, T> = Object.create(null)
     for (const [key, value] of Object.entries(entries)) {
       if (key.startsWith(this.prefix)) scopedEntries[key.slice(this.prefix.length)] = value

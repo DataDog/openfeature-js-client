@@ -14,7 +14,6 @@ export function createExposureCache(
       site: configuration.site,
       clientToken: options.clientToken,
       proxy: typeof options.proxy === 'string' ? new URL(options.proxy, window.location.href).href : undefined,
-      internalAnalyticsSubdomain: options.internalAnalyticsSubdomain,
       env: configuration.env,
       applicationId: configuration.applicationId,
       service: configuration.service,

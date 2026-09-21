@@ -64,7 +64,6 @@ describe.each(['localStorage', 'chrome'] as const)('%s exposure cache isolation'
       ['site', { site: 'datadoghq.eu' }],
       ['service', { service: 'checkout' }],
       ['proxy', { proxy: 'https://proxy.example.com/intake' }],
-      ['internal destination', { internalAnalyticsSubdomain: 'custom-intake' }],
       ['source', { source: 'flutter' }],
     ] satisfies [string, Partial<DatadogTrackingHooksOptions>][])(
       'isolates %s and retains deduplication when each scope is recreated',
