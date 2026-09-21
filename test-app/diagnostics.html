@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Feature Flags lifecycle diagnostic experiment</title>
+  </head>
+  <body>
+    <h1>Feature Flags diagnostics</h1>
+    <p>Experimental staging harness. Credentials stay in memory. Open the developer console for local diagnostics.</p>
+    <form id="setup">
+      <p>
+        <label>Staging client token <input id="token" type="password" required autocomplete="off" /></label>
+      </p>
+      <p>
+        <label>Application ID <input id="application" /></label>
+      </p>
+      <p>
+        <label>Environment <input id="environment" value="staging" required /></label>
+      </p>
+      <p>
+        <label
+          >Configuration request
+          <select id="scenario">
+            <option value="success">Normal fetch</option>
+            <option value="failure">Reject configuration fetch only</option>
+            <option value="slow">Delay configuration by 35 seconds</option>
+          </select>
+        </label>
+      </p>
+      <p>
+        <label><input id="debug" type="checkbox" checked /> Enable debugMode</label>
+      </p>
+      <p>
+        <label><input id="evaluations" type="checkbox" /> Track genuine flag evaluations</label>
+      </p>
+      <button id="start" type="submit">Initialize provider</button>
+    </form>
+    <p>
+      For an uncached failure, clear this page's IndexedDB in developer tools first. A cached configuration can allow
+      initialization to succeed with stale data.
+    </p>
+    <p>
+      <label>Flag key <input id="flag" value="blake-two-test" /></label>
+      <button id="evaluate">Evaluate boolean details</button>
+    </p>
+    <button id="close">Flush diagnostics and close provider</button>
+    <pre id="status">Not initialized</pre>
+    <script type="module" src="/src/diagnostics.ts"></script>
+  </body>
+</html>

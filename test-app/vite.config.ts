@@ -9,6 +9,7 @@ export default defineConfig({
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         protobuf: fileURLToPath(new URL('./protobuf.html', import.meta.url)),
         precomputed: fileURLToPath(new URL('./precomputed.html', import.meta.url)),
+        diagnostics: fileURLToPath(new URL('./diagnostics.html', import.meta.url)),
       },
     },
   },
