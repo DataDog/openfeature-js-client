@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/flagging-core@3.1.0, @datadog/openfeature-node-server@2.4.0
+
+**Features:**
+
+- Bind the root-level `observeFullEvaluationData` privacy choice to the configuration used for each server-side flag evaluation and expose it as `__dd_observe_full_evaluation_data` result metadata. Consent is captured once, requires the literal boolean `true`, and fails closed across JSON and protobuf success, default, error, and exception paths ([#388](https://github.com/DataDog/openfeature-js-client/pull/388)) [CORE] [NODE-SERVER]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.1.0`. The browser package version is unchanged and is not part of this release.
+
 ## @datadog/openfeature-browser@2.0.0
 
 **Breaking Changes:**
