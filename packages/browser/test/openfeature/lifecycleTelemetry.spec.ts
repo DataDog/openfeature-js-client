@@ -95,16 +95,15 @@ describe('lifecycle diagnostic transport', () => {
     telemetry.stop()
   })
 
-  it('omits absent or oversized optional identities and rejects oversized UTF-8 records', () => {
+  it('keeps diagnostics local when identity or environment is invalid', () => {
     const config = configuration()
     config.applicationId = undefined
     config.service = 'x'.repeat(201)
     const telemetry = createLifecycleTelemetry(config)
     telemetry.emit('sdk_init_started')
     telemetry.stop()
-    const record = JSON.parse(mockSend.mock.calls[0][0].data)
-    expect(record.payload.application_id).toBeUndefined()
-    expect(record.payload.service).toBeUndefined()
+    expect(mockSend).not.toHaveBeenCalled()
+    expect(console.log).toHaveBeenCalledWith('[Datadog Feature Flags]', 'sdk_init_started', '')
     mockSend.mockClear()
     const big = createLifecycleTelemetry({
       ...config,
@@ -115,6 +114,27 @@ describe('lifecycle diagnostic transport', () => {
     big.emit('provider_ready')
     big.stop()
     expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('sends exactly one identity, preferring applicationId over service', () => {
+    for (const applicationId of ['app-1', undefined]) {
+      mockSend.mockClear()
+      const telemetry = createLifecycleTelemetry({ ...configuration(), applicationId, service: 'checkout' })
+      telemetry.emit('provider_ready')
+      telemetry.stop()
+      const payload = JSON.parse(mockSend.mock.calls[0][0].data).payload
+      expect(payload.application_id).toBe(applicationId)
+      expect(payload.service_id).toBe(applicationId ? undefined : 'checkout')
+      expect(payload.service).toBeUndefined()
+    }
+  })
+
+  it('does not upload when env is absent', () => {
+    const telemetry = createLifecycleTelemetry({ ...configuration(), env: undefined })
+    telemetry.emit('init_failed')
+    telemetry.stop()
+    expect(mockSend).not.toHaveBeenCalled()
+    expect(console.log).toHaveBeenCalled()
   })
 
   it('does not recurse or throw when telemetry upload or local logging fails', () => {

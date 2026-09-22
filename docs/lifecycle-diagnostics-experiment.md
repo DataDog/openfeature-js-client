@@ -18,6 +18,8 @@ Events are `sdk_init_started`, `configuration_received`, `provider_ready`, `prov
 
 Each provider instance has one runtime ID and emits each transition once (including repeated failures of the same class). A 30-second timer observes slow initialization but does not cancel it; success may arrive later. A failed fetch with cached fallback emits an error without claiming fresh readiness. Superseded requests are not failures. Telemetry upload errors never change evaluation results or generate further diagnostic events. Missing telemetry is unknown, not a confirmed failure.
 
+Remote diagnostics require an `env` plus an `applicationId` or `service`. The payload contains exactly one identity: application_id wins when both are configured; otherwise service_id is the configured service name. Invalid or missing identity/environment leaves diagnostic output local without affecting flag evaluation. Remote storage reduces repeated evidence across runtimes; returned sample runtime IDs must not be interpreted as complete per-runtime histories.
+
 Each diagnostic record is limited to 2 KiB and a runtime produces at most six. The existing Browser SDK batching/retry/page-exit helpers supply transport; periodic flushing can delay visibility by up to the normal batch interval (30 seconds), and page-exit delivery is best effort. Closing the provider flushes pending diagnostics and disconnects its page-exit subscription. No new Browser SDK version is needed by this branch.
 
 ## Local harness

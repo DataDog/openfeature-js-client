@@ -50,6 +50,21 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
     if (stopped || sent.has(eventType)) return
     try {
       const errorCode = eventType in ERROR_CODES ? ERROR_CODES[eventType as FailureEvent] : undefined
+      logDiagnostic(eventType, errorCode ? { error_code: errorCode } : undefined)
+      // Applications and services have separate remote identities. A browser app wins
+      // when service is also configured for other SDK features.
+      const identity = bounded(configuration.applicationId, 128)
+        ? { application_id: configuration.applicationId }
+        : bounded(configuration.service, 200)
+          ? { service_id: configuration.service }
+          : undefined
+      if (!identity || !bounded(configuration.env, 200)) {
+        sent.add(eventType)
+        logDiagnostic(
+          'Remote lifecycle diagnostics require an applicationId or service and an env. Local diagnostics remain available.'
+        )
+        return
+      }
       const event = {
         schema_version: 1,
         event_family: 'sdk_diagnostic',
@@ -59,9 +74,8 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
           runtime_id: runtimeId,
           sdk_name: 'dd-openfeature-browser',
           sdk_version: __BUILD_ENV__SDK_VERSION__,
-          ...(bounded(configuration.applicationId, 128) && { application_id: configuration.applicationId }),
-          ...(bounded(configuration.service, 200) && { service: configuration.service }),
-          ...(bounded(configuration.env, 200) && { environment: configuration.env }),
+          ...identity,
+          environment: configuration.env,
           ...(errorCode && { error_code: errorCode }),
         },
       }
@@ -72,7 +86,6 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
       }
       sent.add(eventType)
       batch.add(event)
-      logDiagnostic(eventType, errorCode ? { error_code: errorCode } : undefined)
     } catch {
       logDiagnostic('Unable to queue lifecycle diagnostics. Flag evaluation is unaffected.')
     }
@@ -94,5 +107,11 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
 }
 
 function bounded(value: string | undefined, limit: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= limit
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= limit &&
+    value.trim() === value &&
+    !/\p{Cc}/u.test(value)
+  )
 }
