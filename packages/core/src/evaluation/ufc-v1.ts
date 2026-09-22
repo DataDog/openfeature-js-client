@@ -46,6 +46,7 @@ export interface Flag {
 export interface UniversalFlagConfigurationV1 {
   createdAt: string
   format: string
+  observeFullEvaluationData?: boolean
   environment: {
     name: string
   }
