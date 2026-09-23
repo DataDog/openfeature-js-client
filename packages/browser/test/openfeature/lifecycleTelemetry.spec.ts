@@ -65,7 +65,7 @@ describe('lifecycle diagnostic transport', () => {
     for (const record of records) {
       expect(record).toEqual({
         schema_version: 1,
-        event_family: 'sdk_diagnostic',
+        type: 'sdk_diagnostic',
         payload: {
           event_type: record.payload.event_type,
           timestamp: expect.any(Number),

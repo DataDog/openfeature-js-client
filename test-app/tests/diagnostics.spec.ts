@@ -8,7 +8,7 @@ for (const scenario of ['success', 'failure'] as const) {
       if (message.text().includes('[Datadog Feature Flags]')) diagnosticLogs.push(message.text())
     })
     const records: {
-      event_family: string
+      type: string
       schema_version: number
       payload: { event_type: string; runtime_id: string }
     }[] = []
@@ -35,9 +35,7 @@ for (const scenario of ['success', 'failure'] as const) {
         : ['sdk_init_started', 'provider_error', 'init_failed']
     )
     expect(new Set(records.map((record) => record.payload.runtime_id)).size).toBe(1)
-    expect(records.every((record) => record.event_family === 'sdk_diagnostic' && record.schema_version === 1)).toBe(
-      true
-    )
+    expect(records.every((record) => record.type === 'sdk_diagnostic' && record.schema_version === 1)).toBe(true)
     expect(JSON.stringify(records)).not.toContain('test-client-token')
     expect(JSON.stringify(records)).not.toContain('evaluation_count')
     expect(diagnosticLogs).toEqual([])

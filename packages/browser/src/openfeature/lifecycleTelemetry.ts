@@ -71,7 +71,7 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
       }
       const event = {
         schema_version: 1,
-        event_family: 'sdk_diagnostic',
+        type: 'sdk_diagnostic',
         payload: {
           event_type: eventType,
           timestamp: Date.now(),
