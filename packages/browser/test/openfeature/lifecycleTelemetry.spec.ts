@@ -99,7 +99,7 @@ describe('lifecycle diagnostic transport', () => {
     const config = configuration()
     config.applicationId = undefined
     config.service = 'x'.repeat(201)
-    const telemetry = createLifecycleTelemetry(config)
+    const telemetry = createLifecycleTelemetry(config, true)
     telemetry.emit('sdk_init_started')
     telemetry.stop()
     expect(mockSend).not.toHaveBeenCalled()
@@ -130,7 +130,7 @@ describe('lifecycle diagnostic transport', () => {
   })
 
   it('does not upload when env is absent', () => {
-    const telemetry = createLifecycleTelemetry({ ...configuration(), env: undefined })
+    const telemetry = createLifecycleTelemetry({ ...configuration(), env: undefined }, true)
     telemetry.emit('init_failed')
     telemetry.stop()
     expect(mockSend).not.toHaveBeenCalled()
@@ -138,7 +138,7 @@ describe('lifecycle diagnostic transport', () => {
   })
 
   it('does not recurse or throw when telemetry upload or local logging fails', () => {
-    const telemetry = createLifecycleTelemetry(configuration())
+    const telemetry = createLifecycleTelemetry(configuration(), true)
     const onError = jest.mocked(createHttpRequest).mock.calls[0][1]
     expect(() => onError?.({} as never)).not.toThrow()
     expect(mockSend).not.toHaveBeenCalled()
@@ -148,5 +148,28 @@ describe('lifecycle diagnostic transport', () => {
     expect(() => logDiagnostic('details', { value: true })).not.toThrow()
     expect(() => telemetry.emit('sdk_init_started')).not.toThrow()
     telemetry.stop()
+  })
+
+  it.each([undefined, false, true])('gates only console output with debugMode=%s', (debugMode) => {
+    const telemetry = createLifecycleTelemetry(configuration(), debugMode)
+    for (const type of types) telemetry.emit(type)
+    const onError = jest.mocked(createHttpRequest).mock.calls[0][1]
+    onError?.({} as never)
+    telemetry.stop()
+    expect(mockSend).toHaveBeenCalledTimes(1)
+    expect(mockSend.mock.calls[0][0].data.split('\n')).toHaveLength(6)
+    if (debugMode) {
+      expect(console.log).toHaveBeenCalledTimes(7)
+    } else {
+      expect(console.log).not.toHaveBeenCalled()
+    }
+  })
+
+  it('does not print missing-identity diagnostics without debug mode', () => {
+    const telemetry = createLifecycleTelemetry({ ...configuration(), applicationId: undefined })
+    telemetry.emit('sdk_init_started')
+    telemetry.stop()
+    expect(mockSend).not.toHaveBeenCalled()
+    expect(console.log).not.toHaveBeenCalled()
   })
 })

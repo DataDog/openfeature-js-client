@@ -16,11 +16,10 @@ jest.mock('@datadog/browser-core', () => ({
 const logger: Logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 const success = () => Promise.resolve(new Response(JSON.stringify(precomputedResponse), { status: 200 }))
 const failure = () => Promise.reject(new TypeError('private network failure details'))
-const options: FlaggingInitConfiguration = {
+const baseOptions: FlaggingInitConfiguration = {
   clientToken: 'test-token',
   applicationId: 'app-1',
   env: 'test',
-  debugMode: true,
   enableExposureLogging: false,
   enableFlagEvaluationTracking: false,
   enableRumFeatureFlagTracking: false,
@@ -33,7 +32,8 @@ function eventTypes(provider: DatadogProvider): string[] {
   )
 }
 
-describe('provider diagnostics', () => {
+describe.each([undefined, false, true])('provider diagnostics with debugMode=%s', (debugMode) => {
+  const options = { ...baseOptions, debugMode }
   beforeEach(() => {
     jest.useFakeTimers()
     jest.clearAllMocks()
@@ -42,17 +42,17 @@ describe('provider diagnostics', () => {
     jest.spyOn(IndexedDBFlagsCache.prototype, 'set').mockImplementation(() => {})
   })
   afterEach(() => {
+    if (!debugMode) expect(console.log).not.toHaveBeenCalled()
     jest.clearAllTimers()
     jest.useRealTimers()
     jest.restoreAllMocks()
   })
 
-  it('is disabled by default and does not allocate telemetry when evaluation reporting is disabled', async () => {
-    const provider = new DatadogProvider({ ...options, debugMode: undefined, flagConfigurationFetch: success })
+  it('emits telemetry even when evaluation, exposure and RUM reporting are disabled', async () => {
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: success })
     await provider.initialize()
-    expect(createHttpRequest).not.toHaveBeenCalled()
-    expect(console.log).not.toHaveBeenCalled()
-    expect(eventTypes(provider)).toEqual([])
+    expect(createHttpRequest).toHaveBeenCalledTimes(1)
+    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'configuration_received', 'provider_ready'])
   })
 
   it('emits real startup evidence without any flag evaluation or RUM', async () => {
@@ -143,15 +143,19 @@ describe('provider diagnostics', () => {
     ])
   })
 
-  it('logs evaluation details locally without changing return values or uploading flag data', async () => {
+  it('only logs evaluation details in debug mode, without changing values or uploading flag data', async () => {
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: success })
     await provider.initialize()
     const details = provider.resolveBooleanEvaluation('missing-test-flag', true, {}, logger)
-    expect(console.log).toHaveBeenCalledWith(
-      '[Datadog Feature Flags]',
-      'Evaluation details',
-      JSON.stringify({ flagKey: 'missing-test-flag', ...details })
-    )
+    if (debugMode) {
+      expect(console.log).toHaveBeenCalledWith(
+        '[Datadog Feature Flags]',
+        'Evaluation details',
+        JSON.stringify({ flagKey: 'missing-test-flag', ...details })
+      )
+    } else {
+      expect(console.log).not.toHaveBeenCalled()
+    }
     eventTypes(provider)
     expect(JSON.stringify(mockSend.mock.calls)).not.toContain('missing-test-flag')
     expect(details.value).toBe(true)

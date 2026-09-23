@@ -145,20 +145,22 @@ export class DatadogProvider extends DatadogCoreProvider {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
-    if (this.debugMode && !this.initializationStarted) {
+    if (!this.initializationStarted) {
       this.initializationStarted = true
-      logDiagnostic(
-        'Initializing. If no remote events arrive, check the client token, site, network, and Content Security Policy.'
-      )
+      if (this.debugMode) {
+        logDiagnostic(
+          'Initializing. If no remote events arrive, check the client token, site, network, and Content Security Policy.'
+        )
+      }
       try {
         if (this.configuration) {
-          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration)
+          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.debugMode)
           this.lifecycleTelemetry.emit('sdk_init_started')
           // Observe slow startup without aborting or changing OpenFeature initialization.
           this.initializationTimer = setTimeout(() => this.lifecycleTelemetry?.emit('init_timeout'), 30_000)
         }
       } catch {
-        logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
+        if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
       }
     }
     this.exposureCacheReady = this.exposureCache?.init()

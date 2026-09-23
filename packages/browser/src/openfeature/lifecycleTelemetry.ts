@@ -28,7 +28,11 @@ export function logDiagnostic(message: string, details?: unknown): void {
 }
 
 /** A separate, bounded lifecycle batch; it does not require evaluation tracking or RUM initialization. */
-export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
+export function createLifecycleTelemetry(configuration: FlaggingConfiguration, debugMode = false) {
+  function log(message: string, details?: unknown): void {
+    if (debugMode) logDiagnostic(message, details)
+  }
+
   const runtimeId = generateUUID()
   const sent = new Set<ProgressEvent | FailureEvent>()
   const flushOnClose = new Observable<void>()
@@ -37,7 +41,7 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
   const batch = createBatch({
     encoder: createIdentityEncoder(),
     request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], () => {
-      logDiagnostic('Lifecycle upload failed. Check the client token, site, network, and Content Security Policy.')
+      log('Lifecycle upload failed. Check the client token, site, network, and Content Security Policy.')
     }),
     flushController: createFlushController({
       pageMayExitObservable: pageExit,
@@ -50,7 +54,7 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
     if (stopped || sent.has(eventType)) return
     try {
       const errorCode = eventType in ERROR_CODES ? ERROR_CODES[eventType as FailureEvent] : undefined
-      logDiagnostic(eventType, errorCode ? { error_code: errorCode } : undefined)
+      log(eventType, errorCode ? { error_code: errorCode } : undefined)
       // Applications and services have separate remote identities. A browser app wins
       // when service is also configured for other SDK features.
       const identity = bounded(configuration.applicationId, 128)
@@ -60,7 +64,7 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
           : undefined
       if (!identity || !bounded(configuration.env, 200)) {
         sent.add(eventType)
-        logDiagnostic(
+        log(
           'Remote lifecycle diagnostics require an applicationId or service and an env. Local diagnostics remain available.'
         )
         return
@@ -81,13 +85,13 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration) {
       }
       // Bound UTF-8 bytes independently of the transport's much larger generic message limit.
       if (new Blob([JSON.stringify(event)]).size > 2048) {
-        logDiagnostic('Lifecycle event exceeds the diagnostic size limit.')
+        log('Lifecycle event exceeds the diagnostic size limit.')
         return
       }
       sent.add(eventType)
       batch.add(event)
     } catch {
-      logDiagnostic('Unable to queue lifecycle diagnostics. Flag evaluation is unaffected.')
+      log('Unable to queue lifecycle diagnostics. Flag evaluation is unaffected.')
     }
   }
 

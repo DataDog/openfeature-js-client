@@ -10,7 +10,7 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
  */
 export interface FlaggingInitConfiguration extends InitConfiguration {
   /**
-   * Enable local diagnostic output and experimental lifecycle reporting (default: false).
+   * Enable local diagnostic output (default: false). Lifecycle telemetry is emitted independently of this option.
    * Local evaluation output may contain sensitive flag values. Use temporarily while troubleshooting.
    */
   debugMode?: boolean

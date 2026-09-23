@@ -3,6 +3,10 @@ import precomputedResponse from '../../packages/browser/test/data/precomputed-v1
 
 for (const scenario of ['success', 'failure'] as const) {
   test(`real provider sends diagnostic-only ${scenario} records without RUM`, async ({ page }) => {
+    const diagnosticLogs: string[] = []
+    page.on('console', (message) => {
+      if (message.text().includes('[Datadog Feature Flags]')) diagnosticLogs.push(message.text())
+    })
     const records: {
       event_family: string
       schema_version: number
@@ -15,6 +19,7 @@ for (const scenario of ['success', 'failure'] as const) {
       await route.fulfill({ status: 202, body: '' })
     })
     await page.goto('/diagnostics.html')
+    await page.getByLabel('Enable debugMode', { exact: false }).uncheck()
     await page.getByLabel('Staging client token').fill('test-client-token')
     await page.getByLabel('Application ID').fill('test-app')
     await page.getByLabel('Configuration request').selectOption(scenario)
@@ -35,6 +40,7 @@ for (const scenario of ['success', 'failure'] as const) {
     )
     expect(JSON.stringify(records)).not.toContain('test-client-token')
     expect(JSON.stringify(records)).not.toContain('evaluation_count')
+    expect(diagnosticLogs).toEqual([])
   })
 }
 
