@@ -298,6 +298,86 @@ describe('DatadogCoreProvider tracking', () => {
     }
   )
 
+  it.each(['rules', 'precomputed'] as const)(
+    'keeps %s exposures deduplicated when equivalent configuration keys are reordered',
+    async (kind) => {
+      const { trackingHooks } = createExposureOnlyTracking()
+      const provider = new DatadogCoreProvider()
+      const client = OpenFeature.getClient(DOMAIN)
+      const rules = rulesConfiguration.rules!
+      const flag = rules.response.flags['test-flag']!
+      const initialConfiguration: FlagsConfiguration =
+        kind === 'rules'
+          ? {
+              rules: {
+                ...rules,
+                response: { ...rules.response, flags: { 'test-flag': flag, 'other-flag': flag } },
+              },
+            }
+          : precomputedConfiguration
+      const reorderedConfiguration: FlagsConfiguration =
+        kind === 'rules'
+          ? {
+              rules: {
+                ...rules,
+                response: { ...rules.response, flags: { 'other-flag': flag, 'test-flag': flag } },
+              },
+            }
+          : {
+              precomputed: {
+                ...precomputedConfiguration.precomputed!,
+                context: { plan: 'free', targetingKey: 'static-user' },
+              },
+            }
+      // Both wire values describe exactly the same configuration, including timestamps.
+      expect(reorderedConfiguration).toEqual(initialConfiguration)
+      const initialWire = configurationToString(initialConfiguration)
+      const reorderedWire = configurationToString(reorderedConfiguration)
+      expect(reorderedWire).not.toBe(initialWire)
+      const exposureRequests = () => fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))
+      const evaluate = () =>
+        kind === 'rules'
+          ? client.getBooleanDetails('test-flag', false)
+          : client.getStringDetails('static-flag', 'default')
+
+      try {
+        await trackingHooks.initialize()
+        provider.setConfiguration(configurationFromString(initialWire))
+        await OpenFeature.setProviderAndWait(
+          DOMAIN,
+          provider,
+          kind === 'rules'
+            ? { targetingKey: 'rules-user', country: 'US' }
+            : { targetingKey: 'static-user', plan: 'free' }
+        )
+        client.addHooks(...trackingHooks.hooks)
+        const firstDetails = evaluate()
+        expect(firstDetails.errorCode).toBeUndefined()
+        expect(firstDetails.variant).toBeDefined()
+        jest.advanceTimersByTime(31_000)
+        expect(exposureRequests()).toHaveLength(1)
+
+        // Control: refetching the identical wire value already stays deduplicated.
+        provider.setConfiguration(configurationFromString(initialWire))
+        evaluate()
+        jest.advanceTimersByTime(31_000)
+        expect(exposureRequests()).toHaveLength(1)
+
+        provider.setConfiguration(configurationFromString(reorderedWire))
+        const reorderedDetails = evaluate()
+        expect(reorderedDetails.errorCode).toBeUndefined()
+        expect(reorderedDetails.value).toEqual(firstDetails.value)
+        expect(reorderedDetails.variant).toBe(firstDetails.variant)
+        jest.advanceTimersByTime(31_000)
+        expect(exposureRequests()).toHaveLength(1)
+        expect(configurationToString(provider.getConfiguration()!)).toBe(reorderedWire)
+      } finally {
+        client.clearHooks()
+        await trackingHooks.shutdown()
+      }
+    }
+  )
+
   it('deduplicates rebuilt rules while still detecting content changes', async () => {
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
