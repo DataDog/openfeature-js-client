@@ -167,6 +167,9 @@ function renderMeasurementTable(measurements) {
 }
 
 function renderMarkdown(providerMeasurements, smokeMeasurements, trackingHookMeasurements) {
+  const dependencyChecksPassed = [...providerMeasurements, ...smokeMeasurements].every(
+    (measurement) => measurement.expectNoProtobuf !== measurement.hasProtobufMarker
+  )
   const lines = [
     '### OpenFeature Browser Provider Bundle Sizes',
     '',
@@ -178,13 +181,9 @@ function renderMarkdown(providerMeasurements, smokeMeasurements, trackingHookMea
     '',
     renderMeasurementTable(providerMeasurements),
     '',
-    '### Additional Smoke Coverage (Not Provider Comparisons)',
-    '',
-    'These scenarios exercise different APIs and test logic. In particular, the precomputed codec row contains no provider, and the rules codec row combines the evaluator with the regular DatadogProvider, not DatadogCoreProvider.',
-    '',
-    renderMeasurementTable(smokeMeasurements),
-    '',
-    'Default and precomputed entrypoints are expected to keep Protobuf-ES out of their bundles. Rules-based entrypoints are expected to include protobuf markers as a positive control. The marker check is a packed-artifact backstop; the source import boundary is enforced by `packages/core/test/entrypoint-boundaries.spec.ts`.',
+    dependencyChecksPassed
+      ? 'Dependency checks passed: no Protobuf markers in default/precomputed scenarios; markers present in rules-based scenarios.'
+      : 'Dependency checks failed. See the CI logs for the affected entrypoints.',
   ]
 
   lines.push('', '### OpenFeature Browser Tracking Hook Bundle Sizes', '')
