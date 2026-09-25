@@ -24,7 +24,7 @@ export default function App() {
       <StatusBar barStyle="light-content" />
       <Text style={styles.eyebrow}>LOCAL TARBALL / NATIVE RUNTIME</Text>
       <Text style={styles.title}>Flagging Core</Text>
-      <Text style={styles.subtitle}>PR #402 manual runtime check</Text>
+      <Text style={styles.subtitle}>React Native runtime compatibility checks</Text>
 
       <View style={styles.card}>
         <Text style={styles.heading}>Runtime and package</Text>
