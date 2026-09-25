@@ -48,7 +48,7 @@ jobs:
       - name: Validate package versions
         run: bash scripts/versions-validate.sh
 
-      - name: Test build environment
+      - name: Test build and report scripts
         run: yarn test:build
 
       - name: Build packages

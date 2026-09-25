@@ -107,3 +107,79 @@ test('executes the packed precomputed entrypoint in Chromium', async ({ page }) 
     rulesExcluded: true,
   })
 })
+
+for (const scenario of [
+  { path: '/provider.html', provider: 'datadog', rules: false },
+  { path: '/core-provider.html', provider: 'datadog-core', rules: true },
+]) {
+  test(`runs the ${scenario.provider} bundle comparison workflow`, async ({ page }) => {
+    const requests: { path: string; method: string; targetingKey?: string }[] = []
+    const unexpectedRequests: string[] = []
+    // Keep response fixtures and request assertions out of the measured browser bundles.
+    await page.route('**/*', async (route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      if (url.origin === 'http://127.0.0.1:4173') {
+        await route.continue()
+        return
+      }
+      if (url.hostname === 'ufc-client.ff-cdn.datad0g.com' && scenario.rules) {
+        requests.push({ path: url.pathname, method: request.method() })
+        expect(request.headers().accept).toBe('application/protobuf')
+        await route.fulfill({
+          contentType: 'application/protobuf',
+          body: Buffer.from(
+            'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg==',
+            'base64'
+          ),
+        })
+        return
+      }
+      if (url.hostname === 'preview.ff-cdn.datad0g.com' && !scenario.rules) {
+        const targetingKey = request.postDataJSON().data.attributes.subject.targeting_key
+        requests.push({ path: url.pathname, method: request.method(), targetingKey })
+        await route.fulfill({
+          json: {
+            data: {
+              attributes: {
+                createdAt: '2026-09-24T00:00:00.000Z',
+                flags: {
+                  'browser-flag': {
+                    allocationKey: 'allocation',
+                    variationKey: 'on',
+                    variationType: 'BOOLEAN',
+                    variationValue: true,
+                    reason: 'STATIC',
+                    doLog: false,
+                  },
+                },
+              },
+            },
+          },
+        })
+        return
+      }
+      unexpectedRequests.push(request.url())
+      await route.abort()
+    })
+
+    const result = await runSmoke<Record<string, unknown>>(page, scenario.path)
+    expect(result).toEqual({
+      provider: scenario.provider,
+      initialValue: true,
+      initialReason: 'STATIC',
+      updatedValue: true,
+      updatedReason: 'STATIC',
+      targetingKey: 'browser-user-b',
+    })
+    expect(unexpectedRequests).toEqual([])
+    expect(requests).toEqual(
+      scenario.rules
+        ? [{ path: '/api/v2/feature-flagging/config/rules-based/client', method: 'GET' }]
+        : [
+            { path: '/precompute-assignments', method: 'POST', targetingKey: 'browser-user-a' },
+            { path: '/precompute-assignments', method: 'POST', targetingKey: 'browser-user-b' },
+          ]
+    )
+  })
+}
