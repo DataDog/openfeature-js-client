@@ -1,0 +1,5 @@
+{
+  "main": "../cjs/rules-based-configuration-wire.js",
+  "module": "../esm/rules-based-configuration-wire.js",
+  "types": "../cjs/rules-based-configuration-wire.d.ts"
+}

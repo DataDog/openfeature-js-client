@@ -15,6 +15,7 @@ cp \
   "$FIXTURE_DIR/package.json" \
   "$FIXTURE_DIR/index.js" \
   "$FIXTURE_DIR/default-entrypoint.js" \
+  "$FIXTURE_DIR/legacy-entrypoint.js" \
   "$FIXTURE_DIR/metro.config.js" \
   "$SMOKE_DIR/"
 
@@ -28,6 +29,9 @@ npm install --ignore-scripts --no-audit --no-fund
 
 echo "Checking that the root entry point does not load protobuf..."
 node default-entrypoint.js
+
+echo "Checking the packed physical rules-based entry point..."
+node legacy-entrypoint.js
 
 echo "Bundling the packed core package with the React Native Metro configuration..."
 mkdir -p dist

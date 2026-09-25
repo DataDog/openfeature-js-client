@@ -11,6 +11,7 @@
   "files": [
     "cjs/",
     "esm/",
+    "rules-based/",
     "*.d.ts"
   ],
   "sideEffects": [
