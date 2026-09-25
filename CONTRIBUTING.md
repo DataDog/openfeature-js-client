@@ -44,6 +44,18 @@ The project uses **independent versioning**, meaning each package can have its o
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Manual React Native Example
+
+Run `yarn example:react-native` to build and pack the local core package and prepare
+an isolated Expo app. Follow the printed `cd` / `npm start` commands, then launch it
+in Expo Go on an iOS/Android simulator or device. The app verifies evaluation on
+Hermes and supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
+
+See [the manual app README](test-app-react-native/manual/README.md) for prerequisites,
+expected results, and how to rebuild after SDK changes. Unlike the automated
+`yarn test:react-native-install` smoke test, this runs the code in a native JS runtime,
+not Node.
+
 ## Entrypoint Guardrails
 
 The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
