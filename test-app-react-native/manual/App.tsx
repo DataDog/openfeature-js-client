@@ -71,8 +71,8 @@ export default function App() {
         globals; the automated Metro smoke test separately exercises missing-global fallbacks.
         {'\n\n'}To change resolution mode, stop Metro and use npm run start:modern or npm run start:legacy-esm. Check
         the Metro terminal for the actual resolved SDK paths.
-        {'\n\n'}After changing SDK source, prepare a new app with yarn example:react-native from the repository. Fast
-        Refresh does not rebuild the installed tarball.
+        {'\n\n'}After changing SDK source, stop Metro and rerun yarn example:react-native from the repository. It
+        rebuilds core in this same app. Restart npm start afterward; Fast Refresh does not rebuild the SDK.
       </Text>
     </ScrollView>
   )

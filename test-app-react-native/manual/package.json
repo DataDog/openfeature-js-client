@@ -12,7 +12,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "file:./core.tgz",
     "expo": "57.0.25",
     "react": "19.2.3",
     "react-native": "0.86.3"

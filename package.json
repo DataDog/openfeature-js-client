@@ -19,7 +19,7 @@
     "test:node-install": "scripts/test-node-package-install.sh",
     "test:node-install:with-of": "scripts/test-node-package-install.sh --with-openfeature",
     "test:react-native-install": "scripts/test-react-native-package-install.sh",
-    "example:react-native": "bash scripts/setup-react-native-example.sh",
+    "example:react-native": "node scripts/setup-react-native-example.js",
     "licenses:validate": "scripts/licenses-validate.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",

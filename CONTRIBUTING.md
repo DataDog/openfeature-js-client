@@ -47,9 +47,11 @@ The project uses **independent versioning**, meaning each package can have its o
 ## Manual React Native Example
 
 Run `yarn example:react-native` to build and pack the local core package and prepare
-an isolated Expo app. Follow the printed `cd` / `npm start` commands, then launch it
-in Expo Go on an iOS/Android simulator or device. The app verifies evaluation on
-Hermes and supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
+an isolated Expo app. The same command reuses a per-checkout cache directory outside
+the repository and reinstalls a fresh core tarball on every run. Stop Metro before
+refreshing, then follow the printed `cd` / `npm start` commands to launch Expo Go
+on an iOS/Android simulator or device. The app verifies evaluation on Hermes and
+supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
 
 See [the manual app README](test-app-react-native/manual/README.md) for prerequisites,
 expected results, and how to rebuild after SDK changes. Unlike the automated
