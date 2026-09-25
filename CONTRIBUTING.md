@@ -44,11 +44,33 @@ The project uses **independent versioning**, meaning each package can have its o
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Manual React Native Example
+
+Run `yarn example:react-native` to build and pack the local core package and prepare
+an isolated Expo app. The same command reuses a per-checkout cache directory outside
+the repository and reinstalls a fresh core tarball on every run. Stop Metro before
+refreshing, then follow the printed `cd` / `npm start` commands to launch Expo Go
+on an iOS/Android simulator or device. The app verifies evaluation on Hermes and
+supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
+
+See [the manual app README](test-app-react-native/manual/README.md) for prerequisites,
+expected results, and how to rebuild after SDK changes. Unlike the automated
+`yarn test:react-native-install` smoke test, this runs the code in a native JS runtime,
+not Node.
+
 ## Entrypoint Guardrails
 
 The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
 
-Two recurring checks help keep that boundary visible:
+For a new core subpath, add its source module and `package.json.exports` mapping, then run the
+normal core build. Compatibility manifests, declaration mappings, publish-file lists, bundles,
+and smoke-test imports are derived automatically. See [Adding a public entry point](packages/core/README.md#adding-a-public-entry-point).
+Commit the generated metadata; `yarn check:entrypoints` rejects drift before CI builds or packing.
+
+Recurring checks keep these contracts visible:
+
+- `yarn test:build` checks generated entrypoint metadata and tests the generator, including adding a second/nested export without bundler registration.
+- `yarn test:react-native-install` discovers every packed JavaScript subpath and checks modern and legacy resolution in the Metro matrix.
 
 - `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
 - `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`, which prints a raw/gzip JS size table for the root, precomputed, and rules-based browser entrypoints. In GitHub Actions the table is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers.

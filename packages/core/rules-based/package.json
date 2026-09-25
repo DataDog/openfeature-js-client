@@ -1,0 +1,6 @@
+{
+  "_generatedBy": "scripts/generate-core-entrypoints.js",
+  "main": "../bundle/legacy/cjs/rules-based.js",
+  "module": "../bundle/legacy/esm/rules-based.js",
+  "types": "../cjs/rules-based-configuration-wire.d.ts"
+}
