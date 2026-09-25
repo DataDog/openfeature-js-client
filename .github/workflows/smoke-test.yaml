@@ -5,6 +5,9 @@ on:
     paths:
       - 'packages/*/package.json'
       - 'packages/core/src/**'
+      - 'packages/core/rules-based/**'
+      - 'scripts/build/core-legacy-webpack.config.js'
+      - 'scripts/webpack-runner.js'
       - 'scripts/test-react-native-package-install.sh'
       - 'test-app-react-native/**'
       - 'yarn.lock'

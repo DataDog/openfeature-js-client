@@ -1,5 +1,5 @@
 {
-  "main": "../cjs/rules-based-configuration-wire.js",
-  "module": "../esm/rules-based-configuration-wire.js",
+  "main": "../bundle/legacy/cjs/rules-based.js",
+  "module": "../bundle/legacy/esm/rules-based.js",
   "types": "../cjs/rules-based-configuration-wire.d.ts"
 }
