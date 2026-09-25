@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/flagging-core@3.1.1
+
+**Bug Fixes:**
+
+- Support legacy Metro resolution of `@datadog/flagging-core/rules-based` so React Native consumers can import rules-based APIs when package exports are disabled ([#402](https://github.com/DataDog/openfeature-js-client/pull/402)) [CORE]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.1.1`. Their package versions are unchanged and are not part of this release.
+
 ## @datadog/flagging-core@3.1.0, @datadog/openfeature-node-server@2.4.0
 
 **Features:**
