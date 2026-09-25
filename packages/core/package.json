@@ -52,9 +52,11 @@
   },
   "scripts": {
     "generate:protobuf": "buf generate",
-    "prepack": "yarn build",
+    "generate:entrypoints": "node ../../scripts/generate-core-entrypoints.js",
+    "check:entrypoints": "node ../../scripts/generate-core-entrypoints.js --check",
+    "prepack": "yarn check:entrypoints && yarn build",
     "pack": "yarn pack",
-    "build": "run-p build:cjs build:esm && yarn build:legacy",
+    "build": "yarn generate:entrypoints && run-p build:cjs build:esm && yarn build:legacy",
     "build:legacy": "rm -rf bundle/legacy && node ../../scripts/webpack-runner.js ../../scripts/build/core-legacy-webpack.config.js --mode=production",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",

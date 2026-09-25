@@ -2,6 +2,8 @@ globalThis.TextEncoder = undefined
 globalThis.TextDecoder = undefined
 globalThis.BigInt = undefined
 
+require('./generated-entrypoints')
+
 const { evaluate, evaluateRulesBasedConfiguration } = require('@datadog/flagging-core')
 const { configurationFromString, configurationToString } = require('@datadog/flagging-core/rules-based')
 const { rules, precomputed } = require('./configurations')

@@ -30,6 +30,43 @@ enabled and disabled, including legacy CommonJS and ESM resolution. It executes 
 in Node without `BigInt`, `TextEncoder`, or `TextDecoder`; this checks fallback behavior but does
 not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
+## Adding a public entry point
+
+`packages/core/package.json` **`exports` is the single source of truth** for public paths.
+To add `@datadog/flagging-core/foo`:
+
+1. Create `src/foo.ts` with the intended exports. Keep any required initialization in this
+   source entry point, rather than adding it to a bundler-specific list.
+2. Add its modern mapping to `exports`:
+
+   ```json
+   {
+     "./foo": {
+       "types": "./cjs/foo.d.ts",
+       "import": "./esm/foo.js",
+       "require": "./cjs/foo.js",
+       "default": "./esm/foo.js"
+     }
+   }
+   ```
+
+3. Run `yarn workspace @datadog/flagging-core build` and commit the generated metadata with
+   the source change. Add the feature's behavior tests as usual.
+
+The build generates the physical fallback manifests, publish-file list, legacy declaration
+mappings, and compatibility-bundle side-effect entries. It discovers and builds a CJS/ESM
+compatibility bundle for every public JavaScript subpath automatically. Do not edit those
+fallback manifests or register new paths in the Webpack configuration or smoke fixtures.
+
+Concrete nested subpaths are supported; wildcard exports and mismatched CJS/ESM/type targets
+fail with an actionable error. Removing a path from `exports` and rebuilding removes its
+owned fallback manifest and derived metadata without deleting unrelated files.
+
+`yarn check:entrypoints` checks generated metadata without changing files. CI runs it before
+building, and `prepack` checks it before packing so a stale publish-file list cannot silently
+omit a new entry point. The packed-package tests discover every declared path and generate
+static imports for the full Metro matrix. The default entry point remains separate and light.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula

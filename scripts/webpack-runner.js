@@ -18,6 +18,10 @@ const mode = process.argv.includes('--mode=production') ? 'production' : 'develo
 
 // Call the config function with the mode
 const config = configFactory({}, { mode })
+if (Array.isArray(config) && config.length === 0) {
+  console.log('No webpack entrypoints configured')
+  process.exit(0)
+}
 
 // Run webpack
 webpack(config, (err, stats) => {

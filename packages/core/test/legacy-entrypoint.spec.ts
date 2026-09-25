@@ -1,43 +1,38 @@
 import fs from 'fs'
 import path from 'path'
 
+const { getCoreEntrypoints, synchronizeCoreEntrypoints } = require('../../../scripts/lib/coreEntrypoints')
 const packageRoot = process.cwd()
 const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'))
-const legacyEntrypointRoot = path.join(packageRoot, 'rules-based')
-const legacyEntrypoint = JSON.parse(fs.readFileSync(path.join(legacyEntrypointRoot, 'package.json'), 'utf8'))
+const entries = getCoreEntrypoints(packageJson) as Array<{
+  subpath: string
+  name: string
+  types: string
+}>
 
-describe('legacy rules-based entrypoint', () => {
-  it('publishes the physical entrypoint and its self-contained bundles', () => {
-    expect(packageJson.files).toContain('rules-based/')
+describe('public entrypoint packaging', () => {
+  it('keeps all generated metadata synchronized with exports', () => {
+    expect(() => synchronizeCoreEntrypoints(packageRoot, { check: true })).not.toThrow()
+  })
+
+  it.each(entries)('publishes modern and legacy declarations and bundles for $subpath', (entry) => {
+    const entrypointRoot = path.join(packageRoot, entry.name)
+    const manifest = JSON.parse(fs.readFileSync(path.join(entrypointRoot, 'package.json'), 'utf8'))
+    expect(packageJson.files).toContain(`${entry.name.split('/')[0]}/`)
     expect(packageJson.files).toContain('bundle/')
+    expect(packageJson.typesVersions['*'][entry.name]).toEqual([entry.types.slice(2)])
+    expect(path.resolve(entrypointRoot, manifest.types)).toBe(path.resolve(packageRoot, entry.types))
+    for (const [field, format] of [
+      ['main', 'cjs'],
+      ['module', 'esm'],
+    ]) {
+      const relativePath = `bundle/legacy/${format}/${entry.name}.js`
+      expect(path.resolve(entrypointRoot, manifest[field])).toBe(path.join(packageRoot, relativePath))
+      if (packageJson.sideEffects !== true) expect(packageJson.sideEffects).toContain(`./${relativePath}`)
+    }
   })
 
-  it.each([
-    ['main', 'cjs'],
-    ['module', 'esm'],
-  ])('maps %s to the %s compatibility bundle', (field, format) => {
-    const relativePath = `bundle/legacy/${format}/rules-based.js`
-    expect(path.resolve(legacyEntrypointRoot, legacyEntrypoint[field])).toBe(path.join(packageRoot, relativePath))
-    // The bundle contains the protobuf text-encoding initialization side effect.
-    expect(packageJson.sideEffects).toContain(`./${relativePath}`)
-  })
-
-  it('reuses the same public TypeScript declarations', () => {
-    expect(path.resolve(legacyEntrypointRoot, legacyEntrypoint.types)).toBe(
-      path.resolve(packageRoot, packageJson.exports['./rules-based'].types)
-    )
-  })
-
-  it('keeps modern rules-based exports modular', () => {
-    expect(packageJson.exports['./rules-based']).toEqual({
-      types: './cjs/rules-based-configuration-wire.d.ts',
-      import: './esm/rules-based-configuration-wire.js',
-      require: './cjs/rules-based-configuration-wire.js',
-      default: './esm/rules-based-configuration-wire.js',
-    })
-  })
-
-  it('keeps the default entrypoint separate from the rules-based parser', () => {
+  it('keeps the default entrypoint separate from compatibility bundles', () => {
     expect(packageJson.main).toBe('cjs/index.js')
     expect(packageJson.module).toBe('esm/index.js')
     expect(packageJson.types).toBe('cjs/index.d.ts')
