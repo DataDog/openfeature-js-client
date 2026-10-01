@@ -1,6 +1,11 @@
-import { type FlagsConfiguration, parsePrecomputedConfigurationResponse } from '@datadog/flagging-core'
+import {
+  type FlagsConfiguration,
+  parsePrecomputedConfigurationResponse,
+  SUPPORTED_ASSIGNMENT_ENCODINGS,
+} from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { ParseError } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import { buildEndpointHost } from './endpoint'
 
@@ -132,6 +137,9 @@ export async function fetchPrecomputedConfiguration(
         attributes: {
           env: envPayload,
           source: sourcePayload,
+          supported_capabilities: {
+            assignment_encodings: SUPPORTED_ASSIGNMENT_ENCODINGS,
+          },
           subject: {
             targeting_key: options.context.targetingKey || '',
             targeting_attributes: stringifiedContext,
@@ -160,12 +168,16 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
-    return fetchPrecomputedConfiguration({
+    const configuration = await fetchPrecomputedConfiguration({
       ...initConfiguration,
       env: initConfiguration.env || '',
       context,
       fetch: initConfiguration.flagConfigurationFetch,
       signal,
     })
+    // Use the provider's existing context-matched cache fallback. Do not replace
+    // a valid snapshot with an unsupported or malformed response encoding.
+    if (configuration.precomputedError) throw new ParseError(configuration.precomputedError)
+    return configuration
   }
 }

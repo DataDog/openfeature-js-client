@@ -6,6 +6,7 @@ import {
   type PrecomputedConfiguration,
   type PrecomputedFlagMetadata,
 } from '../configuration'
+import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { getOwnProperty } from './getOwnProperty'
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
@@ -80,7 +81,24 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, flagKey) : undefined
+  const attributes = precomputed.response.data.attributes
+  // Initial configurations and persistent caches can bypass the wire parser.
+  const encoding = readFlagKeyObfuscation(attributes.obfuscated, attributes.obfuscation)
+  const lookup =
+    'error' in encoding
+      ? encoding
+      : encoding.encoding
+        ? encodePrecomputedFlagKey(flagKey, encoding.encoding)
+        : { key: flagKey }
+  if ('error' in lookup) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: lookup.error,
+    }
+  }
+  const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, lookup.key) : undefined
   if (flagError) {
     return {
       value: defaultValue,
@@ -90,7 +108,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
-  const flag = getOwnProperty(precomputed.response.data.attributes.flags, flagKey)
+  const flag = getOwnProperty(attributes.flags, lookup.key)
   if (!flag) {
     return {
       value: defaultValue,

@@ -1,5 +1,6 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '../time'
+import type { FlagKeyObfuscation } from './flag-key-obfuscation'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
@@ -50,6 +51,10 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      /** Absent or false for legacy plaintext assignments. */
+      obfuscated?: boolean
+      /** Required when obfuscated is true; retained with the map in caches. */
+      obfuscation?: FlagKeyObfuscation
       flags: Record<string, PrecomputedFlag>
     }
   }
