@@ -298,6 +298,9 @@ describe('DatadogProvider', () => {
               sdk_name: 'browser',
               sdk_version: '1.0.0-test',
             },
+            supported_capabilities: {
+              assignment_encodings: ['flag-key-sha256-v1'],
+            },
             subject: {
               targeting_key: 'test-user',
               targeting_attributes: {

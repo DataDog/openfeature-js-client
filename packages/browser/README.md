@@ -147,6 +147,24 @@ If the RUM user changes after provider initialization, call
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
 
+## Flag-key obfuscation
+
+The Precompute fetcher automatically advertises support for the
+flag-key-sha256-v1 assignment encoding. Datadog controls its server rollout.
+The provider accepts both plaintext and obfuscated responses without an
+application configuration change.
+
+Continue evaluating the original flag key. The shared core hashes it with the
+response's public salt before lookup. Values, evaluation details, exposure
+events, and RUM annotations keep their existing behavior. Portable
+configuration and IndexedDB storage retain the descriptor with the assignments.
+Unsupported or malformed encodings are rejected, not interpreted as plaintext.
+
+Obfuscation removes readable flag-map keys. It is not encryption, authorization,
+or response signing. Values, variation names, allocation names, telemetry,
+and application code can still reveal a feature's purpose. Do not put sensitive
+information in client-facing variant values, including JSON objects.
+
 ## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
