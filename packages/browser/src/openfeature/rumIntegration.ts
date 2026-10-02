@@ -41,8 +41,8 @@ export function enrichEvaluationContextWithRumUser(context: EvaluationContext): 
 
 export function createRumTrackingHook(): Hook {
   return {
-    after: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      if (details.variant == null) {
+    finally: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
         return
       }
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()

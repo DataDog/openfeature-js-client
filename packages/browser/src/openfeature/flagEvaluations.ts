@@ -77,9 +77,11 @@ export function createFlagEvalEVPHook(
         flagEvaluationBatch.stop()
       }
     },
-    after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+    // Failed evaluations skip `after`; `finally` receives the result returned to the application.
+    finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
-        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
+        // Provider and hook error messages can contain application data; record only the error code.
+        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details, details.errorCode)
       } catch (error) {
         addTelemetryDebug('Error adding evaluation to aggregator', {
           'error.message': error instanceof Error ? error.message : String(error),

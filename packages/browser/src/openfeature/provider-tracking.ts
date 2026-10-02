@@ -56,14 +56,14 @@ export function createProviderTracking({
 }
 
 function withTrackingContext(hook: Hook, getTrackingContext: (context: EvaluationContext) => EvaluationContext): Hook {
-  if (!hook.after) {
+  if (!hook.finally) {
     return hook
   }
 
   return {
     ...hook,
-    after: (hookContext, details, hookHints) =>
-      hook.after?.(
+    finally: (hookContext, details, hookHints) =>
+      hook.finally?.(
         {
           ...hookContext,
           context: getTrackingContext(hookContext.context),

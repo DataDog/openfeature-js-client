@@ -1,6 +1,7 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { createDatadogExposureLoggingHook } from '../../src/openfeature/exposures'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedServerResponse from '../data/precomputed-v1.json'
@@ -52,6 +53,30 @@ describe('Exposures End-to-End', () => {
     // Mock current time to get deterministic timestamps
     jest.setSystemTime(new Date('2025-08-04T17:00:00.000Z'))
   })
+
+  it.each([{ errorCode: ErrorCode.GENERAL }, { reason: 'ERROR' }, { variant: undefined }])(
+    'does not track errors or runtime defaults in finally: %j',
+    async (fallbackDetails) => {
+      const tracking = createDatadogExposureLoggingHook(baseProviderConfig)
+      await tracking.initialize()
+      try {
+        const hook = tracking.hooks[0]
+        expect(hook.after).toBeUndefined()
+        expect(hook.finally).toBeDefined()
+        hook.finally!({ context: { targetingKey: 'test-user' } } as HookContext, {
+          flagKey: 'test-flag',
+          value: false,
+          variant: 'variant-a',
+          reason: 'TARGETING_MATCH',
+          flagMetadata: { allocationKey: 'allocation-a', doLog: true },
+          ...fallbackDetails,
+        })
+      } finally {
+        await tracking.shutdown?.()
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
 
   it('should send exposure events to correct endpoint with proper payload', async () => {
     // Mock server responses

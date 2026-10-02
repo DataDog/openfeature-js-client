@@ -1,5 +1,5 @@
 import { FlagEvaluationAggregator } from '@datadog/flagging-core'
-import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
+import { ErrorCode, type EvaluationDetails, type HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
 
@@ -38,14 +38,30 @@ jest.mock('@datadog/browser-core', () => ({
 }))
 
 describe('createFlagEvalEVPHook', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
   it('should create a hook that tracks flag evaluations', () => {
     const hook = createFlagEvalEVPHook(mockConfiguration)
 
     expect(hook).toBeDefined()
-    expect(hook.after).toBeDefined()
+    expect(hook.after).toBeUndefined()
+    expect(hook.finally).toBeDefined()
   })
 
-  it('should handle evaluation tracking in after hook', () => {
+  it.each([
+    { errorCode: undefined, errorMessage: undefined, expectedError: undefined },
+    { errorCode: ErrorCode.FLAG_NOT_FOUND, errorMessage: 'Flag not found', expectedError: 'FLAG_NOT_FOUND' },
+    { errorCode: ErrorCode.GENERAL, errorMessage: 'Invalid user private@example.com', expectedError: 'GENERAL' },
+    { errorCode: ErrorCode.TYPE_MISMATCH, errorMessage: '', expectedError: 'TYPE_MISMATCH' },
+    { errorCode: ErrorCode.PROVIDER_NOT_READY, errorMessage: undefined, expectedError: 'PROVIDER_NOT_READY' },
+  ])('tracks evaluation details in finally: $expectedError', ({ errorCode, errorMessage, expectedError }) => {
     const mockContext: HookContext = {
       flagKey: 'test-flag',
       defaultValue: true,
@@ -80,8 +96,10 @@ describe('createFlagEvalEVPHook', () => {
     const mockDetails: EvaluationDetails<boolean> = {
       flagKey: 'test-flag',
       value: true,
-      variant: 'variant-a',
-      reason: 'TARGETING_MATCH',
+      variant: errorCode ? undefined : 'variant-a',
+      reason: errorCode ? 'ERROR' : 'TARGETING_MATCH',
+      errorCode,
+      errorMessage,
       flagMetadata: {
         allocationKey: 'allocation-123',
         targetingRuleKey: 'rule-456',
@@ -96,9 +114,9 @@ describe('createFlagEvalEVPHook', () => {
     const hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
 
     expect(() => {
-      hook.after?.(mockContext, mockDetails)
+      hook.finally?.(mockContext, mockDetails)
     }).not.toThrow()
-    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails)
-    addEvaluationSpy.mockRestore()
+    expect(addEvaluationSpy).toHaveBeenCalledTimes(1)
+    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails, expectedError)
   })
 })
