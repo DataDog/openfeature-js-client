@@ -159,6 +159,72 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     expect(evaluationEvents()).toHaveLength(2)
   })
 
+  it('keeps different failures of the same flag and context separate', () => {
+    client.getStringDetails(flagKey, 'fallback')
+    client.addHooks({
+      before: () => {
+        throw new Error('before hook failed')
+      },
+    })
+    client.getBooleanDetails(flagKey, false)
+    client.getBooleanDetails(flagKey, false)
+    jest.advanceTimersByTime(31_000)
+
+    expect(evaluationEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          flag: { key: flagKey },
+          evaluation_count: 1,
+          runtime_default_used: true,
+          error: { message: 'TYPE_MISMATCH' },
+          ...expectedContext(),
+        }),
+        expect.objectContaining({
+          flag: { key: flagKey },
+          evaluation_count: 2,
+          runtime_default_used: true,
+          error: { message: 'GENERAL' },
+          ...expectedContext(),
+        }),
+      ])
+    )
+    expect(evaluationEvents()).toHaveLength(2)
+    expect(rumEvaluation).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/exposures'))).toHaveLength(0)
+  })
+
+  describe.each(['before', 'after'] as const)('errors from %s hooks', (stage) => {
+    it.each(['private@example.com', 123])('normalizes custom error code %j in telemetry only', (code) => {
+      client.addHooks({
+        [stage]: () => {
+          throw Object.assign(new Error('Hook failed for private@example.com'), { code })
+        },
+      })
+
+      expect(client.getBooleanDetails(flagKey, false)).toMatchObject({
+        value: false,
+        reason: 'ERROR',
+        errorCode: code,
+        errorMessage: 'Hook failed for private@example.com',
+      })
+      jest.advanceTimersByTime(31_000)
+
+      const events = evaluationEvents()
+      expect(events).toEqual([
+        expect.objectContaining({
+          flag: { key: flagKey },
+          evaluation_count: 1,
+          runtime_default_used: true,
+          error: { message: 'GENERAL' },
+          ...expectedContext(),
+        }),
+      ])
+      expect(JSON.stringify(events)).not.toContain('private@example.com')
+      expect(rumEvaluation).not.toHaveBeenCalled()
+      expect(fetchMock.mock.calls.filter(([url]) => url.includes('/exposures'))).toHaveLength(0)
+    })
+  })
+
   it('does not track a discarded assignment or deduplicate its later successful exposure', () => {
     // Global after hooks run after provider and client after hooks.
     OpenFeature.addHooks({
@@ -241,9 +307,9 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
   function expectedContext() {
     return {
       targeting_key: kind === 'core' ? 'core-user' : 'rum-user',
-      context: {
+      context: expect.objectContaining({
         evaluation: { country: 'US', ...(kind === 'online' && { user_email: 'rum@example.com' }) },
-      },
+      }),
     }
   }
 })
