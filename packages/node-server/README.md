@@ -32,6 +32,7 @@ In the browser, use the existing rules-based API:
 
 ```javascript
 import { configurationFromString, DatadogCoreProvider } from '@datadog/openfeature-browser/rules-based'
+import { OpenFeature } from '@openfeature/web-sdk'
 
 const provider = new DatadogCoreProvider()
 provider.setConfiguration(configurationFromString(wire))
