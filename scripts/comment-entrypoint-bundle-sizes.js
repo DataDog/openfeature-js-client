@@ -5,10 +5,50 @@ const path = require('path')
 
 const COMMENT_MARKER = '<!-- datadog-openfeature-entrypoint-bundle-sizes -->'
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+const bundleDirectories = [
+  'packages/browser/',
+  'packages/core/',
+  'test-app/',
+  'scripts/build/',
+  'scripts/lib/',
+  '.yarn/',
+]
+const bundleFiles = new Set([
+  'scripts/webpack-runner.js',
+  'scripts/test-package-install.sh',
+  'scripts/report-entrypoint-bundle-sizes.js',
+  'scripts/comment-entrypoint-bundle-sizes.js',
+  'package.json',
+  'yarn.lock',
+  'lerna.json',
+  '.yarnrc.yml',
+  '.npmrc',
+  '.github/workflows/ci.yaml',
+])
+
+function isBundleReportPath(filename) {
+  if (!filename || /\.(md|markdown)$/i.test(filename)) return false
+
+  return (
+    bundleDirectories.some((directory) => filename.startsWith(directory)) ||
+    bundleFiles.has(filename) ||
+    /^(tsconfig[^/]*\.json|webpack[^/]*\.js)$/.test(filename)
+  )
+}
+
+async function hasBundleRelevantChanges(request, pullRequestPath) {
+  // GitHub caps PR file listings at 3,000 files. At the cap, publish conservatively.
+  for (let page = 1; page <= 30; page++) {
+    const files = await request(`${pullRequestPath}/files?per_page=100&page=${page}`)
+    if (files.some((file) => isBundleReportPath(file.filename) || isBundleReportPath(file.previous_filename))) {
+      return true
+    }
+    if (files.length < 100) return false
+  }
+
+  console.log('PR file listing reached the GitHub limit; publishing the bundle-size report conservatively.')
+  return true
+}
 
 async function main() {
   const reportPath = process.argv[2] || process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH
@@ -49,6 +89,11 @@ async function main() {
   const issueNumber = event.pull_request.number
   const body = `${COMMENT_MARKER}\n${report}\n\n_This report shows current PR artifact sizes only; it does not compare against the base branch._`
   const request = createGithubRequest(token)
+  if (!(await hasBundleRelevantChanges(request, `/repos/${owner}/${repo}/pulls/${issueNumber}`))) {
+    console.log('Skipping entrypoint bundle-size PR comment: no bundle-relevant paths changed in this pull request.')
+    return
+  }
+
   const comments = await request(`/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`)
   const existingComment = comments.find(
     (comment) => typeof comment.body === 'string' && comment.body.includes(COMMENT_MARKER)
@@ -98,3 +143,12 @@ function createGithubRequest(token) {
     return response.json()
   }
 }
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}
+
+module.exports = { main, isBundleReportPath, hasBundleRelevantChanges }

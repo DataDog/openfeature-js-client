@@ -7,6 +7,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        provider: fileURLToPath(new URL('./provider.html', import.meta.url)),
+        coreProvider: fileURLToPath(new URL('./core-provider.html', import.meta.url)),
         protobuf: fileURLToPath(new URL('./protobuf.html', import.meta.url)),
         precomputed: fileURLToPath(new URL('./precomputed.html', import.meta.url)),
         trackingBaseline: fileURLToPath(new URL('./tracking-baseline.html', import.meta.url)),
