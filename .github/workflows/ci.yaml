@@ -63,18 +63,21 @@ jobs:
           BUILD_MODE: release
           ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/entrypoint-bundle-sizes.md
 
-      - name: Comment browser entrypoint bundle sizes
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        run: node scripts/comment-entrypoint-bundle-sizes.js "${{ runner.temp }}/entrypoint-bundle-sizes.md"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
       - name: Test node package installation (without OpenFeature)
         run: yarn test:node-install
+        env:
+          BUILD_MODE: release
+          ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH: ${{ runner.temp }}/node-entrypoint-bundle-sizes.md
 
       - name: Test node package installation (with OpenFeature)
         run: yarn test:node-install:with-of
 
       - name: Test node package installation (with minimum OpenFeature)
         run: OF_SERVER_SDK_VERSION=1.15.0 OF_CORE_VERSION=1.3.0 yarn test:node-install:with-of
+
+      - name: Comment entrypoint bundle sizes
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        run: node scripts/comment-entrypoint-bundle-sizes.js "${{ runner.temp }}/entrypoint-bundle-sizes.md" "${{ runner.temp }}/node-entrypoint-bundle-sizes.md"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

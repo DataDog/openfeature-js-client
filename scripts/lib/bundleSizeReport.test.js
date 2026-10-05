@@ -10,13 +10,18 @@ for (const filename of [
   'packages/browser/package.json',
   'packages/core/src/configuration/generated/ufc_pb.ts',
   'packages/core/tsconfig.esm.json',
+  'packages/node-server/src/index.ts',
+  'packages/node-server/package.json',
+  'test-app-node/bundles/ssr.mjs',
   'test-app/src/provider.ts',
   'test-app/vite.config.ts',
   'scripts/build/replace-build-env.js',
   'scripts/lib/buildEnv.js',
   'scripts/webpack-runner.js',
   'scripts/test-package-install.sh',
+  'scripts/test-node-package-install.sh',
   'scripts/report-entrypoint-bundle-sizes.js',
+  'scripts/report-node-entrypoint-bundle-sizes.js',
   'scripts/comment-entrypoint-bundle-sizes.js',
   'package.json',
   'yarn.lock',
@@ -43,10 +48,9 @@ for (const filename of [
   'packages/core/CHANGELOG.MD',
   'test-app/README.markdown',
   'scripts/lib/README.md',
-  'packages/node-server/src/index.ts',
-  'packages/node-server/package.json',
+  'packages/node-server/README.md',
+  'test-app-node/README.md',
   'packages/browser-tools/index.js',
-  'scripts/test-node-package-install.sh',
   '.github/workflows/licenses.yaml',
   'tools/tsconfig.json',
   'webpack-tools/index.js',
@@ -74,7 +78,7 @@ test('checks all PR files across pages, not only the latest commit', async () =>
 
 test('skips a paginated PR with no bundle-relevant files', async () => {
   let calls = 0
-  const request = async () => (++calls === 1 ? docsPage : [{ filename: 'packages/node-server/src/index.ts' }])
+  const request = async () => (++calls === 1 ? docsPage : [{ filename: 'packages/node-server/README.md' }])
   assert.equal(await hasBundleRelevantChanges(request, pullRequestPath), false)
   assert.equal(calls, 2)
 })
@@ -109,12 +113,16 @@ test('publishes conservatively when GitHub truncates the PR file list', async (t
   assert.equal(calls, 30)
 })
 
-for (const scenario of ['skip', 'create', 'update']) {
+for (const scenario of ['skip', 'create', 'update', 'partial', 'empty', 'missing']) {
   test(`${scenario} PR comment using the path filter`, async (t) => {
     const directory = mkdtempSync(path.join(tmpdir(), 'flagging-bundle-comment-'))
     const reportPath = path.join(directory, 'report.md')
+    const nodeReportPath = path.join(directory, 'node-report.md')
     const eventPath = path.join(directory, 'event.json')
-    writeFileSync(reportPath, 'Bundle report fixture')
+    if (scenario !== 'missing') writeFileSync(reportPath, scenario === 'empty' ? '' : 'Browser bundle report fixture')
+    if (scenario !== 'partial' && scenario !== 'missing') {
+      writeFileSync(nodeReportPath, scenario === 'empty' ? '' : 'Node bundle report fixture')
+    }
     writeFileSync(eventPath, JSON.stringify({ pull_request: { number: 401 } }))
     const environment = {
       GITHUB_TOKEN: 'test-token',
@@ -133,7 +141,7 @@ for (const scenario of ['skip', 'create', 'update']) {
       rmSync(directory, { recursive: true, force: true })
     })
     Object.assign(process.env, environment)
-    process.argv = [process.execPath, 'comment-entrypoint-bundle-sizes.js', reportPath]
+    process.argv = [process.execPath, 'comment-entrypoint-bundle-sizes.js', reportPath, nodeReportPath]
     t.mock.method(console, 'log', () => {})
 
     const calls = []
@@ -143,7 +151,7 @@ for (const scenario of ['skip', 'create', 'update']) {
       let data
       if (calls.length === 1) {
         assert.equal(route, `${pullRequestPath}/files?per_page=100&page=1`)
-        data = [{ filename: scenario === 'skip' ? 'packages/browser/README.md' : 'packages/browser/src/index.ts' }]
+        data = [{ filename: scenario === 'skip' ? 'packages/browser/README.md' : 'packages/node-server/src/index.ts' }]
       } else if (calls.length === 2) {
         assert.equal(route, '/repos/DataDog/openfeature-js-client/issues/401/comments?per_page=100')
         data = scenario === 'update' ? [{ id: 42, body: '<!-- datadog-openfeature-entrypoint-bundle-sizes -->' }] : []
@@ -154,18 +162,27 @@ for (const scenario of ['skip', 'create', 'update']) {
     })
 
     await main()
+    if (scenario === 'empty' || scenario === 'missing') {
+      assert.equal(calls.length, 0)
+      return
+    }
     assert.equal(calls.length, scenario === 'skip' ? 1 : 3)
     assert.equal(calls[0].method, 'GET')
     if (scenario !== 'skip') {
       assert.equal(calls[1].method, 'GET')
-      assert.equal(calls[2].method, scenario === 'create' ? 'POST' : 'PATCH')
+      assert.equal(calls[2].method, scenario === 'update' ? 'PATCH' : 'POST')
       assert.equal(
         calls[2].route,
-        scenario === 'create'
-          ? '/repos/DataDog/openfeature-js-client/issues/401/comments'
-          : '/repos/DataDog/openfeature-js-client/issues/comments/42'
+        scenario === 'update'
+          ? '/repos/DataDog/openfeature-js-client/issues/comments/42'
+          : '/repos/DataDog/openfeature-js-client/issues/401/comments'
       )
-      assert.match(JSON.parse(calls[2].body).body, /Bundle report fixture/)
+      const body = JSON.parse(calls[2].body).body
+      assert.match(body, /Browser bundle report fixture/)
+      assert.match(
+        body,
+        scenario === 'partial' ? /Bundle report unavailable: `node-report.md`/ : /Node bundle report fixture/
+      )
     }
   })
 }
