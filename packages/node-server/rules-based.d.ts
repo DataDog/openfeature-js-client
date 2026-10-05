@@ -881,10 +881,6 @@ interface ConfigurationFetchOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
-	/** Request and body-read timeout in milliseconds. Defaults to 2000. */
-	timeoutMs?: number;
-	/** Maximum decoded HTTP response size in bytes. Defaults to 10 MiB. */
-	maxResponseBytes?: number;
 	signal?: AbortSignal;
 	/** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
 	fetch?: typeof globalThis.fetch;
@@ -898,7 +894,7 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
 	clientToken: string;
 	apiKey?: never;
 });
-export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "response_too_large" | "decode" | "transport" | "timeout" | "cancelled";
+export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "decode" | "transport" | "cancelled";
 /** A configuration-loading failure, not an OpenFeature evaluation error. */
 export declare class ConfigurationFetchError extends Error {
 	readonly code: ConfigurationFetchErrorCode;

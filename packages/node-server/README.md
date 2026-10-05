@@ -45,16 +45,15 @@ await OpenFeature.setProviderAndWait(provider, context)
 
 - Requires Node.js 18 or newer. Uses global Fetch unless `fetch` supplies a Fetch-compatible implementation.
 - `site` defaults to `datadoghq.com`. Supported sites: `datadoghq.com`, `us3.datadoghq.com`, `us5.datadoghq.com`, `datadoghq.eu`, `ap1.datadoghq.com`, `ap2.datadoghq.com`, `uk1.datadoghq.com`, and `datad0g.com`.
-- `timeoutMs` defaults to 2000 and covers both the request and body reads. `signal` permits caller cancellation. Synchronous protobuf decoding cannot be interrupted by a timer.
-- `maxResponseBytes` defaults to 10 MiB and limits the decoded HTTP body, including compressed or chunked responses. Applications with larger configurations can raise it explicitly.
+- `signal` permits caller cancellation or an application-owned deadline. The helper imposes no timeout or response-size limit; applications or custom transports own those policies. Synchronous protobuf decoding cannot be interrupted by an abort signal.
 - Redirects are rejected to avoid forwarding credentials. A custom transport must honor `signal` and `redirect: 'manual'`. Configure proxy routing in that transport; it is responsible for any destination changes.
 - Only HTTP 200 with a nonempty `application/protobuf` body is accepted. This API does not accept a previous configuration or issue conditional requests; HTTP 304 is an error. Retrieval time and ETag are retained for serialization, not used as an implicit cache.
 - Malformed protobuf rejects the fetch. Invalid individual flags remain flag-scoped evaluation errors without disabling valid flags. Serialization retains unknown protobuf fields.
-- `ConfigurationFetchError.code` distinguishes `invalid_options`, `http`, `invalid_response`, `response_too_large`, `decode`, `transport`, `timeout`, and `cancelled`. HTTP failures also include `status`. Errors exclude raw response bodies and transport diagnostics, which can contain credentials.
+- `ConfigurationFetchError.code` distinguishes `invalid_options`, `http`, `invalid_response`, `decode`, `transport`, and `cancelled`. Aborting `signal`, including for a caller deadline, produces `cancelled`. HTTP failures also include `status`. Errors exclude raw response bodies and transport diagnostics, which can contain credentials.
 
 ### Verification
 
-Run `yarn workspace @datadog/openfeature-node-server test --runInBand` for request, decoding, timeout, cancellation, and size-limit tests. After building all packages, `yarn test:node-install` checks installed CommonJS/native ESM exports, Node-only consumer types with legacy and modern module resolution, and Node-to-browser offline bootstrap. Fresh-process checks verify that neither `require` nor native `import` loads protobuf through the root entrypoint. The bootstrap test runs the built browser provider under Node, not a browser UI or SSR framework. These tests use synthetic configuration and mocked requests, not live credentials or customer data.
+Run `yarn workspace @datadog/openfeature-node-server test --runInBand` for request, decoding, cancellation, and cleanup tests. After building all packages, `yarn test:node-install` checks installed CommonJS/native ESM exports, Node-only consumer types with legacy and modern module resolution, and Node-to-browser offline bootstrap. Fresh-process checks verify that neither `require` nor native `import` loads protobuf through the root entrypoint. The bootstrap test runs the built browser provider under Node, not a browser UI or SSR framework. These tests use synthetic configuration and mocked requests, not live credentials or customer data.
 
 ## End-user license agreement
 

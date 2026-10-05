@@ -116,8 +116,6 @@ const clientOptions: RulesConfigurationFetchOptions = {
   distribution: 'client',
   clientToken: 'client-token',
   env: 'prod',
-  timeoutMs: 1000,
-  maxResponseBytes: 1024,
   signal: new AbortController().signal,
   fetch: globalThis.fetch,
 }
