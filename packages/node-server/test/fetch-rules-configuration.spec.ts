@@ -107,14 +107,6 @@ describe('fetchRulesConfiguration', () => {
     { site: 'toString' },
     { site: null },
     { site: {} },
-    { timeoutMs: 0 },
-    { timeoutMs: -1 },
-    { timeoutMs: 1.5 },
-    { timeoutMs: Infinity },
-    { timeoutMs: 2147483648 },
-    { maxResponseBytes: 0 },
-    { maxResponseBytes: Infinity },
-    { maxResponseBytes: 1.5 },
   ])('rejects invalid options before sending credentials: %j', async (override) => {
     await expect(
       fetchRulesConfiguration({ ...options, ...override, fetch: requestFetch } as RulesConfigurationFetchOptions)
@@ -218,29 +210,18 @@ describe('fetchRulesConfiguration', () => {
     [
       { failure: 'http', code: 'http' },
       { failure: 'mime', code: 'invalid_response' },
-      { failure: 'content-length', code: 'response_too_large' },
-      { failure: 'chunks', code: 'response_too_large' },
     ].flatMap((testCase) => ['settles', 'never settles', 'rejects'].map((cleanup) => ({ ...testCase, cleanup })))
   )('preserves $failure errors when cancellation $cleanup', async ({ failure, code, cleanup }) => {
     const cancel = jest.fn(() => {
       if (cleanup === 'never settles') return new Promise<void>(() => {})
       if (cleanup === 'rejects') return Promise.reject(new Error('secret'))
     })
-    const body = new ReadableStream<Uint8Array>({
-      start(stream) {
-        if (failure === 'chunks') {
-          stream.enqueue(new Uint8Array(3))
-          stream.enqueue(new Uint8Array(3))
-        }
-      },
-      cancel,
-    })
+    const body = new ReadableStream<Uint8Array>({ cancel })
     requestFetch.mockResolvedValue(
       new Response(body, {
         status: failure === 'http' ? 403 : 200,
         headers: {
           'Content-Type': failure === 'mime' ? 'text/plain' : 'application/protobuf',
-          ...(failure === 'content-length' ? { 'Content-Length': '6' } : {}),
         },
       })
     )
@@ -249,7 +230,6 @@ describe('fetchRulesConfiguration', () => {
     const rejected = jest.fn()
     const pending = fetchRulesConfiguration({
       ...options,
-      maxResponseBytes: 5,
       signal: controller.signal,
       fetch: requestFetch,
     }).catch(rejected)
@@ -263,15 +243,21 @@ describe('fetchRulesConfiguration', () => {
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
-  it('enforces the limit on decoded chunks even when Content-Length is smaller', async () => {
-    requestFetch.mockResolvedValue(new Response(body, { headers: { ...headers, 'Content-Length': '1' } }))
-    await expect(
-      fetchRulesConfiguration({ ...options, maxResponseBytes: body.length - 1, fetch: requestFetch })
-    ).rejects.toMatchObject({ code: 'response_too_large' })
-    requestFetch.mockResolvedValue(response())
-    await expect(
-      fetchRulesConfiguration({ ...options, maxResponseBytes: body.length, fetch: requestFetch })
-    ).resolves.toHaveProperty('rules')
+  it('decodes a streamed response', async () => {
+    requestFetch.mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            const midpoint = Math.floor(body.length / 2)
+            stream.enqueue(body.subarray(0, midpoint))
+            stream.enqueue(body.subarray(midpoint))
+            stream.close()
+          },
+        }),
+        { headers }
+      )
+    )
+    await expect(fetchRulesConfiguration({ ...options, fetch: requestFetch })).resolves.toHaveProperty('rules')
   })
 
   it('rejects an already cancelled call without fetching', async () => {
@@ -283,40 +269,37 @@ describe('fetchRulesConfiguration', () => {
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
-  it.each(['headers', 'body'])('supports timeout and cancellation while waiting for %s', async (phase) => {
-    for (const reason of ['timeout', 'cancelled']) {
-      const controller = new AbortController()
-      const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
-      requestFetch.mockImplementation((_url, request) => {
-        const signal = request!.signal!
-        if (phase === 'headers') {
-          return new Promise((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('secret')), { once: true })
-          })
-        }
-        return Promise.resolve(
-          new Response(
-            new ReadableStream({
-              start(stream) {
-                signal.addEventListener('abort', () => stream.error(new Error('secret')), { once: true })
-              },
-            }),
-            { headers }
-          )
+  it.each(['headers', 'body'])('leaves cancellation to the caller while waiting for %s', async (phase) => {
+    const controller = new AbortController()
+    const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
+    requestFetch.mockImplementation((_url, request) => {
+      const signal = request!.signal!
+      if (phase === 'headers') {
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('secret')), { once: true })
+        })
+      }
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(stream) {
+              signal.addEventListener('abort', () => stream.error(new Error('secret')), { once: true })
+            },
+          }),
+          { headers }
         )
-      })
-      const pending = fetchRulesConfiguration({
-        ...options,
-        signal: controller.signal,
-        timeoutMs: 50,
-        fetch: requestFetch,
-      })
-      const check = expect(pending).rejects.toMatchObject({ code: reason })
-      if (reason === 'timeout') await jest.advanceTimersByTimeAsync(50)
-      else controller.abort(new Error('secret'))
-      await check
-      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
-    }
+      )
+    })
+    const pending = fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
+    const rejected = jest.fn()
+    const settled = pending.catch(rejected)
+    await jest.advanceTimersByTimeAsync(2500)
+    expect(rejected).not.toHaveBeenCalled()
+    expect(requestFetch.mock.calls[0][1]?.signal?.aborted).toBe(false)
+    controller.abort(new Error('secret'))
+    await settled
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ code: 'cancelled' }))
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
   it('removes the caller listener after success', async () => {

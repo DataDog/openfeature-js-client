@@ -5,10 +5,6 @@ interface ConfigurationFetchOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
-  /** Request and body-read timeout in milliseconds. Defaults to 2000. */
-  timeoutMs?: number
-  /** Maximum decoded HTTP response size in bytes. Defaults to 10 MiB. */
-  maxResponseBytes?: number
   signal?: AbortSignal
   /** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
   fetch?: typeof globalThis.fetch
@@ -21,14 +17,7 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions &
   )
 
 export type ConfigurationFetchErrorCode =
-  | 'invalid_options'
-  | 'http'
-  | 'invalid_response'
-  | 'response_too_large'
-  | 'decode'
-  | 'transport'
-  | 'timeout'
-  | 'cancelled'
+  'invalid_options' | 'http' | 'invalid_response' | 'decode' | 'transport' | 'cancelled'
 
 /** A configuration-loading failure, not an OpenFeature evaluation error. */
 export class ConfigurationFetchError extends Error {
@@ -53,8 +42,6 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     clientToken,
     env,
     site = 'datadoghq.com',
-    timeoutMs = 2000,
-    maxResponseBytes = 10 * 1024 * 1024,
     signal,
     fetch: requestFetch = globalThis.fetch,
   } = options ?? {}
@@ -67,11 +54,6 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     /[\r\n]/.test(credential) ||
     typeof env !== 'string' ||
     !env.trim() ||
-    !Number.isInteger(timeoutMs) ||
-    timeoutMs <= 0 ||
-    timeoutMs > 2147483647 ||
-    !Number.isSafeInteger(maxResponseBytes) ||
-    maxResponseBytes <= 0 ||
     typeof requestFetch !== 'function'
   ) {
     throw new ConfigurationFetchError('invalid_options', 'Invalid configuration fetch options')
@@ -90,10 +72,6 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   const controller = new AbortController()
   const cancel = () => controller.abort(new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled'))
   signal?.addEventListener('abort', cancel, { once: true })
-  const timer = setTimeout(
-    () => controller.abort(new ConfigurationFetchError('timeout', 'Configuration fetch timed out')),
-    timeoutMs
-  )
   const fetchedAt = timeStampNow()
   let response: Response | undefined
   try {
@@ -122,8 +100,14 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
       throw new ConfigurationFetchError('invalid_response', 'Expected a protobuf configuration response')
     }
 
-    const bytes = await readResponse(response, maxResponseBytes)
+    let bytes: Uint8Array
+    try {
+      bytes = new Uint8Array(await response.arrayBuffer())
+    } catch {
+      throw new ConfigurationFetchError('transport', 'Configuration response could not be read')
+    }
     controller.signal.throwIfAborted()
+    if (bytes.length === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
     let configuration: FlagsConfiguration
     try {
       configuration = configurationFromRulesBinary(bytes)
@@ -142,50 +126,10 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     // Transport errors and response bodies can contain credentials. Do not attach them as causes.
     throw new ConfigurationFetchError('transport', 'Configuration request failed')
   } finally {
-    clearTimeout(timer)
     signal?.removeEventListener('abort', cancel)
-    // Aborting also releases an unfinished response after a validation or size-limit failure.
+    // Aborting also releases an unfinished response after a validation failure.
     controller.abort()
     // Custom stream cleanup must not delay the result, even if cancellation never settles.
     if (response?.body && !response.bodyUsed) void response.body.cancel().catch(() => {})
   }
-}
-
-async function readResponse(response: Response, limit: number): Promise<Uint8Array> {
-  if (Number(response.headers.get('content-length')) > limit) {
-    throw new ConfigurationFetchError('response_too_large', 'Configuration response exceeds the size limit')
-  }
-  if (!response.body) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
-
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let size = 0
-  try {
-    while (true) {
-      let result: ReadableStreamReadResult<Uint8Array>
-      try {
-        result = await reader.read()
-      } catch {
-        throw new ConfigurationFetchError('transport', 'Configuration response could not be read')
-      }
-      if (result.done) break
-      size += result.value.byteLength
-      if (size > limit) {
-        throw new ConfigurationFetchError('response_too_large', 'Configuration response exceeds the size limit')
-      }
-      chunks.push(result.value)
-    }
-  } finally {
-    // Release the lock without waiting for a custom stream's cancellation to settle.
-    void reader.cancel().catch(() => {})
-    reader.releaseLock()
-  }
-  if (size === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
-  const bytes = new Uint8Array(size)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
 }
