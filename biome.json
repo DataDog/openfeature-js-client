@@ -38,6 +38,8 @@
       "!**/coverage",
       "!**/*.tgz",
       "!test-app/node_modules",
+      "!packages/node-server/index.d.ts",
+      "!packages/node-server/rules-based.d.ts",
       "!packages/core/test/ffe-system-test-data",
       "!packages/core/src/configuration/generated"
     ]
