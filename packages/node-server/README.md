@@ -4,7 +4,7 @@ This package provides OpenFeature integration for Node.js server environments an
 
 ## Standalone Configuration Helpers
 
-These exports implement the configuration building blocks for the Node SDK. The customer-facing `dd-trace/openfeature` entrypoint requires a separate dd-trace integration and release. The examples below use this internal package to document its contract.
+Requires Node.js 18 or newer. Fetch and parse rules without initializing a tracer or provider. The customer-facing `dd-trace/openfeature` entrypoint is a separate follow-up; these examples use the internal package.
 
 ```javascript
 import { fetchRulesConfiguration, configurationToString } from '@datadog/openfeature-node-server/rules-based'
@@ -22,13 +22,9 @@ const wire = configurationToString(clientConfiguration)
 // Pass wire through the framework's safe SSR data serializer, not raw inline HTML.
 ```
 
-The helpers also support named imports from native ESM. They work without tracer initialization or OpenFeature registration. A call fetches and decodes one protobuf response. It does not change a provider, start polling, save configuration, or emit tracking events. Applications own retries, scheduling, storage, and fallback.
+**Only forward client-distributed configuration to the browser.** Serialization does not remove server-only flags. The client endpoint's access controls and opt-in requirements still apply.
 
-The existing `DatadogNodeServerProvider` stays at the root entrypoint. Importing it does not load the protobuf decoder; the rules-based helpers are opt-in. This separation limits runtime loading, not installed dependency size. Node's native `import` and `require` use the same CommonJS implementation. Bundlers that support the `module` export condition use the ESM build for tree shaking.
-
-The result is the existing parsed `FlagsConfiguration` used by the core evaluator and the browser's `DatadogCoreProvider`. It is **not** the legacy UFC JSON accepted by `DatadogNodeServerProvider.setConfiguration()`. This addition does not change the existing Node provider. `configurationFromRulesBinary`, `configurationFromString`, and `configurationToString` reuse the core codecs; no browser SDK is needed on the server.
-
-In the browser, use the existing rules-based API:
+Initialize the browser provider from the serialized configuration:
 
 ```javascript
 import { configurationFromString, DatadogCoreProvider } from '@datadog/openfeature-browser/rules-based'
@@ -39,21 +35,16 @@ provider.setConfiguration(configurationFromString(wire))
 await OpenFeature.setProviderAndWait(provider, context)
 ```
 
-**Do not expose server-distributed configuration to the browser.** Serialization does not remove server-only flags. Client distribution selects the client rules endpoint and its existing access controls and opt-in requirements. A client token alone does not select client distribution. Missing, mixed, or mismatched credentials are rejected before a request.
+The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `DatadogNodeServerProvider.setConfiguration()`. The existing Node provider is unchanged, and importing it from the root entrypoint does not load the protobuf decoder.
 
-### Transport Contract
+### Fetch Options and Errors
 
-- Requires Node.js 18 or newer. Uses global Fetch unless `fetch` supplies a Fetch-compatible implementation.
-- `site` defaults to `datadoghq.com`. Supported sites: `datadoghq.com`, `us3.datadoghq.com`, `us5.datadoghq.com`, `datadoghq.eu`, `ap1.datadoghq.com`, `ap2.datadoghq.com`, `uk1.datadoghq.com`, and `datad0g.com`.
-- `signal` permits caller cancellation or an application-owned deadline. The helper imposes no timeout or response-size limit; applications or custom transports own those policies. Synchronous protobuf decoding cannot be interrupted by an abort signal.
-- Redirects are rejected to avoid forwarding credentials. A custom transport must honor `signal` and `redirect: 'manual'`. Configure proxy routing in that transport; it is responsible for any destination changes.
-- Only HTTP 200 with a nonempty `application/protobuf` body is accepted. This API does not accept a previous configuration or issue conditional requests; HTTP 304 is an error. Retrieval time and ETag are retained for serialization, not used as an implicit cache.
-- Malformed protobuf rejects the fetch. Invalid individual flags remain flag-scoped evaluation errors without disabling valid flags. Serialization retains unknown protobuf fields.
-- `ConfigurationFetchError.code` distinguishes `invalid_options`, `http`, `invalid_response`, `decode`, `transport`, and `cancelled`. Aborting `signal`, including for a caller deadline, produces `cancelled`. HTTP failures also include `status`. Errors exclude raw response bodies and transport diagnostics, which can contain credentials.
+- `site` defaults to `datadoghq.com`.
+- `fetch` overrides global Fetch. Custom transports must honor `signal` and `redirect: 'manual'`; redirects are rejected to protect credentials.
+- `signal` supports cancellation and caller-owned deadlines. The helper sets no timeout or response-size limit.
+- Failures throw `ConfigurationFetchError` with a `code` and, for HTTP errors, `status`. Caller cancellation uses the `cancelled` code.
 
-### Verification
-
-Run `yarn workspace @datadog/openfeature-node-server test --runInBand` for request, decoding, cancellation, and cleanup tests. After building all packages, `yarn test:node-install` checks installed CommonJS/native ESM exports, Node-only consumer types with legacy and modern module resolution, and Node-to-browser offline bootstrap. Fresh-process checks verify that neither `require` nor native `import` loads protobuf through the root entrypoint. The bootstrap test runs the built browser provider under Node, not a browser UI or SSR framework. These tests use synthetic configuration and mocked requests, not live credentials or customer data.
+Applications own retries, polling, storage, tracking, and fallback.
 
 ## End-user license agreement
 
