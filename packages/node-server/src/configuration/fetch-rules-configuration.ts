@@ -146,7 +146,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     signal?.removeEventListener('abort', cancel)
     // Aborting also releases an unfinished response after a validation or size-limit failure.
     controller.abort()
-    if (response?.body && !response.bodyUsed) await response.body.cancel().catch(() => {})
+    // Custom stream cleanup must not delay the result, even if cancellation never settles.
+    if (response?.body && !response.bodyUsed) void response.body.cancel().catch(() => {})
   }
 }
 
@@ -175,7 +176,8 @@ async function readResponse(response: Response, limit: number): Promise<Uint8Arr
       chunks.push(result.value)
     }
   } finally {
-    await reader.cancel().catch(() => {})
+    // Release the lock without waiting for a custom stream's cancellation to settle.
+    void reader.cancel().catch(() => {})
     reader.releaseLock()
   }
   if (size === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')

@@ -214,8 +214,18 @@ describe('fetchRulesConfiguration', () => {
     })
   })
 
-  it.each(['http', 'mime', 'content-length', 'chunks'])('releases rejected %s responses', async (failure) => {
-    const cancel = jest.fn()
+  it.each(
+    [
+      { failure: 'http', code: 'http' },
+      { failure: 'mime', code: 'invalid_response' },
+      { failure: 'content-length', code: 'response_too_large' },
+      { failure: 'chunks', code: 'response_too_large' },
+    ].flatMap((testCase) => ['settles', 'never settles', 'rejects'].map((cleanup) => ({ ...testCase, cleanup })))
+  )('preserves $failure errors when cancellation $cleanup', async ({ failure, code, cleanup }) => {
+    const cancel = jest.fn(() => {
+      if (cleanup === 'never settles') return new Promise<void>(() => {})
+      if (cleanup === 'rejects') return Promise.reject(new Error('secret'))
+    })
     const body = new ReadableStream<Uint8Array>({
       start(stream) {
         if (failure === 'chunks') {
@@ -234,11 +244,23 @@ describe('fetchRulesConfiguration', () => {
         },
       })
     )
-    await expect(
-      fetchRulesConfiguration({ ...options, maxResponseBytes: 5, fetch: requestFetch })
-    ).rejects.toBeInstanceOf(ConfigurationFetchError)
+    const controller = new AbortController()
+    const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
+    const rejected = jest.fn()
+    const pending = fetchRulesConfiguration({
+      ...options,
+      maxResponseBytes: 5,
+      signal: controller.signal,
+      fetch: requestFetch,
+    }).catch(rejected)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(rejected).toHaveBeenCalledTimes(1)
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ name: 'ConfigurationFetchError', code }))
+    await pending
     expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
     expect(requestFetch.mock.calls[0][1]?.signal?.aborted).toBe(true)
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
   it('enforces the limit on decoded chunks even when Content-Length is smaller', async () => {
