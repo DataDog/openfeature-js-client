@@ -12,6 +12,9 @@ import { TypeMismatchError } from '@openfeature/web-sdk'
 const OVERRIDES_KEY = 'dd.dd_flag.overrides'
 const DEVTOOLS_MARKER_KEY = 'dd.dd_flag.devtools'
 
+// Wrappers in this module share one marker, including during provider replacement.
+const markerOwners = new Set<symbol>()
+
 type DDFlagOverrideType = 'BOOLEAN' | 'STRING' | 'INTEGER' | 'NUMERIC' | 'JSON'
 
 interface DDFlagOverride {
@@ -57,6 +60,7 @@ export class DatadogDevtools implements Provider {
   readonly runsOn: Paradigm = 'client'
 
   private overrides: Record<string, DDFlagOverride> = {}
+  private readonly markerOwner = Symbol()
 
   constructor(private readonly inner: Provider) {}
 
@@ -74,6 +78,7 @@ export class DatadogDevtools implements Provider {
 
   async initialize(context?: EvaluationContext): Promise<void> {
     this.overrides = readOverrides()
+    markerOwners.add(this.markerOwner)
     try {
       localStorage.setItem(DEVTOOLS_MARKER_KEY, 'enabled')
     } catch {}
@@ -81,9 +86,11 @@ export class DatadogDevtools implements Provider {
   }
 
   async onClose(): Promise<void> {
-    try {
-      localStorage.removeItem(DEVTOOLS_MARKER_KEY)
-    } catch {}
+    if (markerOwners.delete(this.markerOwner) && markerOwners.size === 0) {
+      try {
+        localStorage.removeItem(DEVTOOLS_MARKER_KEY)
+      } catch {}
+    }
     await this.inner.onClose?.()
   }
 
