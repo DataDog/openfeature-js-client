@@ -2,10 +2,12 @@ import { sha256Hex } from '../evaluation/sha256'
 import { encodeUtf8 } from '../utf8'
 
 const SCHEME = 'flag-key-sha256-v1'
-const DOMAIN = encodeUtf8('datadog.feature-flags.flag-key.v1\0')
+const DOMAIN = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.flag-key.v1\0')
+const MAX_CACHED_KEYS = 1024
+const lookupCaches = new WeakMap<FlagKeyObfuscation, { salt: string; keys: Map<string, string> }>()
 
-/** Assignment encodings supported by the precomputed parser and evaluator. @internal */
-export const SUPPORTED_ASSIGNMENT_ENCODINGS = [SCHEME] as const
+/** Capabilities supported by the precomputed parser and evaluator. @internal */
+export const SUPPORTED_FLAGS_CAPABILITIES = ['assignment-encoding-flag-key-256-v1'] as const
 
 /** Public metadata stored with the encoded assignment map. @internal */
 export type FlagKeyObfuscation = {
@@ -31,7 +33,8 @@ export function readFlagKeyObfuscation(
   if (!isLowercaseHex(descriptor.salt, 16)) {
     return { error: 'Precomputed flag-key salt must contain 32 lowercase hexadecimal characters' }
   }
-  return { encoding: { scheme: SCHEME, salt: descriptor.salt } }
+  // Keep descriptor identity stable so repeated lookups share a bounded cache.
+  return { encoding: descriptor as FlagKeyObfuscation }
 }
 
 /** Hash only the lookup key. Values and telemetry retain their original meaning. */
@@ -39,6 +42,14 @@ export function encodePrecomputedFlagKey(
   key: string,
   encoding: FlagKeyObfuscation
 ): { key: string } | { error: string } {
+  let cache = lookupCaches.get(encoding)
+  if (!cache || cache.salt !== encoding.salt) {
+    cache = { salt: encoding.salt, keys: new Map() }
+    lookupCaches.set(encoding, cache)
+  }
+  const cached = cache.keys.get(key)
+  if (cached !== undefined) return { key: cached }
+
   // TextEncoder replaces invalid surrogates. Reject them instead of aliasing
   // a different flag whose name contains the Unicode replacement character.
   if (!isWellFormedUnicode(key)) return { error: 'Flag key must contain valid Unicode' }
@@ -50,7 +61,10 @@ export function encodePrecomputedFlagKey(
     input[DOMAIN.length + index] = Number.parseInt(encoding.salt.slice(index * 2, index * 2 + 2), 16)
   }
   input.set(keyBytes, DOMAIN.length + 16)
-  return { key: sha256Hex(input) }
+  const digest = sha256Hex(input)
+  if (cache.keys.size >= MAX_CACHED_KEYS) cache.keys.clear()
+  cache.keys.set(key, digest)
+  return { key: digest }
 }
 
 /** Check the exact byte length and alphabet of a hex-encoded wire value. */

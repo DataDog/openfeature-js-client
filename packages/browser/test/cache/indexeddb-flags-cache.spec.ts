@@ -4,7 +4,7 @@ if (typeof globalThis.structuredClone === 'undefined') {
 }
 
 import 'fake-indexeddb/auto'
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { buildStorageKeySuffix, type FlagsConfiguration, getMD5Hash } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
@@ -34,6 +34,23 @@ const testConfig: FlagsConfiguration = {
 }
 
 const context = { targetingKey: 'user-123' }
+const legacyKey = `flags-config-${buildStorageKeySuffix('test-client-token')}-${getMD5Hash(JSON.stringify(context))}`
+const currentKey = `v2-${legacyKey}`
+const encodedConfig: FlagsConfiguration = {
+  precomputed: {
+    ...testConfig.precomputed!,
+    response: {
+      data: {
+        attributes: {
+          ...testConfig.precomputed!.response.data.attributes,
+          obfuscated: true,
+          obfuscation: { scheme: 'flag-key-sha256-v1', salt: '0'.repeat(32) },
+          flags: { ['a'.repeat(64)]: testConfig.precomputed!.response.data.attributes.flags['test-flag'] },
+        },
+      },
+    },
+  },
+}
 
 describe('IndexedDBFlagsCache', () => {
   let cache: IndexedDBFlagsCache
@@ -66,7 +83,7 @@ describe('IndexedDBFlagsCache', () => {
       // Write a string directly — not a FlagsConfiguration object
       const db = await openTestDB()
       const tx = db.transaction('configurations', 'readwrite')
-      tx.objectStore('configurations').put('not an object', 'flags-config')
+      tx.objectStore('configurations').put('not an object', currentKey)
       await transactionComplete(tx)
       db.close()
 
@@ -78,7 +95,7 @@ describe('IndexedDBFlagsCache', () => {
       // Write an object that has no precomputed field
       const db = await openTestDB()
       const tx = db.transaction('configurations', 'readwrite')
-      tx.objectStore('configurations').put({ version: 1 }, 'flags-config')
+      tx.objectStore('configurations').put({ version: 1 }, currentKey)
       await transactionComplete(tx)
       db.close()
 
@@ -145,6 +162,41 @@ describe('IndexedDBFlagsCache', () => {
       const result = await cache.get(context)
       expect(result!.precomputed!.response.data.attributes.flags['updated-flag'].variationValue).toBe('hello')
       expect(result!.precomputed!.response.data.attributes.flags['test-flag']).toBeUndefined()
+    })
+  })
+
+  describe('older SDK compatibility', () => {
+    it('reads legacy plaintext on upgrade without overwriting it with encoded keys', async () => {
+      await writeEntry(legacyKey, testConfig)
+      expect(await cache.get(context)).toEqual(testConfig)
+
+      cache.set(encodedConfig, context)
+      await flushAsync()
+      expect(await cache.get(context)).toEqual(encodedConfig)
+      expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(legacyKey)).toEqual(testConfig)
+    })
+
+    it('never writes encoded snapshots where an older SDK can read them', async () => {
+      cache.set(encodedConfig, context)
+      await flushAsync()
+      expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(legacyKey)).toBeUndefined()
+    })
+
+    it('replaces encoded snapshots with plaintext on rollout rollback', async () => {
+      cache.set(encodedConfig, context)
+      await flushAsync()
+      cache.set(testConfig, context)
+      await flushAsync()
+      expect(await cache.get(context)).toEqual(testConfig)
+      expect(await readEntry(currentKey)).toEqual(testConfig)
+      expect(await readEntry(legacyKey)).toBeUndefined()
+    })
+
+    it('does not restore encoded snapshots from the legacy namespace', async () => {
+      await writeEntry(legacyKey, encodedConfig)
+      expect(await cache.get(context)).toBeUndefined()
     })
   })
 
@@ -232,6 +284,27 @@ describe('IndexedDBFlagsCache', () => {
 
 function flushAsync(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 50))
+}
+
+async function writeEntry(key: string, value: FlagsConfiguration): Promise<void> {
+  const db = await openTestDB()
+  const tx = db.transaction('configurations', 'readwrite')
+  tx.objectStore('configurations').put(value, key)
+  await transactionComplete(tx)
+  db.close()
+}
+
+async function readEntry(key: string): Promise<FlagsConfiguration | undefined> {
+  const db = await openTestDB()
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction('configurations', 'readonly').objectStore('configurations').get(key)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  } finally {
+    db.close()
+  }
 }
 
 // Helpers to directly open the test DB for setup/verification

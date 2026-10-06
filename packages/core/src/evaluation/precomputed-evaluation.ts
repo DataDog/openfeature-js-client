@@ -84,19 +84,17 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   const attributes = precomputed.response.data.attributes
   // Initial configurations and persistent caches can bypass the wire parser.
   const encoding = readFlagKeyObfuscation(attributes.obfuscated, attributes.obfuscation)
-  const lookup =
-    'error' in encoding
-      ? encoding
-      : encoding.encoding
-        ? encodePrecomputedFlagKey(flagKey, encoding.encoding)
-        : { key: flagKey }
-  if ('error' in lookup) {
+  if ('error' in encoding) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: lookup.error,
+      errorMessage: encoding.error,
     }
+  }
+  const lookup = encoding.encoding ? encodePrecomputedFlagKey(flagKey, encoding.encoding) : { key: flagKey }
+  if ('error' in lookup) {
+    return { value: defaultValue, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' as ErrorCode }
   }
   const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, lookup.key) : undefined
   if (flagError) {

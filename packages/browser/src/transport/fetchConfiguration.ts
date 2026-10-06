@@ -1,7 +1,7 @@
 import {
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
-  SUPPORTED_ASSIGNMENT_ENCODINGS,
+  SUPPORTED_FLAGS_CAPABILITIES,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
@@ -13,6 +13,7 @@ const sourcePayload = {
   sdk_name: 'browser',
   sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
+const capabilitiesHeader = [...SUPPORTED_FLAGS_CAPABILITIES].sort().join(',')
 
 type JSONAPIError = {
   errors: {
@@ -112,6 +113,7 @@ export async function fetchPrecomputedConfiguration(
     options,
     {
       'Content-Type': 'application/vnd.api+json',
+      'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilitiesHeader,
     },
     'precomputed'
   )
@@ -137,9 +139,6 @@ export async function fetchPrecomputedConfiguration(
         attributes: {
           env: envPayload,
           source: sourcePayload,
-          supported_capabilities: {
-            assignment_encodings: SUPPORTED_ASSIGNMENT_ENCODINGS,
-          },
           subject: {
             targeting_key: options.context.targetingKey || '',
             targeting_attributes: stringifiedContext,
@@ -176,7 +175,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
       signal,
     })
     // Use the provider's existing context-matched cache fallback. Do not replace
-    // a valid snapshot with an unsupported or malformed response encoding.
+    // a valid snapshot with a malformed response or unsupported encoding.
     if (configuration.precomputedError) throw new ParseError(configuration.precomputedError)
     return configuration
   }

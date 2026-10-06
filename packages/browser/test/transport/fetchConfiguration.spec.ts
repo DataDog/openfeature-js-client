@@ -205,6 +205,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
+            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
             'dd-application-id': 'test-app-id',
           },
@@ -212,7 +213,7 @@ describe('createFlagsConfigurationFetcher', () => {
       )
     })
 
-    it('should exclude dd headers when overwriteRequestHeaders is true', async () => {
+    it('should exclude authentication headers when overwriteRequestHeaders is true', async () => {
       const config = {
         ...baseConfig,
         flaggingProxy: 'https://proxy.example.com',
@@ -227,6 +228,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
+            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
           },
         })
       )
@@ -250,6 +252,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
+            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
             'dd-application-id': 'test-app-id',
             'X-Custom-Header': 'custom-value',
@@ -274,6 +277,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
+            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
           },
         })
@@ -312,9 +316,6 @@ describe('createFlagsConfigurationFetcher', () => {
             source: {
               sdk_name: 'browser',
               sdk_version: '1.0.0-test',
-            },
-            supported_capabilities: {
-              assignment_encodings: ['flag-key-sha256-v1'],
             },
             subject: {
               targeting_key: 'user-123',

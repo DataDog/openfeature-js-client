@@ -79,36 +79,14 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
     const details = evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
-    return withCoreConfigurationId(details, this.getExposureConfigurationId(flagKey, details, context))
-  }
-
-  private getExposureConfigurationId(
-    flagKey: string,
-    details: ResolutionDetails<FlagTypeToValue<FlagValueType>>,
-    context: EvaluationContext
-  ): string | undefined {
-    const precomputed = this.flagsConfiguration?.precomputed
-    if (
-      !precomputed ||
-      !configMatchesContext(this.flagsConfiguration, context) ||
-      details.flagMetadata?.doLog !== true
-    ) {
-      return this.flagsConfigurationId
-    }
-
-    try {
-      // A new salt changes the wire keys, not the assignment. Use the original
-      // key and resolved assignment to keep exposure deduplication unchanged.
-      const {
-        flags: _flags,
-        obfuscated: _obfuscated,
-        obfuscation: _obfuscation,
-        ...attributes
-      } = precomputed.response.data.attributes
-      return getMD5Hash(JSON.stringify({ attributes, context: precomputed.context, flagKey, details }))
-    } catch {
-      return this.flagsConfigurationId
-    }
+    // Precomputed exposures already identify the subject, flag, allocation,
+    // variant, and serial. A delivery timestamp or salt is not a new assignment.
+    // Keep a stable marker to distinguish these entries from older cache formats.
+    const configurationId =
+      this.flagsConfiguration?.precomputed && configMatchesContext(this.flagsConfiguration, context)
+        ? 'precomputed'
+        : this.flagsConfigurationId
+    return withCoreConfigurationId(details, configurationId)
   }
 
   private canEvaluateCurrentContext(): boolean {

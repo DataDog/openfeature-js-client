@@ -6,7 +6,9 @@ import {
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
 } from '../../src/configuration'
+import { encodePrecomputedFlagKey, type FlagKeyObfuscation } from '../../src/configuration/flag-key-obfuscation'
 import { evaluatePrecomputedConfiguration } from '../../src/evaluation/precomputed-evaluation'
+import * as sha256 from '../../src/evaluation/sha256'
 
 const salt = '000102030405060708090a0b0c0d0e0f'
 const context = { targetingKey: 'athlete-123' }
@@ -54,6 +56,71 @@ function hash(key: string, publicSalt = salt): string {
 }
 
 describe('precomputed flag-key obfuscation', () => {
+  afterEach(() => jest.restoreAllMocks())
+
+  it('caches repeated lookups separately for concurrent configurations', () => {
+    const configurations = [salt, 'f'.repeat(32)].map((publicSalt) =>
+      decode(
+        response(
+          { [hash('flag', publicSalt)]: assignment },
+          { obfuscated: true, obfuscation: { ...descriptor, salt: publicSalt } }
+        )
+      )
+    )
+    const digest = jest.spyOn(sha256, 'sha256Hex')
+    for (let iteration = 0; iteration < 3; iteration++) {
+      for (const configuration of configurations) {
+        expect(evaluatePrecomputedConfiguration(configuration, 'boolean', 'flag', false, context).value).toBe(true)
+      }
+    }
+    expect(digest).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reuse a lookup hash after a descriptor salt changes', () => {
+    const encoding: FlagKeyObfuscation = { scheme: 'flag-key-sha256-v1', salt }
+    for (const publicSalt of [salt, 'f'.repeat(32), salt]) {
+      encoding.salt = publicSalt
+      expect(encodePrecomputedFlagKey('flag', encoding)).toEqual({ key: hash('flag', publicSalt) })
+    }
+  })
+
+  it('bounds the lookup cache without changing evaluation results', () => {
+    const encoding: FlagKeyObfuscation = { scheme: 'flag-key-sha256-v1', salt }
+    const digest = jest.spyOn(sha256, 'sha256Hex')
+    for (let index = 0; index <= 1024; index++) {
+      expect(encodePrecomputedFlagKey(`flag-${index}`, encoding)).toEqual({ key: hash(`flag-${index}`) })
+    }
+    expect(encodePrecomputedFlagKey('flag-1024', encoding)).toEqual({ key: hash('flag-1024') })
+    expect(digest).toHaveBeenCalledTimes(1025)
+    expect(encodePrecomputedFlagKey('flag-0', encoding)).toEqual({ key: hash('flag-0') })
+    expect(digest).toHaveBeenCalledTimes(1026)
+  })
+
+  it.each([false, true])('accepts new flag keys and unknown fields (obfuscated: %s)', (obfuscated) => {
+    const lookupKey = (key: string) => (obfuscated ? hash(key) : key)
+    const payload = response(
+      {
+        [lookupKey('existing-flag')]: assignment,
+        [lookupKey('new-flag')]: { ...assignment, futureAssignmentField: { enabled: true } },
+        [lookupKey('unsupported-flag')]: { ...assignment, variationType: 'future-type' },
+      },
+      {
+        futureResponseField: ['new metadata'],
+        ...(obfuscated ? { obfuscated: true, obfuscation: { ...descriptor, futureEncodingField: true } } : {}),
+      }
+    )
+    const configuration = decode({ ...payload, futureEnvelopeField: true })
+    expect(configuration.precomputedError).toBeUndefined()
+    for (const key of ['existing-flag', 'new-flag']) {
+      expect(evaluatePrecomputedConfiguration(configuration, 'boolean', key, false, context).value).toBe(true)
+    }
+    expect(
+      evaluatePrecomputedConfiguration(configuration, 'boolean', 'unsupported-flag', false, context)
+    ).toMatchObject({
+      errorCode: 'PARSE_ERROR',
+    })
+  })
+
   it.each(vectors)('matches the edge digest for %j', (key, digest) => {
     const plain = decode(response({ [key]: assignment }))
     const encoded = decode(response({ [digest]: assignment }, { obfuscated: true, obfuscation: descriptor }))
@@ -187,9 +254,9 @@ describe('precomputed flag-key obfuscation', () => {
 
   it.each(['\ud800', '\udc00', 'a\ud800b'])('does not alias invalid Unicode to a replacement character: %j', (key) => {
     const encoded = decode(response({ [hash(key)]: assignment }, { obfuscated: true, obfuscation: descriptor }))
-    expect(evaluatePrecomputedConfiguration(encoded, 'boolean', key, false, context)).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-    })
+    const plain = decode(response({ flag: assignment }))
+    expect(evaluatePrecomputedConfiguration(encoded, 'boolean', key, false, context)).toEqual(
+      evaluatePrecomputedConfiguration(plain, 'boolean', key, false, context)
+    )
   })
 })

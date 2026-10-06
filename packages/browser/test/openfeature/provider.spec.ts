@@ -281,6 +281,7 @@ describe('DatadogProvider', () => {
       // Verify headers were set correctly
       expect(requestOptions.headers).toEqual({
         'Content-Type': 'application/vnd.api+json',
+        'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
         'dd-client-token': options.clientToken,
         'dd-application-id': options.applicationId,
       })
@@ -297,9 +298,6 @@ describe('DatadogProvider', () => {
             source: {
               sdk_name: 'browser',
               sdk_version: '1.0.0-test',
-            },
-            supported_capabilities: {
-              assignment_encodings: ['flag-key-sha256-v1'],
             },
             subject: {
               targeting_key: 'test-user',
@@ -608,6 +606,7 @@ describe('DatadogProvider', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/vnd.api+json',
+            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': options.clientToken,
             'dd-application-id': options.applicationId,
           },

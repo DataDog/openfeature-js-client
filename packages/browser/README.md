@@ -149,16 +149,27 @@ evaluation context.
 
 ## Flag-key obfuscation
 
-The Precompute fetcher automatically advertises support for the
-flag-key-sha256-v1 assignment encoding. Datadog controls its server rollout.
+The Precompute fetcher automatically sends
+`X-DD-FEATURE-FLAGS-CAPABILITIES: assignment-encoding-flag-key-256-v1`.
+This declares support for the `flag-key-sha256-v1` response encoding.
+Datadog controls its server rollout.
 The provider accepts both plaintext and obfuscated responses without an
 application configuration change.
 
 Continue evaluating the original flag key. The shared core hashes it with the
-response's public salt before lookup. Values, evaluation details, exposure
-events, and RUM annotations keep their existing behavior. Portable
+response's public salt before lookup. Flag values do not change. Evaluation
+details, exposure events, and RUM annotations retain the original flag key. Portable
 configuration and IndexedDB storage retain the descriptor with the assignments.
 Unsupported or malformed encodings are rejected, not interpreted as plaintext.
+
+Encoded portable snapshots use wire version 2, which older readers reject.
+Plaintext and rules-only snapshots keep version 1. New readers accept both versions.
+This version applies to SDK serialization, not the Precompute API response.
+
+New IndexedDB writes use a separate cache key namespace for both response formats.
+Older SDKs cannot read these encoded entries. New SDKs can read legacy plaintext
+entries when the new namespace has no entry. A plaintext rollout rollback replaces
+the encoded entry in the new namespace. It does not update an older SDK's cache.
 
 Obfuscation removes readable flag-map keys. It is not encryption, authorization,
 or response signing. Values, variation names, allocation names, telemetry,
@@ -285,9 +296,9 @@ await tracking.shutdown()
 
 The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
 
-Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
+For precomputed assignments, both providers keep exposure deduplication across configuration refreshes. The existing exposure cache identifies the subject and its attributes, original flag key, allocation, variant, and assignment serial when present. A change to these fields can emit a new exposure. A changed response timestamp, salt, or unrelated flag does not. A changed value under the same variant and serial does not create a new exposure identity.
 
-Refetching identical content does not invalidate deduplication when only retrieval metadata (`fetchedAt` or `etag`) changes. For rules-based configurations, the server's `createdAt` build timestamp is also excluded from the identity, matching the backend's semantic fingerprint behavior. These fields remain available on the configuration and in its portable wire representation.
+For rules-based configurations, `DatadogCoreProvider` also includes the rules configuration identity. Changed rules allow new exposures without clearing application-managed hook state. Retrieval metadata (`fetchedAt` and `etag`) and the server's `createdAt` build timestamp do not change that identity. These fields remain available on the configuration and in its portable wire representation.
 
 Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 

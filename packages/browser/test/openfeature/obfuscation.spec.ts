@@ -23,7 +23,7 @@ const options = {
 }
 const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 
-function response(publicSalt: string | undefined = salt, value = true) {
+function response(publicSalt: string | undefined = salt, value = true, createdAt = '2026-09-30T00:00:00Z') {
   const lookupKey = publicSalt
     ? createHash('sha256')
         .update('datadog.feature-flags.flag-key.v1\0')
@@ -34,7 +34,7 @@ function response(publicSalt: string | undefined = salt, value = true) {
   return {
     data: {
       attributes: {
-        createdAt: '2026-09-30T00:00:00Z',
+        createdAt,
         obfuscated: Boolean(publicSalt),
         obfuscation: publicSalt ? { scheme: 'flag-key-sha256-v1', salt: publicSalt } : undefined,
         flags: {
@@ -88,9 +88,11 @@ describe('browser flag-key obfuscation', () => {
       reason: 'TARGETING_MATCH',
       flagMetadata: { allocationKey: 'allocation-1', doLog: true, __dd_split_serial_id: 123 },
     })
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).data.attributes).toMatchObject({
+    const request = fetchMock.mock.calls[0][1]
+    expect(request.headers['X-DD-FEATURE-FLAGS-CAPABILITIES']).toBe('assignment-encoding-flag-key-256-v1')
+    expect(JSON.parse(request.body).data.attributes).not.toHaveProperty('supported_capabilities')
+    expect(JSON.parse(request.body).data.attributes).toMatchObject({
       source: { sdk_name: 'browser', sdk_version: '1.0.0-test' },
-      supported_capabilities: { assignment_encodings: ['flag-key-sha256-v1'] },
     })
   })
 
@@ -110,6 +112,37 @@ describe('browser flag-key obfuscation', () => {
       await provider.onContextChange(context, context)
       expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
     }
+    await provider.onClose()
+  })
+
+  it.each(['', salt])('accepts new flags and future fields on refresh (salt: %s)', async (publicSalt) => {
+    const provider = new DatadogProvider(options)
+    await provider.initialize(context)
+    const payload = response(publicSalt)
+    const attributes = payload.data.attributes
+    const assignment = Object.values(attributes.flags)[0]
+    const lookupKey = (name: string) =>
+      publicSalt
+        ? createHash('sha256')
+            .update('datadog.feature-flags.flag-key.v1\0')
+            .update(Buffer.from(publicSalt, 'hex'))
+            .update(name)
+            .digest('hex')
+        : name
+    attributes.flags[lookupKey('new-flag')] = { ...assignment, variationValue: false }
+    attributes.flags[lookupKey('future-type')] = { ...assignment, variationType: 'future-type' }
+    Object.assign(attributes, { futureField: { enabled: true } })
+    Object.assign(assignment, { futureAssignmentField: 123 })
+    fetchMock.mockResolvedValue(fetchResponse(payload))
+    await provider.onContextChange(context, context)
+
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
+    expect(provider.resolveBooleanEvaluation('new-flag', true, context, logger).value).toBe(false)
+    expect(provider.resolveBooleanEvaluation('future-type', false, context, logger)).toMatchObject({
+      value: false,
+      errorCode: 'PARSE_ERROR',
+    })
     await provider.onClose()
   })
 
@@ -135,6 +168,29 @@ describe('browser flag-key obfuscation', () => {
     fetchMock.mockResolvedValue(fetchResponse(invalid))
     const provider = new DatadogProvider(options)
     await expect(provider.initialize(context)).rejects.toMatchObject({ code: 'PARSE_ERROR' })
+    await provider.onClose()
+  })
+
+  it.each(['createdAt', 'flags'])('keeps a matching snapshot when plaintext %s is malformed', async (field) => {
+    const provider = new DatadogProvider(options)
+    fetchMock.mockResolvedValue(fetchResponse(response('')))
+    await provider.initialize(context)
+    const invalid = response('')
+    Object.assign(invalid.data.attributes, { [field]: null })
+    fetchMock.mockResolvedValue(fetchResponse(invalid))
+    await provider.onContextChange(context, context)
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
+    await provider.onClose()
+  })
+
+  it.each(['createdAt', 'flags'])('rejects malformed plaintext %s without a usable cache', async (field) => {
+    const invalid = response('')
+    Object.assign(invalid.data.attributes, { [field]: null })
+    fetchMock.mockResolvedValue(fetchResponse(invalid))
+    const provider = new DatadogProvider(options)
+    await expect(provider.initialize(context)).rejects.toMatchObject({ code: 'PARSE_ERROR' })
+    expect(provider.status).toBe(ProviderStatus.ERROR)
     await provider.onClose()
   })
 
@@ -177,33 +233,115 @@ describe('browser flag-key obfuscation', () => {
     }
   })
 
-  it('does not repeat portable-provider exposures just because the salt changes', async () => {
+  it.each(['online', 'portable'])('keeps %s exposures deduplicated across refreshes and restart', async (kind) => {
     jest.useFakeTimers()
-    const tracking = createDatadogExposureLoggingHook(options)
-    await tracking.initialize()
-    const provider = new DatadogCoreProvider()
-    provider.setConfiguration(await fetchPrecomputedConfiguration({ ...options, context }))
-    await OpenFeature.setProviderAndWait(provider, context)
+    let payload = response()
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('precompute-assignments') ? fetchResponse(payload) : { ok: true, status: 200 }
+    )
+    let tracking: ReturnType<typeof createDatadogExposureLoggingHook> | undefined
+    let provider: DatadogProvider | DatadogCoreProvider
     const client = OpenFeature.getClient()
-    client.addHooks(...tracking.hooks)
+    const install = async () => {
+      if (kind === 'online') {
+        provider = new DatadogProvider({ ...options, enableExposureLogging: true })
+      } else {
+        tracking = createDatadogExposureLoggingHook(options)
+        await tracking.initialize()
+        const core = new DatadogCoreProvider()
+        core.setConfiguration(await fetchPrecomputedConfiguration({ ...options, context }))
+        provider = core
+      }
+      await OpenFeature.setProviderAndWait(provider, context)
+      if (tracking) client.addHooks(...tracking.hooks)
+    }
+    const refresh = async () => {
+      if (provider instanceof DatadogCoreProvider) {
+        const configuration = await fetchPrecomputedConfiguration({ ...options, context })
+        provider.setConfiguration(configurationFromString(configurationToString(configuration)))
+      } else {
+        await provider.onContextChange(context, context)
+      }
+    }
+    const exposureEvents = () =>
+      fetchMock.mock.calls
+        .filter(([url]) => String(url).includes('exposures'))
+        .flatMap(([, request]) =>
+          (request.body as string)
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line))
+        )
+
+    await install()
     const first = client.getBooleanDetails(key, false)
     jest.advanceTimersByTime(31_000)
 
-    for (const publicSalt of ['f'.repeat(32), '', salt]) {
-      fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
-      provider.setConfiguration(await fetchPrecomputedConfiguration({ ...options, context }))
-      expect(client.getBooleanDetails(key, false)).toEqual(first)
+    // Real edge responses change both the salt and createdAt on each fetch.
+    for (const [index, publicSalt] of ['f'.repeat(32), '', salt].entries()) {
+      payload = response(publicSalt, true, `2026-09-30T00:0${index + 1}:00Z`)
+      await refresh()
+      expect(client.getBooleanDetails(key, false).value).toBe(first.value)
       jest.advanceTimersByTime(31_000)
     }
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('exposures'))).toHaveLength(1)
+    expect(exposureEvents()).toHaveLength(1)
 
-    // A real assignment change still starts a new exposure identity.
-    fetchMock.mockResolvedValue(fetchResponse(response(salt, false)))
-    provider.setConfiguration(await fetchPrecomputedConfiguration({ ...options, context }))
+    // The exposure describes the assigned variant, not its delivered value.
+    payload = response(salt, false)
+    const assignment = Object.values(payload.data.attributes.flags)[0]
+    payload.data.attributes.flags['b'.repeat(64)] = { ...assignment, variationValue: true }
+    await refresh()
     expect(client.getBooleanDetails(key, false).value).toBe(false)
     jest.advanceTimersByTime(31_000)
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('exposures'))).toHaveLength(2)
-    await tracking.shutdown()
+    expect(exposureEvents()).toHaveLength(1)
+
+    for (const [index, change] of [
+      { variationKey: 'variant-2' },
+      { allocationKey: 'allocation-2' },
+      { serialId: 124 },
+    ].entries()) {
+      Object.assign(assignment, change)
+      await refresh()
+      client.getBooleanValue(key, true)
+      jest.advanceTimersByTime(31_000)
+      expect(exposureEvents()).toHaveLength(index + 2)
+    }
+    expect(exposureEvents()[3]).toMatchObject({
+      flag: { key },
+      allocation: { key: 'allocation-2' },
+      variant: { key: 'variant-2' },
+      serial_id: 124,
+    })
+
+    // Recreate the provider and hooks without clearing persisted deduplication.
     client.clearHooks()
+    await tracking?.shutdown()
+    await OpenFeature.clearProviders()
+    await install()
+    client.getBooleanValue(key, true)
+    jest.advanceTimersByTime(31_000)
+    expect(exposureEvents()).toHaveLength(4)
+    client.clearHooks()
+    await tracking?.shutdown()
+  })
+
+  it('does not serialize assignment values on repeated portable-provider evaluations', async () => {
+    const configuration = await fetchPrecomputedConfiguration({ ...options, context })
+    const flag = Object.values(configuration.precomputed!.response.data.attributes.flags)[0]
+    flag.variationType = 'object'
+    flag.variationValue = { large: 'x'.repeat(6600) }
+    const provider = new DatadogCoreProvider()
+    provider.setConfiguration(configuration)
+    await provider.initialize(context)
+    const stringify = jest.spyOn(JSON, 'stringify')
+    try {
+      for (let index = 0; index < 10; index++) {
+        const details = provider.resolveObjectEvaluation(key, {}, context, logger)
+        expect(details.value).toBe(flag.variationValue)
+      }
+      expect(stringify).not.toHaveBeenCalled()
+    } finally {
+      stringify.mockRestore()
+    }
   })
 })
