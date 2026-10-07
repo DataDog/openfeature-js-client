@@ -362,7 +362,7 @@ describe('DatadogCoreProvider tracking', () => {
     // Persist an entry in the format written without a core configuration marker.
     const legacy = createExposureOnlyTracking().trackingHooks
     await legacy.initialize()
-    legacy.hooks[0].after!(
+    legacy.hooks[0].finally!(
       { flagKey: 'static-flag', context: { targetingKey: 'static-user', plan: 'free' } } as never,
       {
         flagKey: 'static-flag',
