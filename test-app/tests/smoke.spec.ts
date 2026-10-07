@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { expect, type Page, test } from '@playwright/test'
 import type { SmokeResult as FetchSmokeResult } from '../src/smokeResult'
@@ -106,6 +107,140 @@ test('executes the packed precomputed entrypoint in Chromium', async ({ page }) 
     booleanValue: true,
     rulesExcluded: true,
   })
+})
+
+// Use Node's independent SHA-256 implementation to produce the edge wire format.
+function assignmentPayload(salt?: string, booleanValue = true) {
+  const flags = [
+    ['new-route-planner', 'boolean', booleanValue],
+    ['café', 'string', 'visible-value'],
+    ['number-flag', 'number', 12.5],
+    ['object-flag', 'object', { nested: true }],
+  ] as const
+  return {
+    data: {
+      attributes: {
+        createdAt: '2026-09-30T00:00:00Z',
+        obfuscated: salt !== undefined,
+        ...(salt ? { obfuscation: { scheme: 'flag-key-sha256-v1', salt } } : {}),
+        flags: Object.fromEntries(
+          flags.map(([key, variationType, variationValue]) => [
+            salt
+              ? createHash('sha256')
+                  .update('datadog.feature-flags.flag-key.v1\0')
+                  .update(Buffer.from(salt, 'hex'))
+                  .update(key)
+                  .digest('hex')
+              : key,
+            {
+              variationType,
+              variationValue,
+              allocationKey: 'allocation',
+              variationKey: 'on',
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+            },
+          ])
+        ),
+      },
+    },
+  }
+}
+
+const expectedObfuscationResult = {
+  values: [true, 'visible-value', 12.5, { nested: true }],
+  flagKey: 'new-route-planner',
+  variant: 'on',
+  reason: 'TARGETING_MATCH',
+  missing: 'FLAG_NOT_FOUND',
+  mismatch: 'TYPE_MISMATCH',
+  status: 'READY',
+}
+
+test('negotiates obfuscation, rotates salts, and restores hashed assignments from IndexedDB', async ({ page }) => {
+  let salt = '000102030405060708090a0b0c0d0e0f'
+  let booleanValue = true
+  const expectStoredSalt = async () => {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            new Promise<string[]>((resolve, reject) => {
+              const request = indexedDB.open('dd-flagging')
+              request.onerror = () => reject(request.error)
+              request.onsuccess = () => {
+                const db = request.result
+                if (!db.objectStoreNames.contains('configurations')) {
+                  db.close()
+                  resolve([])
+                  return
+                }
+                const read = db.transaction('configurations').objectStore('configurations').getAll()
+                read.onerror = () => {
+                  db.close()
+                  reject(read.error)
+                }
+                read.onsuccess = () => {
+                  const salts = read.result.map(
+                    (entry) => entry.precomputed?.response.data.attributes.obfuscation?.salt
+                  )
+                  db.close()
+                  resolve(salts)
+                }
+              }
+            })
+        )
+      )
+      .toEqual([salt])
+  }
+  const requests: Record<string, unknown>[] = []
+  await page.route('**/assignments?*', async (route) => {
+    expect(route.request().headers()['x-dd-feature-flags-capabilities']).toBe('assignment-encoding-flag-key-256-v1')
+    requests.push(route.request().postDataJSON())
+    await route.fulfill({ json: assignmentPayload(salt, booleanValue) })
+  })
+  expect(await runSmoke(page, '/obfuscation.html')).toEqual(expectedObfuscationResult)
+  await expectStoredSalt()
+  salt = 'f'.repeat(32)
+  booleanValue = false
+  const refreshedResult = {
+    ...expectedObfuscationResult,
+    values: [false, ...expectedObfuscationResult.values.slice(1)],
+  }
+  expect(await runSmoke(page, '/obfuscation.html')).toEqual(refreshedResult)
+  expect(requests).toHaveLength(2)
+  for (const request of requests) {
+    expect(request).not.toHaveProperty('data.attributes.supported_capabilities')
+    expect(request).toMatchObject({
+      data: {
+        attributes: {
+          source: { sdk_name: 'browser', sdk_version: expectedSdkVersion },
+        },
+      },
+    })
+  }
+  await expectStoredSalt()
+  expect(await runSmoke(page, '/obfuscation.html?offline=1')).toEqual({
+    ...refreshedResult,
+    status: 'STALE',
+  })
+  expect(requests).toHaveLength(2)
+})
+
+test('keeps plaintext responses compatible when rollout is disabled', async ({ page }) => {
+  await page.route('**/assignments?*', (route) => route.fulfill({ json: assignmentPayload() }))
+  expect(await runSmoke(page, '/obfuscation.html')).toEqual(expectedObfuscationResult)
+})
+
+test('evaluates obfuscated keys without native text encoders or Web Crypto', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(globalThis, { TextEncoder: undefined, TextDecoder: undefined })
+    Object.defineProperty(globalThis.crypto, 'subtle', { value: undefined })
+  })
+  await page.route('**/assignments?*', (route) =>
+    route.fulfill({ json: assignmentPayload('000102030405060708090a0b0c0d0e0f') })
+  )
+  expect(await runSmoke(page, '/obfuscation.html')).toEqual(expectedObfuscationResult)
 })
 
 for (const scenario of [

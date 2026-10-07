@@ -147,6 +147,41 @@ If the RUM user changes after provider initialization, call
 preserving explicitly configured OpenFeature properties. Nested RUM user properties are not included in the
 evaluation context.
 
+## Flag-key obfuscation
+
+Requests to the Datadog Precompute endpoint automatically send
+`X-DD-FEATURE-FLAGS-CAPABILITIES: assignment-encoding-flag-key-256-v1`.
+This declares support for the `flag-key-sha256-v1` response encoding.
+Datadog controls its server rollout.
+Requests through `flaggingProxy` do not send this header by default. Proxy owners
+can opt in through `customHeaders`. The proxy must forward the header and, for
+cross-origin requests, allow it in its CORS response before enabling it.
+The provider accepts both plaintext and obfuscated responses without an
+application configuration change.
+
+Continue evaluating the original flag key. The shared core hashes it with the
+response's public salt before lookup. Flag values do not change. Evaluation
+details, exposure events, and RUM annotations retain the original flag key. Portable
+configuration and IndexedDB storage retain the descriptor with the assignments.
+Unsupported or malformed encodings are rejected, not interpreted as plaintext.
+
+Encoded portable snapshots use wire version 2, which older readers reject.
+Plaintext and rules-only snapshots keep version 1. New readers accept both versions.
+This version applies to SDK serialization, not the Precompute API response.
+
+New IndexedDB writes use a separate cache key namespace for both response formats.
+Older SDKs cannot read any entries in the new namespace, including plaintext.
+New SDKs can read legacy plaintext
+entries when the new namespace has no entry. A plaintext rollout rollback replaces
+the encoded entry in the new namespace. It does not update an older SDK's cache.
+A snapshot containing both encoded assignments and rules uses version 2.
+Older readers reject that entire snapshot, including its rules.
+
+Obfuscation removes readable flag-map keys. It is not encryption, authorization,
+or response signing. Values, variation names, allocation names, telemetry,
+and application code can still reveal a feature's purpose. Do not put sensitive
+information in client-facing variant values, including JSON objects.
+
 ## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
@@ -267,9 +302,19 @@ await tracking.shutdown()
 
 The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
 
-Exposure deduplication is tied to the active `DatadogCoreProvider` configuration, so replacing the provider configuration allows exposures for the new configuration to be emitted without clearing application-managed hook state.
+Precomputed assignments retain the existing exposure-reset behavior for plaintext and obfuscated responses.
+On a refresh, `DatadogProvider` clears exposure deduplication when a previously loaded `createdAt` changes.
+It does not clear on the first fetch without an initial configuration.
+`DatadogCoreProvider` includes the configuration identity in exposure deduplication. Replacing the configuration,
+including a changed `createdAt` or obfuscation salt, permits another exposure.
+Reapplying the same configuration preserves deduplication. Neither provider emits an exposure until the application evaluates a flag.
+`createdAt` is a configuration timestamp, not an experiment revision. This behavior does not depend on it changing on every request.
 
-Refetching identical content does not invalidate deduplication when only retrieval metadata (`fetchedAt` or `etag`) changes. For rules-based configurations, the server's `createdAt` build timestamp is also excluded from the identity, matching the backend's semantic fingerprint behavior. These fields remain available on the configuration and in its portable wire representation.
+Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
+The memory cache removes the least recently used entry. Persistent caches remove the oldest written entries.
+An evicted entry can produce another exposure. Storage failures do not prevent flag evaluation.
+
+For rules-based configurations, `DatadogCoreProvider` also includes the rules configuration identity. Changed rules allow new exposures without clearing application-managed hook state. Retrieval metadata (`fetchedAt` and `etag`) and the server's `createdAt` build timestamp do not change that identity. These fields remain available on the configuration and in its portable wire representation.
 
 Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 

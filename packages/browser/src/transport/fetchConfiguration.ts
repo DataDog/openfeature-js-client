@@ -2,15 +2,18 @@ import {
   buildEndpointHost,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
+  SUPPORTED_FLAGS_CAPABILITIES,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { ParseError } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 
 const sourcePayload = {
   sdk_name: 'browser',
   sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
+const capabilitiesHeader = [...SUPPORTED_FLAGS_CAPABILITIES].sort().join(',')
 
 type JSONAPIError = {
   errors: {
@@ -104,12 +107,15 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  const url = buildConfigurationUrl(options, 'precomputed')
+  const requestOptions: ConfigurationRequestOptions = options
+  const url = buildConfigurationUrl(requestOptions, 'precomputed')
   const fetchedAt = timeStampNow()
   const defaultHeaders = buildConfigurationHeaders(
     options,
     {
       'Content-Type': 'application/vnd.api+json',
+      // Customer proxies can opt in through customHeaders after allowing it in CORS.
+      ...(!requestOptions.flaggingProxy && { 'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilitiesHeader }),
     },
     'precomputed'
   )
@@ -163,12 +169,16 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
-    return fetchPrecomputedConfiguration({
+    const configuration = await fetchPrecomputedConfiguration({
       ...initConfiguration,
       env: initConfiguration.env || '',
       context,
       fetch: initConfiguration.flagConfigurationFetch,
       signal,
     })
+    // Use the provider's existing context-matched cache fallback. Do not replace
+    // a valid snapshot with a malformed response or unsupported encoding.
+    if (configuration.precomputedError) throw new ParseError(configuration.precomputedError)
+    return configuration
   }
 }

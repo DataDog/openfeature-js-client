@@ -1,3 +1,4 @@
+import { addTelemetryDebug } from '@datadog/browser-core'
 import {
   type AssignmentCacheEntry,
   assignmentCacheKeyToString,
@@ -21,7 +22,9 @@ export default class ChromeStorageAssignmentCache implements BulkReadAssignmentC
   set(entry: AssignmentCacheEntry): void {
     // "fire-and-forget" - we intentionally don't wait for the promise to resolve
     // noinspection JSIgnoredPromiseFromCall
-    this.storage.set(assignmentCacheKeyToString(entry), assignmentCacheValueToString(entry))
+    this.storage.set(assignmentCacheKeyToString(entry), assignmentCacheValueToString(entry)).catch(() => {
+      addTelemetryDebug('Failed to persist an exposure cache entry')
+    })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

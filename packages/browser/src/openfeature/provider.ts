@@ -70,7 +70,9 @@ export class DatadogProvider extends DatadogProviderBase {
   // result before calling the resolver and subsequent hooks. Return this stored context, not a
   // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
   /** Effective context associated with the active flags configuration. */
-  private evaluationContext: EvaluationContext = {}
+  private evaluationContext: EvaluationContext | undefined
+  /** Request context used for tracking until a configuration has been accepted. */
+  private requestedEvaluationContext: EvaluationContext = {}
 
   status: ProviderStatus
 
@@ -108,7 +110,7 @@ export class DatadogProvider extends DatadogProviderBase {
       options,
       configuration: this.configuration,
       enabledByDefault: true,
-      getTrackingContext: () => this.evaluationContext,
+      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -140,6 +142,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   private setContext(context: EvaluationContext): Promise<void> {
     const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    this.requestedEvaluationContext = evaluationContext
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -161,13 +164,8 @@ export class DatadogProvider extends DatadogProviderBase {
     // `signal`, so we don't block OF SDK unnecessarily.
     this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
-        // New configuration might require clearing exposure
-        // cache. One example of this is updating experiment
-        // boundaries: if we previously emitted exposure events for an
-        // experiment and the new configuration bumped experiment
-        // start time, we need to emit at least one new event within
-        // the new experiment timeframe. We do that by clearing our
-        // exposure
+        // Preserve the existing timestamp-based reset for experiment reporting.
+        // createdAt is a configuration timestamp, not an experiment revision.
         this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
@@ -280,7 +278,7 @@ export class DatadogProvider extends DatadogProviderBase {
       type,
       flagKey,
       defaultValue,
-      this.evaluationContext
+      this.evaluationContext ?? {}
     )
   }
 }

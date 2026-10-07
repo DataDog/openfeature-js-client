@@ -38,7 +38,7 @@ describe('AssignmentCacheFactory', () => {
     })
   })
 
-  it('should create a hybrid cache if chrome storage is available', () => {
+  it('should create a hybrid cache if chrome storage is available', async () => {
     const cache = assignmentCacheFactory({
       chromeStorage: mockChromeStorage,
       storageKeySuffix: 'foo',
@@ -52,6 +52,7 @@ describe('AssignmentCacheFactory', () => {
       variant: { key: 'qux' },
     }
     cache.set(exposureEvent)
+    await cache.init()
     expect(Object.keys(fakeStore)).toHaveLength(1)
   })
 

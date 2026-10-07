@@ -56,6 +56,36 @@ describe('DatadogProvider IndexedDB persistence', () => {
   })
 
   describe('persists flags on successful fetch', () => {
+    it('restores the obfuscation descriptor and map together after a restart', async () => {
+      const context = { targetingKey: 'obfuscated-user' }
+      const digest = 'a60479237ef2f69175bbe0bd581966d1583766941815dc1d414c883767795190'
+      const payload = {
+        data: {
+          attributes: {
+            createdAt: '2026-09-30T00:00:00Z',
+            obfuscated: true,
+            obfuscation: { scheme: 'flag-key-sha256-v1', salt: '000102030405060708090a0b0c0d0e0f' },
+            flags: { [digest]: precomputedResponse.data.attributes.flags['boolean-flag'] },
+          },
+        },
+      }
+      fetchMock.mockResolvedValue({ ok: true, json: async () => payload })
+      const provider = new DatadogProvider(options)
+      await provider.initialize(context)
+      await flushAsync()
+      await provider.onClose()
+
+      const stored = await new IndexedDBFlagsCache(options.clientToken).get(context)
+      expect(stored?.precomputed?.response).toEqual(payload)
+      global.fetch = failingFetchMock()
+      const restarted = new DatadogProvider(options)
+      await restarted.initialize(context)
+      expect(restarted.status).toBe(ProviderStatus.STALE)
+      const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+      expect(restarted.resolveBooleanEvaluation('new-route-planner', false, context, logger).value).toBe(true)
+      await restarted.onClose()
+    })
+
     it('should persist flags to IndexedDB after initialize', async () => {
       const provider = new DatadogProvider(options)
       const context = { targetingKey: 'user-1' }
