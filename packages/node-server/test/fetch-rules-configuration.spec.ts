@@ -1,6 +1,11 @@
+import { getEventListeners } from 'node:events'
 import { Readable } from 'node:stream'
 import { evaluate } from '@datadog/flagging-core'
-import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
+import {
+  configurationFromRulesBinary,
+  configurationFromString,
+  configurationToString,
+} from '@datadog/flagging-core/rules-based'
 import wire from '../../browser/test/data/rules-v1-wire.json'
 import {
   ConfigurationFetchError,
@@ -169,6 +174,43 @@ describe('fetchRulesConfiguration', () => {
     expect(configurationFromString(configurationToString(configuration))).toEqual(configuration)
   })
 
+  it('isolates unsupported flags and preserves unknown fields through fetching and serialization', async () => {
+    const source = configurationFromRulesBinary(body).rules!.response
+    source.flags['future-flag'] = { ...source.flags['test-flag'], minimumFeatureLevel: 1 }
+    source.flags['test-flag'].$unknown = [{ no: 200, wireType: 0, data: Uint8Array.of(9) }]
+    source.$unknown = [{ no: 100, wireType: 0, data: Uint8Array.of(7) }]
+    const encoded = JSON.parse(configurationToString({ rules: { response: source } })).rules.response
+    requestFetch.mockResolvedValue(response(Buffer.from(encoded, 'base64')))
+
+    const fetched = await fetchRulesConfiguration({ ...options, fetch: requestFetch })
+    const restored = configurationFromString(configurationToString(fetched))
+    for (const configuration of [fetched, restored]) {
+      expect(configuration.rules?.response.$unknown).toEqual(source.$unknown)
+      expect(configuration.rules?.response.flags['test-flag'].$unknown).toEqual(source.flags['test-flag'].$unknown)
+      const context = { targetingKey: 'user-1', country: 'US' }
+      expect(evaluate(configuration, 'boolean', 'future-flag', false, context)).toMatchObject({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
+      expect(evaluate(configuration, 'boolean', 'test-flag', false, context)).toMatchObject({
+        value: true,
+        reason: 'TARGETING_MATCH',
+      })
+    }
+  })
+
+  it('records fetchedAt at request start, not completion', async () => {
+    const startedAt = Date.now()
+    requestFetch.mockImplementation(async () => {
+      jest.setSystemTime(startedAt + 1000)
+      return response()
+    })
+    const configuration = await fetchRulesConfiguration({ ...options, fetch: requestFetch })
+    expect(configuration.rules?.fetchedAt).toBe(startedAt)
+    expect(Date.now()).toBe(startedAt + 1000)
+  })
+
   it.each([204, 301, 302, 304, 401, 403, 404, 429, 500])(
     'rejects HTTP %i without exposing its body',
     async (status) => {
@@ -206,7 +248,12 @@ describe('fetchRulesConfiguration', () => {
 
   it('rejects malformed protobuf', async () => {
     requestFetch.mockResolvedValue(response(Buffer.from([0xff])))
-    await expect(fetchRulesConfiguration({ ...options, fetch: requestFetch })).rejects.toMatchObject({ code: 'decode' })
+    const pending = fetchRulesConfiguration({ ...options, fetch: requestFetch })
+    await expect(pending).rejects.toMatchObject({
+      code: 'decode',
+      message: 'Configuration protobuf could not be decoded',
+    })
+    await expect(pending).rejects.not.toHaveProperty('cause')
   })
 
   it.each([new Error('secret'), new ConfigurationFetchError('http', 'secret')])(
@@ -285,6 +332,7 @@ describe('fetchRulesConfiguration', () => {
       })
     )
     const controller = new AbortController()
+    const addListener = jest.spyOn(controller.signal, 'addEventListener')
     const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
     const rejected = jest.fn()
     const pending = fetchRulesConfiguration({
@@ -299,7 +347,8 @@ describe('fetchRulesConfiguration', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(body.locked).toBe(false)
     expect(requestFetch.mock.calls[0][1]?.signal?.aborted).toBe(true)
-    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(removeListener).toHaveBeenCalledWith('abort', addListener.mock.calls[0][1])
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
   it('decodes a streamed response', async () => {
@@ -395,6 +444,7 @@ describe('fetchRulesConfiguration', () => {
     )
   )('honors caller $code while waiting for $phase', async ({ phase, reason, code }) => {
     const controller = new AbortController()
+    const addListener = jest.spyOn(controller.signal, 'addEventListener')
     const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
     requestFetch.mockImplementation(stalledFetch(phase))
     const pending = fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
@@ -406,7 +456,29 @@ describe('fetchRulesConfiguration', () => {
     controller.abort(reason)
     await settled
     expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ code }))
-    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(removeListener).toHaveBeenCalledWith('abort', addListener.mock.calls[0][1])
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
+  })
+
+  it.each(['headers', 'body'])('rejects cancellation as the %s promise resolves', async (phase) => {
+    const controller = new AbortController()
+    const result = response()
+    if (phase === 'headers') {
+      requestFetch.mockImplementation(async () => {
+        controller.abort(new Error('secret'))
+        return result
+      })
+    } else {
+      jest.spyOn(result, 'arrayBuffer').mockImplementation(async () => {
+        controller.abort(new Error('secret'))
+        return Uint8Array.from(body).buffer
+      })
+      requestFetch.mockResolvedValue(result)
+    }
+    await expect(
+      fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
+    ).rejects.toMatchObject({ code: 'cancelled', message: 'Configuration fetch cancelled' })
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
   it('uses one deadline for headers and body together', async () => {
@@ -425,8 +497,10 @@ describe('fetchRulesConfiguration', () => {
 
   it('removes the caller listener after success', async () => {
     const controller = new AbortController()
+    const addListener = jest.spyOn(controller.signal, 'addEventListener')
     const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
     await fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
-    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(removeListener).toHaveBeenCalledWith('abort', addListener.mock.calls[0][1])
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 })
