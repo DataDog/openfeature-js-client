@@ -347,7 +347,7 @@ describe('DatadogCoreProvider tracking', () => {
     const legacy = createExposureOnlyTracking().trackingHooks
     await legacy.initialize()
     const written = nextWrite()
-    legacy.hooks[0].after!(
+    legacy.hooks[0].finally!(
       { flagKey: 'static-flag', context: { targetingKey: 'static-user', plan: 'free' } } as never,
       {
         flagKey: 'static-flag',

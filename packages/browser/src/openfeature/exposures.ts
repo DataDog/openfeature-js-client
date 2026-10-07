@@ -44,7 +44,10 @@ export function createExposureLoggingHook(
 
   return {
     shutdown: () => exposuresBatch.stop(),
-    after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+    finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+      if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
+        return
+      }
       const timestamp = timeStampNow()
       const exposureEvent = createExposureEvent(getEvaluationContext(hookContext.context), details)
       if (!exposureEvent) {

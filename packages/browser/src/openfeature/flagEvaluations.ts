@@ -9,7 +9,13 @@ import {
   Observable,
 } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
-import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import {
+  ErrorCode,
+  type EvaluationContext,
+  type EvaluationDetails,
+  type FlagValue,
+  type HookContext,
+} from '@openfeature/web-sdk'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
@@ -77,9 +83,16 @@ export function createFlagEvalEVPHook(
         flagEvaluationBatch.stop()
       }
     },
-    after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+    // Failed evaluations skip `after`; `finally` receives the result returned to the application.
+    finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
-        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
+        // OpenFeature can copy a customer hook's error.code without validation.
+        // Restrict telemetry to standard OpenFeature error codes.
+        const errorCode =
+          details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
+            ? details.errorCode
+            : ErrorCode.GENERAL
+        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details, errorCode)
       } catch (error) {
         addTelemetryDebug('Error adding evaluation to aggregator', {
           'error.message': error instanceof Error ? error.message : String(error),

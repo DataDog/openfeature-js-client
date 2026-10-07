@@ -77,25 +77,28 @@ describe('tracking resource lifecycle', () => {
     expect(jest.getTimerCount()).toBe(0)
   })
 
-  it('disables registered evaluation hooks after shutdown and can initialize them again', async () => {
-    const controller = createDatadogEvaluationLoggingHook(options)
-    controllers.push(controller)
-    const client = await createClient()
-    client.addHooks(...controller.hooks)
-    await controller.initialize()
-    client.getBooleanValue('test-flag', false)
-    await controller.shutdown()
-    fetchMock.mockClear()
+  it.each(['test-flag', 'missing-flag'])(
+    'disables evaluation tracking for %s after shutdown and can initialize it again',
+    async (flagKey) => {
+      const controller = createDatadogEvaluationLoggingHook(options)
+      controllers.push(controller)
+      const client = await createClient()
+      client.addHooks(...controller.hooks)
+      await controller.initialize()
+      client.getBooleanValue(flagKey, false)
+      await controller.shutdown()
+      fetchMock.mockClear()
 
-    client.getBooleanValue('test-flag', false)
-    jest.advanceTimersByTime(60_000)
-    expect(fetchMock).not.toHaveBeenCalled()
+      client.getBooleanValue(flagKey, false)
+      jest.advanceTimersByTime(60_000)
+      expect(fetchMock).not.toHaveBeenCalled()
 
-    await controller.initialize()
-    client.getBooleanValue('test-flag', false)
-    jest.advanceTimersByTime(31_000)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
+      await controller.initialize()
+      client.getBooleanValue(flagKey, false)
+      jest.advanceTimersByTime(31_000)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it.each(['exposure', 'evaluation'] as const)(
     'cleans up %s resources when the final proxy call throws',
