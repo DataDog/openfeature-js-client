@@ -39,6 +39,35 @@ function abortError(signal?: AbortSignal): ConfigurationFetchError {
     : new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled')
 }
 
+// Raw errors can contain credentials or response bytes. Copy only a fixed diagnostic code.
+const TRANSPORT_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CLOSED',
+  'CERT_HAS_EXPIRED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+function transportError(message: string, error: unknown): ConfigurationFetchError {
+  const { code, cause } = (error ?? {}) as { code?: unknown; cause?: { code?: unknown } }
+  const known = [cause?.code, code].find((value) => typeof value === 'string' && TRANSPORT_CODES.has(value))
+  return new ConfigurationFetchError('transport', known ? `${message} (${known})` : message)
+}
+
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.
@@ -104,8 +133,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
         // Never forward a credential to a redirect destination.
         redirect: 'manual',
       })
-    } catch {
-      throw new ConfigurationFetchError('transport', 'Configuration request failed')
+    } catch (error) {
+      throw transportError('Configuration request failed', error)
     }
     controller.signal.throwIfAborted()
     if (response.status !== 200) {
@@ -119,8 +148,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     let bytes: Uint8Array
     try {
       bytes = new Uint8Array(await response.arrayBuffer())
-    } catch {
-      throw new ConfigurationFetchError('transport', 'Configuration response could not be read')
+    } catch (error) {
+      throw transportError('Configuration response could not be read', error)
     }
     controller.signal.throwIfAborted()
     if (bytes.length === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
@@ -139,8 +168,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason
     if (error instanceof ConfigurationFetchError) throw error
-    // Transport errors and response bodies can contain credentials. Do not attach them as causes.
-    throw new ConfigurationFetchError('transport', 'Configuration request failed')
+    throw transportError('Configuration request failed', error)
   } finally {
     clearTimeout(timeout)
     signal?.removeEventListener('abort', cancel)

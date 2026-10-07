@@ -237,6 +237,35 @@ describe('fetchRulesConfiguration', () => {
 
   it.each(
     [
+      { code: 'ENOTFOUND', suffix: ' (ENOTFOUND)' },
+      { code: 'DEPTH_ZERO_SELF_SIGNED_CERT', suffix: ' (DEPTH_ZERO_SELF_SIGNED_CERT)' },
+      { code: 'UND_ERR_HEADERS_TIMEOUT', suffix: ' (UND_ERR_HEADERS_TIMEOUT)' },
+      { code: 'UND_ERR_BODY_TIMEOUT', suffix: ' (UND_ERR_BODY_TIMEOUT)' },
+      { code: 'KEY_0123ABCD', suffix: '' },
+      { code: 'secret value', suffix: '' },
+      { code: 123, suffix: '' },
+    ].flatMap((testCase) =>
+      ['direct', 'cause'].flatMap((location) => ['request', 'body'].map((phase) => ({ ...testCase, location, phase })))
+    )
+  )('keeps only a known $phase error code from $location: $code', async ({ code, suffix, location, phase }) => {
+    const source = Object.assign(new Error('secret'), { code, data: 'secret response' })
+    const error = location === 'cause' ? Object.assign(new TypeError('secret request'), { cause: source }) : source
+    if (phase === 'request') {
+      requestFetch.mockRejectedValue(error)
+    } else {
+      const result = response()
+      jest.spyOn(result, 'arrayBuffer').mockRejectedValue(error)
+      requestFetch.mockResolvedValue(result)
+    }
+    const message = phase === 'request' ? 'Configuration request failed' : 'Configuration response could not be read'
+    const pending = fetchRulesConfiguration({ ...options, fetch: requestFetch })
+    await expect(pending).rejects.toMatchObject({ code: 'transport', message: `${message}${suffix}` })
+    await expect(pending).rejects.not.toHaveProperty('cause')
+    await expect(pending).rejects.not.toHaveProperty('data')
+  })
+
+  it.each(
+    [
       { failure: 'http', code: 'http' },
       { failure: 'mime', code: 'invalid_response' },
     ].flatMap((testCase) => ['settles', 'never settles', 'rejects'].map((cleanup) => ({ ...testCase, cleanup })))
