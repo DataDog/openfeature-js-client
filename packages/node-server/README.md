@@ -9,12 +9,12 @@ Requires Node.js 18 or newer. Fetch and parse rules without initializing a trace
 ```javascript
 import { fetchRulesConfiguration, configurationToString } from '@datadog/openfeature-node-server/rules-based'
 
-// Server distribution is the default. Rules do not depend on an evaluation context.
+// The server distribution channel is the default. Rules do not depend on an evaluation context.
 const configuration = await fetchRulesConfiguration({ apiKey, env: 'production' })
 
 // For browser bootstrap data, explicitly fetch client-distributed rules.
 const clientConfiguration = await fetchRulesConfiguration({
-  distribution: 'client',
+  distributionChannel: 'client',
   clientToken,
   env: 'production',
 })
@@ -39,6 +39,7 @@ The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `Da
 
 ### Fetch Options and Errors
 
+- `distributionChannel` selects the configuration channel to fetch, not where the helper runs. It defaults to `server`; use `client` when preparing configuration for browser or mobile SDKs.
 - `site` defaults to `datadoghq.com`.
 - `fetch` overrides global Fetch. Custom transports must honor `signal` and `redirect: 'manual'`; redirects are rejected to protect credentials.
 - `timeoutMs` defaults to `5000` and covers the request and response-body read. `signal` supports caller cancellation and earlier deadlines.

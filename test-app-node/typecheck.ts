@@ -114,7 +114,7 @@ void [providerName, runsOn, events, hooks, initPromise]
 // Standalone configuration helpers do not require OpenFeature or browser types.
 const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod' }
 const clientOptions: RulesConfigurationFetchOptions = {
-  distribution: 'client',
+  distributionChannel: 'client',
   clientToken: 'client-token',
   env: 'prod',
   timeoutMs: 5000,
@@ -128,15 +128,21 @@ const decoded: FlagsConfiguration = configurationFromRulesBinary(new Uint8Array(
 const serialized: string = configurationToString(decoded)
 const restored: FlagsConfiguration = configurationFromString(serialized)
 
-// @ts-expect-error: Client distribution must be explicit; credentials never select the distribution.
-const missingDistribution: RulesConfigurationFetchOptions = { clientToken: 'token', env: 'prod' }
-// @ts-expect-error: Credentials for the other distribution must not be sent.
+// @ts-expect-error: Client distribution channel must be explicit; credentials never select the channel.
+const missingDistributionChannel: RulesConfigurationFetchOptions = { clientToken: 'token', env: 'prod' }
+const oldDistributionOption: RulesConfigurationFetchOptions = {
+  // @ts-expect-error: The option is distributionChannel, not distribution.
+  distribution: 'server',
+  apiKey: 'key',
+  env: 'prod',
+}
+// @ts-expect-error: Credentials for the other distribution channel must not be sent.
 const conflictingCredentials: RulesConfigurationFetchOptions = {
-  distribution: 'client',
+  distributionChannel: 'client',
   clientToken: 'token',
   apiKey: 'key',
   env: 'prod',
 }
 // @ts-expect-error: The existing Node provider still expects legacy UFC JSON, not FlagsConfiguration.
 provider.setConfiguration(restored)
-void [pendingConfiguration, timeoutCode, missingDistribution, conflictingCredentials]
+void [pendingConfiguration, timeoutCode, missingDistributionChannel, oldDistributionOption, conflictingCredentials]

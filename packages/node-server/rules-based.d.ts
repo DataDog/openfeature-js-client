@@ -897,11 +897,11 @@ interface ConfigurationFetchOptions {
 	fetch?: typeof globalThis.fetch;
 }
 export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
-	distribution?: "server";
+	distributionChannel?: "server";
 	apiKey: string;
 	clientToken?: never;
 } | {
-	distribution: "client";
+	distributionChannel: "client";
 	clientToken: string;
 	apiKey?: never;
 });

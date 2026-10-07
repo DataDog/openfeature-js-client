@@ -12,7 +12,7 @@ test('the unchanged browser provider initializes from Node wire and reevaluates 
   try {
     let calls = 0
     const configuration = await fetchRulesConfiguration({
-      distribution: 'client',
+      distributionChannel: 'client',
       clientToken: 'test-token',
       env: 'prod',
       fetch: async (url, request) => {
