@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { createHash } = require('node:crypto')
 const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
@@ -53,7 +54,14 @@ test('bundles independent Node ESM scenarios from installed packages without wor
 function writeBundles(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'node-bundle-report-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
-  const contents = ['provider with datadog.ffe.flagging.ufc.v1 type check', 'SSR helpers', 'provider + SSR helpers']
+  // Varied, deterministic kilobyte-scale fixtures keep raw and gzip deltas visible after rounding.
+  const filler = (seed, kib) =>
+    Array.from({ length: kib * 16 }, (_, i) => createHash('sha256').update(`${seed}${i}`).digest('hex')).join('')
+  const contents = [
+    `provider with datadog.ffe.flagging.ufc.v1 type check ${filler('p', 4)}`,
+    `SSR helpers ${filler('s', 1)}`,
+    `provider + SSR helpers ${filler('c', 7)}`,
+  ]
   const builds = []
   for (const [index, name] of ['provider', 'ssr', 'provider-with-ssr'].entries()) {
     mkdirSync(path.join(directory, name))
@@ -78,8 +86,11 @@ test('reports actual raw/gzip sizes, same-build opt-in cost, and measurement lim
   assert.match(report, /Node provider only \| .* \| no \|/)
   assert.match(report, /SSR helpers only .* \| yes \|/)
   assert.match(report, /Node provider \+ SSR helpers \| .* \| yes \|/)
-  const delta = ((measurements[2].rawBytes - measurements[0].rawBytes) / 1024).toFixed(1)
-  assert.ok(report.includes(`adds ${delta} KiB raw`))
+  const rawDelta = ((measurements[2].rawBytes - measurements[0].rawBytes) / 1024).toFixed(1)
+  const gzipDelta = ((measurements[2].gzipBytes - measurements[0].gzipBytes) / 1024).toFixed(1)
+  assert.ok(Number(rawDelta) > 0)
+  assert.ok(Number(gzipDelta) > 0)
+  assert.ok(report.includes(`adds ${rawDelta} KiB raw / ${gzipDelta} KiB gzip`), report)
   assert.match(report, /not just the decoder/)
   assert.match(report, /not npm install sizes/)
   assert.match(report, /not for configuring that provider/)
