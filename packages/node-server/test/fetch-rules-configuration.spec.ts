@@ -15,6 +15,27 @@ function response(bytes = body): Response {
   return new Response(Uint8Array.from(bytes), { headers })
 }
 
+function stalledFetch(phase: string): typeof fetch {
+  return (_url, request) => {
+    const signal = request!.signal!
+    if (phase === 'headers') {
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('secret')), { once: true })
+      })
+    }
+    return Promise.resolve(
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            signal.addEventListener('abort', () => stream.error(new Error('secret')), { once: true })
+          },
+        }),
+        { headers }
+      )
+    )
+  }
+}
+
 describe('fetchRulesConfiguration', () => {
   const requestFetch = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
 
@@ -99,6 +120,14 @@ describe('fetchRulesConfiguration', () => {
     { apiKey: 'secret\r\nheader' },
     { env: '' },
     { env: undefined },
+    { timeoutMs: 0 },
+    { timeoutMs: -1 },
+    { timeoutMs: 1.5 },
+    { timeoutMs: NaN },
+    { timeoutMs: Infinity },
+    { timeoutMs: 2147483648 },
+    { timeoutMs: '5000' },
+    { timeoutMs: null },
     { site: 'datadoghq.com.attacker.invalid' },
     { site: 'datadoghq.com/path' },
     { site: 'ddog-gov.com' },
@@ -260,46 +289,72 @@ describe('fetchRulesConfiguration', () => {
     await expect(fetchRulesConfiguration({ ...options, fetch: requestFetch })).resolves.toHaveProperty('rules')
   })
 
-  it('rejects an already cancelled call without fetching', async () => {
+  it.each([
+    { reason: new Error('secret'), code: 'cancelled', message: 'Configuration fetch cancelled' },
+    { reason: new DOMException('secret', 'TimeoutError'), code: 'timeout', message: 'Configuration fetch timed out' },
+  ])('rejects an already $code call without fetching', async ({ reason, code, message }) => {
     const controller = new AbortController()
-    controller.abort(new Error('secret'))
+    controller.abort(reason)
     await expect(
       fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
-    ).rejects.toMatchObject({ code: 'cancelled' })
+    ).rejects.toMatchObject({ code, message })
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
-  it.each(['headers', 'body'])('leaves cancellation to the caller while waiting for %s', async (phase) => {
+  it.each(
+    ['headers', 'body'].flatMap((phase) =>
+      [undefined, 25].map((timeoutMs) => ({ phase, timeoutMs, deadline: timeoutMs ?? 5000 }))
+    )
+  )('times out after $deadline ms while waiting for $phase', async ({ phase, timeoutMs, deadline }) => {
+    requestFetch.mockImplementation(stalledFetch(phase))
+    const pending = fetchRulesConfiguration({ ...options, timeoutMs, fetch: requestFetch })
+    const rejected = jest.fn()
+    const settled = pending.catch(rejected)
+    await jest.advanceTimersByTimeAsync(deadline - 1)
+    expect(rejected).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    await settled
+    expect(rejected).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'timeout', message: 'Configuration fetch timed out' })
+    )
+    expect(requestFetch.mock.calls[0][1]?.signal?.aborted).toBe(true)
+  })
+
+  it.each(
+    ['headers', 'body'].flatMap((phase) =>
+      [
+        { reason: new DOMException('secret', 'AbortError'), code: 'cancelled' },
+        { reason: new DOMException('secret', 'TimeoutError'), code: 'timeout' },
+      ].map((testCase) => ({ ...testCase, phase }))
+    )
+  )('honors caller $code while waiting for $phase', async ({ phase, reason, code }) => {
     const controller = new AbortController()
     const removeListener = jest.spyOn(controller.signal, 'removeEventListener')
-    requestFetch.mockImplementation((_url, request) => {
-      const signal = request!.signal!
-      if (phase === 'headers') {
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(new Error('secret')), { once: true })
-        })
-      }
-      return Promise.resolve(
-        new Response(
-          new ReadableStream({
-            start(stream) {
-              signal.addEventListener('abort', () => stream.error(new Error('secret')), { once: true })
-            },
-          }),
-          { headers }
-        )
-      )
-    })
+    requestFetch.mockImplementation(stalledFetch(phase))
     const pending = fetchRulesConfiguration({ ...options, signal: controller.signal, fetch: requestFetch })
     const rejected = jest.fn()
     const settled = pending.catch(rejected)
     await jest.advanceTimersByTimeAsync(2500)
     expect(rejected).not.toHaveBeenCalled()
     expect(requestFetch.mock.calls[0][1]?.signal?.aborted).toBe(false)
-    controller.abort(new Error('secret'))
+    controller.abort(reason)
     await settled
-    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ code: 'cancelled' }))
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ code }))
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('uses one deadline for headers and body together', async () => {
+    requestFetch.mockImplementation(async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 4000))
+      return stalledFetch('body')(...args)
+    })
+    const rejected = jest.fn()
+    const pending = fetchRulesConfiguration({ ...options, fetch: requestFetch }).catch(rejected)
+    await jest.advanceTimersByTimeAsync(4999)
+    expect(rejected).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    await pending
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ code: 'timeout' }))
   })
 
   it('removes the caller listener after success', async () => {

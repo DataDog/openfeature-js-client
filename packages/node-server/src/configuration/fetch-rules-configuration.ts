@@ -5,6 +5,8 @@ interface ConfigurationFetchOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
+  /** Request and response-body deadline in milliseconds. Defaults to 5000. */
+  timeoutMs?: number
   signal?: AbortSignal
   /** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
   fetch?: typeof globalThis.fetch
@@ -17,7 +19,7 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions &
   )
 
 export type ConfigurationFetchErrorCode =
-  'invalid_options' | 'http' | 'invalid_response' | 'decode' | 'transport' | 'cancelled'
+  'invalid_options' | 'http' | 'invalid_response' | 'decode' | 'transport' | 'cancelled' | 'timeout'
 
 /** A configuration-loading failure, not an OpenFeature evaluation error. */
 export class ConfigurationFetchError extends Error {
@@ -31,6 +33,12 @@ export class ConfigurationFetchError extends Error {
   }
 }
 
+function abortError(signal?: AbortSignal): ConfigurationFetchError {
+  return signal?.reason?.name === 'TimeoutError'
+    ? new ConfigurationFetchError('timeout', 'Configuration fetch timed out')
+    : new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled')
+}
+
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.
@@ -42,6 +50,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     clientToken,
     env,
     site = 'datadoghq.com',
+    timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
   } = options ?? {}
@@ -54,6 +63,9 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     /[\r\n]/.test(credential) ||
     typeof env !== 'string' ||
     !env.trim() ||
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > 2147483647 ||
     typeof requestFetch !== 'function'
   ) {
     throw new ConfigurationFetchError('invalid_options', 'Invalid configuration fetch options')
@@ -64,14 +76,18 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   } catch {
     throw new ConfigurationFetchError('invalid_options', 'Invalid configuration fetch options')
   }
-  if (signal?.aborted) throw new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled')
+  if (signal?.aborted) throw abortError(signal)
 
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distribution}`)
   url.searchParams.set('dd_env', env)
 
   const controller = new AbortController()
-  const cancel = () => controller.abort(new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled'))
+  const cancel = () => controller.abort(abortError(signal))
   signal?.addEventListener('abort', cancel, { once: true })
+  const timeout = setTimeout(
+    () => controller.abort(new ConfigurationFetchError('timeout', 'Configuration fetch timed out')),
+    timeoutMs
+  )
   const fetchedAt = timeStampNow()
   let response: Response | undefined
   try {
@@ -126,6 +142,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     // Transport errors and response bodies can contain credentials. Do not attach them as causes.
     throw new ConfigurationFetchError('transport', 'Configuration request failed')
   } finally {
+    clearTimeout(timeout)
     signal?.removeEventListener('abort', cancel)
     // Aborting also releases an unfinished response after a validation failure.
     controller.abort()
