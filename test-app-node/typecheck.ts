@@ -24,6 +24,15 @@ import {
   type DatadogNodeServerProviderOptions,
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
+import {
+  type ConfigurationFetchErrorCode,
+  configurationFromRulesBinary,
+  configurationFromString,
+  configurationToString,
+  type FlagsConfiguration,
+  fetchRulesConfiguration,
+  type RulesConfigurationFetchOptions,
+} from '@datadog/openfeature-node-server/rules-based'
 
 // --- Test 1: DatadogNodeServerProvider can be instantiated with correct options ---
 // Consumers get the channel from diagnostics_channel.channel() (returns Channel<unknown, unknown>)
@@ -86,13 +95,14 @@ const initPromise: Promise<void> = provider.initialize()
 //
 // This test only type-checks when @openfeature/server-sdk is installed (normal
 // consumer scenario). In the SSI/dd-trace scenario where the SDK is absent, the
-// @ts-ignore below suppresses the missing-module error and OpenFeature resolves
+// directive below suppresses the missing-module error and OpenFeature resolves
 // to `any`, making the call a type-check no-op.
 //
 // Run against the minimum supported SDK version to catch regressions early:
 //   OF_SERVER_SDK_VERSION=1.15.0 OF_CORE_VERSION=1.3.0 \
 //     yarn test:node-install:with-of
 //
+// biome-ignore lint/suspicious/noTsIgnore: This import must compile both with and without the optional SDK.
 // @ts-ignore: @openfeature/server-sdk may not be installed (SSI/dd-trace scenario)
 import { OpenFeature } from '@openfeature/server-sdk'
 
@@ -100,3 +110,33 @@ OpenFeature.setProvider(provider)
 
 // Verify all bindings are used (no unused variable errors with strict mode)
 void [providerName, runsOn, events, hooks, initPromise]
+
+// Standalone configuration helpers do not require OpenFeature or browser types.
+const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod' }
+const clientOptions: RulesConfigurationFetchOptions = {
+  distributionChannel: 'client',
+  clientToken: 'client-token',
+  env: 'prod',
+  timeoutMs: 5000,
+  signal: new AbortController().signal,
+  fetch: globalThis.fetch,
+}
+const pendingConfiguration: Promise<FlagsConfiguration> = fetchRulesConfiguration(serverOptions)
+const timeoutCode: ConfigurationFetchErrorCode = 'timeout'
+void fetchRulesConfiguration(clientOptions)
+const decoded: FlagsConfiguration = configurationFromRulesBinary(new Uint8Array())
+const serialized: string = configurationToString(decoded)
+const restored: FlagsConfiguration = configurationFromString(serialized)
+
+// @ts-expect-error: Client distribution channel must be explicit; credentials never select the channel.
+const missingDistributionChannel: RulesConfigurationFetchOptions = { clientToken: 'token', env: 'prod' }
+// @ts-expect-error: Credentials for the other distribution channel must not be sent.
+const conflictingCredentials: RulesConfigurationFetchOptions = {
+  distributionChannel: 'client',
+  clientToken: 'token',
+  apiKey: 'key',
+  env: 'prod',
+}
+// @ts-expect-error: The existing Node provider still expects legacy UFC JSON, not FlagsConfiguration.
+provider.setConfiguration(restored)
+void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflictingCredentials]
