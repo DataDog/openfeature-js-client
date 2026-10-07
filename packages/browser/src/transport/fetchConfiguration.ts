@@ -1,4 +1,5 @@
 import {
+  buildEndpointHost,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
   SUPPORTED_FLAGS_CAPABILITIES,
@@ -7,7 +8,6 @@ import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { ParseError } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
-import { buildEndpointHost } from './endpoint'
 
 const sourcePayload = {
   sdk_name: 'browser',
