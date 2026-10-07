@@ -144,6 +144,12 @@ echo "Running runtime tests..."
 echo ""
 yarn test
 
+if [ "$WITH_OPENFEATURE" = false ]; then
+  echo "Building and checking Node entrypoint bundles..."
+  node "$REPO_ROOT/scripts/report-node-entrypoint-bundle-sizes.js" "$TEST_APP_DIR"
+  node --test bundle.test.cjs
+fi
+
 echo ""
 if [ "$WITH_OPENFEATURE" = true ]; then
   echo "Tests completed with OpenFeature dependencies installed"
