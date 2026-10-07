@@ -56,36 +56,39 @@ describe('fetchRulesConfiguration', () => {
     jest.restoreAllMocks()
   })
 
-  it.each([undefined, 'server'] as const)('uses the server endpoint for distribution %s', async (distribution) => {
-    const result = await fetchRulesConfiguration({ ...options, distribution, fetch: requestFetch })
-    expect(requestFetch).toHaveBeenCalledTimes(1)
-    expect(requestFetch).toHaveBeenCalledWith(
-      'https://ufc-server.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/server?dd_env=prod',
-      expect.objectContaining({
-        method: 'GET',
-        redirect: 'manual',
-        signal: expect.any(AbortSignal),
-        headers: {
-          Accept: 'application/protobuf',
-          'dd-api-key': options.apiKey,
-          'DD-Client-Library-Language': 'nodejs',
-          'DD-Client-Library-Version': '1.0.0-test',
-        },
-      })
-    )
-    expect(result.rules).toMatchObject({ etag: wire.rules.etag, fetchedAt: Date.now() })
-    expect(result.rules?.response.environmentName).toBe('prod')
-  })
+  it.each([undefined, 'server'] as const)(
+    'uses the server endpoint for distribution channel %s',
+    async (distributionChannel) => {
+      const result = await fetchRulesConfiguration({ ...options, distributionChannel, fetch: requestFetch })
+      expect(requestFetch).toHaveBeenCalledTimes(1)
+      expect(requestFetch).toHaveBeenCalledWith(
+        'https://ufc-server.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/server?dd_env=prod',
+        expect.objectContaining({
+          method: 'GET',
+          redirect: 'manual',
+          signal: expect.any(AbortSignal),
+          headers: {
+            Accept: 'application/protobuf',
+            'dd-api-key': options.apiKey,
+            'DD-Client-Library-Language': 'nodejs',
+            'DD-Client-Library-Version': '1.0.0-test',
+          },
+        })
+      )
+      expect(result.rules).toMatchObject({ etag: wire.rules.etag, fetchedAt: Date.now() })
+      expect(result.rules?.response.environmentName).toBe('prod')
+    }
+  )
 
   it.each(
     ['us3.datadoghq.com', 'datad0g.com'].flatMap((site) =>
-      ['client', 'server'].map((distribution) => ({ site, distribution }))
+      ['client', 'server'].map((distributionChannel) => ({ site, distributionChannel }))
     )
-  )('uses $distribution authentication on $site', async ({ site, distribution }) => {
+  )('uses $distributionChannel authentication on $site', async ({ site, distributionChannel }) => {
     const credentials =
-      distribution === 'client'
-        ? ({ distribution: 'client', clientToken: 'client-token' } as const)
-        : ({ distribution: 'server', apiKey: 'server-key' } as const)
+      distributionChannel === 'client'
+        ? ({ distributionChannel: 'client', clientToken: 'client-token' } as const)
+        : ({ distributionChannel: 'server', apiKey: 'server-key' } as const)
     await fetchRulesConfiguration({
       ...credentials,
       env: 'test & preview',
@@ -93,12 +96,12 @@ describe('fetchRulesConfiguration', () => {
       fetch: requestFetch,
     })
     expect(requestFetch).toHaveBeenCalledWith(
-      `https://ufc-${distribution}.ff-cdn.${site}/api/v2/feature-flagging/config/rules-based/${distribution}?dd_env=test+%26+preview`,
+      `https://ufc-${distributionChannel}.ff-cdn.${site}/api/v2/feature-flagging/config/rules-based/${distributionChannel}?dd_env=test+%26+preview`,
       expect.objectContaining({
         headers: {
           Accept: 'application/protobuf',
-          [distribution === 'client' ? 'dd-client-token' : 'dd-api-key']:
-            distribution === 'client' ? 'client-token' : 'server-key',
+          [distributionChannel === 'client' ? 'dd-client-token' : 'dd-api-key']:
+            distributionChannel === 'client' ? 'client-token' : 'server-key',
           'DD-Client-Library-Language': 'nodejs',
           'DD-Client-Library-Version': '1.0.0-test',
         },
@@ -115,18 +118,18 @@ describe('fetchRulesConfiguration', () => {
   })
 
   it.each([
-    [{ distribution: 'client' }, 'apiKey with client distribution'],
-    [{ distribution: 'secret' }, 'distribution'],
-    [{ distribution: null }, 'distribution'],
-    [{ clientToken: 'secret' }, 'clientToken with server distribution'],
-    [{ apiKey: undefined, clientToken: 'secret' }, 'clientToken with server distribution'],
-    [{ distribution: 'client', clientToken: 'secret' }, 'apiKey with client distribution'],
+    [{ distributionChannel: 'client' }, 'apiKey with client distribution channel'],
+    [{ distributionChannel: 'secret' }, 'distributionChannel'],
+    [{ distributionChannel: null }, 'distributionChannel'],
+    [{ clientToken: 'secret' }, 'clientToken with server distribution channel'],
+    [{ apiKey: undefined, clientToken: 'secret' }, 'clientToken with server distribution channel'],
+    [{ distributionChannel: 'client', clientToken: 'secret' }, 'apiKey with client distribution channel'],
     [{ apiKey: undefined }, 'apiKey'],
     [{ apiKey: '' }, 'apiKey'],
     [{ apiKey: 'secret\r\nheader' }, 'apiKey'],
-    [{ distribution: 'client', apiKey: undefined }, 'clientToken'],
-    [{ distribution: 'client', apiKey: undefined, clientToken: '' }, 'clientToken'],
-    [{ distribution: 'client', apiKey: undefined, clientToken: 'secret\r\nheader' }, 'clientToken'],
+    [{ distributionChannel: 'client', apiKey: undefined }, 'clientToken'],
+    [{ distributionChannel: 'client', apiKey: undefined, clientToken: '' }, 'clientToken'],
+    [{ distributionChannel: 'client', apiKey: undefined, clientToken: 'secret\r\nheader' }, 'clientToken'],
     [{ env: '' }, 'env'],
     [{ env: undefined }, 'env'],
     [{ env: { value: 'secret' } }, 'env'],

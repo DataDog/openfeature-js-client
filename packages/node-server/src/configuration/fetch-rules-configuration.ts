@@ -14,8 +14,8 @@ interface ConfigurationFetchOptions {
 
 export type RulesConfigurationFetchOptions = ConfigurationFetchOptions &
   (
-    | { distribution?: 'server'; apiKey: string; clientToken?: never }
-    | { distribution: 'client'; clientToken: string; apiKey?: never }
+    | { distributionChannel?: 'server'; apiKey: string; clientToken?: never }
+    | { distributionChannel: 'client'; clientToken: string; apiKey?: never }
   )
 
 export type ConfigurationFetchErrorCode =
@@ -78,7 +78,7 @@ function invalidOption(option: string): ConfigurationFetchError {
  */
 export async function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration> {
   const {
-    distribution = 'server',
+    distributionChannel = 'server',
     apiKey,
     clientToken,
     env,
@@ -87,15 +87,17 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     signal,
     fetch: requestFetch = globalThis.fetch,
   } = options ?? {}
-  if (!['server', 'client'].includes(distribution)) throw invalidOption('distribution')
-  if (distribution === 'client' ? apiKey !== undefined : clientToken !== undefined) {
+  if (!['server', 'client'].includes(distributionChannel)) throw invalidOption('distributionChannel')
+  if (distributionChannel === 'client' ? apiKey !== undefined : clientToken !== undefined) {
     throw invalidOption(
-      distribution === 'client' ? 'apiKey with client distribution' : 'clientToken with server distribution'
+      distributionChannel === 'client'
+        ? 'apiKey with client distribution channel'
+        : 'clientToken with server distribution channel'
     )
   }
-  const credential = distribution === 'client' ? clientToken : apiKey
+  const credential = distributionChannel === 'client' ? clientToken : apiKey
   if (typeof credential !== 'string' || !credential.trim() || /[\r\n]/.test(credential)) {
-    throw invalidOption(distribution === 'client' ? 'clientToken' : 'apiKey')
+    throw invalidOption(distributionChannel === 'client' ? 'clientToken' : 'apiKey')
   }
   if (typeof env !== 'string' || !env.trim()) throw invalidOption('env')
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) throw invalidOption('timeoutMs')
@@ -111,13 +113,13 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   }
   let host: string
   try {
-    host = buildEndpointHost(site, `ufc-${distribution}`)
+    host = buildEndpointHost(site, `ufc-${distributionChannel}`)
   } catch {
     throw invalidOption('site')
   }
   if (signal?.aborted) throw abortError(signal)
 
-  const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distribution}`)
+  const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
 
   const controller = new AbortController()
@@ -135,7 +137,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
         method: 'GET',
         headers: {
           Accept: 'application/protobuf',
-          [distribution === 'client' ? 'dd-client-token' : 'dd-api-key']: credential,
+          [distributionChannel === 'client' ? 'dd-client-token' : 'dd-api-key']: credential,
           'DD-Client-Library-Language': 'nodejs',
           'DD-Client-Library-Version': __BUILD_ENV__SDK_VERSION__,
         },
