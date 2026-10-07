@@ -1,10 +1,5 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import {
-  assignmentCacheKeyToString,
-  assignmentCacheValueToString,
-  type ExposureEvent,
-  type FlagsConfiguration,
-} from '@datadog/flagging-core'
+import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import { OpenFeature } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
@@ -344,53 +339,83 @@ describe('DatadogCoreProvider tracking', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
   })
 
-  it('does not let legacy exposure cache entries suppress core provider exposures', async () => {
-    const staleExposure: ExposureEvent = {
-      allocation: { key: 'static-allocation' },
-      flag: { key: 'static-flag' },
-      variant: { key: 'static-variation' },
-      subject: { id: 'static-user', attributes: { plan: 'free' } },
-    }
-    const staleEntries = {
-      [assignmentCacheKeyToString(staleExposure)]: assignmentCacheValueToString(staleExposure),
-    }
-    let notifyReadStarted!: () => void
-    const readStarted = new Promise<void>((resolve) => {
-      notifyReadStarted = resolve
-    })
-    let resolveInitialRead!: (entries: Record<string, string>) => void
-    const storage = {
-      get: jest.fn(
-        () =>
-          new Promise<Record<string, string>>((resolve) => {
-            resolveInitialRead = resolve
-            notifyReadStarted()
-          })
-      ),
-      set: jest.fn().mockResolvedValue(undefined),
-      clear: jest.fn().mockResolvedValue(undefined),
-    } as unknown as chrome.storage.StorageArea
+  it('does not let persisted marker-less exposure entries suppress core provider exposures', async () => {
+    const persisted: Record<string, string> = {}
     Object.defineProperty(globalThis, 'chrome', {
       configurable: true,
-      value: { storage: { local: storage } },
+      value: {
+        storage: {
+          local: {
+            get: jest.fn(async () => ({ ...persisted })),
+            set: jest.fn(async (items: Record<string, string>) => {
+              Object.assign(persisted, items)
+            }),
+            remove: jest.fn(async (keys: string[]) => {
+              for (const storageKey of keys) delete persisted[storageKey]
+            }),
+          },
+        },
+      },
     })
 
-    const { trackingHooks } = createExposureOnlyTracking()
-    const trackingInitialization = trackingHooks.initialize()
-    await readStarted
-    resolveInitialRead(staleEntries)
-    await trackingInitialization
+    // Persist an entry in the format written without a core configuration marker.
+    const legacy = createExposureOnlyTracking().trackingHooks
+    await legacy.initialize()
+    legacy.hooks[0].after!(
+      { flagKey: 'static-flag', context: { targetingKey: 'static-user', plan: 'free' } } as never,
+      {
+        flagKey: 'static-flag',
+        value: 'static-value',
+        variant: 'static-variation',
+        flagMetadata: { allocationKey: 'static-allocation', doLog: true },
+      } as never
+    )
+    jest.advanceTimersByTime(31_000)
+    await legacy.shutdown()
+    expect(Object.keys(persisted)).toHaveLength(1)
 
+    const { trackingHooks } = createExposureOnlyTracking()
+    await trackingHooks.initialize()
     const provider = new DatadogCoreProvider()
     provider.setConfiguration(precomputedConfiguration)
     await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'static-user', plan: 'free' })
-
     const client = OpenFeature.getClient(DOMAIN)
     client.addHooks(...trackingHooks.hooks)
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
-    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
+  })
+
+  it('keeps rules identities for contexts outside a mixed precomputed snapshot', async () => {
+    const { trackingHooks } = createExposureOnlyTracking()
+    await trackingHooks.initialize()
+    const rules = rulesConfiguration.rules!
+    const provider = new DatadogCoreProvider()
+    provider.setConfiguration({ ...precomputedConfiguration, rules })
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, { targetingKey: 'rules-user', country: 'US' })
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...trackingHooks.hooks)
+
+    const first = client.getBooleanDetails('test-flag', false)
+    expect(first.reason).not.toBe('ERROR')
+    jest.advanceTimersByTime(31_000)
+
+    provider.setConfiguration({
+      ...precomputedConfiguration,
+      rules: {
+        ...rules,
+        response: {
+          ...rules.response,
+          flags: { ...rules.response.flags, 'another-flag': rules.response.flags['test-flag']! },
+        },
+      },
+    })
+    const changed = client.getBooleanDetails('test-flag', false)
+    expect(changed.variant).toBe(first.variant)
+    expect(changed.flagMetadata.__dd_core_configuration_id).not.toBe(first.flagMetadata.__dd_core_configuration_id)
+    jest.advanceTimersByTime(31_000)
+    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
   })
 
   function precomputedConfigurationWithCreatedAt(createdAt: string): FlagsConfiguration {

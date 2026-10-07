@@ -194,6 +194,30 @@ describe('createFlagsConfigurationFetcher', () => {
   })
 
   describe('request headers', () => {
+    it('should declare capabilities to the Datadog edge', async () => {
+      const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, site: 'datadoghq.com' })
+
+      await fetcher(mockContext)
+
+      expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
+        'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
+      })
+    })
+
+    it('should not add a preflighted capabilities header to proxy requests unless configured', async () => {
+      const proxy = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
+      await createFlagsConfigurationFetcher(proxy)(mockContext)
+      await createFlagsConfigurationFetcher({
+        ...proxy,
+        customHeaders: { 'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1' },
+      })(mockContext)
+
+      expect(mockFetch.mock.calls[0][1].headers).not.toHaveProperty('X-DD-FEATURE-FLAGS-CAPABILITIES')
+      expect(mockFetch.mock.calls[1][1].headers).toMatchObject({
+        'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
+      })
+    })
+
     it('should include default headers when not overwriting', async () => {
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
       const fetcher = createFlagsConfigurationFetcher(config)
@@ -205,7 +229,6 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
-            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
             'dd-application-id': 'test-app-id',
           },
@@ -228,7 +251,6 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
-            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
           },
         })
       )
@@ -252,7 +274,6 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
-            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
             'dd-application-id': 'test-app-id',
             'X-Custom-Header': 'custom-value',
@@ -277,7 +298,6 @@ describe('createFlagsConfigurationFetcher', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/vnd.api+json',
-            'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
             'dd-client-token': 'test-token',
           },
         })

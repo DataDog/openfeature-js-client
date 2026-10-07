@@ -107,13 +107,15 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  const url = buildConfigurationUrl(options, 'precomputed')
+  const requestOptions: ConfigurationRequestOptions = options
+  const url = buildConfigurationUrl(requestOptions, 'precomputed')
   const fetchedAt = timeStampNow()
   const defaultHeaders = buildConfigurationHeaders(
     options,
     {
       'Content-Type': 'application/vnd.api+json',
-      'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilitiesHeader,
+      // Customer proxies can opt in through customHeaders after allowing it in CORS.
+      ...(!requestOptions.flaggingProxy && { 'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilitiesHeader }),
     },
     'precomputed'
   )

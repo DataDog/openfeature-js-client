@@ -149,10 +149,13 @@ evaluation context.
 
 ## Flag-key obfuscation
 
-The Precompute fetcher automatically sends
+Requests to the Datadog Precompute endpoint automatically send
 `X-DD-FEATURE-FLAGS-CAPABILITIES: assignment-encoding-flag-key-256-v1`.
 This declares support for the `flag-key-sha256-v1` response encoding.
 Datadog controls its server rollout.
+Requests through `flaggingProxy` do not send this header by default. Proxy owners
+can opt in through `customHeaders`. The proxy must forward the header and, for
+cross-origin requests, allow it in its CORS response before enabling it.
 The provider accepts both plaintext and obfuscated responses without an
 application configuration change.
 
@@ -167,9 +170,12 @@ Plaintext and rules-only snapshots keep version 1. New readers accept both versi
 This version applies to SDK serialization, not the Precompute API response.
 
 New IndexedDB writes use a separate cache key namespace for both response formats.
-Older SDKs cannot read these encoded entries. New SDKs can read legacy plaintext
+Older SDKs cannot read any entries in the new namespace, including plaintext.
+New SDKs can read legacy plaintext
 entries when the new namespace has no entry. A plaintext rollout rollback replaces
 the encoded entry in the new namespace. It does not update an older SDK's cache.
+A snapshot containing both encoded assignments and rules uses version 2.
+Older readers reject that entire snapshot, including its rules.
 
 Obfuscation removes readable flag-map keys. It is not encryption, authorization,
 or response signing. Values, variation names, allocation names, telemetry,
@@ -297,6 +303,10 @@ await tracking.shutdown()
 The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
 
 For precomputed assignments, both providers keep exposure deduplication across configuration refreshes. The existing exposure cache identifies the subject and its attributes, original flag key, allocation, variant, and assignment serial when present. A change to these fields can emit a new exposure. A changed response timestamp, salt, or unrelated flag does not. A changed value under the same variant and serial does not create a new exposure identity.
+
+Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
+The memory cache removes the least recently used entry. Persistent caches remove the oldest written entries.
+An evicted entry can produce another exposure. Storage failures do not prevent flag evaluation.
 
 For rules-based configurations, `DatadogCoreProvider` also includes the rules configuration identity. Changed rules allow new exposures without clearing application-managed hook state. Retrieval metadata (`fetchedAt` and `etag`) and the server's `createdAt` build timestamp do not change that identity. These fields remain available on the configuration and in its portable wire representation.
 

@@ -344,4 +344,50 @@ describe('browser flag-key obfuscation', () => {
       stringify.mockRestore()
     }
   })
+
+  it('loads persisted exposure identities before reporting ready', async () => {
+    jest.useFakeTimers()
+    let resolveRead: ((entries: Record<string, string>) => void) | undefined
+    const readStarted = new Promise<void>((started) => {
+      Object.defineProperty(globalThis, 'chrome', {
+        configurable: true,
+        value: {
+          storage: {
+            local: {
+              get: jest.fn(
+                () =>
+                  new Promise<Record<string, string>>((resolve) => {
+                    resolveRead = resolve
+                    started()
+                  })
+              ),
+              set: jest.fn().mockResolvedValue(undefined),
+              remove: jest.fn().mockResolvedValue(undefined),
+            },
+          },
+        },
+      })
+    })
+    try {
+      const provider = new DatadogProvider({ ...options, enableExposureLogging: true })
+      let ready = false
+      const initialized = OpenFeature.setProviderAndWait(provider, context).then(() => {
+        ready = true
+      })
+      await readStarted
+      await jest.advanceTimersByTimeAsync(100)
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('precompute-assignments'))).toBe(true)
+      expect(ready).toBe(false)
+
+      resolveRead!({})
+      await initialized
+      OpenFeature.getClient().getBooleanValue(key, false)
+      jest.advanceTimersByTime(31_000)
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('exposures'))).toHaveLength(1)
+    } finally {
+      // Let provider shutdown finish if an assertion failed before the read resolved.
+      resolveRead?.({})
+      Reflect.deleteProperty(globalThis, 'chrome')
+    }
+  })
 })

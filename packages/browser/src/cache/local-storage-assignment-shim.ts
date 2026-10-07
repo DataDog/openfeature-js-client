@@ -1,4 +1,6 @@
 // noinspection JSUnusedGlobalSymbols (methods are used by common repository)
+
+import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
 import { hasWindowLocalStorage } from './helpers'
 
 export class LocalStorageAssignmentShim {
@@ -49,12 +51,28 @@ export class LocalStorageAssignmentShim {
   }
 
   public set(key: string, value: string): this {
-    return this.setCache(this.getCache().set(key, value))
+    const cache = this.getCache()
+    cache.delete(key)
+    cache.set(key, value)
+    this.trim(cache)
+    return this.setCache(cache)
   }
 
   private getCache(): Map<string, string> {
     const cache = window.localStorage.getItem(this.localStorageKey)
-    return cache ? new Map(JSON.parse(cache)) : new Map()
+    const entries: Map<string, string> = cache ? new Map(JSON.parse(cache)) : new Map()
+    if (entries.size > MAX_EXPOSURE_CACHE_ENTRIES) {
+      this.trim(entries)
+      this.setCache(entries)
+    }
+    return entries
+  }
+
+  private trim(cache: Map<string, string>): void {
+    for (const key of cache.keys()) {
+      if (cache.size <= MAX_EXPOSURE_CACHE_ENTRIES) break
+      cache.delete(key)
+    }
   }
 
   private setCache(cache: Map<string, string>): this {

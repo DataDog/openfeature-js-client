@@ -7,6 +7,7 @@ async function run() {
     clientToken: 'obfuscation-smoke-token',
     env: 'test',
     flaggingProxy: new URL('/assignments', location.href).toString(),
+    customHeaders: { 'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1' },
     enableExposureLogging: false,
     enableFlagEvaluationTracking: false,
     enableRumFeatureFlagTracking: false,

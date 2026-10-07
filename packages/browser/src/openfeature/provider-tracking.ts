@@ -1,4 +1,3 @@
-import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
@@ -8,9 +7,7 @@ import { createRumTrackingHook } from './rumIntegration'
 import type { DatadogTrackingHook, DatadogTrackingHooks } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
-export interface ProviderTracking extends DatadogTrackingHooks {
-  exposureCache?: AssignmentCache
-}
+export type ProviderTracking = DatadogTrackingHooks
 
 export function createProviderTracking({
   options,
@@ -33,10 +30,8 @@ export function createProviderTracking({
     trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration)))
   }
 
-  let exposureCache: AssignmentCache | undefined
   if ((options.enableExposureLogging ?? enabledByDefault) && configuration) {
     const cache = createExposureCache(options, configuration)
-    exposureCache = cache
     trackingHooks.push(
       createTrackingHookController(async () => {
         await runTrackingLifecycleOperation(() => cache.init())
@@ -51,7 +46,6 @@ export function createProviderTracking({
     hooks: getTrackingContext
       ? tracking.hooks.map((hook) => withTrackingContext(hook, getTrackingContext))
       : tracking.hooks,
-    exposureCache,
   }
 }
 
