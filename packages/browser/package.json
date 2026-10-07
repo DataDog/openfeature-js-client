@@ -1,6 +1,6 @@
 {
   "name": "@datadog/openfeature-browser",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Browser-specific bindings for OpenFeature (wraps @datadog/openfeature-core)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/DataDog/openfeature-js-client#readme",
@@ -12,12 +12,25 @@
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "rules-based": [
+        "cjs/rules-based.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./cjs/index.d.ts",
       "import": "./esm/index.js",
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
+    },
+    "./rules-based": {
+      "types": "./cjs/rules-based.d.ts",
+      "import": "./esm/rules-based.js",
+      "require": "./cjs/rules-based.js",
+      "default": "./esm/rules-based.js"
     },
     "./package.json": "./package.json"
   },
@@ -44,27 +57,29 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/browser-core": "^6.19.0",
-    "@datadog/flagging-core": "0.3.3",
-    "@types/chrome": "^0.1.18"
+    "@datadog/browser-core": "7.1.0",
+    "@datadog/flagging-core": "3.1.1",
+    "@datadog/js-core": "0.0.3"
   },
   "peerDependencies": {
-    "@openfeature/core": "^1.8.0",
+    "@openfeature/core": "^1.9.2",
     "@openfeature/web-sdk": "^1.5.0"
   },
   "devDependencies": {
-    "@openfeature/core": "^1.8.1",
+    "@openfeature/core": "^1.9.2",
     "@openfeature/web-sdk": "^1.5.0",
-    "@types/jest": "^29.4.0",
-    "@types/node": "^18.0.0",
+    "@types/chrome": "^0.2.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
     "fake-indexeddb": "^6.2.5",
     "jest": "^30.0.4",
     "jest-environment-jsdom": "^30.0.4",
     "jest-util": "^30.0.2",
-    "jsdom": "^24.0.0",
+    "jsdom": "^29.0.1",
     "npm-run-all": "^4.1.5",
     "ts-jest": "^29.4.0",
     "ts-loader": "^9.5.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "whatwg-fetch": "^3.6.20"
   }
 }

@@ -5,3 +5,8 @@ if (typeof globalThis.structuredClone === 'undefined') {
 
 // Auto-register fake IndexedDB globals before any test code runs
 import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+
+beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory()
+})

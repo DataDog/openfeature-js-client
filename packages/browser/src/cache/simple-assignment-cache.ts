@@ -1,47 +1,21 @@
-import {
-  type AbstractAssignmentCache,
-  type AssignmentCacheEntry,
-  NonExpiringInMemoryAssignmentCache,
-} from '@datadog/flagging-core'
+import { LRUInMemoryAssignmentCache } from '@datadog/flagging-core'
 
-import type { BulkReadAssignmentCache, BulkWriteAssignmentCache } from './hybrid-assignment-cache'
+import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
 
-/** An {@link BulkWriteAssignmentCache} assignment cache backed by an in-memory {@link Map} */
-export default class SimpleAssignmentCache implements BulkWriteAssignmentCache, BulkReadAssignmentCache {
-  private readonly store: Map<string, string>
-  private readonly cache: AbstractAssignmentCache<Map<string, string>>
-
+/** A bounded in-memory exposure cache, also used to serve persisted entries. */
+export default class SimpleAssignmentCache extends LRUInMemoryAssignmentCache {
   constructor() {
-    this.store = new Map<string, string>()
-    this.cache = new NonExpiringInMemoryAssignmentCache(this.store)
-  }
-
-  init(): Promise<void> {
-    return Promise.resolve()
-  }
-
-  set(key: AssignmentCacheEntry): void {
-    this.cache.set(key)
-  }
-
-  has(key: AssignmentCacheEntry): boolean {
-    return this.cache.has(key)
+    super(MAX_EXPOSURE_CACHE_ENTRIES)
   }
 
   setEntries(entries: [string, string][]): void {
-    const { store } = this
-    // it's important to call store.set() directly here because we want to set the raw entries into the cache, bypassing
-    // the AbstractAssignmentCache logic, which takes an AssignmentCacheKey instead.
+    // Load serialized entries through the same capacity limit as new exposures.
     entries.forEach(([key, value]) => {
-      store.set(key, value)
+      this.delegate.set(key, value)
     })
   }
 
   getEntries(): Promise<[string, string][]> {
-    return Promise.resolve(Array.from(this.cache.entries()))
-  }
-
-  clear(): void {
-    this.cache.clear()
+    return Promise.resolve(Array.from(this.entries()))
   }
 }

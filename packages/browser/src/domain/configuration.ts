@@ -1,6 +1,5 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
-import { display, validateAndBuildConfiguration } from '@datadog/browser-core'
-import { createEndpointBuilder, type TrackType } from '@datadog/browser-core/cjs/domain/configuration'
+import { validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
@@ -9,16 +8,11 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
 /**
  * Init Configuration for the Flagging SDK.
  */
-export interface FlaggingInitConfiguration extends InitConfiguration {
+export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
   /**
    * The RUM application ID.
    */
   applicationId?: string
-
-  /**
-   * Initial flags configuration (precomputed flags)
-   */
-  initialFlagsConfiguration?: FlagsConfiguration
 
   /**
    * RUM integration options
@@ -48,7 +42,8 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
   enableFlagEvaluationTracking?: boolean
 
   /**
-   * Whether to include feature flag assignment details in RUM events (default: true)
+   * Whether to enable RUM integration (default: true). This includes feature flag assignment details in RUM events
+   * and flat primitive RUM user properties in the OpenFeature evaluation context.
    * See: https://docs.datadoghq.com/real_user_monitoring/feature_flag_tracking/
    */
   enableRumFeatureFlagTracking?: boolean
@@ -57,6 +52,16 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Flag evaluation tracking interval in milliseconds (default: 10000ms)
    */
   flagEvaluationTrackingInterval?: number
+}
+
+/**
+ * Init Configuration for the online Flagging provider.
+ */
+export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfiguration {
+  /**
+   * Initial flags configuration (precomputed flags)
+   */
+  initialFlagsConfiguration?: FlagsConfiguration
 
   /**
    * Custom headers to add to the request to the Datadog API.
@@ -72,25 +77,33 @@ export interface FlaggingInitConfiguration extends InitConfiguration {
    * Proxy URL for flagging configuration requests. If set, this will be used instead of the site parameter.
    */
   flaggingProxy?: string
+
+  /**
+   * Fetch implementation used only for flag configuration requests. It receives the provider-generated RequestInit,
+   * including authentication and configured custom headers. Exposure and flag-evaluation intake requests do not use it.
+   */
+  flagConfigurationFetch?: typeof globalThis.fetch
 }
 
-export interface FlaggingConfiguration extends Configuration {
+export interface FlaggingTrackingConfiguration extends Configuration {
   applicationId?: string
   flagEvaluationTrackingInterval: number
-  fetchFlagsConfiguration: (context: EvaluationContext) => Promise<FlagsConfiguration>
 
-  // [FlagEval] TODO: Remove this once we have a proper endpoint builder from browser core SDK.
+  // Inherited from Configuration via TransportConfiguration.
+  // Declared explicitly here to make the contract visible to consumers of FlaggingTrackingConfiguration.
   flagEvaluationEndpointBuilder: EndpointBuilder
 }
 
-export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration
-): FlaggingConfiguration | undefined {
-  if (!initConfiguration.applicationId) {
-    display.error('Application ID is not configured, no flagging data will be collected.')
-    return
-  }
+export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
+  fetchFlagsConfiguration: (
+    context: EvaluationContext,
+    options?: { signal?: AbortSignal }
+  ) => Promise<FlagsConfiguration>
+}
 
+export function validateAndBuildFlaggingTrackingConfiguration(
+  initConfiguration: FlaggingTrackingInitConfiguration
+): FlaggingTrackingConfiguration | undefined {
   const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
   if (!baseConfiguration) {
     return
@@ -99,9 +112,20 @@ export function validateAndBuildFlaggingConfiguration(
   return {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
-    // [FlagEval] TODO: Don't set this once we have a proper endpoint builder from browser core SDK
-    flagEvaluationEndpointBuilder: createEndpointBuilder(initConfiguration, 'flagevaluation' as TrackType),
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
     ...baseConfiguration,
+  }
+}
+
+export function validateAndBuildFlaggingConfiguration(
+  initConfiguration: FlaggingInitConfiguration
+): FlaggingConfiguration | undefined {
+  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration)
+  if (!trackingConfiguration) {
+    return
+  }
+
+  return {
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
+    ...trackingConfiguration,
   }
 }

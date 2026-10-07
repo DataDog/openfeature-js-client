@@ -1,7 +1,7 @@
 import { getGlobalObject } from '@datadog/browser-core'
 import type { EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
-import { createRumTrackingHook } from '../../src/openfeature/rumIntegration'
+import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from '../../src/openfeature/rumIntegration'
 
 describe('createRumTrackingHook', () => {
   const mockHookContext = {} as HookContext
@@ -82,5 +82,52 @@ describe('createRumTrackingHook', () => {
     hook.after!(mockHookContext, details)
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('my-flag', 'variant-key-a')
+  })
+
+  describe('RUM user context', () => {
+    it('should add flat primitive user properties to the evaluation context', () => {
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => ({
+          id: 'rum-user',
+          user_email: 'rum@example.com',
+          company_name: 'Example, Inc.',
+          age: 42,
+          active: true,
+          profile: { plan: 'enterprise' },
+          roles: ['admin'],
+        }),
+      }
+
+      expect(
+        enrichEvaluationContextWithRumUser({
+          targetingKey: 'explicit-user',
+          user_email: 'explicit@example.com',
+          request_attribute: 'request-value',
+        })
+      ).toEqual({
+        targetingKey: 'explicit-user',
+        user_email: 'explicit@example.com',
+        company_name: 'Example, Inc.',
+        age: 42,
+        active: true,
+        request_attribute: 'request-value',
+      })
+    })
+
+    it('should preserve context when RUM user lookup is unavailable', () => {
+      const context = { targetingKey: 'explicit-user' }
+      expect(enrichEvaluationContextWithRumUser(context)).toBe(context)
+
+      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+      globalObject.DD_RUM = {
+        addFeatureFlagEvaluation: jest.fn(),
+        getUser: () => {
+          throw new Error('RUM is not initialized')
+        },
+      }
+      expect(enrichEvaluationContextWithRumUser(context)).toBe(context)
+    })
   })
 })

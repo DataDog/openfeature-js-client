@@ -18,6 +18,7 @@ export function createExposureEvent<T extends FlagValue>(
   }
 
   const { targetingKey: id = '', ...attributes } = context
+  const serialId = details.flagMetadata?.__dd_split_serial_id
 
   return {
     allocation: {
@@ -29,6 +30,7 @@ export function createExposureEvent<T extends FlagValue>(
     variant: {
       key: variantKey,
     },
+    ...(typeof serialId === 'number' ? { serial_id: serialId } : {}),
     subject: {
       id,
       attributes,

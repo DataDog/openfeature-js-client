@@ -1,7 +1,10 @@
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
+import { type TimeStamp, timeStampNow } from '../time'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
+
+const EVALUATION_TIMESTAMP_METADATA_KEY = '__dd_eval_timestamp_ms'
 
 interface FlagEvaluationAggregationData {
   flagKey: string
@@ -11,8 +14,8 @@ interface FlagEvaluationAggregationData {
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
   count: number
-  firstEvaluation: number
-  lastEvaluation: number
+  firstEvaluation: TimeStamp
+  lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
 }
@@ -44,7 +47,7 @@ export class FlagEvaluationAggregator {
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
     const keyString = this.createAggregationKeyString(context, details, error)
-    const timestamp = Date.now()
+    const timestamp = getEvaluationTimestamp(details)
 
     const existingData = this.aggregatedData.get(keyString)
     if (existingData) {
@@ -54,7 +57,7 @@ export class FlagEvaluationAggregator {
         existingData.error = error
       }
     } else {
-      const runtimeDefaultUsed = details.reason === 'DEFAULT' || details.reason === 'ERROR'
+      const runtimeDefaultUsed = isRuntimeDefaultUsed(details)
       const allocationKey = details.flagMetadata?.allocationKey as string
       const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
       const { targetingKey, ...targetingContext } = context
@@ -80,8 +83,9 @@ export class FlagEvaluationAggregator {
       return
     }
 
+    const flushTimestamp = timeStampNow()
     const events = Array.from(this.aggregatedData.values()).map((data) =>
-      createFlagEvaluationEvent(data, data.firstEvaluation)
+      createFlagEvaluationEvent(data, flushTimestamp)
     )
     this.aggregatedData.clear()
     this.onFlush(events)
@@ -109,4 +113,18 @@ export class FlagEvaluationAggregator {
       })
     )
   }
+}
+
+function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): TimeStamp {
+  const metadataTimestamp = details.flagMetadata?.[EVALUATION_TIMESTAMP_METADATA_KEY]
+  return Number.isFinite(metadataTimestamp) ? (metadataTimestamp as TimeStamp) : timeStampNow()
+}
+
+function isRuntimeDefaultUsed<T extends FlagValue>(details: EvaluationDetails<T>): boolean {
+  // Datadog-assigned evaluations attach a platform variation key to OpenFeature
+  // details.variant. Browser precomputed flags model variationKey as a string, and
+  // server UFC variants are keyed by string. Default/error fallback paths omit the
+  // variant, so nullish variant is the SDK-visible signal that the caller's default
+  // value was returned.
+  return details.variant == null
 }

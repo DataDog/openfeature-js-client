@@ -1,16 +1,13 @@
+import { FlagEvaluationAggregator } from '@datadog/flagging-core'
 import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
 import type { FlaggingConfiguration } from '../../src/domain/configuration'
-import { createFlagEvaluationTrackingHook } from '../../src/openfeature/flagEvaluations'
+import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
 
 const mockConfiguration: FlaggingConfiguration = {
   flagEvaluationTrackingInterval: 1000,
   applicationId: 'test-app-id',
   fetchFlagsConfiguration: jest.fn(),
   service: 'test-service',
-  batchBytesLimit: 64 * 1024,
-  batchMessagesLimit: 500,
-  messageBytesLimit: 256 * 1024,
-  flushTimeout: 30000 as any,
   exposuresEndpointBuilder: jest.fn() as any,
   flagEvaluationEndpointBuilder: jest.fn() as any,
   // Add required Configuration properties
@@ -18,8 +15,11 @@ const mockConfiguration: FlaggingConfiguration = {
   version: '1.0.0',
   sessionSampleRate: 100,
   telemetrySampleRate: 20,
-  replica: {} as any,
-  sendToExtensionPredicate: () => false,
+  // `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
+  // fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
+  // that createFlagEvalEVPHook never reads. All @datadog/browser-core imports used by
+  // createFlagEvalEVPHook are mocked at the module level below, so missing fields don't
+  // cause runtime failures.
 } as unknown as FlaggingConfiguration
 
 jest.mock('@datadog/browser-core', () => ({
@@ -37,17 +37,15 @@ jest.mock('@datadog/browser-core', () => ({
   dateNow: jest.fn(() => 1234567890),
 }))
 
-describe('createFlagEvaluationTrackingHook', () => {
+describe('createFlagEvalEVPHook', () => {
   it('should create a hook that tracks flag evaluations', () => {
-    const hook = createFlagEvaluationTrackingHook(mockConfiguration)
+    const hook = createFlagEvalEVPHook(mockConfiguration)
 
     expect(hook).toBeDefined()
     expect(hook.after).toBeDefined()
   })
 
   it('should handle evaluation tracking in after hook', () => {
-    const hook = createFlagEvaluationTrackingHook(mockConfiguration)
-
     const mockContext: HookContext = {
       flagKey: 'test-flag',
       defaultValue: true,
@@ -70,6 +68,13 @@ describe('createFlagEvaluationTrackingHook', () => {
         warn: jest.fn(),
         error: jest.fn(),
       } as any,
+      hookData: {
+        set: jest.fn(),
+        get: jest.fn(),
+        has: jest.fn(),
+        delete: jest.fn(),
+        clear: jest.fn(),
+      } as any,
     }
 
     const mockDetails: EvaluationDetails<boolean> = {
@@ -83,8 +88,17 @@ describe('createFlagEvaluationTrackingHook', () => {
       },
     }
 
+    const effectiveContext = {
+      targetingKey: 'rum-user',
+      user_email: 'rum@example.com',
+    }
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    const hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
+
     expect(() => {
       hook.after?.(mockContext, mockDetails)
     }).not.toThrow()
+    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails)
+    addEvaluationSpy.mockRestore()
   })
 })

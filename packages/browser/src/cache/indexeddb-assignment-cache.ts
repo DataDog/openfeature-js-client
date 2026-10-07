@@ -1,114 +1,76 @@
-import {
-  type AssignmentCacheEntry,
-  assignmentCacheKeyToString,
-  assignmentCacheValueToString,
-  buildStorageKeySuffix,
-} from '@datadog/flagging-core'
+import type { AssignmentCacheEntry } from '@datadog/flagging-core'
+import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
+import { withStore } from './indexeddb-store'
+import SimpleAssignmentCache from './simple-assignment-cache'
 
-import type { BulkReadAssignmentCache } from './hybrid-assignment-cache'
-import { openDB, STORE_NAME } from './indexeddb-store'
-
-export class IndexedDBAssignmentCache implements BulkReadAssignmentCache {
+/** Keep exposure checks synchronous. Persist bounded snapshots without blocking evaluation. */
+export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private readonly storageKey: string
-  private readonly mirror: Map<string, string> = new Map()
+  private operations: Promise<void> = Promise.resolve()
+  private initialization?: Promise<void>
   private persistScheduled = false
+  private generation = 0
 
-  constructor(clientToken: string) {
-    this.storageKey = `assignments-${buildStorageKeySuffix(clientToken)}`
+  constructor(storageKeySuffix: string) {
+    super()
+    this.storageKey = `assignments-${storageKeySuffix}`
   }
 
-  /** No-op — IndexedDB entries are loaded lazily via getEntries(). */
   init(): Promise<void> {
-    return Promise.resolve()
+    if (!this.initialization) {
+      const generation = this.generation
+      this.initialization = this.enqueue(async () => {
+        const stored: unknown = await withStore('readonly', (store) => store.get(this.storageKey))
+        // A clear during loading must not restore the previous configuration's exposures.
+        if (generation !== this.generation || !Array.isArray(stored)) return
+        const current = Array.from(this.entries())
+        super.clear()
+        this.setEntries(stored.filter(isEntry))
+        // Evaluations during loading take precedence over older persisted values.
+        this.setEntries(current)
+        if (stored.length > MAX_EXPOSURE_CACHE_ENTRIES) this.persist()
+      })
+    }
+    return this.initialization
   }
 
-  /** Fire-and-forget persist to IndexedDB. Never blocks the caller, never throws. */
   set(entry: AssignmentCacheEntry): void {
-    const key = assignmentCacheKeyToString(entry)
-    const value = assignmentCacheValueToString(entry)
-    this.mirror.set(key, value)
+    void this.init()
+    super.set(entry)
     this.persist()
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  has(_entry: AssignmentCacheEntry): boolean {
-    throw new Error('This should never be called for IndexedDBAssignmentCache, use getEntries() instead.')
-  }
-
-  /** Read all persisted entries. Returns [] on any error — never throws. */
-  async getEntries(): Promise<[string, string][]> {
-    try {
-      const db = await openDB()
-      try {
-        const entries = await new Promise<[string, string][] | undefined>((resolve, reject) => {
-          const tx = db.transaction(STORE_NAME, 'readonly')
-          const store = tx.objectStore(STORE_NAME)
-          const request = store.get(this.storageKey)
-          request.onsuccess = () => resolve(request.result as [string, string][] | undefined)
-          request.onerror = () => reject(request.error)
-        })
-        if (Array.isArray(entries)) {
-          this.mirror.clear()
-          for (const [k, v] of entries) {
-            this.mirror.set(k, v)
-          }
-          return entries
-        }
-      } finally {
-        db.close()
-      }
-    } catch {
-      // Silently fail — persistence should never break the SDK
-    }
-    return []
-  }
-
-  /** Remove persisted entries. Never throws. */
-  async clear(): Promise<void> {
-    this.mirror.clear()
-    try {
-      const db = await openDB()
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const tx = db.transaction(STORE_NAME, 'readwrite')
-          const store = tx.objectStore(STORE_NAME)
-          store.delete(this.storageKey)
-          tx.oncomplete = () => resolve()
-          tx.onerror = () => reject(tx.error)
-          tx.onabort = () => reject(tx.error)
-        })
-      } finally {
-        db.close()
-      }
-    } catch {
-      // Silently fail
-    }
-  }
-
-  /**
-   * Schedule a fire-and-forget write for the next microtask. Coalesces rapid set() calls
-   * into a single IDB transaction, avoiding O(n^2) write volume and out-of-order races.
-   */
-  private persist(): void {
-    if (this.persistScheduled) {
-      return
-    }
-    this.persistScheduled = true
-    queueMicrotask(() => {
-      this.persistScheduled = false
-      const entries = Array.from(this.mirror.entries())
-      openDB()
-        .then((db) => {
-          const tx = db.transaction(STORE_NAME, 'readwrite')
-          const store = tx.objectStore(STORE_NAME)
-          store.put(entries, this.storageKey)
-          tx.oncomplete = () => db.close()
-          tx.onerror = () => db.close()
-          tx.onabort = () => db.close()
-        })
-        .catch(() => {
-          // Silently fail — persistence should never break the SDK
-        })
+  clear(): Promise<void> {
+    super.clear()
+    this.generation++
+    // New entries need a write after the delete, even if an older write is queued.
+    this.persistScheduled = false
+    return this.enqueue(async () => {
+      await withStore('readwrite', (store) => store.delete(this.storageKey))
     })
   }
+
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    this.operations = this.operations.then(operation).catch(() => {
+      // Storage failures must not stop evaluation or later persistence attempts.
+    })
+    return this.operations
+  }
+
+  private persist(): void {
+    if (this.persistScheduled) return
+    this.persistScheduled = true
+    void Promise.resolve().then(() => {
+      void this.enqueue(async () => {
+        this.persistScheduled = false
+        await withStore('readwrite', (store) => store.put(Array.from(this.entries()), this.storageKey))
+      })
+    })
+  }
+}
+
+function isEntry(value: unknown): value is [string, string] {
+  return (
+    Array.isArray(value) && value.length === 2 && value.every((part) => typeof part === 'string') && value[0] !== ''
+  )
 }

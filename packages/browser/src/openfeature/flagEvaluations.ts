@@ -9,28 +9,27 @@ import {
   Observable,
 } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
-import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
+import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
-export function createFlagEvaluationTrackingHook(configuration: FlaggingConfiguration): Hook {
+export function createFlagEvalEVPHook(
+  configuration: FlaggingTrackingConfiguration,
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+): ManagedTrackingHook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
+  const sessionExpireObservable = new Observable<void>()
   const flagEvaluationBatch = createBatch({
     encoder: createIdentityEncoder(),
-    request: createHttpRequest(
-      [configuration.flagEvaluationEndpointBuilder],
-      configuration.batchBytesLimit,
-      (error: RawError) => {
-        addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-      }
-    ),
-    flushController: createFlushController({
-      messagesLimit: configuration.batchMessagesLimit,
-      bytesLimit: configuration.batchBytesLimit,
-      durationLimit: configuration.flushTimeout,
-      pageMayExitObservable,
-      sessionExpireObservable: new Observable(),
+    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
+      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
     }),
-    messageBytesLimit: configuration.messageBytesLimit,
+    flushController: createFlushController({
+      pageMayExitObservable,
+      sessionExpireObservable,
+    }),
   })
 
   const aggregator = new FlagEvaluationAggregator(
@@ -64,14 +63,23 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
 
   aggregator.start()
 
-  pageMayExitObservable.subscribe(() => {
+  const pageExitSubscription = pageMayExitObservable.subscribe(() => {
     aggregator.stop()
   })
 
   return {
+    shutdown: () => {
+      try {
+        aggregator.stop()
+        sessionExpireObservable.notify()
+      } finally {
+        pageExitSubscription.unsubscribe()
+        flagEvaluationBatch.stop()
+      }
+    },
     after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       try {
-        aggregator.addEvaluation(hookContext.context, details)
+        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details)
       } catch (error) {
         addTelemetryDebug('Error adding evaluation to aggregator', {
           'error.message': error instanceof Error ? error.message : String(error),
@@ -79,4 +87,11 @@ export function createFlagEvaluationTrackingHook(configuration: FlaggingConfigur
       }
     },
   }
+}
+
+export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
+  const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
+  return configuration
+    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration))
+    : composeDatadogTrackingHooks()
 }

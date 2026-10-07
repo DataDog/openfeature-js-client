@@ -6,25 +6,32 @@ import {
   createIdentityEncoder,
   Observable,
 } from '@datadog/browser-core'
-import type { FlaggingConfiguration } from '../domain/configuration'
+import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 
 export function startExposuresBatch(
-  configuration: FlaggingConfiguration,
+  configuration: FlaggingTrackingConfiguration,
   reportError: (error: RawError) => void,
   pageMayExitObservable: Observable<PageMayExitEvent>
 ) {
+  const sessionExpireObservable = new Observable<void>()
   const batch = createBatch({
     encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.exposuresEndpointBuilder], configuration.batchBytesLimit, reportError),
+    request: createHttpRequest([configuration.exposuresEndpointBuilder], reportError),
     flushController: createFlushController({
-      messagesLimit: configuration.batchMessagesLimit,
-      bytesLimit: configuration.batchBytesLimit,
-      durationLimit: configuration.flushTimeout,
       pageMayExitObservable,
-      sessionExpireObservable: new Observable(),
+      sessionExpireObservable,
     }),
-    messageBytesLimit: configuration.messageBytesLimit,
   })
 
-  return batch
+  return {
+    ...batch,
+    stop: () => {
+      // Flush pending exposures and cancel the batch timeout before removing subscriptions.
+      try {
+        sessionExpireObservable.notify()
+      } finally {
+        batch.stop()
+      }
+    },
+  }
 }

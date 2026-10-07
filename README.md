@@ -3,8 +3,6 @@
 This repository hosts Browser and React Native clients, as well as the
 NodeJS flag evaluator, for Datadog's OpenFeature implementation.
 
-**Note: This project is currently in Preview; expect breaking API changes.**
-
 ## Documentation
 
 Please see the full documentation site: [Getting Started with Feature Flags](https://docs.datadoghq.com/getting_started/feature_flags/)
@@ -25,6 +23,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 
 // Initialize the provider
 const provider = new DatadogProvider({
+  applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
   enableExposureLogging: true,
   enableFlagEvaluationTracking: true,
@@ -32,7 +31,7 @@ const provider = new DatadogProvider({
 })
 
 // Set the provider
-await OpenFeature.setProvider(provider)
+await OpenFeature.setProviderAndWait(provider)
 
 // Get a client and evaluate flags
 const client = OpenFeature.getClient()
@@ -58,8 +57,41 @@ const provider = new DatadogProvider({
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
+
+  // Optional Fetch-compatible implementation for flag configuration requests
+  flagConfigurationFetch: globalThis.fetch,
 })
 ```
+
+The custom Fetch implementation applies only to flag configuration requests. Exposure and flag-evaluation intake
+requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
+authentication and any configured custom headers, and may route or transform the request as needed.
+
+### Request Timeouts and Retries for npm Consumers
+
+The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose
+these helpers. The wrappers preserve the provider's cancellation signal and can be composed:
+
+```javascript
+import { DatadogProvider, withRetry, withTimeout } from '@datadog/openfeature-browser'
+
+const customFetch = withRetry(withTimeout(globalThis.fetch, 5_000), 1)
+
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  flagConfigurationFetch: customFetch,
+})
+```
+
+Here, each attempt has a five-second timeout and `1` allows one retry after the initial request. The timeout includes
+response-body download. The wrapper buffers the response body and is intended for flag configuration responses. A
+timeout of `0` disables the timer. Valid timeout values end at `2_147_483_647`. Retry counts range from `0` to `10`.
+`withRetry` uses randomized exponential backoff for Fetch `TypeError` failures, timeout failures, HTTP 408, and HTTP
+5xx responses. On HTTP 503, a valid `Retry-After` value up to 30 seconds is treated as a minimum delay before jittered
+backoff is added; responses that request a longer delay are not retried. It does not retry HTTP 429. Browsers report
+network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
+`withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
 ## Usage Examples
 
@@ -89,7 +121,8 @@ Context must be set globally before flag evaluation and affects all subsequent e
 // Set global context (async operation)
 await OpenFeature.setContext({
   targetingKey: 'user-123',
-  user: { id: 'user-123', email: 'user@example.com' },
+  userId: 'user-123',
+  userEmail: 'user@example.com',
 })
 
 // Now evaluate flags with the context
@@ -97,6 +130,29 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+## Contributing
+
+### Setup
+
+This project uses [`@lavamoat/allow-scripts`](https://github.com/LavaMoat/LavaMoat/tree/main/packages/allow-scripts) to protect against supply-chain attacks by blocking all dependency lifecycle scripts by default. Only explicitly allowlisted packages can run postinstall scripts.
+
+To install dependencies:
+
+```bash
+yarn setup
+```
+
+Do **not** use bare `yarn install` for local development — it will skip the postinstall scripts that some dependencies need (e.g. `nx`, `unrs-resolver`).
+
+### Adding new packages
+
+When you add a dependency that includes lifecycle scripts (preinstall/install/postinstall):
+
+1. Inspect the dependency's install scripts to verify they are safe.
+2. Run `yarn allow-scripts auto` to update the allowlist in `package.json`.
+3. Review the generated `lavamoat.allowScripts` entries — set trusted packages to `true` and leave untrusted ones as `false`.
+4. Run `yarn setup` to re-install with the updated allowlist.
 
 ## End-user license agreement
 

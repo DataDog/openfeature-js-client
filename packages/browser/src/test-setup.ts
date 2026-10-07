@@ -1,3 +1,6 @@
+// Polyfill fetch for jsdom environment
+import 'whatwg-fetch'
+
 // Mock build environment globals for tests
 // This value is set during regular builds.
 Object.defineProperty(global, '__BUILD_ENV__SDK_VERSION__', {

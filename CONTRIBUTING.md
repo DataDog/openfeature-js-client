@@ -8,8 +8,9 @@ This is a monorepo managed with Lerna that contains multiple packages:
 
 - **`@datadog/flagging-core`** - Runtime-agnostic flag-evaluation logic
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
+- **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **fixed versioning**, meaning all packages share the same version number and are released together. The version is managed centrally in `lerna.json`.
+The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions on release (via `command.version.exact` in `lerna.json`) to prevent version skew.
 
 ## Development Setup
 
@@ -43,6 +44,39 @@ The project uses **fixed versioning**, meaning all packages share the same versi
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Manual React Native Example
+
+Run `yarn example:react-native` to build and pack the local core package and prepare
+an isolated Expo app. The same command reuses a per-checkout cache directory outside
+the repository and reinstalls a fresh core tarball on every run. Stop Metro before
+refreshing, then follow the printed `cd` / `npm start` commands to launch Expo Go
+on an iOS/Android simulator or device. The app verifies evaluation on Hermes and
+supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
+
+See [the manual app README](test-app-react-native/manual/README.md) for prerequisites,
+expected results, and how to rebuild after SDK changes. Unlike the automated
+`yarn test:react-native-install` smoke test, this runs the code in a native JS runtime,
+not Node.
+
+## Entrypoint Guardrails
+
+The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
+
+For a new core subpath, add its source module and `package.json.exports` mapping, then run the
+normal core build. Compatibility manifests, declaration mappings, publish-file lists, bundles,
+and smoke-test imports are derived automatically. See [Adding a public entry point](packages/core/README.md#adding-a-public-entry-point).
+Commit the generated metadata; `yarn check:entrypoints` rejects drift before CI builds or packing.
+
+Recurring checks keep these contracts visible:
+
+- `yarn test:build` checks generated entrypoint metadata and tests the generator, including adding a second/nested export without bundler registration.
+- `yarn test:react-native-install` discovers every packed JavaScript subpath and checks modern and legacy resolution in the Metro matrix.
+
+- `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
+- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`. The report compares `DatadogProvider` (precomputed fetching) with `DatadogCoreProvider` plus `fetchRulesConfiguration` (local rules evaluation), using the same OpenFeature initialization, boolean evaluation, and context-change flow with telemetry disabled for both. Playwright supplies configuration responses outside the measured bundles. These are complete scenario JS sizes, including OpenFeature and the shared harness, not isolated SDK or decoder sizes. Additional parser/fetch-wrapper smoke scenarios remain part of the dependency checks, summarized as a pass/fail result rather than a size table. Tracking-hook sizes are reported separately. In GitHub Actions the report is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers or rules-based bundles lack them.
+
+The PR comment is only created or updated when the PR changes a bundle-relevant path. The allowlist in `scripts/comment-entrypoint-bundle-sizes.js` covers `packages/browser/**`, `packages/core/**`, `test-app/**`, `scripts/build/**`, `scripts/lib/**`, the package-install/report/webpack-runner scripts, root dependency and build configuration, `.yarn/**`, and `.github/workflows/ci.yaml`. Markdown files are excluded. The filter checks the full PR diff, including deletions and both paths of renames, and publishes conservatively if GitHub's 3,000-file listing limit is reached. Report generation, the CI summary, smoke tests, and dependency checks still run regardless of the changed paths. `yarn test:build` covers the filter and comment creation/update behavior with mocked GitHub responses.
+
 ## Release Process
 
 ### Prerequisites
@@ -68,14 +102,20 @@ The project supports different build modes that affect how the SDK version is de
 #### 2. Release Mode (`release`)
 
 - Used for public releases
-- SDK version uses the actual version from `lerna.json`
+- SDK version uses the version from the package's `package.json`
 - This is the mode used for production releases
 
 #### 3. Canary Mode (`canary`)
 
 - Used on staging and production Datadog web app
-- SDK version format: `{lerna-version}-{commit-sha}`
+- SDK version format: `{package-version}-{commit-sha}`
 - Example: `0.1.0-alpha.2-a1b2c3d4`
+
+Run builds through `yarn build`, `yarn workspace <package-name> build`, or from the package directory. The build scripts read `package.json` from their working directory; release and canary builds fail if the package version cannot be read. Development builds continue to use `dev`.
+
+`yarn test:build` verifies package-specific version stamping and runs in regular CI.
+
+The publishing job sets `BUILD_MODE=release` for all steps, including the `prepack` rebuilds triggered by packing and publishing. CI also runs the packed-browser smoke test in release mode and verifies that configuration requests report the installed package's version.
 
 ### SDK Setups
 
@@ -86,30 +126,49 @@ The project also supports different SDK setups:
 
 ### Creating a Release
 
-#### NPM Tag Conventions
-
-The release workflow automatically determines the npm tag based on your release tag name:
-
-- **`alpha` tag**: Used for all prerelease versions that don't contain "preview"
-  - Example release tags: `v0.1.0-alpha.13`, `v0.2.0-beta.1`, `v1.0.0-rc.1`
-  - npm install: `npm install @datadog/flagging-core@alpha`
-
-- **`preview` tag**: Used for prerelease versions that contain "preview" in the tag
-  - Example release tags: `v0.1.0-preview.1`, `v0.2.0-preview.2`
-  - npm install: `npm install @datadog/flagging-core@preview`
-
-Both packages (core and browser) will be published with the same npm tag to maintain consistency.
+All packages are published with the `latest` npm tag.
 
 #### Step 1: Prepare for Release
 
 1. **Switch to a feature branch:**
+
    ```bash
+   # For independent releases (describe what's being released)
+   git checkout -b release/node-server-1.3.0
+   git checkout -b release/browser-and-node-server-1.3.0
+
+   # For unified releases (all packages with same version)
    git checkout -b release/v1.2.3
    ```
 
-#### Step 2: Prepare Package Dependencies
+#### Step 2: Pin Internal Dependencies
 
-2. **Update the version using the CLI:**
+2. **Ensure internal dependencies use exact versions:**
+
+   ```bash
+   yarn node ./scripts/release/update-peer-dependency-versions.js
+   ```
+
+   This script reads each package's current version and updates internal dependencies (like `@datadog/flagging-core`) to use exact versions without the `^` prefix. This prevents version skew between packages.
+
+   After running, verify the changes:
+
+   ```bash
+   git diff packages/*/package.json
+   ```
+
+   You should see changes like:
+
+   ```diff
+   -    "@datadog/flagging-core": "^1.2.1"
+   +    "@datadog/flagging-core": "1.2.1"
+   ```
+
+#### Step 3: Version the Package(s)
+
+3. **Update the version using the CLI:**
+
+   **For independent releases (recommended):**
 
    ```bash
    yarn release
@@ -117,31 +176,48 @@ Both packages (core and browser) will be published with the same npm tag to main
 
    This command:
    - Validates you're not on the `main` branch
-   - Runs `lerna version --exact --force-publish` to update the version
-   - Prompts for the new version number (applied to all packages)
-   - Creates version commits and tags
-   - Updates all package versions to match
-   - Pushes version tag to Github
+   - Runs `lerna version --exact`
+   - Prompts for version updates only for **changed** packages
+   - Creates version commits and tags per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
+   - Pushes version tags to Github
 
-#### Step 3: Publish via GitHub Release
+   **For unified releases (all packages with same version):**
+
+   ```bash
+   yarn release:all
+   ```
+
+   This command:
+   - Same as above, but uses `--force-publish` to prompt for **all** packages
+   - Use this when you want to release all packages together with the same version
+
+#### Step 4: Open and Merge the Release PR
+
+4. **Open a PR from your release branch and merge it with a merge commit — not a squash.**
+
+   `yarn release` pushes the version tag onto your branch commit. Squashing creates a new commit on `main` and orphans that tag, which breaks change detection on the _next_ release (Lerna falls back to an old tag and prompts to version packages that never changed). A merge commit keeps the tag reachable.
+
+#### Step 5: Publish via GitHub Release
 
 **Publishing is fully automated via GitHub workflows!**
 
 1. **Create a GitHub Release:**
    - Go to the GitHub repository
    - Click "Releases" → "Create a new release"
-   - Set the tag to match your version (e.g., `v0.1.0-alpha.8`)
-   - **Important:** Mark as "This is a pre-release" for alpha/beta versions
+   - Set the tag to match your version:
+     - Independent: `@datadog/openfeature-node-server@1.3.0` (publishes only that package)
+     - Unified: `v1.2.1` (publishes all packages)
    - Add release notes describing your changes or use the `Generate Release Notes` button
    - Click "Publish release"
 
+   **For multiple independent releases:** Create a separate GitHub release for each package tag (e.g., one for `@datadog/openfeature-browser@1.3.0` and one for `@datadog/openfeature-node-server@1.3.0`).
+
 2. **Automated Publishing Workflow:**
 
-   The `prerelease.yaml` workflow will automatically trigger and:
+   The `release.yaml` workflow will automatically trigger and:
 
    **Validation Phase:**
-   - Validates that the release is marked as a prerelease
-   - Checks that the GitHub release tag matches the version in `lerna.json`
+   - Checks that the GitHub release tag matches the corresponding package version
    - Fails fast if validation doesn't pass
 
    **Build and Publish Phase:**
@@ -150,20 +226,16 @@ Both packages (core and browser) will be published with the same npm tag to main
    - Creates package tarballs with `yarn lerna run pack --stream`
 
    **Publishing Sequence:**
-   1. **Determines npm tag** based on release tag:
-      - If release tag contains "preview" → uses `preview` npm tag
-      - Otherwise → uses `alpha` npm tag (default)
-   2. **Publishes core package first** (`@datadog/flagging-core`)
-      - Uses `NPM_PUBLISH_TOKEN_FLAGGING_CORE` secret
-      - Publishes with the determined npm tag (`alpha` or `preview`)
-   3. **Waits for npm registry propagation**
-      - Polls npm registry for up to 5 minutes
-      - Ensures core package is available before proceeding
-      - Prevents dependency resolution issues
-   4. **Publishes browser package** (`@datadog/openfeature-browser`)
-      - Uses `NPM_PUBLISH_TOKEN` secret
-      - Publishes with the same npm tag as core package
-      - Will have updated dependency on the just-published core package
+
+   _For independent releases_ (`@datadog/pkg@x.y.z`):
+   - Publishes only the specified package
+   - If publishing `browser` or `node-server`, waits for `flagging-core` to be available on npm first
+
+   _For unified releases_ (`vX.Y.Z`):
+   1. Publishes `@datadog/flagging-core` first
+   2. Waits for npm registry propagation (up to 5 minutes)
+   3. Publishes `@datadog/openfeature-browser`
+   4. Publishes `@datadog/openfeature-node-server`
 
 ### Package-Specific Build Commands
 
@@ -217,32 +289,33 @@ yarn pack
 
 ### Version Management
 
-Since this project uses **fixed versioning**:
+Since this project uses **independent versioning**:
 
-- All packages share the same version number (managed in `lerna.json`)
-- When running `yarn release`, Lerna will prompt for a single version update
-- All package versions are automatically synchronized
-- Peer dependencies are automatically updated to match the fixed version
-- A single version commit and tag is created for the entire project
+- Each package has its own version number (stored in its `package.json`)
+- `yarn release` prompts for version updates only for **changed** packages (independent releases)
+- `yarn release:all` prompts for **all** packages (unified releases)
+- Internal dependencies are pinned to exact versions (configured via `command.version.exact` in `lerna.json`)
+- Version commits and tags are created per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
+
+> ⚠️ **Version policy for `@datadog/flagging-core`:** Internal dependencies are pinned to **exact** versions (enforced by `scripts/internal-deps-validate.sh`), so our packages never pull a core update implicitly. From `2.0.0` onward, `flagging-core` follows normal semver — minor/patch for backward-compatible changes, major for breaking ones. Two rules still apply:
+>
+> 1. **Do not publish new `1.x` versions of `flagging-core`.** Legacy consumers still on `^1.2.1` would pull them and risk version skew; the `2.0.0` major bump exists to cap those consumers below `2.x`.
+> 2. **Bumping core does not reach dependents automatically.** Because `openfeature-browser` and `openfeature-node-server` pin core exactly, you must update each dependent's pin and re-release it (see [Step 2](#step-2-pin-internal-dependencies)) for consumers to pick up the new core.
 
 ### Automated Release Workflow Details
 
-The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures:
+The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 
-1. **Release Type Validation:**
-   - Only triggers on prerelease GitHub releases
-   - Prevents accidental production releases without proper workflow
+1. **Version Consistency Check:**
+   - Compares GitHub release tag with the corresponding package version
+   - Ensures tags and package versions are synchronized
 
-2. **Version Consistency Check:**
-   - Compares GitHub release tag with `lerna.json` version
-   - Ensures tags and versions are synchronized
-
-3. **Dependency Coordination:**
+2. **Dependency Coordination:**
    - Core package is published first
    - Waits for npm registry propagation (up to 5 minutes)
    - Browser package gets updated core dependency automatically
 
-4. **Build Integrity:**
+3. **Build Integrity:**
    - Uses `BUILD_MODE=release` for production builds
    - Replaces build environment variables correctly
    - Creates both npm packages and CDN bundles
@@ -277,7 +350,7 @@ The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures
 
 5. **Package creation test:**
    ```bash
-   yarn version  # Test dependency updates and package creation
+   yarn version  # Pins internal dependencies and creates package tarballs
    ```
 
 ### Troubleshooting
@@ -297,8 +370,8 @@ The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures
    - Check that all dependencies are installed
 
 4. **Version synchronization issues:**
-   - Run `yarn version` to update peer dependencies
-   - Check that all package versions match the version in `lerna.json`
+   - Run `yarn node ./scripts/release/update-peer-dependency-versions.js` to pin internal dependencies
+   - Verify internal dependencies use exact versions (no `^` prefix)
 
 5. **GitHub workflow failures:**
    - Check the Actions tab for detailed error logs
@@ -322,7 +395,7 @@ The GitHub Actions workflow (`prerelease.yaml`) includes several safety measures
 - Check the [README.md](README.md) for basic project information
 - Review the scripts in the `scripts/` directory for implementation details
 - Check the GitHub Actions tab for workflow status and logs
-- Examine the `scripts/cli` script for available commands (`release`, `version`, `typecheck`, `lint`)
+- Examine the `scripts/cli` script for available commands (`release`, `release_all`, `version`, `typecheck`, `lint`)
 - Open an issue on GitHub for bugs or feature requests
 
 #### Manual Publishing (Emergency Only)
@@ -336,21 +409,19 @@ If the automated workflow fails and you need to publish manually:
    yarn version
    ```
 
-2. **Determine npm tag** based on your version:
-   - For versions containing "preview": use `preview` tag
-   - For other prerelease versions: use `alpha` tag
-
-3. **Publish core package:**
+2. **Publish core package:**
 
    ```bash
    cd packages/core
-   npm publish --tag alpha  # or --tag preview
+   npm publish --tag latest
    ```
 
-4. **Wait for propagation, then publish browser package:**
+3. **Wait for propagation, then publish remaining packages:**
    ```bash
    cd packages/browser
-   npm publish --tag alpha  # or --tag preview (same as core)
+   npm publish --tag latest
+   cd ../node-server
+   npm publish --tag latest
    ```
 
 ## Third-Party Licenses

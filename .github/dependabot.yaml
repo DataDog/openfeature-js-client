@@ -1,57 +1,47 @@
-# Dependabot configuration for openfeature-js-client monorepo
-# Documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-#
-# Strategy:
-# - Single root config leverages yarn workspaces to update all packages together
-# - Grouped updates reduce PR noise (dev deps monthly, prod deps weekly)
-# - Dev dependency minor/patch updates are auto-merged via GitHub Actions
-
 version: 2
 updates:
-  # NPM dependencies (yarn workspaces handles the monorepo)
-  - package-ecosystem: 'npm'
-    directory: '/'
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: 'weekly'
-      day: 'monday'
+      interval: weekly
+      day: monday
       time: '09:00'
-      timezone: 'America/New_York'
+      timezone: America/New_York
     groups:
-      # Dev dependencies grouped together, monthly updates
       dev-dependencies:
-        dependency-type: 'development'
+        dependency-type: development
         update-types:
-          - 'minor'
-          - 'patch'
-      # Production minor/patch grouped together
+          - minor
+          - patch
       production-minor-patch:
-        dependency-type: 'production'
+        dependency-type: production
         update-types:
-          - 'minor'
-          - 'patch'
+          - minor
+          - patch
     labels:
-      - 'dependencies'
+      - dependencies
     commit-message:
-      prefix: '👷 chore(deps)'
-      prefix-development: '👷 chore(deps-dev)'
-      include: 'scope'
-
-  # GitHub Actions dependencies
-  - package-ecosystem: 'github-actions'
-    directory: '/'
+      prefix: "\U0001F477 chore(deps)"
+      prefix-development: "\U0001F477 chore(deps-dev)"
+      include: scope
+    cooldown:
+      default-days: 14
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: 'monthly'
-      day: 'monday'
+      interval: monthly
+      day: monday
       time: '09:00'
-      timezone: 'America/New_York'
+      timezone: America/New_York
     groups:
-      # Group all GHA updates together
       github-actions:
         patterns:
           - '*'
     labels:
-      - 'dependencies'
-      - 'github-actions'
+      - dependencies
+      - github-actions
     commit-message:
-      prefix: '👷 ci(deps)'
-      include: 'scope'
+      prefix: "\U0001F477 ci(deps)"
+      include: scope
+    cooldown:
+      default-days: 14

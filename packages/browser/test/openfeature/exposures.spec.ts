@@ -1,8 +1,9 @@
-import { INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
+import type { DDRum } from '../../src/openfeature/rumIntegration'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
@@ -43,6 +44,8 @@ describe('Exposures End-to-End', () => {
     await OpenFeature.clearContext()
     OpenFeature.clearHandlers()
     OpenFeature.clearHooks()
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    delete globalObject.DD_RUM
 
     // Reset IndexedDB to clear assignment cache between tests
     globalThis.indexedDB = new IDBFactory()
@@ -163,6 +166,172 @@ describe('Exposures End-to-End', () => {
     expect(exposureEvents).toEqual(expectedEvents)
   })
 
+  it('should include RUM user properties in exposure events', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    globalObject.DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => ({
+        id: 'rum-user',
+        user_email: 'rum@example.com',
+        company_name: 'Example, Inc.',
+      }),
+    }
+
+    await OpenFeature.setContext({ user_email: 'explicit@example.com' })
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+      })
+    )
+
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents[0].subject).toEqual({
+      id: 'rum-user',
+      attributes: {
+        user_email: 'explicit@example.com',
+        company_name: 'Example, Inc.',
+      },
+    })
+  })
+
+  it('should keep exposure identity aligned with the active configuration until context is reconciled', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    let rumUser = { id: 'rum-user-a', user_email: 'a@example.com' }
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    globalObject.DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => rumUser,
+    }
+
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+      })
+    )
+
+    rumUser = { id: 'rum-user-b', user_email: 'b@example.com' }
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    let exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents[0].subject).toEqual({
+      id: 'rum-user-a',
+      attributes: { user_email: 'a@example.com' },
+    })
+
+    await OpenFeature.setContext(OpenFeature.getContext())
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
+    expect(exposureEvents[exposureEvents.length - 1]?.subject).toEqual({
+      id: 'rum-user-b',
+      attributes: { user_email: 'b@example.com' },
+    })
+  })
+
+  it('should not include RUM user properties when RUM integration is disabled', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+    globalObject.DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => ({ id: 'rum-user', user_email: 'rum@example.com' }),
+    }
+
+    await OpenFeature.setContext({ targetingKey: 'explicit-user' })
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+        enableRumFeatureFlagTracking: false,
+      })
+    )
+
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents[0].subject).toEqual({
+      id: 'explicit-user',
+      attributes: {},
+    })
+  })
+
+  it('should send exposure events without RUM application attribution when applicationId is not provided', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(precomputedServerResponse),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    await OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    const provider = new DatadogProvider({
+      clientToken: 'test-client-token',
+      env: 'test',
+      site: INTAKE_SITE_STAGING,
+      enableExposureLogging: true,
+    })
+    await OpenFeature.setProviderAndWait(provider)
+
+    OpenFeature.getClient().getStringValue('string-flag', 'default')
+    triggerBatch()
+
+    const exposuresCalls = getExposuresCalls()
+    expect(exposuresCalls).toHaveLength(1)
+
+    const [event] = parseExposureEvents(exposuresCalls[0][1].body)
+    expect(event.rum).toEqual({ view: { url: 'http://localhost/' } })
+  })
+
   it('should not send exposure events when exposure logging is disabled', async () => {
     // Mock server response
     fetchMock.mockImplementation((url: string) => {
@@ -275,6 +444,58 @@ describe('Exposures End-to-End', () => {
 
       expect(exposureEvents).toEqual(expectedEvents)
     }
+  })
+
+  it('should send serial_id only for flags whose precomputed assignment carries one', async () => {
+    const responseWithSerialId = {
+      ...precomputedServerResponse,
+      data: {
+        ...precomputedServerResponse.data,
+        attributes: {
+          ...precomputedServerResponse.data.attributes,
+          flags: {
+            'string-flag': {
+              ...precomputedServerResponse.data.attributes.flags['string-flag'],
+              serialId: 340132,
+            },
+            'boolean-flag': precomputedServerResponse.data.attributes.flags['boolean-flag'],
+          },
+        },
+      },
+    }
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('exposures')) {
+        return Promise.resolve({ ok: true, status: 200 })
+      }
+      if (url.includes('precompute-assignments')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(responseWithSerialId),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    await OpenFeature.setContext({ targetingKey: 'test-user-123' })
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({
+        ...baseProviderConfig,
+        enableExposureLogging: true,
+      })
+    )
+
+    const client = OpenFeature.getClient()
+    client.getStringValue('string-flag', 'default')
+    client.getBooleanValue('boolean-flag', false)
+    triggerBatch()
+
+    const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
+    expect(exposureEvents).toHaveLength(2)
+
+    const byFlagKey = new Map(exposureEvents.map((event) => [event.flag.key, event]))
+    expect(byFlagKey.get('string-flag').serial_id).toBe(340132)
+    expect(byFlagKey.get('boolean-flag')).not.toHaveProperty('serial_id')
   })
 
   describe('exposure logging deduplication', () => {
@@ -421,7 +642,6 @@ describe('Exposures End-to-End', () => {
                 variationKey: 'variation-a',
                 variationType: 'STRING',
                 variationValue: 'red',
-                extraLogging: {},
                 doLog: true,
                 reason: 'TARGETING_MATCH',
               },
@@ -442,7 +662,6 @@ describe('Exposures End-to-End', () => {
                 variationKey: 'variation-b',
                 variationType: 'STRING',
                 variationValue: 'blue',
-                extraLogging: {},
                 doLog: true,
                 reason: 'TARGETING_MATCH',
               },
@@ -567,14 +786,15 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch new configuration with different createdAt (cache should be cleared)
+      // Fetch the same assignment with a changed configuration timestamp.
       await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
 
-      // Evaluate same flag - should log again because cache was cleared
+      // Receiving configuration does not itself emit an exposure.
+      expect(getExposuresCalls()).toHaveLength(1)
+      // The next evaluation can emit another exposure despite identical assignment IDs.
       client.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      // Should have 2 exposure calls (cache was cleared)
       expect(getExposuresCalls()).toHaveLength(2)
     })
 

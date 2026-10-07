@@ -6,6 +6,232 @@
 
 ---
 
+## @datadog/flagging-core@3.1.1
+
+**Bug Fixes:**
+
+- Support legacy Metro resolution of `@datadog/flagging-core/rules-based` so React Native consumers can import rules-based APIs when package exports are disabled ([#402](https://github.com/DataDog/openfeature-js-client/pull/402)) [CORE]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.1.1`. Their package versions are unchanged and are not part of this release.
+
+## @datadog/flagging-core@3.1.0, @datadog/openfeature-node-server@2.4.0
+
+**Features:**
+
+- Bind the root-level `observeFullEvaluationData` privacy choice to the configuration used for each server-side flag evaluation and expose it as `__dd_observe_full_evaluation_data` result metadata. Consent is captured once, requires the literal boolean `true`, and fails closed across JSON and protobuf success, default, error, and exception paths ([#388](https://github.com/DataDog/openfeature-js-client/pull/388)) [CORE] [NODE-SERVER]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.1.0`. The browser package version is unchanged and is not part of this release.
+
+## @datadog/openfeature-browser@2.0.0
+
+**Breaking Changes:**
+
+- Remove the inherited, deprecated `allowFallbackToLocalStorage` initialization option through the upgrade to `@datadog/browser-core@7.1.0`. Applications that specify this option should remove it ([#286](https://github.com/DataDog/openfeature-js-client/pull/286)) [BROWSER]
+
+**Features:**
+
+- Add the evaluation-only `DatadogCoreProvider` through the opt-in `@datadog/openfeature-browser/rules-based` entrypoint. Applications supply precomputed or rules-based configurations and can evaluate rules locally as the OpenFeature context changes, without built-in fetching or telemetry ([#336](https://github.com/DataDog/openfeature-js-client/pull/336), [#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+- Support portable configuration wire formats and opt-in rules-based parsing, and expose `getPrecomputedContext` for restoring the context associated with precomputed configurations ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#353](https://github.com/DataDog/openfeature-js-client/pull/353), [#346](https://github.com/DataDog/openfeature-js-client/pull/346)) [BROWSER]
+- Add standalone `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers with custom Fetch support, and reuse matching precomputed bootstrap configurations when initializing `DatadogProvider` ([#351](https://github.com/DataDog/openfeature-js-client/pull/351)) [BROWSER]
+- Add opt-in exposure, evaluation, and RUM tracking hook factories and `composeDatadogTrackingHooks`. Applications register hooks with OpenFeature and explicitly initialize and shut down their tracking resources ([#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+
+**Bug Fixes:**
+
+- Scope persistent exposure deduplication to the telemetry destination and configuration for both `DatadogProvider` and standalone exposure hooks. Existing unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication ([#349](https://github.com/DataDog/openfeature-js-client/pull/349)) [BROWSER]
+- Preserve exposure deduplication across equivalent configuration refreshes, clean up tracking resources even if the final flush fails, and settle pending context updates during provider shutdown ([#349](https://github.com/DataDog/openfeature-js-client/pull/349), [#391](https://github.com/DataDog/openfeature-js-client/pull/391)) [BROWSER]
+- Include the core fix for negated string and SHA-256 string comparisons in local rules-based evaluation ([#386](https://github.com/DataDog/openfeature-js-client/pull/386)) [BROWSER]
+- Report the browser package version in configuration requests instead of `independent`, and preserve release-mode version stamping through packaging and publishing rebuilds ([#395](https://github.com/DataDog/openfeature-js-client/pull/395)) [BROWSER]
+
+**Internal Changes:**
+
+- Align the internal precomputed configuration representation with core `3.0.1`, including removal of the deprecated `PrecomputedFlag.extraLogging` field ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [BROWSER]
+- Share precomputed evaluation with core and keep generated protobuf code isolated from the default/precomputed entrypoints, with packed-package dependency-boundary and bundle-size guardrails ([#336](https://github.com/DataDog/openfeature-js-client/pull/336), [#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#382](https://github.com/DataDog/openfeature-js-client/pull/382)) [BROWSER]
+- Use the already-published exact `@datadog/flagging-core@3.0.1` dependency. Core and Node.js package versions are unchanged by this release.
+
+## @datadog/flagging-core@3.0.1
+
+**Bug Fixes:**
+
+- Honor negated string and SHA-256 string comparisons in protobuf rules-based configurations. Missing or unsupported context values continue to fail the condition rather than becoming matches through negation ([#386](https://github.com/DataDog/openfeature-js-client/pull/386)) [CORE]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.0.1`. Browser and Node.js package versions are unchanged and will be released separately.
+
+## @datadog/flagging-core@3.0.0
+
+**Breaking Changes:**
+
+- Remove the deprecated `extraLogging` field from `PrecomputedFlag` metadata ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [CORE] [BROWSER]
+
+**Features:**
+
+- Add portable flags configuration wire parsing and serialization APIs, including the opt-in `@datadog/flagging-core/rules-based` entrypoint for rules-based configuration parsing ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#351](https://github.com/DataDog/openfeature-js-client/pull/351)) [CORE] [BROWSER]
+- Move browser precomputed evaluation onto shared core evaluation APIs so browser and Node can share the same evaluator surface ([#336](https://github.com/DataDog/openfeature-js-client/pull/336)) [CORE] [BROWSER]
+
+**Internal Changes:**
+
+- Add protobuf-based UFC decoding, evaluation fixtures, and entrypoint guardrails to keep rules-based parsing isolated from default/precomputed entrypoints ([#344](https://github.com/DataDog/openfeature-js-client/pull/344), [#382](https://github.com/DataDog/openfeature-js-client/pull/382)) [CORE] [BROWSER]
+
+## @datadog/flagging-core@2.2.0
+
+**Internal Changes:**
+
+- fix(core): support canonical FFE validation and extended SemVer version parts ([#370](https://github.com/DataDog/openfeature-js-client/pull/370)) [CORE] [NODE-SERVER]
+
+## @datadog/openfeature-node-server@2.3.0
+
+**Internal Changes:**
+
+- fix(core): support canonical FFE validation and extended SemVer version parts ([#370](https://github.com/DataDog/openfeature-js-client/pull/370)) [CORE] [NODE-SERVER]
+
+## @datadog/openfeature-browser@1.4.0
+
+**Features:**
+
+- Allow a custom Fetch-compatible implementation for browser flag configuration requests so applications can own timeout, retry, proxy, and header behavior ([#348](https://github.com/DataDog/openfeature-js-client/pull/348)) [BROWSER]
+
+**Bug Fixes:**
+
+- Make browser Fetch timeout and retry helpers preserve cancellation, buffer response bodies within the timeout, safely replay request bodies, bound retry inputs, and apply `Retry-After` with jittered backoff ([#376](https://github.com/DataDog/openfeature-js-client/pull/376)) [BROWSER]
+
+## @datadog/openfeature-node-server@2.1.0
+
+**Bug Fixes:**
+
+- Remove `@openfeature/server-sdk` and `@openfeature/core` as runtime/peer dependencies, replacing the OpenFeature `EventEmitter` with a self-contained `NodeProviderEventEmitter` and bundling all `@openfeature/*` type declarations into a single self-contained `index.d.ts` via `dts-bundle-generator` ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+
+  This restores SSI (Single-Step Instrumentation) compatibility with `dd-trace-js`, where `dd-trace` is installed outside the application's `node_modules` tree and would otherwise get a separate copy of the OpenFeature SDK with a different event-emitter identity. The published package now has zero runtime imports from `@openfeature/*`.
+
+**Internal Changes:**
+
+- Add prepack guard (`verify-no-openfeature-dep.js`) that fails the publish if `@openfeature/server-sdk` or `@openfeature/core` appear in `dependencies`/`peerDependencies`, or if compiled `.js` files contain runtime `@openfeature` imports ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Add TypeScript consumer test (`test-app-node/typecheck.ts`) verifying the bundled `index.d.ts` compiles both with and without `@openfeature/*` installed, including an `OpenFeature.setProvider(provider)` compatibility check against the minimum supported SDK versions ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Add unit tests for `NodeProviderEventEmitter` covering emit/addHandler, handler error isolation, removeHandler LIFO semantics, removeAllHandlers scoping, getHandlers, and setLogger routing ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Pin TypeScript to 5.9.3 via root `resolutions` to satisfy `dts-bundle-generator`'s nested dependency ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+- Update `COMPATIBILITY.md` to reflect that `@openfeature/server-sdk` is no longer a peer dependency ([#356](https://github.com/DataDog/openfeature-js-client/pull/356)) [NODE-SERVER]
+
+## @datadog/flagging-core@2.0.2, @datadog/openfeature-browser@1.2.5, @datadog/openfeature-node-server@2.0.2
+
+**Bug Fixes:**
+
+- Remove `@datadog/js-core` from `@datadog/flagging-core` and `@datadog/openfeature-node-server` by moving the epoch timestamp primitive into core ([#342](https://github.com/DataDog/openfeature-js-client/pull/342)) [NODE-SERVER]
+
+**Internal Changes:**
+
+- Enforce packed Node.js dependency-tree purity against browser SDK packages ([#342](https://github.com/DataDog/openfeature-js-client/pull/342)) [NODE-SERVER]
+
+## @datadog/flagging-core@2.0.1, @datadog/openfeature-browser@1.2.4, @datadog/openfeature-node-server@2.0.1
+
+**Bug Fixes:**
+
+- Align shared UFC evaluation reasons and malformed-configuration isolation with the canonical cross-SDK fixtures ([#275](https://github.com/DataDog/openfeature-js-client/pull/275)) [BROWSER] [NODE-SERVER]
+
+**Internal Changes:**
+
+- Source evaluator regression coverage from `DataDog/ffe-system-test-data` ([#275](https://github.com/DataDog/openfeature-js-client/pull/275)) [BROWSER] [NODE-SERVER]
+
+## @datadog/flagging-core@2.0.0
+
+**Breaking Changes:**
+
+- Major version bump. `@datadog/flagging-core` cannot be safely updated within the 1.x range — existing `^1.2.1` consumers would pull new 1.x versions and risk version skew — so these additions ship as `2.0.0`.
+
+**Features:**
+
+- refactor: extract rules-based UFC evaluator into `@datadog/flagging-core` ([#332](https://github.com/DataDog/openfeature-js-client/pull/332))
+- feat: adopt js-core 0.0.3 (TimeStamp types, monitor, util) ([#308](https://github.com/DataDog/openfeature-js-client/pull/308))
+
+**Bug Fixes:**
+
+- fix(core): serialize precomputed.response in configurationToString ([#331](https://github.com/DataDog/openfeature-js-client/pull/331))
+
+**Internal Changes:**
+
+- Align Node.js flagevaluation EVP metadata ([#317](https://github.com/DataDog/openfeature-js-client/pull/317))
+
+## @datadog/openfeature-browser@1.2.3
+
+**Features:**
+
+- feat(browser): support uk1.datadoghq.com site ([#309](https://github.com/DataDog/openfeature-js-client/pull/309))
+
+**Internal Changes:**
+
+- refactor(browser): migrate dateNow from browser-core to js-core ([#300](https://github.com/DataDog/openfeature-js-client/pull/300))
+
+## @datadog/openfeature-browser@1.2.2, @datadog/openfeature-node-server@2.0.0
+
+**Bug Fixes:**
+
+- fix: pin @datadog/flagging-core to exact version to prevent version skew [BROWSER] [NODE-SERVER]
+
+**Internal Changes:**
+
+- chore: switch to lerna independent versioning ([#288](https://github.com/DataDog/openfeature-js-client/pull/288))
+- chore: pin exact versions for internal dependencies ([#283](https://github.com/DataDog/openfeature-js-client/pull/283))
+- ci: add npm compatibility smoke test ([#282](https://github.com/DataDog/openfeature-js-client/pull/282))
+
+> **Note:** This is the first stable release with the serialId feature. v1.2.0 had yarn syntax issues, v1.2.1 had loose dependency issues. `node-server` is bumped to 2.0.0 to prevent automatic upgrades by older dd-trace versions with unpinned dependencies.
+
+## v1.2.0
+
+**Internal Changes:**
+
+- feat(node): expose serial ID in flagMetadata for span enrichment ([#269](https://github.com/DataDog/openfeature-js-client/pull/269)) [NODE-SERVER]
+- 👷 ci(deps): Bump dependabot/fetch-metadata ([#267](https://github.com/DataDog/openfeature-js-client/pull/267))
+
+## v1.1.2
+
+**Internal Changes:**
+
+- 👷 ci(deps)(deps): Bump actions/setup-node in the github-actions group ([#222](https://github.com/DataDog/openfeature-js-client/pull/222))
+- 👷 chore(deps)(deps): Bump follow-redirects from 1.15.11 to 1.16.0 ([#245](https://github.com/DataDog/openfeature-js-client/pull/245))
+- 👷 chore(deps)(deps): Bump tmp from 0.2.3 to 0.2.5 ([#228](https://github.com/DataDog/openfeature-js-client/pull/228))
+- 👷 chore(deps-dev)(deps-dev): Bump glob from 11.1.0 to 13.0.6 ([#216](https://github.com/DataDog/openfeature-js-client/pull/216))
+- 👷 chore(deps): Bump axios from 1.13.4 to 1.15.0 ([#244](https://github.com/DataDog/openfeature-js-client/pull/244))
+- update missed touchpoints on v1.1.1 release
+- fix: replace Map<string, string> constraint with CacheDelegate to avoid MapIterator in declarations ([#263](https://github.com/DataDog/openfeature-js-client/pull/263)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#252](https://github.com/DataDog/openfeature-js-client/pull/252))
+- fix(browser): bump @datadog/browser-core to ^6.33.0 ([#261](https://github.com/DataDog/openfeature-js-client/pull/261)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#254](https://github.com/DataDog/openfeature-js-client/pull/254)) [BROWSER] [NODE-SERVER]
+- Executing automated changes ([#253](https://github.com/DataDog/openfeature-js-client/pull/253)) [NODE-SERVER]
+- chore(browser): move @types/chrome from dependencies to devDependencies ([#250](https://github.com/DataDog/openfeature-js-client/pull/250)) [BROWSER]
+- fix(node): mark open @openfeature/server-sdk as non-optional ([#248](https://github.com/DataDog/openfeature-js-client/pull/248)) [NODE-SERVER]
+- Remove nested attributes from setContext example ([#234](https://github.com/DataDog/openfeature-js-client/pull/234)) [BROWSER]
+- chore: Harden npm supply chain with @lavamoat/allow-scripts ([#233](https://github.com/DataDog/openfeature-js-client/pull/233))
+
+## v1.1.1
+
+\*_ Bug Fixes_
+
+- fix: allow null targeting key for static and rule-only flags (#232)
+
+## v1.1.0
+
+**Behavior Changes:**
+
+- Add IndexedDB persistence for browser flag configurations ([#186](https://github.com/DataDog/openfeature-js-client/pull/186)) [BROWSER]
+- Enable RUM feature flag tracking by default if RUM is available ([#176](https://github.com/DataDog/openfeature-js-client/pull/176)) [BROWSER]
+
+**Internal Changes:**
+
+- 👷 chore(deps-dev)(deps-dev): Bump lerna from 8.2.3 to 9.0.3 ([#173](https://github.com/DataDog/openfeature-js-client/pull/173))
+- 👷 chore(deps)(deps): Bump lodash from 4.17.21 to 4.17.23 ([#169](https://github.com/DataDog/openfeature-js-client/pull/169))
+- 👷 ci(deps)(deps): Bump the github-actions group with 4 updates ([#168](https://github.com/DataDog/openfeature-js-client/pull/168))
+- 👷 chore(deps)(deps): Bump js-yaml from 3.14.1 to 3.14.2 ([#170](https://github.com/DataDog/openfeature-js-client/pull/170))
+- Fix license validation CI and improve developer docs ([#187](https://github.com/DataDog/openfeature-js-client/pull/187))
+- Executing automated changes ([#182](https://github.com/DataDog/openfeature-js-client/pull/182)) [NODE-SERVER]
+- Executing automated changes ([#181](https://github.com/DataDog/openfeature-js-client/pull/181)) [BROWSER]
+- VULN UPGRADE: minor upgrades — 8 packages (minor: 4 · patch: 4) ([#180](https://github.com/DataDog/openfeature-js-client/pull/180)) [BROWSER]
+- Executing automated changes ([#177](https://github.com/DataDog/openfeature-js-client/pull/177))
+- Release v1.0.0 - GA ([#166](https://github.com/DataDog/openfeature-js-client/pull/166)) [BROWSER] [NODE-SERVER]
+- Simplify Dependabot config with grouping and auto-merge ([#167](https://github.com/DataDog/openfeature-js-client/pull/167))
+
 ## v1.0.0
 
 **Behavior Changes:**

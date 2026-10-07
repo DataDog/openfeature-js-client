@@ -1,21 +1,19 @@
-import type { AssignmentCache, FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  type AssignmentCache,
+  configMatchesContext,
+  evaluatePrecomputedConfiguration,
+  type FlagsConfiguration,
+  type FlagTypeToValue,
+} from '@datadog/flagging-core'
 import type {
   EvaluationContext,
+  FlagValueType,
   Hook,
-  JsonValue,
   Logger,
-  Paradigm,
-  Provider,
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import {
-  OpenFeatureEventEmitter,
-  type ProviderEventEmitter,
-  ProviderEvents,
-  ProviderStatus,
-} from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
+import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
@@ -23,175 +21,261 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { evaluate } from '../evaluation'
-import { createExposureLoggingHook } from './exposures'
-import { createFlagEvaluationTrackingHook } from './flagEvaluations'
-import { createRumTrackingHook } from './rumIntegration'
+import { toProviderErrorEvent } from './error-event'
+import { DatadogProviderBase } from './provider-base'
+import { createProviderTracking, type ProviderTracking } from './provider-tracking'
+import { enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
  */
 export type DatadogProviderOptions = FlaggingInitConfiguration
 
+/**
+ * Wait for `promise` to resolve but automatically cancel the promise
+ * if `signal` aborts.
+ *
+ * Note: it does not abort the `promise` itself and it will continue
+ * running in the "background." Prefer native signal-aware interfaces
+ * when possible and use `waitWithAbort` as a hacky way to interrupt
+ * otherwise non-interruptible promises.
+ */
+function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Promise<T> {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted()
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    Promise.resolve(promise).then(resolve, reject)
+  })
+}
+
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider implements Provider {
+export class DatadogProvider extends DatadogProviderBase {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
-  readonly runsOn: Paradigm = 'client'
   hooks?: Hook[]
-  readonly events: ProviderEventEmitter<ProviderEvents>
+
+  /** Provider-level configuration */
+  private readonly configuration?: FlaggingConfiguration
+
+  /** Controls both directions of the provider's RUM integration. */
+  private readonly isRumIntegrationEnabled: boolean
+
+  // TODO: Migrate this manual context plumbing to a provider `before` hook once
+  // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
+  // Watch upstream packages/web/src/hooks/hook.ts for the before return changing from `void`,
+  // and packages/web/src/client/internal/open-feature-client.ts for `beforeHooks` merging that
+  // result before calling the resolver and subsequent hooks. Return this stored context, not a
+  // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
+  /** Effective context associated with the active flags configuration. */
+  private evaluationContext: EvaluationContext = {}
 
   status: ProviderStatus
-  private flagsConfiguration: FlagsConfiguration = {}
-  private configuration?: FlaggingConfiguration
-  private exposureCache: AssignmentCache | undefined
+
+  private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
-  private readonly hasInitialFlagsConfiguration: boolean
+
+  private exposureCache: AssignmentCache | undefined
+  private exposureCacheReady: Promise<void> | undefined
+  private readonly tracking: ProviderTracking
+
+  /**
+   * Concurrency control for initialize/onContextChange:
+   *
+   * Per OpenFeature spec, the SDK determines provider status from the
+   * last onContextChange to TERMINATE (resolve/reject), not the last
+   * to be CALLED. This creates a race condition when multiple calls
+   * overlap.
+   *
+   * Solution:
+   * 1. `contextUpdateAbortController`: allows aborting previous operation.
+   * 2. `latestContextUpdate`: the last-called context update
+   *    operation. Aborted updates delegate to it so all concurrent
+   *    updates resolve to the same result. On close, it is replaced
+   *    with a settled promise so aborted updates can finish.
+   */
+  private latestContextUpdate: Promise<void> = Promise.resolve()
+  private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
+    super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
-    // Set up provider-managed hooks and events
-    this.hooks = []
-    this.events = new OpenFeatureEventEmitter()
-
-    const isRumFeatureFlagTrackingEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (isRumFeatureFlagTrackingEnabled) {
-      this.hooks.push(createRumTrackingHook())
-    }
-
-    // Add flag evaluation tracking hook
-    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
-    if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvaluationTrackingHook(this.configuration))
-    }
-
-    // Add proper exposure logging hook (creates batch internally)
-    const isExposureLoggingEnabled = options.enableExposureLogging ?? true
-    if (isExposureLoggingEnabled && this.configuration) {
-      this.exposureCache = assignmentCacheFactory({
-        clientToken: options.clientToken,
-      })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache))
-    }
+    this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
+    this.tracking = createProviderTracking({
+      options,
+      configuration: this.configuration,
+      enabledByDefault: true,
+      getTrackingContext: () => this.evaluationContext,
+    })
+    this.hooks = this.tracking.hooks
+    this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
     }
 
-    this.hasInitialFlagsConfiguration = !!options.initialFlagsConfiguration
-
-    if (options.initialFlagsConfiguration) {
-      this.flagsConfiguration = options.initialFlagsConfiguration
-      this.status = ProviderStatus.READY
-    } else {
-      this.flagsConfiguration = {}
-      this.status = ProviderStatus.NOT_READY
-    }
+    this.flagsConfiguration = options.initialFlagsConfiguration
+    this.status = ProviderStatus.NOT_READY
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    this.exposureCacheReady = this.tracking.initialize()
+    return this.setContext(context)
+  }
+
+  async onClose(): Promise<void> {
+    // Aborted updates must not delegate to their own pending promise during shutdown.
+    this.latestContextUpdate = Promise.resolve()
+    this.contextUpdateAbortController.abort()
+    await this.tracking.shutdown()
+    this.status = ProviderStatus.NOT_READY
+  }
+
+  public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
+    return this.setContext(context)
+  }
+
+  private setContext(context: EvaluationContext): Promise<void> {
+    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+
+    if (this.status === ProviderStatus.NOT_READY) {
+      // we're initializing, no status changes necessary
+    } else {
+      this.status = ProviderStatus.RECONCILING
+      this.events.emit(ProviderEvents.Reconciling)
+    }
+
+    // abort any previous setContext operation
+    this.contextUpdateAbortController.abort(
+      new DOMException('Flag configuration fetch superseded by a newer context update', 'AbortError')
+    )
+    this.contextUpdateAbortController = new AbortController()
+
+    const signal = this.contextUpdateAbortController.signal
+
+    // Important: OF SDK awaits for all onContextChange calls to exit
+    // before marking the provider as ready. Make sure to respect
+    // `signal`, so we don't block OF SDK unnecessarily.
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
+      .then((result) =>
+        // Preserve the existing timestamp-based reset for experiment reporting.
+        // createdAt is a configuration timestamp, not an experiment revision.
+        this.maybeClearExposureCache(result.config, { signal }).then(
+          () => result,
+          // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
+          () => result
+        )
+      )
+      .then(
+        ({ config, fromCache }) => {
+          if (signal.aborted) {
+            // Follow the newer update, or the settled promise installed by onClose.
+            return this.latestContextUpdate
+          }
+
+          // If we get to here, we're the latest context update
+          // call. We should update our state atomically here in a
+          // single microtask (i.e., without any await/promise
+          // scheduling).
+
+          this.flagsConfiguration = config
+          this.evaluationContext = evaluationContext
+          this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.events.emit(ProviderEvents.ConfigurationChanged)
+
+          if (this.status === ProviderStatus.STALE) {
+            // HACK: returning from onContextChange causes the OF SDK
+            // to overwrite its knowledge of provider status to READY
+            // (even if we emit Stale event or set our own status to
+            // STALE). Schedule a macrotask to notify the OF SDK of
+            // the stale status when it's ready.
+            setTimeout(() => {
+              if (this.status === ProviderStatus.STALE) {
+                this.events.emit(ProviderEvents.Stale)
+              }
+            }, 0)
+          }
+        },
+        (error) => {
+          if (signal.aborted) {
+            // Follow the newer update, or the settled promise installed by onClose.
+            return this.latestContextUpdate
+          } else {
+            // Otherwise, this is a legitimate error
+            this.status = ProviderStatus.ERROR
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            throw error
+          }
+        }
+      )
+
+    return this.latestContextUpdate
+  }
+
+  /**
+   * Tries to retrieve flags configuration for the given evaluation
+   * context. Prefers network, falls back to current configuration
+   * (if context matches), then to persistent cache if network request fails.
+   */
+  private async retrieveFlagsConfiguration(
+    context: EvaluationContext,
+    { signal }: { signal: AbortSignal }
+  ): Promise<{ config: FlagsConfiguration; fromCache: boolean }> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
 
-    // Start all async work concurrently — cache read should not delay the fetch.
-    const cachedConfigPromise = !this.hasInitialFlagsConfiguration ? this.flagsCache?.get(context) : undefined
-    const exposureCacheReady = this.exposureCache?.init()
+    // Prefer current config over cache if it matches the requested context
+    const cachedConfigPromise = configMatchesContext(this.flagsConfiguration, context)
+      ? Promise.resolve(this.flagsConfiguration)
+      : this.flagsCache?.get(context)
 
     try {
-      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      // Fire-and-forget: cache write should not block readiness
-      this.flagsCache?.set(this.flagsConfiguration, context)
-    } catch (error) {
-      // Network failed — try to serve from cache or initialFlagsConfiguration
-      const cachedConfig = await cachedConfigPromise
-      if (cachedConfig?.precomputed) {
-        this.flagsConfiguration = cachedConfig
-      }
-      if (this.flagsConfiguration?.precomputed) {
-        this.status = ProviderStatus.STALE
-        this.events.emit(ProviderEvents.Stale)
-        await exposureCacheReady
-        return
-      }
-      throw error
-    }
-    this.status = ProviderStatus.READY
-    await exposureCacheReady
-  }
+      const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
+      this.flagsCache?.set(config, context)
+      return { config, fromCache: false }
+    } catch (err) {
+      // Try to recover with current/cached config
+      try {
+        const config = await waitWithAbort(signal, cachedConfigPromise)
+        if (config) {
+          return { config, fromCache: true }
+        }
+      } catch (err) {}
 
-  async onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
-    if (!this.configuration) {
-      throw new Error('Invalid configuration')
-    }
-    this.status = ProviderStatus.RECONCILING
-    try {
-      this.flagsConfiguration = await this.fetchFlagsAndMaybeClearExposureCache(context)
-      // Fire-and-forget: cache write should not block readiness
-      this.flagsCache?.set(this.flagsConfiguration, context)
-      this.status = ProviderStatus.READY
-    } catch (error) {
-      this.events.emit(ProviderEvents.Error, { error })
-      this.status = ProviderStatus.ERROR
+      throw err
     }
   }
 
-  resolveBooleanEvaluation(
-    flagKey: string,
-    defaultValue: boolean,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<boolean> {
-    return evaluate(this.flagsConfiguration, 'boolean', flagKey, defaultValue, context)
-  }
+  private async maybeClearExposureCache(
+    newFlagsConfiguration: FlagsConfiguration,
+    { signal }: { signal: AbortSignal }
+  ): Promise<void> {
+    await waitWithAbort(signal, this.exposureCacheReady)
 
-  resolveStringEvaluation(
-    flagKey: string,
-    defaultValue: string,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<string> {
-    return evaluate(this.flagsConfiguration, 'string', flagKey, defaultValue, context)
-  }
-
-  resolveNumberEvaluation(
-    flagKey: string,
-    defaultValue: number,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<number> {
-    return evaluate(this.flagsConfiguration, 'number', flagKey, defaultValue, context)
-  }
-
-  resolveObjectEvaluation<T extends JsonValue>(
-    flagKey: string,
-    defaultValue: T,
-    context: EvaluationContext,
-    _logger: Logger
-  ): ResolutionDetails<T> {
-    // type safety: OpenFeature interface requires us to return a
-    // specific T for *any* value of T (which could be any subtype of
-    // JsonValue). We can't even theoretically implement it in a
-    // type-sound way because there's no runtime information passed to
-    // learn what type the user expects. So it's up to the user to
-    // make sure they pass the appropriate type.
-    return evaluate(this.flagsConfiguration, 'object', flagKey, defaultValue, context) as ResolutionDetails<T>
-  }
-
-  private async fetchFlagsAndMaybeClearExposureCache(context: EvaluationContext): Promise<FlagsConfiguration> {
-    if (!this.configuration) {
-      throw new Error('Invalid configuration')
-    }
     const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
-    const flagsConfiguration = await this.configuration.fetchFlagsConfiguration(context)
-    const newCreatedAt = flagsConfiguration.precomputed?.response.data.attributes.createdAt
+    const newCreatedAt = newFlagsConfiguration.precomputed?.response.data.attributes.createdAt
     if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
-      await this.exposureCache?.clear()
+      await waitWithAbort(signal, this.exposureCache?.clear())
     }
-    return flagsConfiguration
+  }
+
+  protected resolve<T extends FlagValueType>(
+    type: T,
+    flagKey: string,
+    defaultValue: FlagTypeToValue<T>,
+    _context: EvaluationContext,
+    _logger: Logger
+  ): ResolutionDetails<FlagTypeToValue<T>> {
+    return evaluatePrecomputedConfiguration(
+      this.flagsConfiguration,
+      type,
+      flagKey,
+      defaultValue,
+      this.evaluationContext
+    )
   }
 }

@@ -27,12 +27,12 @@ const buildEnvFactories = {
   SDK_VERSION: () => {
     switch (getBuildMode()) {
       case 'release':
-        return getOpenFeatureVersion()
+        return getPackageVersion()
       case 'canary': {
         const commitSha1 = execSync('git rev-parse HEAD').toString().trim()
         // TODO when tags would allow '+' characters
         //  use build separator (+) instead of prerelease separator (-)
-        return `${getOpenFeatureVersion()}-${commitSha1}`
+        return `${getPackageVersion()}-${commitSha1}`
       }
       default:
         return 'dev'
@@ -76,14 +76,12 @@ function getSdkSetup() {
   process.exit(1)
 }
 
-function getOpenFeatureVersion() {
-  // For fixed versioning, we'll use the version from lerna.json
-  try {
-    const lernaJsonPath = path.join(__dirname, '../../lerna.json')
-    const lernaJson = JSON.parse(readFileSync(lernaJsonPath, 'utf8'))
-    return lernaJson.version
-  } catch (error) {
-    console.warn('Could not read lerna.json version, using "0.1.0-alpha.2"', error)
-    return '0.1.0-alpha.2'
+function getPackageVersion() {
+  // Workspace scripts run from the package directory for both tsc and webpack builds.
+  const packageJsonPath = path.resolve(process.cwd(), 'package.json')
+  const { version } = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+  if (typeof version !== 'string' || version.trim() === '') {
+    throw new Error(`Missing or invalid version in ${packageJsonPath}`)
   }
+  return version
 }

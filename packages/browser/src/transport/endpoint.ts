@@ -5,6 +5,7 @@ const siteConfig: Record<string, { dc?: string; tld?: string }> = {
   'us5.datadoghq.com': { dc: 'us5' },
   'ap1.datadoghq.com': { dc: 'ap1' },
   'ap2.datadoghq.com': { dc: 'ap2' },
+  'uk1.datadoghq.com': { dc: 'uk1' },
   'datadoghq.eu': { tld: 'eu' },
 }
 

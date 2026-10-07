@@ -1,0 +1,24 @@
+{
+  "name": "flagging-core-react-native-example",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "EXPO_PUBLIC_CORE_RESOLUTION=legacy-cjs expo start --go --clear",
+    "start:modern": "EXPO_PUBLIC_CORE_RESOLUTION=modern expo start --go --clear",
+    "start:legacy-esm": "EXPO_PUBLIC_CORE_RESOLUTION=legacy-esm expo start --go --clear",
+    "ios": "npm start -- --ios",
+    "android": "npm start -- --android",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "57.0.25",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "~19.2.0",
+    "typescript": "~6.0.3"
+  }
+}

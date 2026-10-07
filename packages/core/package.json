@@ -1,6 +1,6 @@
 {
   "name": "@datadog/flagging-core",
-  "version": "1.0.0",
+  "version": "3.1.1",
   "description": "Runtime-agnostic flag-evaluation logic for Datadog Flagging",
   "license": "Apache-2.0",
   "repository": {
@@ -11,7 +11,15 @@
   "files": [
     "cjs/",
     "esm/",
+    "bundle/",
+    "rules-based/",
     "*.d.ts"
+  ],
+  "sideEffects": [
+    "./cjs/configuration/protobuf-text-encoding.js",
+    "./esm/configuration/protobuf-text-encoding.js",
+    "./bundle/legacy/cjs/rules-based.js",
+    "./bundle/legacy/esm/rules-based.js"
   ],
   "publishConfig": {
     "access": "public",
@@ -20,6 +28,13 @@
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "types": "cjs/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "rules-based": [
+        "cjs/rules-based-configuration-wire.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./cjs/index.d.ts",
@@ -27,31 +42,44 @@
       "require": "./cjs/index.js",
       "default": "./esm/index.js"
     },
+    "./rules-based": {
+      "types": "./cjs/rules-based-configuration-wire.d.ts",
+      "import": "./esm/rules-based-configuration-wire.js",
+      "require": "./cjs/rules-based-configuration-wire.js",
+      "default": "./esm/rules-based-configuration-wire.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "prepack": "yarn build",
+    "generate:protobuf": "buf generate",
+    "generate:entrypoints": "node ../../scripts/generate-core-entrypoints.js",
+    "check:entrypoints": "node ../../scripts/generate-core-entrypoints.js --check",
+    "prepack": "yarn check:entrypoints && yarn build",
     "pack": "yarn pack",
-    "build": "run-p build:cjs build:esm",
+    "build": "yarn generate:entrypoints && run-p build:cjs build:esm && yarn build:legacy",
+    "build:legacy": "rm -rf bundle/legacy && node ../../scripts/webpack-runner.js ../../scripts/build/core-legacy-webpack.config.js --mode=production",
     "build:cjs": "rm -rf cjs && tsc -p tsconfig.cjs.json && yarn replace-build-env cjs",
     "build:esm": "rm -rf esm && tsc -p tsconfig.esm.json && yarn replace-build-env esm",
     "replace-build-env": "node ../../scripts/build/replace-build-env.js",
-    "clean": "rm -rf dist cjs esm",
+    "clean": "rm -rf dist cjs esm bundle",
     "test": "jest --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@openfeature/core": "^1.8.1",
-    "@types/jest": "^29.4.0",
-    "@types/node": "^18.0.0",
+    "@bufbuild/buf": "^1.72.0",
+    "@bufbuild/protoc-gen-es": "^2.13.0",
+    "@openfeature/core": "^1.9.2",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
     "@types/spark-md5": "^3.0.5",
-    "jest": "^30.0.4",
+    "jest": "^30.0.5",
     "npm-run-all": "^4.1.5",
-    "ts-jest": "^29.4.0",
-    "ts-loader": "^9.5.2",
-    "typescript": "^5.5.0"
+    "ts-jest": "^29.4.9",
+    "ts-loader": "^9.5.7",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.13.0",
     "spark-md5": "^3.0.2"
   }
 }

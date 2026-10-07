@@ -5,7 +5,7 @@ const packagesDirectory = path.join(__dirname, '../../packages')
 
 const packagesDirectoryNames = fs
   .readdirSync(packagesDirectory, { withFileTypes: true })
-  .filter((dirent) => dirent.isDirectory())
+  .filter((dirent) => dirent.isDirectory() && fs.existsSync(path.join(packagesDirectory, dirent.name, 'package.json')))
   .map((dirent) => dirent.name)
 
 module.exports = {

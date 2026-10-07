@@ -1,144 +1,212 @@
-import { IDBFactory } from 'fake-indexeddb'
-import type { ExposureEvent } from '../../../core/src/configuration/exposureEvent.types'
+import { assignmentCacheKeyToString, assignmentCacheValueToString, type ExposureEvent } from '@datadog/flagging-core'
+import { IDBDatabase, IDBObjectStore } from 'fake-indexeddb'
 import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
+import * as storage from '../../src/cache/indexeddb-store'
+import { deferred, nextWrite } from './indexeddb-test-helpers'
 
-const exposureA: ExposureEvent = {
-  subject: { id: 'user-1', attributes: {} },
-  flag: { key: 'flag-1' },
-  allocation: { key: 'alloc-1' },
-  variant: { key: 'var-1' },
-}
-
-const exposureB: ExposureEvent = {
-  subject: { id: 'user-2', attributes: {} },
-  flag: { key: 'flag-2' },
-  allocation: { key: 'alloc-2' },
-  variant: { key: 'var-2' },
-}
+const exposure = (id: string): ExposureEvent => ({
+  subject: { id, attributes: {} },
+  flag: { key: 'flag' },
+  allocation: { key: 'allocation' },
+  variant: { key: 'control' },
+})
+const a = exposure('a')
+const b = exposure('b')
+const serialized = (entry: ExposureEvent): [string, string] => [
+  assignmentCacheKeyToString(entry),
+  assignmentCacheValueToString(entry),
+]
+const read = () => storage.withStore('readonly', (store) => store.get('assignments-scope'))
+const seed = (value: unknown) => storage.withStore('readwrite', (store) => store.put(value, 'assignments-scope'))
 
 describe('IndexedDBAssignmentCache', () => {
   let cache: IndexedDBAssignmentCache
-
   beforeEach(() => {
-    globalThis.indexedDB = new IDBFactory()
-    cache = new IndexedDBAssignmentCache('test-client-token')
+    cache = new IndexedDBAssignmentCache('scope')
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('serves synchronously, batches writes, and restores on reload', async () => {
+    await cache.init()
+    const operations = jest.spyOn(storage, 'withStore')
+    const written = nextWrite()
+    cache.set(a)
+    cache.set(b)
+    expect(cache.has(a)).toBe(true)
+    expect(cache.has(b)).toBe(true)
+    await written
+    expect(operations.mock.calls.filter(([mode]) => mode === 'readwrite')).toHaveLength(1)
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(true)
+    expect(reloaded.has(b)).toBe(true)
   })
 
-  describe('round-trip set/getEntries', () => {
-    it('should persist entries and retrieve them', async () => {
-      cache.set(exposureA)
-      // Allow fire-and-forget persist to complete
-      await flushAsync()
-
-      const entries = await cache.getEntries()
-      expect(entries).toHaveLength(1)
-      expect(entries[0]).toHaveLength(2)
-      expect(typeof entries[0][0]).toBe('string')
-      expect(typeof entries[0][1]).toBe('string')
+  it('initializes once without replacing an updated assignment with persisted data', async () => {
+    const loading = deferred<unknown>()
+    const started = deferred<void>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(() => {
+      started.resolve()
+      return loading.promise as Promise<never>
     })
-
-    it('should persist multiple entries', async () => {
-      cache.set(exposureA)
-      cache.set(exposureB)
-      await flushAsync()
-
-      const entries = await cache.getEntries()
-      expect(entries).toHaveLength(2)
-    })
-
-    it('should return empty array when no entries exist', async () => {
-      const entries = await cache.getEntries()
-      expect(entries).toEqual([])
-    })
+    const initialized = cache.init()
+    expect(cache.init()).toBe(initialized)
+    await started.promise
+    const updated = { ...a, variant: { key: 'treatment' } }
+    const written = nextWrite()
+    cache.set(updated)
+    cache.set(b)
+    loading.resolve([serialized(a)])
+    await initialized
+    await written
+    expect(cache.has(a)).toBe(false)
+    expect(cache.has(updated)).toBe(true)
+    expect(cache.has(b)).toBe(true)
+    expect(await read()).toEqual([serialized(updated), serialized(b)])
   })
 
-  describe('client token isolation', () => {
-    it('should not share data between caches with different client tokens', async () => {
-      const cacheA = new IndexedDBAssignmentCache('token-aaa')
-      const cacheB = new IndexedDBAssignmentCache('token-bbb')
-
-      cacheA.set(exposureA)
-      await flushAsync()
-
-      const entriesA = await cacheA.getEntries()
-      const entriesB = await cacheB.getEntries()
-
-      expect(entriesA).toHaveLength(1)
-      expect(entriesB).toEqual([])
-    })
+  it('loads old entries before persisting a write made before init', async () => {
+    await seed([serialized(a)])
+    const written = nextWrite()
+    cache.set(b)
+    await written
+    expect(cache.has(a)).toBe(true)
+    expect(await read()).toEqual([serialized(a), serialized(b)])
   })
 
-  describe('graceful failure when IndexedDB unavailable', () => {
-    it('getEntries should return empty array', async () => {
-      const originalIndexedDB = globalThis.indexedDB
-      // @ts-expect-error — simulating unavailable IndexedDB
-      delete globalThis.indexedDB
-      try {
-        const entries = await cache.getEntries()
-        expect(entries).toEqual([])
-      } finally {
-        globalThis.indexedDB = originalIndexedDB
-      }
+  it('does not restore entries when cleared during loading', async () => {
+    const loading = deferred<unknown>()
+    const started = deferred<void>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(() => {
+      started.resolve()
+      return loading.promise as Promise<never>
     })
-
-    it('set should not throw', () => {
-      const originalIndexedDB = globalThis.indexedDB
-      // @ts-expect-error — simulating unavailable IndexedDB
-      delete globalThis.indexedDB
-      try {
-        expect(() => cache.set(exposureA)).not.toThrow()
-      } finally {
-        globalThis.indexedDB = originalIndexedDB
-      }
-    })
-
-    it('clear should not throw', async () => {
-      const originalIndexedDB = globalThis.indexedDB
-      // @ts-expect-error — simulating unavailable IndexedDB
-      delete globalThis.indexedDB
-      try {
-        await expect(cache.clear()).resolves.toBeUndefined()
-      } finally {
-        globalThis.indexedDB = originalIndexedDB
-      }
-    })
+    const initialized = cache.init()
+    await started.promise
+    const cleared = cache.clear()
+    loading.resolve([serialized(a)])
+    await Promise.all([initialized, cleared])
+    expect(cache.has(a)).toBe(false)
+    expect(await read()).toBeUndefined()
   })
 
-  describe('has', () => {
-    it('should throw because the serving store handles this', () => {
-      expect(() => cache.has(exposureA)).toThrow()
+  it('clears after an in-flight write and persists subsequent writes', async () => {
+    await cache.init()
+    const writing = deferred<void>()
+    const started = deferred<void>()
+    const transact = storage.withStore
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(async (mode, operation) => {
+      started.resolve()
+      await writing.promise
+      return transact(mode, operation)
     })
+    cache.set(a)
+    await started.promise
+    const cleared = cache.clear()
+    expect(cache.has(a)).toBe(false)
+    writing.resolve()
+    await cleared
+    expect(await read()).toBeUndefined()
+    const written = nextWrite()
+    cache.set(b)
+    await written
+    expect(await read()).toEqual([serialized(b)])
   })
 
-  describe('cross-instance persistence (simulates page reload)', () => {
-    it('should read entries written by a previous instance', async () => {
-      cache.set(exposureA)
-      cache.set(exposureB)
-      await flushAsync()
-
-      // New instance with the same token — simulates a fresh page load
-      const freshCache = new IndexedDBAssignmentCache('test-client-token')
-      const entries = await freshCache.getEntries()
-      expect(entries).toHaveLength(2)
-    })
+  it('keeps a write made immediately after clear', async () => {
+    await cache.init()
+    const written = nextWrite()
+    cache.set(a)
+    const cleared = cache.clear()
+    cache.set(b)
+    await cleared
+    await written
+    expect(cache.has(a)).toBe(false)
+    expect(await read()).toEqual([serialized(b)])
   })
 
-  describe('clear', () => {
-    it('should remove all entries', async () => {
-      cache.set(exposureA)
-      await flushAsync()
-      expect(await cache.getEntries()).toHaveLength(1)
+  it('persists post-clear entries when a pre-clear write is waiting for initialization', async () => {
+    const loading = deferred<unknown>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(() => loading.promise as Promise<never>)
+    const initialized = cache.init()
+    cache.set(a)
+    // Let persistence queue behind the pending read, before clear queues its delete.
+    await Promise.resolve()
+    const cleared = cache.clear()
+    cache.set(b)
+    loading.resolve([])
+    await Promise.all([initialized, cleared])
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(false)
+    expect(reloaded.has(b)).toBe(true)
+  })
 
-      await cache.clear()
+  it('keeps memory usable after open failure and retries later writes', async () => {
+    const open = jest.spyOn(indexedDB, 'open').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+    await cache.init()
+    cache.set(a)
+    await cache.clear()
+    open.mockRestore()
+    const written = nextWrite()
+    cache.set(b)
+    expect(cache.has(b)).toBe(true)
+    await written
+    expect(await read()).toEqual([serialized(b)])
+  })
+
+  it('does not let an aborted transaction poison later operations', async () => {
+    await cache.init()
+    const transaction = IDBDatabase.prototype.transaction
+    const aborted = deferred<void>()
+    jest.spyOn(IDBDatabase.prototype, 'transaction').mockImplementationOnce(function (this: IDBDatabase, ...args) {
+      const tx = transaction.apply(this, args)
+      tx.addEventListener('abort', () => aborted.resolve())
+      tx.abort()
+      return tx
+    })
+    cache.set(a)
+    await aborted.promise
+    expect(cache.has(a)).toBe(true)
+    const written = nextWrite()
+    cache.set(b)
+    await written
+    expect(await read()).toEqual([serialized(a), serialized(b)])
+  })
+
+  it('settles a read transaction that aborts after its request succeeds', async () => {
+    const get = IDBObjectStore.prototype.get
+    jest.spyOn(IDBObjectStore.prototype, 'get').mockImplementationOnce(function (this: IDBObjectStore, key) {
+      const request = get.call(this, key)
+      request.addEventListener('success', () => request.transaction!.abort())
+      return request
+    })
+    await expect(cache.init()).resolves.toBeUndefined()
+    expect(cache.has(a)).toBe(false)
+    const written = nextWrite()
+    cache.set(a)
+    await written
+    expect(await read()).toEqual([serialized(a)])
+  })
+
+  it('closes the connection when a storage operation throws', async () => {
+    const close = jest.spyOn(IDBDatabase.prototype, 'close')
+    await expect(
+      storage.withStore('readwrite', () => {
+        throw new Error('quota')
+      })
+    ).rejects.toThrow('quota')
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([null, 'invalid', { invalid: true }, [null, [], ['key', 12], ['', 'value']]])(
+    'ignores malformed persisted data: %j',
+    async (value) => {
+      await seed(value)
+      await expect(cache.init()).resolves.toBeUndefined()
       expect(await cache.getEntries()).toEqual([])
-    })
-
-    it('should not throw when DB is already empty', async () => {
-      await expect(cache.clear()).resolves.toBeUndefined()
-    })
-  })
+    }
+  )
 })
-
-function flushAsync(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 50))
-}

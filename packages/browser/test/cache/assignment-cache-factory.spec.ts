@@ -1,38 +1,28 @@
-/**
- * @jest-environment jsdom
- */
-
 import { assignmentCacheFactory } from '../../src/cache/assignment-cache-factory'
-import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
 import SimpleAssignmentCache from '../../src/cache/simple-assignment-cache'
 
-describe('AssignmentCacheFactory', () => {
-  it('should create a hybrid cache with IndexedDB when IndexedDB is available', () => {
-    const cache = assignmentCacheFactory({
-      clientToken: 'test-token',
-    })
-    expect(cache).toBeInstanceOf(HybridAssignmentCache)
+describe('assignmentCacheFactory', () => {
+  it('uses IndexedDB when available', () => {
+    expect(assignmentCacheFactory({ storageKeySuffix: 'scope' })).toBeInstanceOf(IndexedDBAssignmentCache)
   })
 
-  it('should create a simple cache when IndexedDB is unavailable', () => {
-    const originalIndexedDB = globalThis.indexedDB
-    // @ts-expect-error — simulating unavailable IndexedDB
+  it('uses memory when IndexedDB is unavailable', () => {
+    const original = globalThis.indexedDB
+    // @ts-expect-error Simulate unavailable browser storage.
     delete globalThis.indexedDB
     try {
-      const cache = assignmentCacheFactory({
-        clientToken: 'test-token',
-      })
+      const cache = assignmentCacheFactory({ storageKeySuffix: 'scope' })
       expect(cache).toBeInstanceOf(SimpleAssignmentCache)
+      expect(cache).not.toBeInstanceOf(IndexedDBAssignmentCache)
     } finally {
-      globalThis.indexedDB = originalIndexedDB
+      globalThis.indexedDB = original
     }
   })
 
-  it('should create a simple cache when forceMemoryOnly is true', () => {
-    const cache = assignmentCacheFactory({
-      clientToken: 'test-token',
-      forceMemoryOnly: true,
-    })
+  it('uses memory when explicitly requested', () => {
+    const cache = assignmentCacheFactory({ storageKeySuffix: 'scope', forceMemoryOnly: true })
     expect(cache).toBeInstanceOf(SimpleAssignmentCache)
+    expect(cache).not.toBeInstanceOf(IndexedDBAssignmentCache)
   })
 })

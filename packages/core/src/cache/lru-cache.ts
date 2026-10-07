@@ -11,23 +11,10 @@
  * ```
  * Source: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
  */
-export class LRUCache implements Map<string, string> {
-  protected readonly cache = new Map<string, string>();
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  [Symbol.toStringTag]: string
+export class LRUCache {
+  protected readonly cache = new Map<string, string>()
 
   constructor(protected readonly capacity: number) {}
-
-  [Symbol.iterator](): IterableIterator<[string, string]> {
-    return this.cache[Symbol.iterator]()
-  }
-
-  forEach(callbackFn: (value: string, key: string, map: Map<string, string>) => void): void {
-    this.cache.forEach(callbackFn)
-  }
-
-  readonly size: number = this.cache.size
 
   entries(): IterableIterator<[string, string]> {
     return this.cache.entries()
