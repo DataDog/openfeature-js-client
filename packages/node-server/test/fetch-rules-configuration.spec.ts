@@ -115,48 +115,62 @@ describe('fetchRulesConfiguration', () => {
   })
 
   it.each([
-    { distribution: 'client' },
-    { distribution: 'all' },
-    { distribution: null },
-    { clientToken: 'token' },
-    { apiKey: undefined, clientToken: 'token' },
-    { distribution: 'client', clientToken: 'token' },
-    { apiKey: undefined },
-    { apiKey: '' },
-    { apiKey: 'secret\r\nheader' },
-    { env: '' },
-    { env: undefined },
-    { timeoutMs: 0 },
-    { timeoutMs: -1 },
-    { timeoutMs: 1.5 },
-    { timeoutMs: NaN },
-    { timeoutMs: Infinity },
-    { timeoutMs: 2147483648 },
-    { timeoutMs: '5000' },
-    { timeoutMs: null },
-    { site: 'datadoghq.com.attacker.invalid' },
-    { site: 'datadoghq.com/path' },
-    { site: 'ddog-gov.com' },
-    { site: 'constructor' },
-    { site: '__proto__' },
-    { site: 'toString' },
-    { site: null },
-    { site: {} },
-  ])('rejects invalid options before sending credentials: %j', async (override) => {
+    [{ distribution: 'client' }, 'apiKey with client distribution'],
+    [{ distribution: 'secret' }, 'distribution'],
+    [{ distribution: null }, 'distribution'],
+    [{ clientToken: 'secret' }, 'clientToken with server distribution'],
+    [{ apiKey: undefined, clientToken: 'secret' }, 'clientToken with server distribution'],
+    [{ distribution: 'client', clientToken: 'secret' }, 'apiKey with client distribution'],
+    [{ apiKey: undefined }, 'apiKey'],
+    [{ apiKey: '' }, 'apiKey'],
+    [{ apiKey: 'secret\r\nheader' }, 'apiKey'],
+    [{ distribution: 'client', apiKey: undefined }, 'clientToken'],
+    [{ distribution: 'client', apiKey: undefined, clientToken: '' }, 'clientToken'],
+    [{ distribution: 'client', apiKey: undefined, clientToken: 'secret\r\nheader' }, 'clientToken'],
+    [{ env: '' }, 'env'],
+    [{ env: undefined }, 'env'],
+    [{ env: { value: 'secret' } }, 'env'],
+    [{ timeoutMs: 0 }, 'timeoutMs'],
+    [{ timeoutMs: -1 }, 'timeoutMs'],
+    [{ timeoutMs: 1.5 }, 'timeoutMs'],
+    [{ timeoutMs: NaN }, 'timeoutMs'],
+    [{ timeoutMs: Infinity }, 'timeoutMs'],
+    [{ timeoutMs: 2147483648 }, 'timeoutMs'],
+    [{ timeoutMs: 'secret' }, 'timeoutMs'],
+    [{ timeoutMs: null }, 'timeoutMs'],
+    [{ site: 'datadoghq.com.attacker.invalid' }, 'site'],
+    [{ site: 'datadoghq.com/secret' }, 'site'],
+    [{ site: 'ddog-gov.com' }, 'site'],
+    [{ site: 'constructor' }, 'site'],
+    [{ site: '__proto__' }, 'site'],
+    [{ site: 'toString' }, 'site'],
+    [{ site: null }, 'site'],
+    [{ site: {} }, 'site'],
+    [{ fetch: 'secret' }, 'fetch'],
+    [{ signal: {} }, 'signal'],
+    [{ signal: null }, 'signal'],
+    [{ signal: 'secret' }, 'signal'],
+    [{ signal: { aborted: false, addEventListener() {} } }, 'signal'],
+    [{ signal: { aborted: false, removeEventListener() {} } }, 'signal'],
+    [{ signal: { addEventListener() {}, removeEventListener() {} } }, 'signal'],
+  ])('rejects invalid options before sending credentials: %j', async (override, option) => {
     await expect(
-      fetchRulesConfiguration({ ...options, ...override, fetch: requestFetch } as RulesConfigurationFetchOptions)
-    ).rejects.toMatchObject({ code: 'invalid_options', message: 'Invalid configuration fetch options' })
+      fetchRulesConfiguration({ ...options, fetch: requestFetch, ...override } as RulesConfigurationFetchOptions)
+    ).rejects.toMatchObject({ code: 'invalid_options', message: `Invalid configuration fetch options: ${option}` })
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
   it('rejects missing options and a missing fetch implementation', async () => {
     await expect(fetchRulesConfiguration(undefined as unknown as RulesConfigurationFetchOptions)).rejects.toMatchObject(
-      { code: 'invalid_options' }
+      { code: 'invalid_options', message: 'Invalid configuration fetch options: apiKey' }
     )
     const original = globalThis.fetch
     try {
       globalThis.fetch = undefined as unknown as typeof fetch
-      await expect(fetchRulesConfiguration(options)).rejects.toMatchObject({ code: 'invalid_options' })
+      await expect(fetchRulesConfiguration(options)).rejects.toMatchObject({
+        code: 'invalid_options',
+        message: 'Invalid configuration fetch options: fetch',
+      })
     } finally {
       globalThis.fetch = original
     }

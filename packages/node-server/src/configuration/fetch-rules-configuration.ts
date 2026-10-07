@@ -68,6 +68,10 @@ function transportError(message: string, error: unknown): ConfigurationFetchErro
   return new ConfigurationFetchError('transport', known ? `${message} (${known})` : message)
 }
 
+function invalidOption(option: string): ConfigurationFetchError {
+  return new ConfigurationFetchError('invalid_options', `Invalid configuration fetch options: ${option}`)
+}
+
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.
@@ -83,27 +87,33 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     signal,
     fetch: requestFetch = globalThis.fetch,
   } = options ?? {}
+  if (!['server', 'client'].includes(distribution)) throw invalidOption('distribution')
+  if (distribution === 'client' ? apiKey !== undefined : clientToken !== undefined) {
+    throw invalidOption(
+      distribution === 'client' ? 'apiKey with client distribution' : 'clientToken with server distribution'
+    )
+  }
   const credential = distribution === 'client' ? clientToken : apiKey
+  if (typeof credential !== 'string' || !credential.trim() || /[\r\n]/.test(credential)) {
+    throw invalidOption(distribution === 'client' ? 'clientToken' : 'apiKey')
+  }
+  if (typeof env !== 'string' || !env.trim()) throw invalidOption('env')
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) throw invalidOption('timeoutMs')
+  if (typeof requestFetch !== 'function') throw invalidOption('fetch')
   if (
-    !['server', 'client'].includes(distribution) ||
-    (distribution === 'client' ? apiKey !== undefined : clientToken !== undefined) ||
-    typeof credential !== 'string' ||
-    !credential.trim() ||
-    /[\r\n]/.test(credential) ||
-    typeof env !== 'string' ||
-    !env.trim() ||
-    !Number.isInteger(timeoutMs) ||
-    timeoutMs <= 0 ||
-    timeoutMs > 2147483647 ||
-    typeof requestFetch !== 'function'
+    signal !== undefined &&
+    (signal === null ||
+      typeof signal.aborted !== 'boolean' ||
+      typeof signal.addEventListener !== 'function' ||
+      typeof signal.removeEventListener !== 'function')
   ) {
-    throw new ConfigurationFetchError('invalid_options', 'Invalid configuration fetch options')
+    throw invalidOption('signal')
   }
   let host: string
   try {
     host = buildEndpointHost(site, `ufc-${distribution}`)
   } catch {
-    throw new ConfigurationFetchError('invalid_options', 'Invalid configuration fetch options')
+    throw invalidOption('site')
   }
   if (signal?.aborted) throw abortError(signal)
 
