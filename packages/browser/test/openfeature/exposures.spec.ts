@@ -726,7 +726,7 @@ describe('Exposures End-to-End', () => {
       expect(secondExposureEvents[0].variant.key).toBe('variation-b')
     })
 
-    it('should keep exposure cache when only configuration createdAt changes', async () => {
+    it('should clear exposure cache when configuration createdAt changes', async () => {
       // Create two responses with different createdAt timestamps
       const firstResponse = {
         ...precomputedServerResponse,
@@ -785,14 +785,16 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch the same assignment with a new delivery timestamp.
+      // Fetch the same assignment with a changed configuration timestamp.
       await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
 
-      // The assignment has not changed, so do not log another exposure.
+      // Receiving configuration does not itself emit an exposure.
+      expect(getExposuresCalls()).toHaveLength(1)
+      // The next evaluation can emit another exposure despite identical assignment IDs.
       client.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      expect(getExposuresCalls()).toHaveLength(1)
+      expect(getExposuresCalls()).toHaveLength(2)
     })
 
     it('should not clear exposure cache on initial page load', async () => {

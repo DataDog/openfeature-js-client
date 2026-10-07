@@ -1,11 +1,5 @@
 import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import {
-  configMatchesContext,
-  evaluate,
-  type FlagsConfigurationError,
-  getFlagsConfigurationError,
-  getMD5Hash,
-} from '@datadog/flagging-core'
+import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError, getMD5Hash } from '@datadog/flagging-core'
 import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
   EvaluationContext,
@@ -78,15 +72,10 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    const details = evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger)
-    // Precomputed exposures already identify the subject, flag, allocation,
-    // variant, and serial. A delivery timestamp or salt is not a new assignment.
-    // Keep a stable marker to distinguish these entries from older cache formats.
-    const configurationId =
-      this.flagsConfiguration?.precomputed && configMatchesContext(this.flagsConfiguration, context)
-        ? 'precomputed'
-        : this.flagsConfigurationId
-    return withCoreConfigurationId(details, configurationId)
+    return withCoreConfigurationId(
+      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+      this.flagsConfigurationId
+    )
   }
 
   private canEvaluateCurrentContext(): boolean {

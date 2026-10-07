@@ -302,7 +302,13 @@ await tracking.shutdown()
 
 The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
 
-For precomputed assignments, both providers keep exposure deduplication across configuration refreshes. The existing exposure cache identifies the subject and its attributes, original flag key, allocation, variant, and assignment serial when present. A change to these fields can emit a new exposure. A changed response timestamp, salt, or unrelated flag does not. A changed value under the same variant and serial does not create a new exposure identity.
+Precomputed assignments retain the existing exposure-reset behavior for plaintext and obfuscated responses.
+On a refresh, `DatadogProvider` clears exposure deduplication when a previously loaded `createdAt` changes.
+It does not clear on the first fetch without an initial configuration.
+`DatadogCoreProvider` includes the configuration identity in exposure deduplication. Replacing the configuration,
+including a changed `createdAt` or obfuscation salt, permits another exposure.
+Reapplying the same configuration preserves deduplication. Neither provider emits an exposure until the application evaluates a flag.
+`createdAt` is a configuration timestamp, not an experiment revision. This behavior does not depend on it changing on every request.
 
 Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
 The memory cache removes the least recently used entry. Persistent caches remove the oldest written entries.

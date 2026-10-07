@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
+import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
@@ -233,9 +234,14 @@ describe('browser flag-key obfuscation', () => {
     }
   })
 
-  it.each(['online', 'portable'])('keeps %s exposures deduplicated across refreshes and restart', async (kind) => {
+  it.each([
+    ['online', ''],
+    ['online', salt],
+    ['portable', ''],
+    ['portable', salt],
+  ])('preserves %s exposure resets with initial salt "%s"', async (kind, initialSalt) => {
     jest.useFakeTimers()
-    let payload = response()
+    let payload = response(initialSalt)
     fetchMock.mockImplementation(async (url: string) =>
       url.includes('precompute-assignments') ? fetchResponse(payload) : { ok: true, status: 200 }
     )
@@ -274,27 +280,42 @@ describe('browser flag-key obfuscation', () => {
         )
 
     await install()
-    const first = client.getBooleanDetails(key, false)
-    jest.advanceTimersByTime(31_000)
-
-    // Real edge responses change both the salt and createdAt on each fetch.
-    for (const [index, publicSalt] of ['f'.repeat(32), '', salt].entries()) {
-      payload = response(publicSalt, true, `2026-09-30T00:0${index + 1}:00Z`)
-      await refresh()
-      expect(client.getBooleanDetails(key, false).value).toBe(first.value)
+    const evaluate = () => {
+      expect(client.getBooleanValue(key, false)).toBe(true)
       jest.advanceTimersByTime(31_000)
     }
+    evaluate()
+    evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
-    // The exposure describes the assigned variant, not its delivered value.
-    payload = response(salt, false)
-    const assignment = Object.values(payload.data.attributes.flags)[0]
-    payload.data.attributes.flags['b'.repeat(64)] = { ...assignment, variationValue: true }
+    // createdAt may stay unchanged across requests. Reusing the same snapshot
+    // must preserve deduplication, including a portable serialization round trip.
     await refresh()
-    expect(client.getBooleanDetails(key, false).value).toBe(false)
-    jest.advanceTimersByTime(31_000)
+    evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
+    // Timestamp changes permit another exposure with identical assignment IDs.
+    // This also applies to an older timestamp; it is not a monotonic revision.
+    for (const [index, createdAt] of ['2026-09-30T00:01:00Z', '2026-09-29T00:00:00Z'].entries()) {
+      payload = response(initialSalt, true, createdAt)
+      await refresh()
+      jest.advanceTimersByTime(31_000)
+      expect(exposureEvents()).toHaveLength(index + 1)
+      evaluate()
+      evaluate()
+      expect(exposureEvents()).toHaveLength(index + 2)
+    }
+
+    // Cover new salts and both rollout directions without changing assignments.
+    for (const [index, publicSalt] of ['f'.repeat(32), '', salt].entries()) {
+      payload = response(publicSalt, true, `2026-09-30T00:0${index + 2}:00Z`)
+      await refresh()
+      evaluate()
+      expect(exposureEvents()).toHaveLength(index + 4)
+    }
+
+    // Assignment identity changes still produce exposures with a stable timestamp.
+    const assignment = Object.values(payload.data.attributes.flags)[0]
     for (const [index, change] of [
       { variationKey: 'variant-2' },
       { allocationKey: 'allocation-2' },
@@ -302,11 +323,10 @@ describe('browser flag-key obfuscation', () => {
     ].entries()) {
       Object.assign(assignment, change)
       await refresh()
-      client.getBooleanValue(key, true)
-      jest.advanceTimersByTime(31_000)
-      expect(exposureEvents()).toHaveLength(index + 2)
+      evaluate()
+      expect(exposureEvents()).toHaveLength(index + 7)
     }
-    expect(exposureEvents()[3]).toMatchObject({
+    expect(exposureEvents()[8]).toMatchObject({
       flag: { key },
       allocation: { key: 'allocation-2' },
       variant: { key: 'variant-2' },
@@ -318,11 +338,130 @@ describe('browser flag-key obfuscation', () => {
     await tracking?.shutdown()
     await OpenFeature.clearProviders()
     await install()
-    client.getBooleanValue(key, true)
-    jest.advanceTimersByTime(31_000)
-    expect(exposureEvents()).toHaveLength(4)
+    evaluate()
+    expect(exposureEvents()).toHaveLength(9)
     client.clearHooks()
     await tracking?.shutdown()
+  })
+
+  it.each(['', salt])('preserves first-load behavior with initial salt "%s"', async (publicSalt) => {
+    jest.useFakeTimers()
+    let payload = response(publicSalt)
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('precompute-assignments') ? fetchResponse(payload) : { ok: true, status: 200 }
+    )
+    const providerOptions = { ...options, enableExposureLogging: true }
+    const exposures = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('exposures'))
+    await OpenFeature.setProviderAndWait(new DatadogProvider(providerOptions), context)
+    OpenFeature.getClient().getBooleanValue(key, false)
+    jest.advanceTimersByTime(31_000)
+    expect(exposures()).toHaveLength(1)
+    await OpenFeature.clearProviders()
+
+    // Without an initial configuration, first fetch must retain persisted deduplication,
+    // even when the server timestamp has changed since the previous page load.
+    payload = response(publicSalt, true, '2026-09-30T00:01:00Z')
+    await OpenFeature.setProviderAndWait(new DatadogProvider(providerOptions), context)
+    OpenFeature.getClient().getBooleanValue(key, false)
+    jest.advanceTimersByTime(31_000)
+    expect(exposures()).toHaveLength(1)
+    await OpenFeature.clearProviders()
+
+    // An explicitly supplied initial configuration restores the normal comparison.
+    const initialFlagsConfiguration = await fetchPrecomputedConfiguration({ ...options, context })
+    payload = response(publicSalt, true, '2026-09-30T00:02:00Z')
+    await OpenFeature.setProviderAndWait(
+      new DatadogProvider({ ...providerOptions, initialFlagsConfiguration }),
+      context
+    )
+    jest.advanceTimersByTime(31_000)
+    expect(exposures()).toHaveLength(1)
+    OpenFeature.getClient().getBooleanValue(key, false)
+    jest.advanceTimersByTime(31_000)
+    expect(exposures()).toHaveLength(2)
+  })
+
+  it.each(['', salt])('keeps configuration usable when clearing exposures fails, salt "%s"', async (publicSalt) => {
+    let payload = response(publicSalt)
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('precompute-assignments') ? fetchResponse(payload) : { ok: true, status: 200 }
+    )
+    const provider = new DatadogProvider({ ...options, enableExposureLogging: true })
+    const clear = jest
+      .spyOn(HybridAssignmentCache.prototype, 'clear')
+      .mockRejectedValue(new Error('storage unavailable'))
+    try {
+      await provider.initialize(context)
+      expect(clear).not.toHaveBeenCalled()
+      payload = response(publicSalt, false, '2026-09-30T00:01:00Z')
+      await provider.onContextChange(context, context)
+      expect(clear).toHaveBeenCalledTimes(1)
+      expect(provider.status).toBe(ProviderStatus.READY)
+      expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
+    } finally {
+      clear.mockRestore()
+      await provider.onClose()
+    }
+  })
+
+  it.each(['', salt])('waits for exposure clearing before publishing configuration, salt "%s"', async (publicSalt) => {
+    let payload = response(publicSalt)
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('precompute-assignments') ? fetchResponse(payload) : { ok: true, status: 200 }
+    )
+    const provider = new DatadogProvider({ ...options, enableExposureLogging: true })
+    await provider.initialize(context)
+    let finishClear!: () => void
+    let startClear!: () => void
+    const clearingStarted = new Promise<void>((resolve) => {
+      startClear = resolve
+    })
+    const clearingFinished = new Promise<void>((resolve) => {
+      finishClear = resolve
+    })
+    const clear = jest.spyOn(HybridAssignmentCache.prototype, 'clear').mockImplementation(() => {
+      startClear()
+      return clearingFinished
+    })
+    let refreshed = false
+    payload = response(publicSalt, false, '2026-09-30T00:01:00Z')
+    const refresh = provider.onContextChange(context, context).then(() => {
+      refreshed = true
+    })
+    try {
+      await clearingStarted
+      // Drain the update chain so an unawaited clear cannot pass this assertion.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(refreshed).toBe(false)
+      expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
+      finishClear()
+      await refresh
+      expect(provider.status).toBe(ProviderStatus.READY)
+      expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
+    } finally {
+      finishClear()
+      await refresh
+      clear.mockRestore()
+      await provider.onClose()
+    }
+  })
+
+  it.each(['', salt])('refreshes without an exposure cache when logging is disabled, salt "%s"', async (publicSalt) => {
+    fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
+    const provider = new DatadogProvider(options)
+    const clear = jest.spyOn(HybridAssignmentCache.prototype, 'clear')
+    try {
+      await provider.initialize(context)
+      fetchMock.mockResolvedValue(fetchResponse(response(publicSalt, false, '2026-09-30T00:01:00Z')))
+      await provider.onContextChange(context, context)
+      expect(provider.status).toBe(ProviderStatus.READY)
+      expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
+      expect(clear).not.toHaveBeenCalled()
+      expect(localStorage.length).toBe(0)
+    } finally {
+      clear.mockRestore()
+      await provider.onClose()
+    }
   })
 
   it('does not serialize assignment values on repeated portable-provider evaluations', async () => {

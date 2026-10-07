@@ -203,7 +203,7 @@ describe('DatadogCoreProvider tracking', () => {
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes('exposures'))).toBe(false)
   })
 
-  it('keeps exposures deduplicated when the precomputed response timestamp changes', async () => {
+  it('emits another exposure when the precomputed configuration timestamp changes', async () => {
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()
 
@@ -217,10 +217,11 @@ describe('DatadogCoreProvider tracking', () => {
     jest.advanceTimersByTime(31_000)
 
     provider.setConfiguration(precomputedConfigurationWithCreatedAt('2026-07-07T00:00:00.000Z'))
+    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
     client.getStringValue('static-flag', 'default')
     jest.advanceTimersByTime(31_000)
 
-    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))).toHaveLength(2)
   })
 
   it('keeps exposure deduplication when the core provider configuration identity is unchanged', async () => {

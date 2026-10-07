@@ -1,4 +1,5 @@
 import {
+  type AssignmentCache,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
@@ -76,6 +77,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
+  private exposureCache: AssignmentCache | undefined
   private exposureCacheReady: Promise<void> | undefined
   private readonly tracking: ProviderTracking
 
@@ -109,6 +111,7 @@ export class DatadogProvider extends DatadogProviderBase {
       getTrackingContext: () => this.evaluationContext,
     })
     this.hooks = this.tracking.hooks
+    this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
@@ -158,9 +161,9 @@ export class DatadogProvider extends DatadogProviderBase {
     // `signal`, so we don't block OF SDK unnecessarily.
     this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
-        // Load persisted exposure identities before publishing the configuration.
-        // Refetches do not clear them; assignment changes produce different entries.
-        waitWithAbort(signal, this.exposureCacheReady).then(
+        // Preserve the existing timestamp-based reset for experiment reporting.
+        // createdAt is a configuration timestamp, not an experiment revision.
+        this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
           () => result
@@ -244,6 +247,19 @@ export class DatadogProvider extends DatadogProviderBase {
       } catch (err) {}
 
       throw err
+    }
+  }
+
+  private async maybeClearExposureCache(
+    newFlagsConfiguration: FlagsConfiguration,
+    { signal }: { signal: AbortSignal }
+  ): Promise<void> {
+    await waitWithAbort(signal, this.exposureCacheReady)
+
+    const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
+    const newCreatedAt = newFlagsConfiguration.precomputed?.response.data.attributes.createdAt
+    if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
+      await waitWithAbort(signal, this.exposureCache?.clear())
     }
   }
 
