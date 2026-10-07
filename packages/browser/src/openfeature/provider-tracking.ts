@@ -48,10 +48,10 @@ export function createProviderTracking({
   const tracking = composeDatadogTrackingHooks(...trackingHooks)
   return {
     ...tracking,
+    exposureCache,
     hooks: getTrackingContext
       ? tracking.hooks.map((hook) => withTrackingContext(hook, getTrackingContext))
       : tracking.hooks,
-    exposureCache,
   }
 }
 

@@ -59,6 +59,7 @@ describe('exposure cache storage boundaries', () => {
       const second = createCache('scope-b')
       first.set(exposure)
       second.set(exposure)
+      await Promise.all([first.init(), second.init()])
 
       const storageKeys = Object.keys(kind === 'chrome' ? stored : localStorage).filter((key) => key !== 'unrelated')
       const entrySuffix = kind === 'chrome' ? `:${assignmentCacheKeyToString(exposure)}` : ''

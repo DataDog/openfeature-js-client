@@ -785,14 +785,15 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch new configuration with different createdAt (cache should be cleared)
+      // Fetch the same assignment with a changed configuration timestamp.
       await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
 
-      // Evaluate same flag - should log again because cache was cleared
+      // Receiving configuration does not itself emit an exposure.
+      expect(getExposuresCalls()).toHaveLength(1)
+      // The next evaluation can emit another exposure despite identical assignment IDs.
       client.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      // Should have 2 exposure calls (cache was cleared)
       expect(getExposuresCalls()).toHaveLength(2)
     })
 

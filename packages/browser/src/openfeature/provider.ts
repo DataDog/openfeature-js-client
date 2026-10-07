@@ -161,13 +161,8 @@ export class DatadogProvider extends DatadogProviderBase {
     // `signal`, so we don't block OF SDK unnecessarily.
     this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
-        // New configuration might require clearing exposure
-        // cache. One example of this is updating experiment
-        // boundaries: if we previously emitted exposure events for an
-        // experiment and the new configuration bumped experiment
-        // start time, we need to emit at least one new event within
-        // the new experiment timeframe. We do that by clearing our
-        // exposure
+        // Preserve the existing timestamp-based reset for experiment reporting.
+        // createdAt is a configuration timestamp, not an experiment revision.
         this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.

@@ -74,6 +74,43 @@ describe('configuration wire', () => {
     expect(restored).toEqual(configuration)
   })
 
+  it.each([false, true])('versions encoded portable snapshots (with rules: %s)', (includeRules) => {
+    const precomputed = configuration.precomputed!
+    const encoded: FlagsConfiguration = {
+      precomputed: {
+        ...precomputed,
+        response: {
+          data: {
+            attributes: {
+              ...precomputed.response.data.attributes,
+              obfuscated: true,
+              obfuscation: { scheme: 'flag-key-sha256-v1', salt: '0'.repeat(32) },
+              flags: { ['a'.repeat(64)]: precomputed.response.data.attributes.flags['my-flag'] },
+            },
+          },
+        },
+      },
+      ...(includeRules
+        ? configurationFromString(JSON.stringify({ version: 1, rules: { response: rulesResponse } }))
+        : {}),
+    }
+    const wire = configurationToString(encoded)
+    expect(JSON.parse(wire).version).toBe(2)
+    expect(configurationFromString(wire)).toEqual(encoded)
+    expect(configurationFromRulesString(wire).rules).toEqual(encoded.rules)
+
+    const precomputedWire = configurationToPrecomputedString(encoded)
+    expect(JSON.parse(precomputedWire).version).toBe(2)
+    expect(configurationFromPrecomputedString(precomputedWire)).toEqual({ precomputed: encoded.precomputed })
+  })
+
+  it('keeps plaintext and rules-only portable snapshots on version 1', () => {
+    expect(JSON.parse(configurationToString(configuration)).version).toBe(1)
+    expect(JSON.parse(configurationToPrecomputedString(configuration)).version).toBe(1)
+    const rules = configurationFromString(JSON.stringify({ version: 1, rules: { response: rulesResponse } }))
+    expect(JSON.parse(configurationToString(rules)).version).toBe(1)
+  })
+
   it('keeps flags readable after a round-trip', () => {
     const restored = configurationFromString(configurationToString(configuration))
 
@@ -117,7 +154,7 @@ describe('configuration wire', () => {
   })
 
   it('retains a configuration error for an unknown version', () => {
-    expect(configurationFromString(JSON.stringify({ version: 2 }))).toEqual({
+    expect(configurationFromString(JSON.stringify({ version: 3 }))).toEqual({
       configurationError: 'Invalid flags configuration wire format',
     })
   })
