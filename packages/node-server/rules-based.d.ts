@@ -61,6 +61,11 @@ declare const StandardResolutionReasons: {
 type TimeStamp = number & {
 	t: "Epoch time";
 };
+declare const SCHEME = "flag-key-sha256-v1";
+type FlagKeyObfuscation = {
+	scheme: typeof SCHEME;
+	salt: string;
+};
 declare enum WireType {
 	/**
 	 * Used for int32, int64, uint32, uint64, sint32, sint64, bool, enum
@@ -850,6 +855,10 @@ type PrecomputedConfigurationResponse = {
 		attributes: {
 			/** When configuration was generated. */
 			createdAt: string;
+			/** Absent or false for legacy plaintext assignments. */
+			obfuscated?: boolean;
+			/** Required when obfuscated is true; retained with the map in caches. */
+			obfuscation?: FlagKeyObfuscation;
 			flags: Record<string, PrecomputedFlag>;
 		};
 	};
