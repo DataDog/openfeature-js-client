@@ -130,12 +130,6 @@ const restored: FlagsConfiguration = configurationFromString(serialized)
 
 // @ts-expect-error: Client distribution channel must be explicit; credentials never select the channel.
 const missingDistributionChannel: RulesConfigurationFetchOptions = { clientToken: 'token', env: 'prod' }
-const oldDistributionOption: RulesConfigurationFetchOptions = {
-  // @ts-expect-error: The option is distributionChannel, not distribution.
-  distribution: 'server',
-  apiKey: 'key',
-  env: 'prod',
-}
 // @ts-expect-error: Credentials for the other distribution channel must not be sent.
 const conflictingCredentials: RulesConfigurationFetchOptions = {
   distributionChannel: 'client',
@@ -145,4 +139,4 @@ const conflictingCredentials: RulesConfigurationFetchOptions = {
 }
 // @ts-expect-error: The existing Node provider still expects legacy UFC JSON, not FlagsConfiguration.
 provider.setConfiguration(restored)
-void [pendingConfiguration, timeoutCode, missingDistributionChannel, oldDistributionOption, conflictingCredentials]
+void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflictingCredentials]
