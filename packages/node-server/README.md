@@ -41,8 +41,8 @@ The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `Da
 
 - `site` defaults to `datadoghq.com`.
 - `fetch` overrides global Fetch. Custom transports must honor `signal` and `redirect: 'manual'`; redirects are rejected to protect credentials.
-- `signal` supports cancellation and caller-owned deadlines. The helper sets no timeout or response-size limit.
-- Failures throw `ConfigurationFetchError` with a `code` and, for HTTP errors, `status`. Caller cancellation uses the `cancelled` code.
+- `timeoutMs` defaults to `5000` and covers the request and response-body read. `signal` supports caller cancellation and earlier deadlines.
+- Failures throw `ConfigurationFetchError` with a `code` and, for HTTP errors, `status`. Timeouts use `timeout`; other caller cancellations use `cancelled`.
 
 Applications own retries, polling, storage, tracking, and fallback.
 

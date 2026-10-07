@@ -25,6 +25,7 @@ import {
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
 import {
+  type ConfigurationFetchErrorCode,
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
@@ -116,10 +117,12 @@ const clientOptions: RulesConfigurationFetchOptions = {
   distribution: 'client',
   clientToken: 'client-token',
   env: 'prod',
+  timeoutMs: 5000,
   signal: new AbortController().signal,
   fetch: globalThis.fetch,
 }
 const pendingConfiguration: Promise<FlagsConfiguration> = fetchRulesConfiguration(serverOptions)
+const timeoutCode: ConfigurationFetchErrorCode = 'timeout'
 void fetchRulesConfiguration(clientOptions)
 const decoded: FlagsConfiguration = configurationFromRulesBinary(new Uint8Array())
 const serialized: string = configurationToString(decoded)
@@ -136,4 +139,4 @@ const conflictingCredentials: RulesConfigurationFetchOptions = {
 }
 // @ts-expect-error: The existing Node provider still expects legacy UFC JSON, not FlagsConfiguration.
 provider.setConfiguration(restored)
-void [pendingConfiguration, missingDistribution, conflictingCredentials]
+void [pendingConfiguration, timeoutCode, missingDistribution, conflictingCredentials]
