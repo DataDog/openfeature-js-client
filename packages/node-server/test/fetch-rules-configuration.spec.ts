@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { evaluate } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import wire from '../../browser/test/data/rules-v1-wire.json'
@@ -316,6 +317,42 @@ describe('fetchRulesConfiguration', () => {
       )
     )
     await expect(fetchRulesConfiguration({ ...options, fetch: requestFetch })).resolves.toHaveProperty('rules')
+  })
+
+  it.each([
+    { status: 302, contentType: 'application/protobuf', code: 'http' },
+    { status: 403, contentType: 'application/protobuf', code: 'http' },
+    { status: 200, contentType: 'text/html', code: 'invalid_response' },
+  ])('destroys Node response streams without masking $code errors ($status)', async ({ status, contentType, code }) => {
+    const body = Readable.from(['secret'])
+    const destroy = jest.spyOn(body, 'destroy')
+    requestFetch.mockResolvedValue({
+      status,
+      headers: new Headers({ 'Content-Type': contentType }),
+      body,
+      bodyUsed: false,
+    } as unknown as Response)
+    await expect(fetchRulesConfiguration({ ...options, fetch: requestFetch })).rejects.toMatchObject({ code })
+    expect(destroy).toHaveBeenCalledTimes(1)
+    expect(body.destroyed).toBe(true)
+  })
+
+  it.each(['cancel', 'destroy'])('preserves the result if custom body.%s throws synchronously', async (method) => {
+    const cleanup = jest.fn(() => {
+      throw new Error('secret')
+    })
+    requestFetch.mockResolvedValue({
+      status: 403,
+      body: { [method]: cleanup },
+      bodyUsed: false,
+    } as unknown as Response)
+    const pending = fetchRulesConfiguration({ ...options, fetch: requestFetch })
+    await expect(pending).rejects.toMatchObject({
+      code: 'http',
+      status: 403,
+      message: 'Configuration fetch returned HTTP 403',
+    })
+    expect(cleanup).toHaveBeenCalledTimes(1)
   })
 
   it.each([

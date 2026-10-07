@@ -174,7 +174,16 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     signal?.removeEventListener('abort', cancel)
     // Aborting also releases an unfinished response after a validation failure.
     controller.abort()
-    // Custom stream cleanup must not delay the result, even if cancellation never settles.
-    if (response?.body && !response.bodyUsed) void response.body.cancel().catch(() => {})
+    // Custom transports can use Web streams or Node streams (for example, node-fetch).
+    // Cleanup must not replace the result or delay it if cancellation never settles.
+    try {
+      const body = response?.body as (ReadableStream & { destroy?: () => void }) | null | undefined
+      if (body && !response?.bodyUsed) {
+        if (typeof body.cancel === 'function') void body.cancel().catch(() => {})
+        else body.destroy?.()
+      }
+    } catch {
+      // Ignore synchronous cleanup failures from custom transports as well.
+    }
   }
 }
