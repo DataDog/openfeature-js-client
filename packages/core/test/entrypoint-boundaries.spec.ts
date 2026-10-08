@@ -14,6 +14,7 @@ type RuntimeImport = {
 
 const coreSourceRoot = path.resolve(process.cwd(), 'src')
 const browserSourceRoot = path.resolve(process.cwd(), '../browser/src')
+const nodeSourceRoot = path.resolve(process.cwd(), '../node-server/src')
 const { getCoreEntrypoints } = require('../../../scripts/lib/coreEntrypoints')
 const corePackage = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'))
 const coreEntrypoints = getCoreEntrypoints(corePackage) as Array<{ subpath: string; source: string }>
@@ -32,6 +33,10 @@ const defaultEntrypoints: Entrypoint[] = [
   {
     name: '@datadog/openfeature-browser',
     file: path.join(browserSourceRoot, 'index.ts'),
+  },
+  {
+    name: '@datadog/openfeature-node-server',
+    file: path.join(nodeSourceRoot, 'index.ts'),
   },
 ]
 

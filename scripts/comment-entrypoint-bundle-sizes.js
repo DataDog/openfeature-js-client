@@ -8,7 +8,9 @@ const COMMENT_MARKER = '<!-- datadog-openfeature-entrypoint-bundle-sizes -->'
 const bundleDirectories = [
   'packages/browser/',
   'packages/core/',
+  'packages/node-server/',
   'test-app/',
+  'test-app-node/',
   'scripts/build/',
   'scripts/lib/',
   '.yarn/',
@@ -16,7 +18,9 @@ const bundleDirectories = [
 const bundleFiles = new Set([
   'scripts/webpack-runner.js',
   'scripts/test-package-install.sh',
+  'scripts/test-node-package-install.sh',
   'scripts/report-entrypoint-bundle-sizes.js',
+  'scripts/report-node-entrypoint-bundle-sizes.js',
   'scripts/comment-entrypoint-bundle-sizes.js',
   'package.json',
   'yarn.lock',
@@ -51,24 +55,31 @@ async function hasBundleRelevantChanges(request, pullRequestPath) {
 }
 
 async function main() {
-  const reportPath = process.argv[2] || process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH
+  const reportPaths = process.argv.slice(2)
+  if (reportPaths.length === 0 && process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH) {
+    reportPaths.push(process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH)
+  }
 
-  if (!reportPath) {
+  if (reportPaths.length === 0) {
     console.log('Skipping entrypoint bundle-size PR comment: report path was not provided.')
     return
   }
 
-  const resolvedReportPath = path.resolve(reportPath)
-  if (!fs.existsSync(resolvedReportPath)) {
-    console.log(`Skipping entrypoint bundle-size PR comment: report was not found at ${resolvedReportPath}.`)
+  const reports = reportPaths.map((reportPath) => {
+    const resolvedPath = path.resolve(reportPath)
+    return fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf8').trim() : ''
+  })
+  if (!reports.some(Boolean)) {
+    console.log('Skipping entrypoint bundle-size PR comment: no nonempty reports were found.')
     return
   }
-
-  const report = fs.readFileSync(resolvedReportPath, 'utf8').trim()
-  if (!report) {
-    console.log(`Skipping entrypoint bundle-size PR comment: report at ${resolvedReportPath} is empty.`)
-    return
-  }
+  const report = reports
+    .map(
+      (content, index) =>
+        content ||
+        `Bundle report unavailable: \`${path.basename(reportPaths[index])}\` (missing or empty). Check the CI logs.`
+    )
+    .join('\n\n')
 
   const token = process.env.GITHUB_TOKEN
   const repository = process.env.GITHUB_REPOSITORY
