@@ -12,7 +12,7 @@ import {
   DatadogCoreProvider,
 } from '../../src/rules-based'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
-import { deferred } from '../cache/indexeddb-test-helpers'
+import { deferred, nextWrite } from '../cache/indexeddb-test-helpers'
 
 const context = { targetingKey: 'athlete-123' }
 const key = 'new-route-planner'
@@ -282,18 +282,20 @@ describe('browser flag-key obfuscation', () => {
         )
 
     await install()
-    const evaluate = () => {
+    const evaluate = async (expectWrite = false) => {
+      const written = expectWrite ? nextWrite() : undefined
       expect(client.getBooleanValue(key, false)).toBe(true)
       jest.advanceTimersByTime(31_000)
+      await written
     }
-    evaluate()
-    evaluate()
+    await evaluate(true)
+    await evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
     // createdAt may stay unchanged across requests. Reusing the same snapshot
     // must preserve deduplication, including a portable serialization round trip.
     await refresh()
-    evaluate()
+    await evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
     // Timestamp changes permit another exposure with identical assignment IDs.
@@ -303,8 +305,8 @@ describe('browser flag-key obfuscation', () => {
       await refresh()
       jest.advanceTimersByTime(31_000)
       expect(exposureEvents()).toHaveLength(index + 1)
-      evaluate()
-      evaluate()
+      await evaluate(true)
+      await evaluate()
       expect(exposureEvents()).toHaveLength(index + 2)
     }
 
@@ -312,7 +314,7 @@ describe('browser flag-key obfuscation', () => {
     for (const [index, publicSalt] of ['f'.repeat(32), '', salt].entries()) {
       payload = response(publicSalt, true, `2026-09-30T00:0${index + 2}:00Z`)
       await refresh()
-      evaluate()
+      await evaluate(true)
       expect(exposureEvents()).toHaveLength(index + 4)
     }
 
@@ -325,7 +327,7 @@ describe('browser flag-key obfuscation', () => {
     ].entries()) {
       Object.assign(assignment, change)
       await refresh()
-      evaluate()
+      await evaluate(true)
       expect(exposureEvents()).toHaveLength(index + 7)
     }
     expect(exposureEvents()[8]).toMatchObject({
@@ -340,7 +342,7 @@ describe('browser flag-key obfuscation', () => {
     await tracking?.shutdown()
     await OpenFeature.clearProviders()
     await install()
-    evaluate()
+    await evaluate()
     expect(exposureEvents()).toHaveLength(9)
     client.clearHooks()
     await tracking?.shutdown()

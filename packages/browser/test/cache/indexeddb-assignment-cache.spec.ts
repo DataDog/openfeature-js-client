@@ -42,6 +42,61 @@ describe('IndexedDBAssignmentCache', () => {
     expect(reloaded.has(b)).toBe(true)
   })
 
+  it('preserves committed entries from another instance of the same scope', async () => {
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    let written = nextWrite()
+    cache.set(a)
+    await written
+    written = nextWrite()
+    other.set(b)
+    await written
+
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(true)
+    expect(reloaded.has(b)).toBe(true)
+  })
+
+  it('merges concurrent writes from separate instances atomically', async () => {
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    const written = nextWrite(2)
+    cache.set(a)
+    other.set(b)
+    await written
+    expect(new Map(await read())).toEqual(new Map([serialized(a), serialized(b)]))
+  })
+
+  it("does not restore cleared entries from another instance's loaded snapshot", async () => {
+    await seed([serialized(a)])
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    await cache.clear()
+    const written = nextWrite()
+    other.set(b)
+    await written
+
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(false)
+    expect(reloaded.has(b)).toBe(true)
+  })
+
+  it("does not overwrite another instance's updated assignment with a loaded value", async () => {
+    await seed([serialized(a)])
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    const updated = { ...a, variant: { key: 'treatment' } }
+    let written = nextWrite()
+    cache.set(updated)
+    await written
+    written = nextWrite()
+    other.set(b)
+    await written
+    expect(await read()).toEqual([serialized(updated), serialized(b)])
+  })
+
   it('initializes once without replacing an updated assignment with persisted data', async () => {
     const loading = deferred<unknown>()
     const started = deferred<void>()
@@ -169,6 +224,42 @@ describe('IndexedDBAssignmentCache', () => {
     })
     cache.set(a)
     await aborted.promise
+    expect(cache.has(a)).toBe(true)
+    const written = nextWrite()
+    cache.set(b)
+    await written
+    expect(await read()).toEqual([serialized(a), serialized(b)])
+  })
+
+  it('retries the latest assignment after a failed write without replaying loaded entries', async () => {
+    await seed([serialized(b)])
+    await cache.init()
+    const attempted = deferred<void>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(async () => {
+      attempted.resolve()
+      throw new Error('write failed')
+    })
+    cache.set(a)
+    await attempted.promise
+    const other = new IndexedDBAssignmentCache('scope')
+    await other.clear()
+    const updated = { ...a, variant: { key: 'treatment' } }
+    const written = nextWrite()
+    cache.set(updated)
+    await written
+    expect(await read()).toEqual([serialized(updated)])
+  })
+
+  it('aborts and retries when put throws inside the merge callback', async () => {
+    await cache.init()
+    const aborted = deferred<void>()
+    const put = jest.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(function (this: IDBObjectStore) {
+      this.transaction.addEventListener('abort', () => aborted.resolve())
+      throw new Error('quota')
+    })
+    cache.set(a)
+    await aborted.promise
+    put.mockRestore()
     expect(cache.has(a)).toBe(true)
     const written = nextWrite()
     cache.set(b)
