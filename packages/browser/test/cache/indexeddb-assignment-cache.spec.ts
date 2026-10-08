@@ -16,7 +16,7 @@ const serialized = (entry: ExposureEvent): [string, string] => [
   assignmentCacheKeyToString(entry),
   assignmentCacheValueToString(entry),
 ]
-const read = () => storage.withStore('readonly', (store) => store.get('assignments-scope'))
+const read = async () => (await storage.withStore('readonly', (store) => store.get('assignments-scope')))?.entries
 const seed = (value: unknown) => storage.withStore('readwrite', (store) => store.put(value, 'assignments-scope'))
 
 describe('IndexedDBAssignmentCache', () => {
@@ -80,7 +80,10 @@ describe('IndexedDBAssignmentCache', () => {
     const reloaded = new IndexedDBAssignmentCache('scope')
     await reloaded.init()
     expect(reloaded.has(a)).toBe(false)
-    expect(reloaded.has(b)).toBe(true)
+    // The first stale batch is discarded, including new entries recorded before it observes the clear.
+    expect(reloaded.has(b)).toBe(false)
+    expect(other.has(a)).toBe(false)
+    expect(other.has(b)).toBe(false)
   })
 
   it("does not overwrite another instance's updated assignment with a loaded value", async () => {
@@ -95,6 +98,70 @@ describe('IndexedDBAssignmentCache', () => {
     other.set(b)
     await written
     expect(await read()).toEqual([serialized(updated), serialized(b)])
+  })
+
+  it('rejects a pending write from before another instance clears the scope', async () => {
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    const started = deferred<void>()
+    const resume = deferred<void>()
+    const transact = storage.withStore
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(async (mode, operation) => {
+      started.resolve()
+      await resume.promise
+      return transact(mode, operation)
+    })
+    other.set(a)
+    await started.promise
+    await cache.clear()
+
+    const written = nextWrite()
+    resume.resolve()
+    await written
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(false)
+    expect(other.has(a)).toBe(false)
+
+    // Once the instance observes the clear, new exposures can be persisted again.
+    const next = nextWrite()
+    other.set(b)
+    await next
+    const latest = new IndexedDBAssignmentCache('scope')
+    await latest.init()
+    expect(latest.has(a)).toBe(false)
+    expect(latest.has(b)).toBe(true)
+  })
+
+  it('rejects a failed write retried after another instance clears the scope', async () => {
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    const attempted = deferred<void>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(async () => {
+      attempted.resolve()
+      throw new Error('write failed')
+    })
+    other.set(a)
+    await attempted.promise
+    await cache.clear()
+
+    const written = nextWrite()
+    other.set(b)
+    await written
+    const reloaded = new IndexedDBAssignmentCache('scope')
+    await reloaded.init()
+    expect(reloaded.has(a)).toBe(false)
+    expect(other.has(a)).toBe(false)
+  })
+
+  it('increments the stored counter for concurrent clears', async () => {
+    const other = new IndexedDBAssignmentCache('scope')
+    await Promise.all([cache.init(), other.init()])
+    await Promise.all([cache.clear(), other.clear()])
+    expect(await storage.withStore('readonly', (store) => store.get('assignments-scope'))).toEqual({
+      generation: 2,
+      entries: [],
+    })
   })
 
   it('initializes once without replacing an updated assignment with persisted data', async () => {
@@ -142,7 +209,7 @@ describe('IndexedDBAssignmentCache', () => {
     loading.resolve([serialized(a)])
     await Promise.all([initialized, cleared])
     expect(cache.has(a)).toBe(false)
-    expect(await read()).toBeUndefined()
+    expect(await read()).toEqual([])
   })
 
   it('clears after an in-flight write and persists subsequent writes', async () => {
@@ -161,7 +228,7 @@ describe('IndexedDBAssignmentCache', () => {
     expect(cache.has(a)).toBe(false)
     writing.resolve()
     await cleared
-    expect(await read()).toBeUndefined()
+    expect(await read()).toEqual([])
     const written = nextWrite()
     cache.set(b)
     await written
@@ -170,7 +237,7 @@ describe('IndexedDBAssignmentCache', () => {
 
   it('keeps a write made immediately after clear', async () => {
     await cache.init()
-    const written = nextWrite()
+    const written = nextWrite(2)
     cache.set(a)
     const cleared = cache.clear()
     cache.set(b)
@@ -185,7 +252,7 @@ describe('IndexedDBAssignmentCache', () => {
     jest.spyOn(storage, 'withStore').mockImplementationOnce(() => loading.promise as Promise<never>)
     const initialized = cache.init()
     cache.set(a)
-    // Let persistence queue behind the pending read, before clear queues its delete.
+    // Let persistence queue behind the pending read, before clear queues its transaction.
     await Promise.resolve()
     const cleared = cache.clear()
     cache.set(b)
@@ -231,7 +298,7 @@ describe('IndexedDBAssignmentCache', () => {
     expect(await read()).toEqual([serialized(a), serialized(b)])
   })
 
-  it('retries the latest assignment after a failed write without replaying loaded entries', async () => {
+  it('discards a stale retry and persists the latest assignment after observing the clear', async () => {
     await seed([serialized(b)])
     await cache.init()
     const attempted = deferred<void>()
@@ -244,8 +311,32 @@ describe('IndexedDBAssignmentCache', () => {
     const other = new IndexedDBAssignmentCache('scope')
     await other.clear()
     const updated = { ...a, variant: { key: 'treatment' } }
+    let written = nextWrite()
+    cache.set(updated)
+    await written
+    expect(await read()).toEqual([])
+    expect(cache.has(updated)).toBe(false)
+    written = nextWrite()
+    cache.set(updated)
+    await written
+    expect(await read()).toEqual([serialized(updated)])
+  })
+
+  it('retries the latest assignment when the scope was not cleared', async () => {
+    await cache.init()
+    const attempted = deferred<void>()
+    const resume = deferred<void>()
+    jest.spyOn(storage, 'withStore').mockImplementationOnce(async () => {
+      attempted.resolve()
+      await resume.promise
+      throw new Error('write failed')
+    })
+    cache.set(a)
+    await attempted.promise
+    const updated = { ...a, variant: { key: 'treatment' } }
     const written = nextWrite()
     cache.set(updated)
+    resume.resolve()
     await written
     expect(await read()).toEqual([serialized(updated)])
   })
@@ -292,7 +383,16 @@ describe('IndexedDBAssignmentCache', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
-  it.each([null, 'invalid', { invalid: true }, [null, [], ['key', 12], ['', 'value']]])(
+  it.each([
+    null,
+    'invalid',
+    { invalid: true },
+    [null, [], ['key', 12], ['', 'value']],
+    { generation: -1, entries: [serialized(a)] },
+    { generation: '1', entries: [serialized(a)] },
+    { generation: 1, entries: null },
+    { generation: 1, entries: [null, ['key', 12]] },
+  ])(
     'ignores malformed persisted data: %j',
     async (value) => {
       await seed(value)

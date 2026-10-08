@@ -315,6 +315,10 @@ Exposure checks use a bounded in-memory cache. Background IndexedDB transactions
 with the stored entries, so instances sharing a scope preserve each other's writes without replaying their loaded snapshots.
 Memory removes the least recently used entries; persistence removes the oldest written entries when it reaches its limit.
 Evicted entries can produce another exposure.
+Clearing a scope stores an empty cache with an incremented invalidation counter. Other instances reject pending or retried
+writes with an older counter. On their next write, they discard stale memory and pending entries, then load the current cache.
+This can produce repeat exposures. Other tabs' memory caches are not updated immediately, and concurrent tabs can still log
+the same exposure. The cache reduces duplicates; it does not guarantee exactly-once logging across tabs.
 If IndexedDB is unavailable or a storage operation fails, evaluation and in-memory deduplication continue.
 An abrupt page exit can lose an unfinished write and permit a repeat exposure after reload.
 

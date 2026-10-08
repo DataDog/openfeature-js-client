@@ -51,7 +51,7 @@ describe('exposure cache capacity', () => {
     const written = nextWrite()
     cache.set(exposure('new'))
     await written
-    const stored = new Map(await withStore('readonly', (store) => store.get('assignments-scope')))
+    const stored = new Map((await withStore('readonly', (store) => store.get('assignments-scope'))).entries)
     expect(stored.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
     expect(stored.has('key-1')).toBe(false)
     expect(cache.has(exposure('new'))).toBe(true)
@@ -67,7 +67,7 @@ describe('exposure cache capacity', () => {
     second.set(exposure('second'))
     await written
 
-    const stored = new Map(await withStore('readonly', (store) => store.get('assignments-scope')))
+    const stored = new Map((await withStore('readonly', (store) => store.get('assignments-scope'))).entries)
     expect(stored.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
     expect(stored.has('key-0')).toBe(false)
     expect(stored.has('key-1')).toBe(false)

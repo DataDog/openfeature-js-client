@@ -29,7 +29,12 @@ describe('exposure cache storage boundaries', () => {
     await Promise.all([first.init(), second.init()])
     expect(first.has(exposure)).toBe(false)
     expect(second.has(exposure)).toBe(true)
+    expect(await withStore('readonly', (store) => store.get('assignments-scope-a'))).toEqual({
+      generation: 1,
+      entries: [],
+    })
     expect(await withStore('readonly', (store) => store.getAllKeys())).toEqual([
+      'assignments-scope-a',
       'assignments-scope-b',
       'v2-flags-config-other',
     ])

@@ -3,6 +3,11 @@ import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
 import { withStore } from './indexeddb-store'
 import SimpleAssignmentCache from './simple-assignment-cache'
 
+interface StoredExposures {
+  generation: number
+  entries: [string, string][]
+}
+
 /** Keep exposure checks synchronous. Merge pending entries into storage without blocking evaluation. */
 export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private readonly storageKey: string
@@ -10,6 +15,7 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private initialization?: Promise<void>
   private persistScheduled = false
   private generation = 0
+  private storedGeneration = 0
   private pendingKeys = new Set<string>()
 
   constructor(storageKeySuffix: string) {
@@ -21,15 +27,16 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
     if (!this.initialization) {
       const generation = this.generation
       this.initialization = this.enqueue(async () => {
-        const stored: unknown = await withStore('readonly', (store) => store.get(this.storageKey))
+        const stored = readStored(await withStore('readonly', (store) => store.get(this.storageKey)))
         // A clear during loading must not restore the previous configuration's exposures.
-        if (generation !== this.generation || !Array.isArray(stored)) return
+        if (generation !== this.generation) return
+        this.storedGeneration = stored.generation
         const current = Array.from(this.entries())
         super.clear()
-        this.setEntries(stored.filter(isEntry))
+        this.setEntries(stored.entries)
         // Evaluations during loading take precedence over older persisted values.
         this.setEntries(current)
-        if (stored.length > MAX_EXPOSURE_CACHE_ENTRIES) this.persist()
+        if (stored.entries.length > MAX_EXPOSURE_CACHE_ENTRIES) this.persist()
       })
     }
     return this.initialization
@@ -52,10 +59,12 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
     super.clear()
     this.generation++
     this.pendingKeys.clear()
-    // New entries need a write after the delete, even if an older write is queued.
+    // New entries need a write after the clear, even if an older write is queued.
     this.persistScheduled = false
     return this.enqueue(async () => {
-      await withStore('readwrite', (store) => store.delete(this.storageKey))
+      // Keep a counter so other instances can reject their pre-clear writes.
+      const stored = await this.update((current) => ({ generation: current.generation + 1, entries: [] }))
+      this.storedGeneration = stored.generation
     })
   }
 
@@ -78,32 +87,32 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
         const pendingKeys = this.pendingKeys
         this.pendingKeys = new Set()
         const entries = Array.from(this.entries()).filter(([key]) => pendingKeys.has(key))
+        const storedGeneration = this.storedGeneration
         try {
-          await withStore('readwrite', (store) => {
-            // IndexedDB serializes read/write transactions across connections and tabs.
-            // Merge only this batch's changes, never the instance's stale loaded snapshot.
-            const request = store.get(this.storageKey)
-            request.onsuccess = () => {
-              try {
-                const stored = new Map<string, string>(
-                  Array.isArray(request.result) ? request.result.filter(isEntry) : []
-                )
-                for (const [key, value] of entries) {
-                  stored.delete(key)
-                  stored.set(key, value)
-                }
-                for (const key of stored.keys()) {
-                  if (stored.size <= MAX_EXPOSURE_CACHE_ENTRIES) break
-                  stored.delete(key)
-                }
-                store.put(Array.from(stored), this.storageKey)
-              } catch {
-                // Exceptions in a request callback must abort the whole merge.
-                store.transaction.abort()
-              }
+          const stored = await this.update((current) => {
+            if (current.generation !== storedGeneration) return current
+            // Merge only this batch's changes, never the instance's loaded snapshot.
+            const merged = new Map(current.entries)
+            for (const [key, value] of entries) {
+              merged.delete(key)
+              merged.set(key, value)
             }
-            return request
+            for (const key of merged.keys()) {
+              if (merged.size <= MAX_EXPOSURE_CACHE_ENTRIES) break
+              merged.delete(key)
+            }
+            return { generation: storedGeneration, entries: Array.from(merged) }
           })
+          if (generation === this.generation && stored.generation !== storedGeneration) {
+            // Another instance cleared the scope. Drop this batch and any queued old writes.
+            // This can repeat an exposure, but cannot restore a cleared deduplication entry.
+            this.generation++
+            this.storedGeneration = stored.generation
+            this.persistScheduled = false
+            this.pendingKeys.clear()
+            super.clear()
+            this.setEntries(stored.entries)
+          }
         } catch {
           if (generation === this.generation) {
             // Retry failed entries on a later write, retaining only keys still in memory.
@@ -118,6 +127,38 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
       })
     })
   }
+
+  private async update(change: (current: StoredExposures) => StoredExposures): Promise<StoredExposures> {
+    let updated!: StoredExposures
+    await withStore('readwrite', (store) => {
+      // IndexedDB serializes these read/write transactions across connections and tabs.
+      const request = store.get(this.storageKey)
+      request.onsuccess = () => {
+        try {
+          updated = change(readStored(request.result))
+          store.put(updated, this.storageKey)
+        } catch {
+          store.transaction.abort()
+        }
+      }
+      return request
+    })
+    return updated
+  }
+}
+
+function readStored(value: unknown): StoredExposures {
+  // Accept snapshots written by earlier builds without an invalidation counter.
+  if (Array.isArray(value)) return { generation: 0, entries: value.filter(isEntry) }
+  if (
+    typeof value === 'object' && value !== null &&
+    'generation' in value && typeof value.generation === 'number' &&
+    Number.isSafeInteger(value.generation) && value.generation >= 0 &&
+    'entries' in value && Array.isArray(value.entries)
+  ) {
+    return { generation: value.generation, entries: value.entries.filter(isEntry) }
+  }
+  return { generation: 0, entries: [] }
 }
 
 function isEntry(value: unknown): value is [string, string] {
