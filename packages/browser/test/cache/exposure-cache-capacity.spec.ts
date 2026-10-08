@@ -1,8 +1,9 @@
 import { assignmentCacheKeyToString, assignmentCacheValueToString, type ExposureEvent } from '@datadog/flagging-core'
-import ChromeStorageAsyncMap from '../../src/cache/chrome-storage-async-map'
 import { MAX_EXPOSURE_CACHE_ENTRIES } from '../../src/cache/constants'
-import { LocalStorageAssignmentShim } from '../../src/cache/local-storage-assignment-shim'
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
+import { withStore } from '../../src/cache/indexeddb-store'
 import SimpleAssignmentCache from '../../src/cache/simple-assignment-cache'
+import { nextWrite } from './indexeddb-test-helpers'
 
 const exposure = (id: string): ExposureEvent => ({
   subject: { id, attributes: {} },
@@ -14,8 +15,6 @@ const entries = (count = MAX_EXPOSURE_CACHE_ENTRIES): [string, string][] =>
   Array.from({ length: count }, (_, index) => [`key-${index}`, 'value'])
 
 describe('exposure cache capacity', () => {
-  beforeEach(() => localStorage.clear())
-
   it('uses the Node provider limit and evicts the least recently used memory entry', async () => {
     expect(MAX_EXPOSURE_CACHE_ENTRIES).toBe(50_000)
     const cache = new SimpleAssignmentCache()
@@ -40,62 +39,43 @@ describe('exposure cache capacity', () => {
     expect(cache.has(old)).toBe(true)
   })
 
-  it('bounds localStorage on load and on write without changing another namespace', () => {
-    localStorage.setItem('datadog-assignment-bounded', JSON.stringify(entries(MAX_EXPOSURE_CACHE_ENTRIES + 1)))
-    localStorage.setItem('datadog-assignment-other', 'preserve')
-    const cache = new LocalStorageAssignmentShim('bounded')
-    expect(cache.has('key-0')).toBe(false)
-    cache.set('key-1', 'updated')
-    cache.set('new', 'value')
-    const stored = new Map(JSON.parse(localStorage.getItem('datadog-assignment-bounded')!))
+  it('bounds IndexedDB on load and subsequent writes', async () => {
+    await withStore('readwrite', (store) => store.put(entries(MAX_EXPOSURE_CACHE_ENTRIES + 1), 'assignments-scope'))
+    const cache = new IndexedDBAssignmentCache('scope')
+    const pruned = nextWrite()
+    await cache.init()
+    await pruned
+    const imported = new Map(await cache.getEntries())
+    expect(imported.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
+    expect(imported.has('key-0')).toBe(false)
+    const written = nextWrite()
+    cache.set(exposure('new'))
+    await written
+    const stored = new Map((await withStore('readonly', (store) => store.get('assignments-scope'))).entries)
     expect(stored.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
-    expect(stored.has('key-2')).toBe(false)
-    expect(stored.get('key-1')).toBe('updated')
-    expect(new LocalStorageAssignmentShim('bounded').has('new')).toBe(true)
-    expect(localStorage.getItem('datadog-assignment-other')).toBe('preserve')
+    expect(stored.has('key-1')).toBe(false)
+    expect(cache.has(exposure('new'))).toBe(true)
   })
 
-  function chromeCache(count: number) {
-    const stored: Record<string, string> = Object.fromEntries(
-      entries(count).map(([key, value]) => [`bounded:${key}`, value])
+  it("bounds the merged store without discarding another instance's recent writes", async () => {
+    await withStore('readwrite', (store) => store.put(entries(), 'assignments-scope'))
+    const first = new IndexedDBAssignmentCache('scope')
+    const second = new IndexedDBAssignmentCache('scope')
+    await Promise.all([first.init(), second.init()])
+    const written = nextWrite(2)
+    first.set(exposure('first'))
+    second.set(exposure('second'))
+    await written
+
+    const stored = new Map((await withStore('readonly', (store) => store.get('assignments-scope'))).entries)
+    expect(stored.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
+    expect(stored.has('key-0')).toBe(false)
+    expect(stored.has('key-1')).toBe(false)
+    expect(stored.get(assignmentCacheKeyToString(exposure('first')))).toBe(
+      assignmentCacheValueToString(exposure('first'))
     )
-    stored['other:preserve'] = 'value'
-    const storage = {
-      get: jest.fn(async () => ({ ...stored })),
-      set: jest.fn(async (items: Record<string, string>) => {
-        Object.assign(stored, items)
-      }),
-      remove: jest.fn(async (keys: string[]) => {
-        for (const key of keys) delete stored[key]
-      }),
-    }
-    const cache = new ChromeStorageAsyncMap<string>(storage as unknown as chrome.storage.StorageArea, 'bounded')
-    return { stored, storage, cache }
-  }
-
-  it('bounds Chrome storage on load and serializes concurrent writes and eviction', async () => {
-    const { stored, cache } = chromeCache(MAX_EXPOSURE_CACHE_ENTRIES + 1)
-    expect(Object.keys(await cache.entries())).toHaveLength(MAX_EXPOSURE_CACHE_ENTRIES)
-    expect(stored['bounded:key-0']).toBeUndefined()
-    await Promise.all([cache.set('key-1', 'updated'), cache.set('new-1', 'value'), cache.set('new-2', 'value')])
-    expect(Object.keys(stored)).toHaveLength(MAX_EXPOSURE_CACHE_ENTRIES + 1)
-    expect(stored['bounded:key-1']).toBe('updated')
-    expect(stored['bounded:key-2']).toBeUndefined()
-    expect(stored['bounded:key-3']).toBeUndefined()
-    expect(stored['bounded:new-1']).toBe('value')
-    expect(stored['bounded:new-2']).toBe('value')
-    expect(stored['other:preserve']).toBe('value')
-  })
-
-  it('continues after a failed Chrome write and clears after queued writes', async () => {
-    const { stored, storage, cache } = chromeCache(0)
-    storage.set.mockRejectedValueOnce(new Error('quota'))
-    await expect(cache.set('failed', 'value')).rejects.toThrow('quota')
-    await cache.set('next', 'value')
-    expect(stored['bounded:next']).toBe('value')
-    const pendingWrite = cache.set('pending', 'value')
-    await cache.clear()
-    await pendingWrite
-    expect(stored).toEqual({ 'other:preserve': 'value' })
+    expect(stored.get(assignmentCacheKeyToString(exposure('second')))).toBe(
+      assignmentCacheValueToString(exposure('second'))
+    )
   })
 })

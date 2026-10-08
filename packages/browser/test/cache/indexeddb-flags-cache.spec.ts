@@ -1,9 +1,3 @@
-// structuredClone is required by fake-indexeddb but not available in jsdom
-if (typeof globalThis.structuredClone === 'undefined') {
-  globalThis.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val))
-}
-
-import 'fake-indexeddb/auto'
 import { buildStorageKeySuffix, type FlagsConfiguration, getMD5Hash } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import { IDBFactory } from 'fake-indexeddb'

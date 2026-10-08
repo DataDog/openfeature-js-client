@@ -1,8 +1,9 @@
-import { assignmentCacheKeyToString, type ExposureEvent } from '@datadog/flagging-core'
+import type { ExposureEvent } from '@datadog/flagging-core'
 import { assignmentCacheFactory } from '../../src/cache/assignment-cache-factory'
-import ChromeStorageAsyncMap from '../../src/cache/chrome-storage-async-map'
 import { createExposureCache } from '../../src/cache/exposure-cache'
+import { withStore } from '../../src/cache/indexeddb-store'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
+import { nextWrite } from './indexeddb-test-helpers'
 
 const exposure: ExposureEvent = {
   flag: { key: 'flag' },
@@ -12,73 +13,32 @@ const exposure: ExposureEvent = {
 }
 
 describe('exposure cache storage boundaries', () => {
-  beforeEach(() => {
-    localStorage.clear()
-  })
-
-  it('reads Chrome storage entries only from its own namespace', async () => {
-    const stored: Record<string, string> = {
-      'scope-a:assignment': 'first',
-      'scope-b:assignment': 'second',
-      assignment: 'legacy',
-      'scope-b:other': 'other-scope-only',
+  it('clears only its own namespace and leaves configuration snapshots intact', async () => {
+    const createCache = (storageKeySuffix: string) => assignmentCacheFactory({ storageKeySuffix })
+    await withStore('readwrite', (store) => store.put('preserve', 'v2-flags-config-other'))
+    for (const scope of ['scope-a', 'scope-b']) {
+      const cache = createCache(scope)
+      await cache.init()
+      const written = nextWrite()
+      cache.set(exposure)
+      await written
     }
-    const get = jest.fn(async (key: string) => ({ [key]: stored[key] }))
-    const storage = { get } as unknown as chrome.storage.StorageArea
-    const first = new ChromeStorageAsyncMap<string>(storage, 'scope-a')
-    const second = new ChromeStorageAsyncMap<string>(storage, 'scope-b')
-
-    expect(await first.get('assignment')).toBe('first')
-    expect(get).toHaveBeenLastCalledWith('scope-a:assignment')
-    expect(await second.get('assignment')).toBe('second')
-    expect(get).toHaveBeenLastCalledWith('scope-b:assignment')
-    expect(await first.get('other')).toBeUndefined()
-    expect(get).toHaveBeenLastCalledWith('scope-a:other')
+    await createCache('scope-a').clear()
+    const first = createCache('scope-a')
+    const second = createCache('scope-b')
+    await Promise.all([first.init(), second.init()])
+    expect(first.has(exposure)).toBe(false)
+    expect(second.has(exposure)).toBe(true)
+    expect(await withStore('readonly', (store) => store.get('assignments-scope-a'))).toEqual({
+      generation: 1,
+      entries: [],
+    })
+    expect(await withStore('readonly', (store) => store.getAllKeys())).toEqual([
+      'assignments-scope-a',
+      'assignments-scope-b',
+      'v2-flags-config-other',
+    ])
   })
-
-  it.each(['localStorage', 'chrome'] as const)(
-    'clears only its own %s namespace, including persisted entries',
-    async (kind) => {
-      const stored: Record<string, string> = { unrelated: 'preserve-me' }
-      const storage = {
-        get: jest.fn(async () => ({ ...stored })),
-        set: jest.fn(async (entries: Record<string, string>) => {
-          Object.assign(stored, entries)
-        }),
-        remove: jest.fn(async (keys: string[]) => {
-          for (const key of keys) delete stored[key]
-        }),
-        clear: jest.fn(),
-      } as unknown as chrome.storage.StorageArea
-      const createCache = (storageKeySuffix: string) =>
-        assignmentCacheFactory({
-          storageKeySuffix,
-          chromeStorage: kind === 'chrome' ? storage : undefined,
-        })
-      const first = createCache('scope-a')
-      const second = createCache('scope-b')
-      first.set(exposure)
-      second.set(exposure)
-      await Promise.all([first.init(), second.init()])
-
-      const storageKeys = Object.keys(kind === 'chrome' ? stored : localStorage).filter((key) => key !== 'unrelated')
-      const entrySuffix = kind === 'chrome' ? `:${assignmentCacheKeyToString(exposure)}` : ''
-      expect(storageKeys.sort()).toEqual([
-        `datadog-assignment-scope-a${entrySuffix}`,
-        `datadog-assignment-scope-b${entrySuffix}`,
-      ])
-
-      await first.clear()
-
-      const reloadedFirst = createCache('scope-a')
-      const reloadedSecond = createCache('scope-b')
-      await Promise.all([reloadedFirst.init(), reloadedSecond.init()])
-      expect(reloadedFirst.has(exposure)).toBe(false)
-      expect(reloadedSecond.has(exposure)).toBe(true)
-      expect(stored.unrelated).toBe('preserve-me')
-      expect(storage.clear).not.toHaveBeenCalled()
-    }
-  )
 
   it('keeps callback proxy caches independent without invoking the proxy during setup', async () => {
     const proxy = jest.fn(() => 'https://proxy.example.com/intake')
@@ -87,12 +47,10 @@ describe('exposure cache storage boundaries', () => {
     const first = createExposureCache(options, configuration)
     await first.init()
     first.set(exposure)
-
     const second = createExposureCache(options, configuration)
     await second.init()
     expect(first.has(exposure)).toBe(true)
     expect(second.has(exposure)).toBe(false)
-    expect(localStorage.length).toBe(0)
     expect(proxy).not.toHaveBeenCalled()
   })
 })

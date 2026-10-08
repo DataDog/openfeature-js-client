@@ -1,9 +1,11 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
+import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createDatadogExposureLoggingHook } from '../../src/openfeature/exposures'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
+import { nextWrite } from '../cache/indexeddb-test-helpers'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
@@ -47,8 +49,8 @@ describe('Exposures End-to-End', () => {
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
     delete globalObject.DD_RUM
 
-    // Clear localStorage to reset assignment cache between tests
-    localStorage.clear()
+    // Reset IndexedDB to clear assignment cache between tests
+    globalThis.indexedDB = new IDBFactory()
 
     // Mock current time to get deterministic timestamps
     jest.setSystemTime(new Date('2025-08-04T17:00:00.000Z'))
@@ -859,13 +861,15 @@ describe('Exposures End-to-End', () => {
       await OpenFeature.setProviderAndWait(provider1)
       const client1 = OpenFeature.getClient()
 
+      const written = nextWrite()
       client1.getStringValue('string-flag', 'default')
       triggerBatch()
+      await written
 
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Simulate page reload: clear providers but keep localStorage
+      // Simulate page reload: clear providers but keep IndexedDB
       await OpenFeature.clearProviders()
       fetchMock.mockClear()
 
@@ -874,11 +878,11 @@ describe('Exposures End-to-End', () => {
       await OpenFeature.setProviderAndWait(provider2)
       const client2 = OpenFeature.getClient()
 
-      // Evaluate same flag - should NOT log because cache persisted from localStorage
+      // Evaluate same flag - should NOT log because cache persisted from IndexedDB
       client2.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      // Should have no new exposure calls (cache was loaded from localStorage)
+      // Should have no new exposure calls (cache was loaded from IndexedDB)
       expect(getExposuresCalls()).toHaveLength(0)
     })
 

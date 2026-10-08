@@ -1,7 +1,6 @@
 import { getMD5Hash } from '@datadog/flagging-core'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
 import { assignmentCacheFactory } from './assignment-cache-factory'
-import { chromeStorageIfAvailable } from './helpers'
 
 export function createExposureCache(
   options: Partial<FlaggingTrackingInitConfiguration>,
@@ -22,7 +21,6 @@ export function createExposureCache(
   )
   return assignmentCacheFactory({
     forceMemoryOnly,
-    chromeStorage: chromeStorageIfAvailable(),
     storageKeySuffix: `dd-of-browser-${scope}`,
   })
 }

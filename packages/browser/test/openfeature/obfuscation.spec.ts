@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
-import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
+import * as indexeddbStore from '../../src/cache/indexeddb-store'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
@@ -11,6 +12,7 @@ import {
   DatadogCoreProvider,
 } from '../../src/rules-based'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
+import { deferred, nextWrite } from '../cache/indexeddb-test-helpers'
 
 const context = { targetingKey: 'athlete-123' }
 const key = 'new-route-planner'
@@ -280,18 +282,20 @@ describe('browser flag-key obfuscation', () => {
         )
 
     await install()
-    const evaluate = () => {
+    const evaluate = async (expectWrite = false) => {
+      const written = expectWrite ? nextWrite() : undefined
       expect(client.getBooleanValue(key, false)).toBe(true)
       jest.advanceTimersByTime(31_000)
+      await written
     }
-    evaluate()
-    evaluate()
+    await evaluate(true)
+    await evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
     // createdAt may stay unchanged across requests. Reusing the same snapshot
     // must preserve deduplication, including a portable serialization round trip.
     await refresh()
-    evaluate()
+    await evaluate()
     expect(exposureEvents()).toHaveLength(1)
 
     // Timestamp changes permit another exposure with identical assignment IDs.
@@ -301,8 +305,8 @@ describe('browser flag-key obfuscation', () => {
       await refresh()
       jest.advanceTimersByTime(31_000)
       expect(exposureEvents()).toHaveLength(index + 1)
-      evaluate()
-      evaluate()
+      await evaluate(true)
+      await evaluate()
       expect(exposureEvents()).toHaveLength(index + 2)
     }
 
@@ -310,7 +314,7 @@ describe('browser flag-key obfuscation', () => {
     for (const [index, publicSalt] of ['f'.repeat(32), '', salt].entries()) {
       payload = response(publicSalt, true, `2026-09-30T00:0${index + 2}:00Z`)
       await refresh()
-      evaluate()
+      await evaluate(true)
       expect(exposureEvents()).toHaveLength(index + 4)
     }
 
@@ -323,7 +327,7 @@ describe('browser flag-key obfuscation', () => {
     ].entries()) {
       Object.assign(assignment, change)
       await refresh()
-      evaluate()
+      await evaluate(true)
       expect(exposureEvents()).toHaveLength(index + 7)
     }
     expect(exposureEvents()[8]).toMatchObject({
@@ -338,7 +342,7 @@ describe('browser flag-key obfuscation', () => {
     await tracking?.shutdown()
     await OpenFeature.clearProviders()
     await install()
-    evaluate()
+    await evaluate()
     expect(exposureEvents()).toHaveLength(9)
     client.clearHooks()
     await tracking?.shutdown()
@@ -388,7 +392,7 @@ describe('browser flag-key obfuscation', () => {
     )
     const provider = new DatadogProvider({ ...options, enableExposureLogging: true })
     const clear = jest
-      .spyOn(HybridAssignmentCache.prototype, 'clear')
+      .spyOn(IndexedDBAssignmentCache.prototype, 'clear')
       .mockRejectedValue(new Error('storage unavailable'))
     try {
       await provider.initialize(context)
@@ -419,7 +423,7 @@ describe('browser flag-key obfuscation', () => {
     const clearingFinished = new Promise<void>((resolve) => {
       finishClear = resolve
     })
-    const clear = jest.spyOn(HybridAssignmentCache.prototype, 'clear').mockImplementation(() => {
+    const clear = jest.spyOn(IndexedDBAssignmentCache.prototype, 'clear').mockImplementation(() => {
       startClear()
       return clearingFinished
     })
@@ -449,7 +453,7 @@ describe('browser flag-key obfuscation', () => {
   it.each(['', salt])('refreshes without an exposure cache when logging is disabled, salt "%s"', async (publicSalt) => {
     fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
     const provider = new DatadogProvider(options)
-    const clear = jest.spyOn(HybridAssignmentCache.prototype, 'clear')
+    const clear = jest.spyOn(IndexedDBAssignmentCache.prototype, 'clear')
     try {
       await provider.initialize(context)
       fetchMock.mockResolvedValue(fetchResponse(response(publicSalt, false, '2026-09-30T00:01:00Z')))
@@ -486,26 +490,11 @@ describe('browser flag-key obfuscation', () => {
 
   it('loads persisted exposure identities before reporting ready', async () => {
     jest.useFakeTimers()
-    let resolveRead: ((entries: Record<string, string>) => void) | undefined
-    const readStarted = new Promise<void>((started) => {
-      Object.defineProperty(globalThis, 'chrome', {
-        configurable: true,
-        value: {
-          storage: {
-            local: {
-              get: jest.fn(
-                () =>
-                  new Promise<Record<string, string>>((resolve) => {
-                    resolveRead = resolve
-                    started()
-                  })
-              ),
-              set: jest.fn().mockResolvedValue(undefined),
-              remove: jest.fn().mockResolvedValue(undefined),
-            },
-          },
-        },
-      })
+    const read = deferred<unknown>()
+    const started = deferred<void>()
+    const load = jest.spyOn(indexeddbStore, 'withStore').mockImplementationOnce(() => {
+      started.resolve()
+      return read.promise as Promise<never>
     })
     try {
       const provider = new DatadogProvider({ ...options, enableExposureLogging: true })
@@ -513,20 +502,20 @@ describe('browser flag-key obfuscation', () => {
       const initialized = OpenFeature.setProviderAndWait(provider, context).then(() => {
         ready = true
       })
-      await readStarted
+      await started.promise
       await jest.advanceTimersByTimeAsync(100)
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('precompute-assignments'))).toBe(true)
       expect(ready).toBe(false)
 
-      resolveRead!({})
+      read.resolve([])
       await initialized
       OpenFeature.getClient().getBooleanValue(key, false)
       jest.advanceTimersByTime(31_000)
       expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('exposures'))).toHaveLength(1)
     } finally {
       // Let provider shutdown finish if an assertion failed before the read resolved.
-      resolveRead?.({})
-      Reflect.deleteProperty(globalThis, 'chrome')
+      read.resolve([])
+      load.mockRestore()
     }
   })
 })

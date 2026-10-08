@@ -311,12 +311,20 @@ Reapplying the same configuration preserves deduplication. Neither provider emit
 `createdAt` is a configuration timestamp, not an experiment revision. This behavior does not depend on it changing on every request.
 
 Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
-The memory cache removes the least recently used entry. Persistent caches remove the oldest written entries.
-An evicted entry can produce another exposure. Storage failures do not prevent flag evaluation.
+Exposure checks use a bounded in-memory cache. Background IndexedDB transactions merge newly recorded exposures
+with the stored entries, so instances sharing a scope preserve each other's writes without replaying their loaded snapshots.
+Memory removes the least recently used entries; persistence removes the oldest written entries when it reaches its limit.
+Evicted entries can produce another exposure.
+Clearing a scope stores an empty cache with an incremented invalidation counter. Other instances reject pending or retried
+writes with an older counter. On their next write, they discard stale memory and pending entries, then load the current cache.
+This can produce repeat exposures. Other tabs' memory caches are not updated immediately, and concurrent tabs can still log
+the same exposure. The cache reduces duplicates; it does not guarantee exactly-once logging across tabs.
+If IndexedDB is unavailable or a storage operation fails, evaluation and in-memory deduplication continue.
+An abrupt page exit can lose an unfinished write and permit a repeat exposure after reload.
 
 For rules-based configurations, `DatadogCoreProvider` also includes the rules configuration identity. Changed rules allow new exposures without clearing application-managed hook state. Retrieval metadata (`fetchedAt` and `etag`) and the server's `createdAt` build timestamp do not change that identity. These fields remain available on the configuration and in its portable wire representation.
 
-Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Older unscoped cache entries are not reused, so upgrading can produce a one-time repeat exposure. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
+Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Existing localStorage and Chrome storage entries are not migrated or deleted, so upgrading can produce repeat exposures. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
 

@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/test/setup-indexeddb.ts', '<rootDir>/src/test-setup.ts'],
   transform: {
     '^.+\\.ts$': [
       'ts-jest',

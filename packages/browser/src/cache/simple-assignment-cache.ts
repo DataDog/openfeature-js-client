@@ -1,13 +1,9 @@
 import { LRUInMemoryAssignmentCache } from '@datadog/flagging-core'
 
 import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
-import type { BulkReadAssignmentCache, BulkWriteAssignmentCache } from './hybrid-assignment-cache'
 
 /** A bounded in-memory exposure cache, also used to serve persisted entries. */
-export default class SimpleAssignmentCache
-  extends LRUInMemoryAssignmentCache
-  implements BulkWriteAssignmentCache, BulkReadAssignmentCache
-{
+export default class SimpleAssignmentCache extends LRUInMemoryAssignmentCache {
   constructor() {
     super(MAX_EXPOSURE_CACHE_ENTRIES)
   }

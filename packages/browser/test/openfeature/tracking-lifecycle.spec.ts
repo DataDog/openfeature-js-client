@@ -1,4 +1,5 @@
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import * as indexeddbStore from '../../src/cache/indexeddb-store'
 import {
   composeDatadogTrackingHooks,
   configurationFromString,
@@ -139,16 +140,13 @@ describe('tracking resource lifecycle', () => {
     const readStarted = new Promise<void>((resolve) => {
       notifyRead = resolve
     })
-    const storage = {
-      get: jest.fn(
-        () =>
-          new Promise<Record<string, string>>((resolve) => {
-            resolveRead = resolve
-            notifyRead()
-          })
-      ),
-    }
-    Object.defineProperty(globalThis, 'chrome', { configurable: true, value: { storage: { local: storage } } })
+    jest.spyOn(indexeddbStore, 'withStore').mockImplementationOnce(
+      () =>
+        new Promise<never>((resolve) => {
+          resolveRead = resolve as unknown as typeof resolveRead
+          notifyRead()
+        })
+    )
     const controller = createDatadogExposureLoggingHook(options)
     controllers.push(controller)
     const initialize = controller.initialize()

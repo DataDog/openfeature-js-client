@@ -2,6 +2,7 @@ import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import { OpenFeature } from '@openfeature/web-sdk'
+import { withStore } from '../../src/cache/indexeddb-store'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
   composeDatadogTrackingHooks,
@@ -12,6 +13,7 @@ import {
   createDatadogRumTrackingHook,
   DatadogCoreProvider,
 } from '../../src/rules-based'
+import { nextWrite } from '../cache/indexeddb-test-helpers'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
@@ -341,27 +343,10 @@ describe('DatadogCoreProvider tracking', () => {
   })
 
   it('does not let persisted marker-less exposure entries suppress core provider exposures', async () => {
-    const persisted: Record<string, string> = {}
-    Object.defineProperty(globalThis, 'chrome', {
-      configurable: true,
-      value: {
-        storage: {
-          local: {
-            get: jest.fn(async () => ({ ...persisted })),
-            set: jest.fn(async (items: Record<string, string>) => {
-              Object.assign(persisted, items)
-            }),
-            remove: jest.fn(async (keys: string[]) => {
-              for (const storageKey of keys) delete persisted[storageKey]
-            }),
-          },
-        },
-      },
-    })
-
     // Persist an entry in the format written without a core configuration marker.
     const legacy = createExposureOnlyTracking().trackingHooks
     await legacy.initialize()
+    const written = nextWrite()
     legacy.hooks[0].finally!(
       { flagKey: 'static-flag', context: { targetingKey: 'static-user', plan: 'free' } } as never,
       {
@@ -373,7 +358,8 @@ describe('DatadogCoreProvider tracking', () => {
     )
     jest.advanceTimersByTime(31_000)
     await legacy.shutdown()
-    expect(Object.keys(persisted)).toHaveLength(1)
+    await written
+    expect(await withStore('readonly', (store) => store.getAllKeys())).toHaveLength(1)
 
     const { trackingHooks } = createExposureOnlyTracking()
     await trackingHooks.initialize()

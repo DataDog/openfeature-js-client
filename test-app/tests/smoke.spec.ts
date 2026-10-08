@@ -232,6 +232,61 @@ test('keeps plaintext responses compatible when rollout is disabled', async ({ p
   expect(await runSmoke(page, '/obfuscation.html')).toEqual(expectedObfuscationResult)
 })
 
+test('persists exposure deduplication across reloads and isolates client tokens', async ({ page }) => {
+  let salt = '000102030405060708090a0b0c0d0e0f'
+  const exposures: { flag: { key: string } }[] = []
+  await page.route('**/assignments?*', (route) => route.fulfill({ json: assignmentPayload(salt) }))
+  await page.route(
+    (url) => url.pathname === '/exposures',
+    async (route) => {
+      for (const line of route.request().postData()!.trim().split('\n')) exposures.push(JSON.parse(line))
+      await route.fulfill({ status: 202, body: '' })
+    }
+  )
+  const storedScopes = () =>
+    page.evaluate(
+      () =>
+        new Promise<number>((resolve, reject) => {
+          const open = indexedDB.open('dd-flagging')
+          open.onerror = () => reject(open.error)
+          open.onsuccess = () => {
+            const db = open.result
+            const read = db.transaction('configurations').objectStore('configurations').getAllKeys()
+            read.onsuccess = () => {
+              db.close()
+              resolve(read.result.filter((key) => String(key).startsWith('assignments-')).length)
+            }
+            read.onerror = () => {
+              db.close()
+              reject(read.error)
+            }
+          }
+        })
+    )
+
+  expect(await runSmoke(page, '/obfuscation.html?exposures=1')).toEqual(expectedObfuscationResult)
+  await expect.poll(() => exposures.length).toBe(4)
+  await expect.poll(storedScopes).toBe(1)
+  expect(exposures.map((event) => event.flag.key).sort()).toEqual([
+    'café',
+    'new-route-planner',
+    'number-flag',
+    'object-flag',
+  ])
+
+  salt = 'f'.repeat(32)
+  expect(await runSmoke(page, '/obfuscation.html?exposures=1')).toEqual(expectedObfuscationResult)
+  await page.waitForLoadState('networkidle')
+  expect(exposures).toHaveLength(4)
+  expect(await runSmoke(page, '/obfuscation.html?exposures=1&token=other-app')).toEqual(expectedObfuscationResult)
+  await expect.poll(() => exposures.length).toBe(8)
+  await expect.poll(storedScopes).toBe(2)
+
+  expect(await runSmoke(page, '/obfuscation.html?exposures=1')).toEqual(expectedObfuscationResult)
+  await page.waitForLoadState('networkidle')
+  expect(exposures).toHaveLength(8)
+})
+
 test('evaluates obfuscated keys without native text encoders or Web Crypto', async ({ page }) => {
   await page.addInitScript(() => {
     Object.assign(globalThis, { TextEncoder: undefined, TextDecoder: undefined })

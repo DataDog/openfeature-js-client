@@ -1,77 +1,28 @@
-/**
- * @jest-environment jsdom
- */
-
-import type { ExposureEvent } from '../../../core/src/configuration/exposureEvent.types'
 import { assignmentCacheFactory } from '../../src/cache/assignment-cache-factory'
-import HybridAssignmentCache from '../../src/cache/hybrid-assignment-cache'
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
+import SimpleAssignmentCache from '../../src/cache/simple-assignment-cache'
 
-import StorageArea = chrome.storage.StorageArea
-
-describe('AssignmentCacheFactory', () => {
-  // TODO: Extract test-only function for this
-  const fakeStore: { [k: string]: string } = {}
-
-  const get = jest.fn((key?: string) => {
-    return new Promise((resolve) => {
-      if (!key) {
-        resolve(fakeStore)
-      } else {
-        resolve({ [key]: fakeStore[key] })
-      }
-    })
-  }) as jest.Mock
-
-  const set = jest.fn((items: { [key: string]: string }) => {
-    return new Promise((resolve) => {
-      Object.assign(fakeStore, items)
-      resolve(undefined)
-    })
-  }) as jest.Mock
-
-  const mockChromeStorage = { get, set } as unknown as StorageArea
-
-  beforeEach(() => {
-    window.localStorage.clear()
-    Object.keys(fakeStore).forEach((key) => {
-      delete fakeStore[key]
-    })
+describe('assignmentCacheFactory', () => {
+  it('uses IndexedDB when available', () => {
+    expect(assignmentCacheFactory({ storageKeySuffix: 'scope' })).toBeInstanceOf(IndexedDBAssignmentCache)
   })
 
-  it('should create a hybrid cache if chrome storage is available', async () => {
-    const cache = assignmentCacheFactory({
-      chromeStorage: mockChromeStorage,
-      storageKeySuffix: 'foo',
-    })
-    expect(cache).toBeInstanceOf(HybridAssignmentCache)
-    expect(Object.keys(fakeStore)).toHaveLength(0)
-    const exposureEvent: ExposureEvent = {
-      subject: { id: 'foo', attributes: {} },
-      flag: { key: 'bar' },
-      allocation: { key: 'baz' },
-      variant: { key: 'qux' },
+  it('uses memory when IndexedDB is unavailable', () => {
+    const original = globalThis.indexedDB
+    // @ts-expect-error Simulate unavailable browser storage.
+    delete globalThis.indexedDB
+    try {
+      const cache = assignmentCacheFactory({ storageKeySuffix: 'scope' })
+      expect(cache).toBeInstanceOf(SimpleAssignmentCache)
+      expect(cache).not.toBeInstanceOf(IndexedDBAssignmentCache)
+    } finally {
+      globalThis.indexedDB = original
     }
-    cache.set(exposureEvent)
-    await cache.init()
-    expect(Object.keys(fakeStore)).toHaveLength(1)
   })
 
-  it('should create a hybrid cache if local storage is available', () => {
-    const cache = assignmentCacheFactory({
-      storageKeySuffix: 'foo',
-    })
-    expect(cache).toBeInstanceOf(HybridAssignmentCache)
-    expect(localStorage.length).toEqual(0)
-    const exposureEvent: ExposureEvent = {
-      subject: { id: 'foo', attributes: {} },
-      flag: { key: 'bar' },
-      allocation: { key: 'baz' },
-      variant: { key: 'qux' },
-    }
-    cache.set(exposureEvent)
-    // chrome storage is not being used
-    expect(Object.keys(fakeStore)).toHaveLength(0)
-    // local storage is being used
-    expect(localStorage.length).toEqual(1)
+  it('uses memory when explicitly requested', () => {
+    const cache = assignmentCacheFactory({ storageKeySuffix: 'scope', forceMemoryOnly: true })
+    expect(cache).toBeInstanceOf(SimpleAssignmentCache)
+    expect(cache).not.toBeInstanceOf(IndexedDBAssignmentCache)
   })
 })
