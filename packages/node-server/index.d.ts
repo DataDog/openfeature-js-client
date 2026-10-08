@@ -469,6 +469,19 @@ type NotOneOfCondition = {
 	attribute: string;
 	value: string[];
 };
+type FlagEvaluation = {
+	key: string;
+	property?: "variant_key" | "reason" | "error_code";
+};
+type FlagEvaluationCondition = {
+	operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF;
+	flagEvaluation: FlagEvaluation;
+	value: string[];
+} | {
+	operator: OperatorType.MATCHES | OperatorType.NOT_MATCHES;
+	flagEvaluation: FlagEvaluation;
+	value: string;
+};
 type NumericCondition = {
 	operator: NumericOperator;
 	attribute: string;
@@ -484,7 +497,7 @@ type SemVerCondition = {
 	attribute: string;
 	value: string;
 };
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | SemVerCondition;
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | FlagEvaluationCondition | NumericCondition | NullCondition | SemVerCondition;
 interface Rule {
 	conditions: Condition[];
 }
@@ -527,6 +540,9 @@ export interface UniversalFlagConfigurationV1 {
 	createdAt: string;
 	format: string;
 	observeFullEvaluationData?: boolean;
+	evaluatorParams?: {
+		maxDependencyDepth?: number;
+	};
 	environment: {
 		name: string;
 	};
@@ -564,12 +580,20 @@ export interface DatadogNodeServerProviderOptions {
 	 */
 	exposureChannel: Channel<ExposureEvent>;
 	/**
+	 * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+	 */
+	dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>;
+	/**
 	 * Timeout in milliseconds for provider initialization.
 	 * If the configuration is not set within this time, initialization will fail.
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
 }
+export type DependencyEvaluationEvent = {
+	context: EvaluationContext;
+	details: EvaluationDetails<FlagValue>;
+};
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
 	readonly metadata: ProviderMetadata;
@@ -606,6 +630,8 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	private handleDependencyEvaluation;
+	private handleDependencyExposures;
 	private handleExposure;
 }
 
