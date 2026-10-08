@@ -392,12 +392,9 @@ describe('IndexedDBAssignmentCache', () => {
     { generation: '1', entries: [serialized(a)] },
     { generation: 1, entries: null },
     { generation: 1, entries: [null, ['key', 12]] },
-  ])(
-    'ignores malformed persisted data: %j',
-    async (value) => {
-      await seed(value)
-      await expect(cache.init()).resolves.toBeUndefined()
-      expect(await cache.getEntries()).toEqual([])
-    }
-  )
+  ])('ignores malformed persisted data: %j', async (value) => {
+    await seed(value)
+    await expect(cache.init()).resolves.toBeUndefined()
+    expect(await cache.getEntries()).toEqual([])
+  })
 })

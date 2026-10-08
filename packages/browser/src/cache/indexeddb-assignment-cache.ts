@@ -151,10 +151,14 @@ function readStored(value: unknown): StoredExposures {
   // Accept snapshots written by earlier builds without an invalidation counter.
   if (Array.isArray(value)) return { generation: 0, entries: value.filter(isEntry) }
   if (
-    typeof value === 'object' && value !== null &&
-    'generation' in value && typeof value.generation === 'number' &&
-    Number.isSafeInteger(value.generation) && value.generation >= 0 &&
-    'entries' in value && Array.isArray(value.entries)
+    typeof value === 'object' &&
+    value !== null &&
+    'generation' in value &&
+    typeof value.generation === 'number' &&
+    Number.isSafeInteger(value.generation) &&
+    value.generation >= 0 &&
+    'entries' in value &&
+    Array.isArray(value.entries)
   ) {
     return { generation: value.generation, entries: value.entries.filter(isEntry) }
   }
