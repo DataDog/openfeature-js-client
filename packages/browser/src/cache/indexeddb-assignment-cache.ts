@@ -1,15 +1,16 @@
-import type { AssignmentCacheEntry } from '@datadog/flagging-core'
+import { type AssignmentCacheEntry, assignmentCacheKeyToString } from '@datadog/flagging-core'
 import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
 import { withStore } from './indexeddb-store'
 import SimpleAssignmentCache from './simple-assignment-cache'
 
-/** Keep exposure checks synchronous. Persist bounded snapshots without blocking evaluation. */
+/** Keep exposure checks synchronous. Merge pending entries into storage without blocking evaluation. */
 export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private readonly storageKey: string
   private operations: Promise<void> = Promise.resolve()
   private initialization?: Promise<void>
   private persistScheduled = false
   private generation = 0
+  private pendingKeys = new Set<string>()
 
   constructor(storageKeySuffix: string) {
     super()
@@ -37,12 +38,20 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   set(entry: AssignmentCacheEntry): void {
     void this.init()
     super.set(entry)
+    const key = assignmentCacheKeyToString(entry)
+    this.pendingKeys.delete(key)
+    this.pendingKeys.add(key)
+    // Keep the pending key index bounded even if storage is unavailable.
+    if (this.pendingKeys.size > MAX_EXPOSURE_CACHE_ENTRIES) {
+      this.pendingKeys.delete(this.pendingKeys.values().next().value!)
+    }
     this.persist()
   }
 
   clear(): Promise<void> {
     super.clear()
     this.generation++
+    this.pendingKeys.clear()
     // New entries need a write after the delete, even if an older write is queued.
     this.persistScheduled = false
     return this.enqueue(async () => {
@@ -60,10 +69,52 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private persist(): void {
     if (this.persistScheduled) return
     this.persistScheduled = true
+    const generation = this.generation
     void Promise.resolve().then(() => {
       void this.enqueue(async () => {
+        // A queued write from before clear must not consume post-clear entries.
+        if (generation !== this.generation) return
         this.persistScheduled = false
-        await withStore('readwrite', (store) => store.put(Array.from(this.entries()), this.storageKey))
+        const pendingKeys = this.pendingKeys
+        this.pendingKeys = new Set()
+        const entries = Array.from(this.entries()).filter(([key]) => pendingKeys.has(key))
+        try {
+          await withStore('readwrite', (store) => {
+            // IndexedDB serializes read/write transactions across connections and tabs.
+            // Merge only this batch's changes, never the instance's stale loaded snapshot.
+            const request = store.get(this.storageKey)
+            request.onsuccess = () => {
+              try {
+                const stored = new Map<string, string>(
+                  Array.isArray(request.result) ? request.result.filter(isEntry) : []
+                )
+                for (const [key, value] of entries) {
+                  stored.delete(key)
+                  stored.set(key, value)
+                }
+                for (const key of stored.keys()) {
+                  if (stored.size <= MAX_EXPOSURE_CACHE_ENTRIES) break
+                  stored.delete(key)
+                }
+                store.put(Array.from(stored), this.storageKey)
+              } catch {
+                // Exceptions in a request callback must abort the whole merge.
+                store.transaction.abort()
+              }
+            }
+            return request
+          })
+        } catch {
+          if (generation === this.generation) {
+            // Retry failed entries on a later write, retaining only keys still in memory.
+            // Read their current values then, so retries cannot overwrite newer assignments.
+            const newerKeys = this.pendingKeys
+            this.pendingKeys = new Set()
+            for (const [key] of this.entries()) {
+              if (pendingKeys.has(key) || newerKeys.has(key)) this.pendingKeys.add(key)
+            }
+          }
+        }
       })
     })
   }

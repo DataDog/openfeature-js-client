@@ -311,8 +311,10 @@ Reapplying the same configuration preserves deduplication. Neither provider emit
 `createdAt` is a configuration timestamp, not an experiment revision. This behavior does not depend on it changing on every request.
 
 Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
-Exposure checks use a bounded in-memory cache. IndexedDB stores snapshots of that cache in the background.
-The least recently used entries are removed when the cache reaches its limit. Evicted entries can produce another exposure.
+Exposure checks use a bounded in-memory cache. Background IndexedDB transactions merge newly recorded exposures
+with the stored entries, so instances sharing a scope preserve each other's writes without replaying their loaded snapshots.
+Memory removes the least recently used entries; persistence removes the oldest written entries when it reaches its limit.
+Evicted entries can produce another exposure.
 If IndexedDB is unavailable or a storage operation fails, evaluation and in-memory deduplication continue.
 An abrupt page exit can lose an unfinished write and permit a repeat exposure after reload.
 

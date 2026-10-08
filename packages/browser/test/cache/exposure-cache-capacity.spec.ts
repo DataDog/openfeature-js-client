@@ -56,4 +56,26 @@ describe('exposure cache capacity', () => {
     expect(stored.has('key-1')).toBe(false)
     expect(cache.has(exposure('new'))).toBe(true)
   })
+
+  it("bounds the merged store without discarding another instance's recent writes", async () => {
+    await withStore('readwrite', (store) => store.put(entries(), 'assignments-scope'))
+    const first = new IndexedDBAssignmentCache('scope')
+    const second = new IndexedDBAssignmentCache('scope')
+    await Promise.all([first.init(), second.init()])
+    const written = nextWrite(2)
+    first.set(exposure('first'))
+    second.set(exposure('second'))
+    await written
+
+    const stored = new Map(await withStore('readonly', (store) => store.get('assignments-scope')))
+    expect(stored.size).toBe(MAX_EXPOSURE_CACHE_ENTRIES)
+    expect(stored.has('key-0')).toBe(false)
+    expect(stored.has('key-1')).toBe(false)
+    expect(stored.get(assignmentCacheKeyToString(exposure('first')))).toBe(
+      assignmentCacheValueToString(exposure('first'))
+    )
+    expect(stored.get(assignmentCacheKeyToString(exposure('second')))).toBe(
+      assignmentCacheValueToString(exposure('second'))
+    )
+  })
 })

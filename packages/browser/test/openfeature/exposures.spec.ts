@@ -5,6 +5,7 @@ import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { createDatadogExposureLoggingHook } from '../../src/openfeature/exposures'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
+import { nextWrite } from '../cache/indexeddb-test-helpers'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
@@ -860,8 +861,10 @@ describe('Exposures End-to-End', () => {
       await OpenFeature.setProviderAndWait(provider1)
       const client1 = OpenFeature.getClient()
 
+      const written = nextWrite()
       client1.getStringValue('string-flag', 'default')
       triggerBatch()
+      await written
 
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
