@@ -6,6 +6,30 @@
 
 ---
 
+## @datadog/openfeature-browser@2.1.0, @datadog/flagging-core@3.2.0
+
+**Features:**
+
+- Support SHA-256-obfuscated keys in precomputed assignment responses. Applications continue to evaluate flags by their original keys, and telemetry keeps those keys. Obfuscation hides readable flag names; it does not encrypt values or authenticate responses ([#405](https://github.com/DataDog/openfeature-js-client/pull/405)) [BROWSER] [CORE]
+- Persist precomputed configurations and exposure deduplication in IndexedDB. Restore matching configurations when a network request fails, and preserve exposure-cache updates across tabs ([#188](https://github.com/DataDog/openfeature-js-client/pull/188)) [BROWSER]
+- Version portable snapshots that contain obfuscated assignments so older readers reject an unsupported encoding. Store new browser snapshots separately from legacy cache entries ([#405](https://github.com/DataDog/openfeature-js-client/pull/405)) [BROWSER] [CORE]
+- Export `buildEndpointHost` to share validated flagging endpoint construction with server-side configuration fetchers ([#409](https://github.com/DataDog/openfeature-js-client/pull/409), [#408](https://github.com/DataDog/openfeature-js-client/pull/408)) [CORE]
+
+**Bug Fixes:**
+
+- Run exposure, evaluation, and RUM tracking hooks in the OpenFeature `finally` stage so tracking can inspect the final evaluation result ([#406](https://github.com/DataDog/openfeature-js-client/pull/406)) [BROWSER]
+- Keep the DevTools marker available until the last active provider wrapper closes ([#390](https://github.com/DataDog/openfeature-js-client/pull/390)) [BROWSER]
+- Bound exposure caches and flag-key lookup caches. Clear the lookup cache when the obfuscation salt changes, and retain exposure resets when configuration timestamps change ([#405](https://github.com/DataDog/openfeature-js-client/pull/405)) [BROWSER]
+
+**Upgrade Notes:**
+
+- Direct Datadog Precompute requests now advertise `X-DD-FEATURE-FLAGS-CAPABILITIES`. The endpoint must allow this header in CORS responses before this browser release is used. Configured customer proxies do not receive this header automatically; they can opt in after supporting the header and encoded responses ([#405](https://github.com/DataDog/openfeature-js-client/pull/405)) [BROWSER]
+- Existing localStorage and Chrome-storage exposure entries are not migrated or deleted. Upgrading can produce repeat exposures. Persistent storage failures use in-memory operation ([#188](https://github.com/DataDog/openfeature-js-client/pull/188)) [BROWSER]
+
+**Internal Changes:**
+
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.2.0`. The Node.js package version is unchanged and is not part of this release. Publish core before browser.
+
 ## @datadog/flagging-core@3.1.1
 
 **Bug Fixes:**
