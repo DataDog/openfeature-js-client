@@ -31,6 +31,17 @@ message FlagsConfiguration {
   // Opt-in flag for emitting full flag-evaluation data from SDKs to
   // Datadog. May contain PII; defaults to false for privacy.
   bool observe_full_evaluation_data = 10;
+
+  // Optional evaluator behavior overrides. Evaluators use their hard-coded
+  // defaults when this message or one of its fields is absent.
+  EvaluatorParams evaluator_params = 11;
+}
+
+message EvaluatorParams {
+  // Maximum dependency-edge depth, counted from a root flag at depth zero.
+  // The maximum is inclusive, and zero rejects every dependency edge. Values
+  // must not exceed 255.
+  optional uint64 max_dependency_depth = 1;
 }
 
 message Version {
@@ -135,7 +146,20 @@ message Condition {
     VersionCondition version = 8;
     StringComparisonCondition string_comparison = 9;
     Sha256StringComparisonCondition sha256_string_comparison = 10;
+    FlagEvaluationStringMembershipCondition flag_evaluation_string_membership = 11;
   }
+}
+
+// Evaluates another flag and tests its variant key for membership. This is a
+// dedicated condition kind so flag evaluations cannot be used as attribute
+// sources for other comparators or as partition keys.
+message FlagEvaluationStringMembershipCondition {
+  // Index into FlagsConfiguration.strings for the flag key.
+  uint32 flag_key_string_index = 1;
+  // Indices into FlagsConfiguration.strings for expected variant keys.
+  repeated uint32 string_indexes = 2;
+  // True negates membership.
+  bool negate = 3;
 }
 
 message ConditionOperands {

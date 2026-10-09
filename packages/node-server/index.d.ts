@@ -1,5 +1,7 @@
 import { Channel } from 'node:diagnostics_channel';
 
+type Metadata = Record<string, string>;
+type Paradigm = "server" | "client";
 type PrimitiveValue = null | boolean | string | number;
 type JsonObject = {
 	[key: string]: JsonValue;
@@ -17,155 +19,8 @@ type EvaluationContext = {
 	 */
 	targetingKey?: string;
 } & Record<string, EvaluationContextValue>;
-type FlagValue = boolean | string | number | JsonValue;
-interface ExposureEvent {
-	allocation: {
-		key: string;
-	};
-	flag: {
-		key: string;
-	};
-	variant: {
-		key: string;
-	};
-	serial_id?: number;
-	subject: {
-		id: string;
-		attributes: EvaluationContext;
-	};
-	service?: string;
-	rum?: {
-		application?: {
-			id?: string;
-		};
-		view?: {
-			url?: string;
-		};
-	};
-}
-declare enum OperatorType {
-	MATCHES = "MATCHES",
-	NOT_MATCHES = "NOT_MATCHES",
-	GTE = "GTE",
-	GT = "GT",
-	LTE = "LTE",
-	LT = "LT",
-	ONE_OF = "ONE_OF",
-	NOT_ONE_OF = "NOT_ONE_OF",
-	IS_NULL = "IS_NULL",
-	SEMVER_EQ = "SEMVER_EQ",
-	SEMVER_NEQ = "SEMVER_NEQ",
-	SEMVER_LT = "SEMVER_LT",
-	SEMVER_LTE = "SEMVER_LTE",
-	SEMVER_GT = "SEMVER_GT",
-	SEMVER_GTE = "SEMVER_GTE"
-}
-type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
-type SemVerOperator = OperatorType.SEMVER_EQ | OperatorType.SEMVER_NEQ | OperatorType.SEMVER_GTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_LT;
-type MatchesCondition = {
-	operator: OperatorType.MATCHES;
-	attribute: string;
-	value: string;
-};
-type NotMatchesCondition = {
-	operator: OperatorType.NOT_MATCHES;
-	attribute: string;
-	value: string;
-};
-type OneOfCondition = {
-	operator: OperatorType.ONE_OF;
-	attribute: string;
-	value: string[];
-};
-type NotOneOfCondition = {
-	operator: OperatorType.NOT_ONE_OF;
-	attribute: string;
-	value: string[];
-};
-type NumericCondition = {
-	operator: NumericOperator;
-	attribute: string;
-	value: number;
-};
-type NullCondition = {
-	operator: OperatorType.IS_NULL;
-	attribute: string;
-	value: boolean;
-};
-type SemVerCondition = {
-	operator: SemVerOperator;
-	attribute: string;
-	value: string;
-};
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | SemVerCondition;
-interface Rule {
-	conditions: Condition[];
-}
-type VariantType = "BOOLEAN" | "INTEGER" | "NUMERIC" | "STRING" | "JSON";
-interface VariantConfiguration {
-	key: string;
-	value: FlagValue;
-}
-interface ShardRange {
-	start: number;
-	end: number;
-}
-interface Shard {
-	salt: string;
-	ranges: ShardRange[];
-	totalShards: number;
-}
-interface Split {
-	variationKey: string;
-	shards: Shard[];
-	extraLogging?: Record<string, string>;
-	serialId?: number;
-}
-interface Allocation {
-	key: string;
-	rules?: Rule[];
-	startAt?: Date;
-	endAt?: Date;
-	splits: Split[];
-	doLog?: boolean;
-}
-interface Flag {
-	key: string;
-	enabled: boolean;
-	variationType: VariantType;
-	variations: Record<string, VariantConfiguration>;
-	allocations: Allocation[];
-}
-export interface UniversalFlagConfigurationV1 {
-	createdAt: string;
-	format: string;
-	observeFullEvaluationData?: boolean;
-	environment: {
-		name: string;
-	};
-	flags: Record<string, Flag>;
-}
-type Metadata = Record<string, string>;
-type Paradigm = "server" | "client";
-type PrimitiveValue$1 = null | boolean | string | number;
-type JsonObject$1 = {
-	[key: string]: JsonValue$1;
-};
-type JsonArray$1 = JsonValue$1[];
-type JsonValue$1 = PrimitiveValue$1 | JsonObject$1 | JsonArray$1;
-type EvaluationContextValue$1 = PrimitiveValue$1 | Date | {
-	[key: string]: EvaluationContextValue$1;
-} | EvaluationContextValue$1[];
-type EvaluationContext$1 = {
-	/**
-	 * A string uniquely identifying the subject (end-user, or client service) of a flag evaluation.
-	 * Providers may require this field for fractional flag evaluation, rules, or overrides targeting specific users.
-	 * Such providers may behave unpredictably if a targeting key is not specified at flag resolution.
-	 */
-	targetingKey?: string;
-} & Record<string, EvaluationContextValue$1>;
 type FlagValueType = "boolean" | "string" | "number" | "object";
-type FlagValue$1 = boolean | string | number | JsonValue$1;
+type FlagValue = boolean | string | number | JsonValue;
 type ResolutionReason = keyof typeof StandardResolutionReasons | (string & Record<never, never>);
 type FlagMetadata = Record<string, string | number | boolean>;
 type ResolutionDetails<U> = {
@@ -176,7 +31,7 @@ type ResolutionDetails<U> = {
 	errorCode?: ErrorCode;
 	errorMessage?: string;
 };
-type EvaluationDetails<T extends FlagValue$1> = {
+type EvaluationDetails<T extends FlagValue> = {
 	flagKey: string;
 	flagMetadata: Readonly<FlagMetadata>;
 } & ResolutionDetails<T>;
@@ -362,7 +217,7 @@ interface ProviderEventEmitter<E extends AnyProviderEvent, AdditionalContext ext
 	removeAllHandlers(eventType?: AnyProviderEvent): void;
 	getHandlers(eventType: AnyProviderEvent): EventHandler[];
 }
-type TrackingEventValue = PrimitiveValue$1 | Date | {
+type TrackingEventValue = PrimitiveValue | Date | {
 	[key: string]: TrackingEventValue;
 } | TrackingEventValue[];
 type TrackingEventDetails = {
@@ -454,14 +309,14 @@ interface CommonProvider<S extends ClientProviderStatus | ServerProviderStatus> 
 	 * Use this function to perform any context-dependent setup within the provider.
 	 * @param context
 	 */
-	initialize?(context?: EvaluationContext$1): Promise<void>;
+	initialize?(context?: EvaluationContext): Promise<void>;
 	/**
 	 * Track a user action or application state, usually representing a business objective or outcome.
 	 * @param trackingEventName
 	 * @param context
 	 * @param trackingEventDetails
 	 */
-	track?(trackingEventName: string, context: EvaluationContext$1, trackingEventDetails: TrackingEventDetails): void;
+	track?(trackingEventName: string, context: EvaluationContext, trackingEventDetails: TrackingEventDetails): void;
 }
 interface ClientMetadata {
 	/**
@@ -521,20 +376,20 @@ interface HookData<TData = Record<string, unknown>> {
 	clear(): void;
 }
 type HookHints = Readonly<Record<string, unknown>>;
-interface HookContext<T extends FlagValue$1 = FlagValue$1, TData = Record<string, unknown>> {
+interface HookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> {
 	readonly flagKey: string;
 	readonly defaultValue: T;
 	readonly flagValueType: FlagValueType;
-	readonly context: Readonly<EvaluationContext$1>;
+	readonly context: Readonly<EvaluationContext>;
 	readonly clientMetadata: ClientMetadata;
 	readonly providerMetadata: ProviderMetadata;
 	readonly logger: Logger;
 	readonly hookData: HookData<TData>;
 }
-interface BeforeHookContext<T extends FlagValue$1 = FlagValue$1, TData = Record<string, unknown>> extends HookContext<T, TData> {
-	context: EvaluationContext$1;
+interface BeforeHookContext<T extends FlagValue = FlagValue, TData = Record<string, unknown>> extends HookContext<T, TData> {
+	context: EvaluationContext;
 }
-interface BaseHook<T extends FlagValue$1 = FlagValue$1, TData = Record<string, unknown>, BeforeHookReturn = unknown, HooksReturn = unknown> {
+interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unknown>, BeforeHookReturn = unknown, HooksReturn = unknown> {
 	/**
 	 * Runs before flag values are resolved from the provider.
 	 * If an EvaluationContext is returned, it will be merged with the pre-existing EvaluationContext.
@@ -564,7 +419,145 @@ interface BaseHook<T extends FlagValue$1 = FlagValue$1, TData = Record<string, u
 	 */
 	finally?(hookContext: Readonly<HookContext<T, TData>>, evaluationDetails: EvaluationDetails<T>, hookHints?: HookHints): HooksReturn;
 }
-type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue$1, TData, Promise<EvaluationContext$1 | void> | EvaluationContext$1 | void, Promise<void> | void>;
+interface ExposureEvent {
+	allocation: {
+		key: string;
+	};
+	flag: {
+		key: string;
+	};
+	variant: {
+		key: string;
+	};
+	serial_id?: number;
+	subject: {
+		id: string;
+		attributes: EvaluationContext;
+	};
+	service?: string;
+	rum?: {
+		application?: {
+			id?: string;
+		};
+		view?: {
+			url?: string;
+		};
+	};
+}
+declare enum OperatorType {
+	MATCHES = "MATCHES",
+	NOT_MATCHES = "NOT_MATCHES",
+	GTE = "GTE",
+	GT = "GT",
+	LTE = "LTE",
+	LT = "LT",
+	ONE_OF = "ONE_OF",
+	NOT_ONE_OF = "NOT_ONE_OF",
+	IS_NULL = "IS_NULL",
+	SEMVER_EQ = "SEMVER_EQ",
+	SEMVER_NEQ = "SEMVER_NEQ",
+	SEMVER_LT = "SEMVER_LT",
+	SEMVER_LTE = "SEMVER_LTE",
+	SEMVER_GT = "SEMVER_GT",
+	SEMVER_GTE = "SEMVER_GTE"
+}
+type NumericOperator = OperatorType.GTE | OperatorType.GT | OperatorType.LTE | OperatorType.LT;
+type SemVerOperator = OperatorType.SEMVER_EQ | OperatorType.SEMVER_NEQ | OperatorType.SEMVER_GTE | OperatorType.SEMVER_GT | OperatorType.SEMVER_LTE | OperatorType.SEMVER_LT;
+type MatchesCondition = {
+	operator: OperatorType.MATCHES;
+	attribute: string;
+	value: string;
+};
+type NotMatchesCondition = {
+	operator: OperatorType.NOT_MATCHES;
+	attribute: string;
+	value: string;
+};
+type OneOfCondition = {
+	operator: OperatorType.ONE_OF;
+	attribute: string;
+	value: string[];
+};
+type NotOneOfCondition = {
+	operator: OperatorType.NOT_ONE_OF;
+	attribute: string;
+	value: string[];
+};
+type FlagEvaluation = {
+	key: string;
+};
+type FlagEvaluationCondition = {
+	operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF;
+	flagEvaluation: FlagEvaluation;
+	value: string[];
+};
+type NumericCondition = {
+	operator: NumericOperator;
+	attribute: string;
+	value: number;
+};
+type NullCondition = {
+	operator: OperatorType.IS_NULL;
+	attribute: string;
+	value: boolean;
+};
+type SemVerCondition = {
+	operator: SemVerOperator;
+	attribute: string;
+	value: string;
+};
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | FlagEvaluationCondition | NumericCondition | NullCondition | SemVerCondition;
+interface Rule {
+	conditions: Condition[];
+}
+type VariantType = "BOOLEAN" | "INTEGER" | "NUMERIC" | "STRING" | "JSON";
+interface VariantConfiguration {
+	key: string;
+	value: FlagValue;
+}
+interface ShardRange {
+	start: number;
+	end: number;
+}
+interface Shard {
+	salt: string;
+	ranges: ShardRange[];
+	totalShards: number;
+}
+interface Split {
+	variationKey: string;
+	shards: Shard[];
+	extraLogging?: Record<string, string>;
+	serialId?: number;
+}
+interface Allocation {
+	key: string;
+	rules?: Rule[];
+	startAt?: Date;
+	endAt?: Date;
+	splits: Split[];
+	doLog?: boolean;
+}
+interface Flag {
+	key: string;
+	enabled: boolean;
+	variationType: VariantType;
+	variations: Record<string, VariantConfiguration>;
+	allocations: Allocation[];
+}
+export interface UniversalFlagConfigurationV1 {
+	createdAt: string;
+	format: string;
+	observeFullEvaluationData?: boolean;
+	evaluatorParams?: {
+		maxDependencyDepth?: number;
+	};
+	environment: {
+		name: string;
+	};
+	flags: Record<string, Flag>;
+}
+type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
 	/**
 	 * A provider hook exposes a mechanism for provider authors to register hooks
@@ -576,19 +569,19 @@ interface Provider extends CommonProvider<ServerProviderStatus> {
 	/**
 	 * Resolve a boolean flag and its evaluation details.
 	 */
-	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext$1, logger: Logger): Promise<ResolutionDetails<boolean>>;
+	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<boolean>>;
 	/**
 	 * Resolve a string flag and its evaluation details.
 	 */
-	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext$1, logger: Logger): Promise<ResolutionDetails<string>>;
+	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<string>>;
 	/**
 	 * Resolve a numeric flag and its evaluation details.
 	 */
-	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext$1, logger: Logger): Promise<ResolutionDetails<number>>;
+	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<number>>;
 	/**
 	 * Resolve and parse an object flag and its evaluation details.
 	 */
-	resolveObjectEvaluation<T extends JsonValue$1>(flagKey: string, defaultValue: T, context: EvaluationContext$1, logger: Logger): Promise<ResolutionDetails<T>>;
+	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 }
 export interface DatadogNodeServerProviderOptions {
 	/**
@@ -596,12 +589,20 @@ export interface DatadogNodeServerProviderOptions {
 	 */
 	exposureChannel: Channel<ExposureEvent>;
 	/**
+	 * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+	 */
+	dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>;
+	/**
 	 * Timeout in milliseconds for provider initialization.
 	 * If the configuration is not set within this time, initialization will fail.
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
 }
+export type DependencyEvaluationEvent = {
+	context: EvaluationContext;
+	details: EvaluationDetails<FlagValue>;
+};
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
 	readonly metadata: ProviderMetadata;
@@ -634,10 +635,12 @@ export declare class DatadogNodeServerProvider implements Provider {
 	 * See setConfiguration and setError for more details.
 	 */
 	initialize(): Promise<void>;
-	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext$1, _logger: Logger): Promise<ResolutionDetails<boolean>>;
-	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext$1, _logger: Logger): Promise<ResolutionDetails<string>>;
-	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext$1, _logger: Logger): Promise<ResolutionDetails<number>>;
-	resolveObjectEvaluation<T extends JsonValue$1>(flagKey: string, defaultValue: T, context: EvaluationContext$1, _logger: Logger): Promise<ResolutionDetails<T>>;
+	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<boolean>>;
+	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
+	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
+	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	private handleDependencyEvaluation;
+	private handleDependencyExposures;
 	private handleExposure;
 }
 

@@ -2,6 +2,8 @@ import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
   createExposureEvent,
+  type DependencyEvaluation,
+  type DependencyExposureCandidate,
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
   timeStampNow,
@@ -41,11 +43,20 @@ export interface DatadogNodeServerProviderOptions {
    */
   exposureChannel: Channel<ExposureEvent>
   /**
+   * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+   */
+  dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>
+  /**
    * Timeout in milliseconds for provider initialization.
    * If the configuration is not set within this time, initialization will fail.
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+}
+
+export type DependencyEvaluationEvent = {
+  context: EvaluationContext
+  details: EvaluationDetails<FlagValue>
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -144,7 +155,18 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const dependencyExposures: DependencyExposureCandidate[] = []
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'boolean',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      (evaluations) => dependencyExposures.push(...evaluations)
+    )
+    this.handleDependencyExposures(context, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -155,7 +177,18 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const dependencyExposures: DependencyExposureCandidate[] = []
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'string',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      (evaluations) => dependencyExposures.push(...evaluations)
+    )
+    this.handleDependencyExposures(context, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -166,7 +199,18 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const dependencyExposures: DependencyExposureCandidate[] = []
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'number',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      (evaluations) => dependencyExposures.push(...evaluations)
+    )
+    this.handleDependencyExposures(context, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -183,16 +227,43 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
+    const dependencyExposures: DependencyExposureCandidate[] = []
     const resolutionDetails = evaluate(
       this.configuration,
       'object',
       flagKey,
       defaultValue,
       context,
-      _logger
+      _logger,
+      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      (evaluations) => dependencyExposures.push(...evaluations)
     ) as ResolutionDetails<T>
+    this.handleDependencyExposures(context, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
+  }
+
+  private handleDependencyEvaluation(context: EvaluationContext, evaluation: DependencyEvaluation): void {
+    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
+      return
+    }
+    this.options.dependencyEvaluationChannel.publish({
+      context,
+      details: {
+        ...evaluation.details,
+        flagKey: evaluation.flagKey,
+        flagMetadata: evaluation.details.flagMetadata ?? {},
+      },
+    })
+  }
+
+  private handleDependencyExposures(
+    context: EvaluationContext,
+    evaluations: readonly DependencyExposureCandidate[]
+  ): void {
+    for (const evaluation of evaluations) {
+      this.handleExposure(evaluation.flagKey, context, evaluation.details)
+    }
   }
 
   private handleExposure<T extends FlagValue>(

@@ -1,5 +1,5 @@
 import type { EvaluationContext } from '@openfeature/core'
-import { matchesRule, OperatorType, type Rule } from './rules'
+import { isValidRule, matchesRule, OperatorType, type Rule } from './rules'
 
 describe('condition attribute coercion', () => {
   it.each([
@@ -37,5 +37,25 @@ describe('condition attribute coercion', () => {
     } as Rule
 
     expect(matchesRule(rule, { value } as EvaluationContext)).toBe(expected)
+  })
+})
+
+describe('dependent condition validation', () => {
+  it('accepts key-only variant membership', () => {
+    expect(
+      isValidRule({
+        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.ONE_OF, value: ['on'] }],
+      })
+    ).toBe(true)
+  })
+
+  it.each([
+    [
+      'a malformed flag-evaluation reference',
+      { flagEvaluation: { key: 'prerequisite', unexpected: true }, operator: OperatorType.ONE_OF, value: ['on'] },
+    ],
+    ['a regex operator', { flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
+  ])('rejects %s', (_description, condition) => {
+    expect(isValidRule({ conditions: [condition] })).toBe(false)
   })
 })
