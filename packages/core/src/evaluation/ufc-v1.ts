@@ -47,6 +47,9 @@ export interface UniversalFlagConfigurationV1 {
   createdAt: string
   format: string
   observeFullEvaluationData?: boolean
+  evaluatorParams?: {
+    maxDependencyDepth?: number
+  }
   environment: {
     name: string
   }
