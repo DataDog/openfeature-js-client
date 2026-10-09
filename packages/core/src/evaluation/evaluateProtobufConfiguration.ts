@@ -14,7 +14,7 @@ import type { PreparedRulesResponse } from '../configuration/prepared-rules-resp
 import { type TimeStamp, timeStampNow } from '../time'
 import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
-import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
+import { DependencyGraphError, FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
@@ -31,6 +31,8 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
+export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
+
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: PreparedRulesResponse,
   type: T,
@@ -38,7 +40,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp = timeStampNow()
+  evaluationTimestampMs: TimeStamp = timeStampNow(),
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
@@ -56,7 +59,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (flag.minimumFeatureLevel > SUPPORTED_FEATURE_LEVEL) {
       throw new FlagConfigurationError('Flag requires an unsupported feature level')
     }
-    const flagValueType = variationTypeToFlagValueType(flag.variationType)
+    const flagValueType = protobufVariationTypeToFlagValueType(flag.variationType)
     if (type !== flagValueType) {
       logger.debug('variant value type mismatch, returning default value', {
         flagKey,
@@ -74,7 +77,15 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
+      if (
+        !matchesCondition(
+          allocation.targetingConditionIndex,
+          configuration,
+          context,
+          conditionResults,
+          resolveFlagEvaluation
+        )
+      ) {
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
@@ -95,12 +106,13 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           __dd_do_log: allocation.logExposureEvent,
           __dd_split_serial_id: split.serialId,
           allocationKey: allocation.key,
-          variationType: variationTypeToFlagValueType(flag.variationType),
+          variationType: protobufVariationTypeToFlagValueType(flag.variationType),
           doLog: allocation.logExposureEvent,
         } as PrecomputedFlagMetadata,
       }
     }
   } catch (error) {
+    if (error instanceof DependencyGraphError) throw error
     if (error instanceof FlagConfigurationError) {
       logger.error('returning default value because flag configuration is invalid', {
         flagKey,
@@ -152,7 +164,8 @@ function matchesCondition(
   index: number | undefined,
   configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
-  results: Map<number, boolean>
+  results: Map<number, boolean>,
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): boolean {
   if (index === undefined) return true
   const cached = results.get(index)
@@ -162,15 +175,15 @@ function matchesCondition(
   if (condition.kind.case === 'all') {
     result = condition.kind.value.conditionIndexes.every((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results)
+      return matchesCondition(child, configuration, attributes, results, resolveFlagEvaluation)
     })
   } else if (condition.kind.case === 'any') {
     result = condition.kind.value.conditionIndexes.some((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results)
+      return matchesCondition(child, configuration, attributes, results, resolveFlagEvaluation)
     })
   } else {
-    result = matchesLeafCondition(condition, configuration, attributes)
+    result = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
   }
   results.set(index, result)
   return result
@@ -179,13 +192,23 @@ function matchesCondition(
 function matchesLeafCondition(
   condition: Condition,
   configuration: PreparedRulesResponse,
-  context: EvaluationContext
+  context: EvaluationContext,
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new FlagConfigurationError('Unsupported condition')
   }
-  const value = attributeValueAt(configuration, kind.value.attributeIndex, context)
+  if (kind.case === 'flagEvaluationStringMembership') {
+    if (resolveFlagEvaluation === undefined) throw new FlagConfigurationError('Flag evaluation is not supported')
+    const flagKey = atIndex(configuration.strings, kind.value.flagKeyStringIndex, 'flag key')
+    const variantKey = resolveFlagEvaluation(flagKey)
+    if (variantKey === undefined) return false
+    const included = containsInternedString(kind.value.stringIndexes, variantKey, configuration.strings)
+    return kind.value.negate ? !included : included
+  }
+  const attribute = atIndex(configuration.attributes, kind.value.attributeIndex, 'condition attribute')
+  const value = attributeValue(attribute, configuration, context)
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -332,14 +355,6 @@ function computePartitionKey(
   return partitionKey
 }
 
-function attributeValueAt(
-  configuration: PreparedRulesResponse,
-  index: number,
-  context: EvaluationContext
-): EvaluationContextValue | undefined {
-  return attributeValue(atIndex(configuration.attributes, index, 'condition attribute'), configuration, context)
-}
-
 function attributeValue(
   attribute: PreparedRulesResponse['attributes'][number],
   configuration: PreparedRulesResponse,
@@ -414,7 +429,7 @@ function resolutionReason(split: Split): ResolutionReason {
   return 'UNKNOWN'
 }
 
-function variationTypeToFlagValueType(variationType: VariationType): FlagValueType {
+export function protobufVariationTypeToFlagValueType(variationType: VariationType): FlagValueType {
   const ufcVariationType = variationType as number
   if (ufcVariationType === UFC_VARIATION_TYPE.BOOLEAN) return 'boolean'
   if (ufcVariationType === UFC_VARIATION_TYPE.STRING) return 'string'
