@@ -1,17 +1,14 @@
 # openfeature-js-client
 
-Monorepo using **Lerna** with **fixed versioning** — all packages share the version in `lerna.json`.
+Monorepo using **Lerna** with **independent versioning**. Each package declares its version in its own `package.json`.
 
 ## Release
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#creating-a-release) for the full release process.
 
-Key commands:
+Prepare only the requested package releases and their required dependencies. Keep internal dependencies pinned to exact versions.
 
-```bash
-# Non-interactive version bump (use this instead of interactive `yarn release`)
-yarn lerna version <VERSION> --exact --force-publish --yes
-```
+`yarn release` creates commits and tags and pushes them. Do not run it when the user requests preparation only. Publishing a GitHub release triggers npm publication for the package named in its tag.
 
 ## Packages
 
