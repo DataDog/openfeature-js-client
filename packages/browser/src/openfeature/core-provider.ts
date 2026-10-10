@@ -90,13 +90,18 @@ export class DatadogCoreProvider extends DatadogProviderBase {
         configurationToString({
           ...configuration,
           precomputed: configuration.precomputed && {
-            ...configuration.precomputed,
+            ...sortJsonObjectKeys(configuration.precomputed),
             fetchedAt: undefined,
             etag: undefined,
           },
           rules: configuration.rules && {
             ...configuration.rules,
-            response: { ...configuration.rules.response, createdAt: undefined },
+            response: {
+              ...configuration.rules.response,
+              // Protobuf map iteration follows insertion order; repeated fields must retain their order.
+              flags: sortObjectKeys(configuration.rules.response.flags),
+              createdAt: undefined,
+            },
             fetchedAt: undefined,
             etag: undefined,
           },
@@ -114,4 +119,23 @@ function toOpenFeatureError(error: FlagsConfigurationError | undefined): Error |
   if (error.errorCode === 'PARSE_ERROR') return new ParseError(error.errorMessage)
   if (error.errorCode === 'INVALID_CONTEXT') return new InvalidContextError(error.errorMessage)
   return new ProviderNotReadyError(error.errorMessage)
+}
+
+// Canonicalize only the fingerprint copy, leaving the portable wire format and caller's data untouched.
+function sortObjectKeys<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) as T
+}
+
+function sortJsonObjectKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(sortJsonObjectKeys) as T
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  ) {
+    return Object.fromEntries(
+      Object.entries(sortObjectKeys(value)).map(([key, entry]) => [key, sortJsonObjectKeys(entry)])
+    ) as T
+  }
+  return value
 }
