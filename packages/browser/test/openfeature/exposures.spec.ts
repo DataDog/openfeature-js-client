@@ -612,6 +612,51 @@ describe('Exposures End-to-End', () => {
       expect(getExposuresCalls()).toHaveLength(2)
     })
 
+    it('logs A to B to A when the same subject returns to an earlier context', async () => {
+      let response = precomputedServerResponse
+      fetchMock.mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(url.includes('precompute-assignments') ? response : {}),
+        })
+      )
+      await OpenFeature.setContext({ targetingKey: 'test-user-123', plan: 'initial' })
+      await OpenFeature.setProviderAndWait(new DatadogProvider(providerConfig))
+      const client = OpenFeature.getClient()
+
+      for (const [plan, variant] of [
+        ['free', 'A'],
+        ['paid', 'B'],
+        ['free', 'A'],
+      ]) {
+        response = {
+          ...precomputedServerResponse,
+          data: {
+            ...precomputedServerResponse.data,
+            attributes: {
+              ...precomputedServerResponse.data.attributes,
+              flags: {
+                ...precomputedServerResponse.data.attributes.flags,
+                'string-flag': {
+                  ...precomputedServerResponse.data.attributes.flags['string-flag'],
+                  variationKey: variant,
+                  variationValue: variant,
+                },
+              },
+            },
+          },
+        }
+        await OpenFeature.setContext({ targetingKey: 'test-user-123', plan })
+        expect(client.getStringValue('string-flag', 'default')).toBe(variant)
+        expect(client.getStringValue('string-flag', 'default')).toBe(variant)
+        triggerBatch()
+      }
+
+      const events = getExposuresCalls().flatMap(([, options]) => parseExposureEvents(options.body))
+      expect(events.map((event) => event.variant.key)).toEqual(['A', 'B', 'A'])
+    })
+
     it('logs for each unique flag', async () => {
       // Set context before provider initialization
       await OpenFeature.setContext({
