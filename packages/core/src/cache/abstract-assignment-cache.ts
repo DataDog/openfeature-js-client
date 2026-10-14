@@ -4,15 +4,14 @@ import { getMD5Hash } from '../obfuscation'
 export type AssignmentCacheKey = Pick<ExposureEvent, 'flag' | 'subject'>
 export type AssignmentCacheEntry = ExposureEvent
 
-/** Converts an {@link AssignmentCacheKey} to a string. */
+/** Keep only the latest exposure for each subject and flag. */
 export function assignmentCacheKeyToString(exposureEvent: AssignmentCacheKey | ExposureEvent): string {
-  const key: AssignmentCacheKey = {
+  const key = {
     flag: {
       key: exposureEvent.flag.key,
     },
     subject: {
       id: exposureEvent.subject.id,
-      attributes: exposureEvent.subject.attributes,
     },
   }
   return getMD5Hash(JSON.stringify(key))
@@ -20,7 +19,18 @@ export function assignmentCacheKeyToString(exposureEvent: AssignmentCacheKey | E
 
 /** Converts an {@link AssignmentCacheValue} to a string. */
 export function assignmentCacheValueToString(cacheValue: AssignmentCacheEntry): string {
-  return getMD5Hash(JSON.stringify(cacheValue))
+  return getMD5Hash(
+    JSON.stringify(cacheValue, (_key, value) => {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]])
+        )
+      }
+      return value
+    })
+  )
 }
 
 export interface AsyncMap<K, V> {
