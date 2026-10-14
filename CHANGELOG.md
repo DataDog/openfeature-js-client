@@ -16,6 +16,7 @@
 **Usage Notes:**
 
 - Only forward client-distributed configuration to browsers. Serialization does not remove server-only flags. Customer-facing exports through `dd-trace/openfeature` require a separate integration; this package remains internal to Datadog. [NODE-SERVER]
+- Package imports are now limited to `@datadog/openfeature-node-server`, `@datadog/openfeature-node-server/rules-based`, and `@datadog/openfeature-node-server/package.json`. Replace internal deep imports such as `@datadog/openfeature-node-server/cjs/index.js` with the root import. Existing root imports continue to work ([#408](https://github.com/DataDog/openfeature-js-client/pull/408)) [NODE-SERVER]
 
 **Internal Changes:**
 
