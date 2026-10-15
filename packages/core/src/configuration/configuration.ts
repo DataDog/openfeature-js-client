@@ -105,13 +105,13 @@ export function configMatchesContext(
   if (!storedContext) return true
 
   // Stored context exists = must match exactly
-  return contextsEqual(storedContext, requestedContext)
+  return evaluationContextsEqual(storedContext, requestedContext)
 }
 
 /**
  * Deep equality check for evaluation contexts
  */
-function contextsEqual(a: EvaluationContext, b: EvaluationContext): boolean {
+export function evaluationContextsEqual(a: EvaluationContext, b: EvaluationContext): boolean {
   return objectsEqual(a, b)
 }
 

@@ -124,6 +124,46 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### Subject-level evaluation telemetry opt-out
+
+Enable the control when creating the provider. Your application supplies its decision as a typed boolean in the evaluation context.
+
+```typescript
+import { DatadogProvider } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const provider = new DatadogProvider({
+  clientToken: 'your-client-token',
+  env: 'production',
+  enableEvaluationTelemetryOptOutParameter: true,
+})
+
+await OpenFeature.setProviderAndWait(provider, {
+  targetingKey: 'user-123',
+  dd_evaluation_telemetry_opt_out: true,
+})
+
+const client = OpenFeature.getClient()
+const enabled = client.getBooleanValue('new-feature', false)
+```
+
+Only boolean `true` suppresses new evaluation events, evaluation counts, and automatic RUM flag annotations. Missing, false, null, and other types preserve telemetry. Without explicit activation, the attribute is an ordinary context attribute and has no special behavior.
+
+Use `OpenFeature.setContext()` to update the decision. Preserve the subject and its other attributes:
+
+```typescript
+await OpenFeature.setContext({
+  ...OpenFeature.getContext(),
+  dd_evaluation_telemetry_opt_out: false,
+})
+```
+
+Changes to only this attribute apply locally. They do not request assignments or clear cached values. The online provider removes the activated attribute from assignment requests. A real targeting-context change still requests new assignments.
+
+Flag values, experiment participation, exposures, customer hooks, and unrelated application telemetry remain unchanged. The control does not remove queued events or existing RUM annotations. It is not a general consent system. Exposures and assignment requests can still contain subject data.
+
+For portable configuration, use `new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: true })`. The separately composed Datadog evaluation and RUM tracking hooks honor that provider's policy. Exposure hooks remain enabled. The core provider consumes the attribute locally before configuration matching or rules evaluation. When fetching precomputed configuration separately, pass only targeting attributes to `fetchPrecomputedConfiguration`; keep this local control in the OpenFeature context.
+
 ### RUM User Context
 
 When RUM integration is enabled (the default), the provider includes flat primitive properties returned by

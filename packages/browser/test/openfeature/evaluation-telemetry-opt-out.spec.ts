@@ -1,0 +1,320 @@
+import { getGlobalObject } from '@datadog/browser-core'
+import type { FlagEvaluationEvent } from '@datadog/flagging-core'
+import { type EvaluationContext, OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
+import { DatadogProvider } from '../../src/openfeature/provider'
+import type { DDRum } from '../../src/openfeature/rumIntegration'
+import {
+  composeDatadogTrackingHooks,
+  configurationFromString,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  DatadogCoreProvider,
+  DatadogDevtools,
+  type DatadogTrackingHooks,
+} from '../../src/rules-based'
+import precomputedResponse from '../data/precomputed-v1.json'
+import rulesWire from '../data/rules-v1-wire.json'
+import { createDeferred } from '../transport/fetchTestUtils'
+
+const domain = 'evaluation-telemetry-opt-out'
+const attribute = 'dd_evaluation_telemetry_opt_out'
+const options = { clientToken: 'local-token', env: 'test', flagEvaluationTrackingInterval: 1000 }
+
+describe('evaluation telemetry opt-out', () => {
+  let originalFetch: typeof globalThis.fetch
+  let uploads: jest.Mock
+  let rum: jest.Mock
+  let tracking: DatadogTrackingHooks | undefined
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    localStorage.clear()
+    originalFetch = globalThis.fetch
+    uploads = jest.fn().mockResolvedValue({ ok: true, status: 200 })
+    globalThis.fetch = uploads
+    rum = jest.fn()
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = { addFeatureFlagEvaluation: rum }
+  })
+
+  afterEach(async () => {
+    OpenFeature.getClient(domain).clearHooks()
+    OpenFeature.clearHooks()
+    await tracking?.shutdown()
+    tracking = undefined
+    await OpenFeature.clearProviders()
+    await OpenFeature.clearContext()
+    delete getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM
+    globalThis.fetch = originalFetch
+    jest.useRealTimers()
+  })
+
+  describe.each(['online', 'rules', 'precomputed'] as const)('%s', (mode) => {
+    const flag = mode === 'rules' ? 'test-flag' : 'boolean-flag'
+
+    async function initialize(activated: boolean, value: EvaluationContext[string] | undefined) {
+      const context = { targetingKey: 'user', country: 'US', ...(value !== undefined && { [attribute]: value }) }
+      const client = OpenFeature.getClient(domain)
+      if (mode === 'online') {
+        const provider = new DatadogProvider({
+          ...options,
+          enableEvaluationTelemetryOptOutParameter: activated,
+          flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+        })
+        await OpenFeature.setProviderAndWait(domain, provider, context)
+      } else {
+        const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated })
+        provider.setConfiguration(
+          mode === 'rules'
+            ? configurationFromString(JSON.stringify(rulesWire))
+            : configurationFromString(
+                JSON.stringify({
+                  version: 1,
+                  precomputed: {
+                    context: activated ? { targetingKey: 'user', country: 'US' } : context,
+                    response: JSON.stringify(precomputedResponse),
+                  },
+                })
+              )
+        )
+        await OpenFeature.setProviderAndWait(domain, provider, context)
+        tracking = composeDatadogTrackingHooks(
+          createDatadogEvaluationLoggingHook(options),
+          createDatadogExposureLoggingHook(options),
+          createDatadogRumTrackingHook()
+        )
+        await tracking.initialize()
+        client.addHooks(...tracking.hooks)
+      }
+      return client
+    }
+
+    it.each([false, true])('preserves values and exposures with activation=%s', async (activated) => {
+      const client = await initialize(activated, true)
+      expect(client.getBooleanValue(flag, false)).toBe(true)
+      expect(client.getBooleanValue(flag, false)).toBe(true)
+      expect(client.getBooleanDetails('missing', false).errorCode).toBe('FLAG_NOT_FOUND')
+      expect(client.getStringDetails(flag, 'fallback').errorCode).toBe('TYPE_MISMATCH')
+      jest.advanceTimersByTime(31_000)
+      expect(evaluationCount()).toBe(activated ? 0 : 4)
+      expect(events('exposures')).toHaveLength(1)
+      expect(rum).toHaveBeenCalledTimes(activated ? 0 : 2)
+    })
+
+    it.each([undefined, false, null, 'true', 1, 0, [true], { enabled: true }])(
+      'preserves telemetry for %p',
+      async (value) => {
+        const client = await initialize(true, value)
+        expect(client.getBooleanValue(flag, false)).toBe(true)
+        jest.advanceTimersByTime(31_000)
+        expect(evaluationCount()).toBe(1)
+        expect(events('exposures')).toHaveLength(1)
+        expect(rum).toHaveBeenCalledTimes(1)
+      }
+    )
+
+    it('suppresses error telemetry when a customer before hook throws', async () => {
+      const client = await initialize(true, true)
+      const customerFinally = jest.fn()
+      client.addHooks({
+        before: () => {
+          throw new Error('customer hook failure')
+        },
+        finally: customerFinally,
+      })
+      expect(client.getBooleanDetails(flag, false)).toMatchObject({ value: false, errorCode: 'GENERAL' })
+      jest.advanceTimersByTime(31_000)
+      expect(evaluationCount()).toBe(0)
+      expect(events('exposures')).toHaveLength(0)
+      expect(customerFinally).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps previously queued evaluations and exposures across local policy updates', async () => {
+      const client = await initialize(true, false)
+      expect(client.getBooleanValue(flag, false)).toBe(true)
+      await OpenFeature.setContext(domain, { targetingKey: 'user', country: 'US', [attribute]: true })
+      expect(client.getBooleanValue(flag, false)).toBe(true)
+      await OpenFeature.setContext(domain, { targetingKey: 'user', country: 'US', [attribute]: false })
+      expect(client.getBooleanValue(flag, false)).toBe(true)
+      jest.advanceTimersByTime(31_000)
+      expect(evaluationCount()).toBe(2)
+      expect(events('exposures')).toHaveLength(1)
+      expect(rum).toHaveBeenCalledTimes(2)
+      // Explicit application instrumentation remains outside this control.
+      getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM?.addFeatureFlagEvaluation('manual-flag', 'manual-value')
+      expect(rum).toHaveBeenLastCalledWith('manual-flag', 'manual-value')
+    })
+  })
+
+  it('does not restore RUM-derived telemetry admission during an evaluation', async () => {
+    let optedOut = true
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+      getUser: () => ({ id: 'user', [attribute]: optedOut }),
+      addFeatureFlagEvaluation: rum,
+    }
+    const fetchAssignments = jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse })
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: true,
+      flagConfigurationFetch: fetchAssignments,
+    })
+    await OpenFeature.setProviderAndWait(domain, provider, {})
+    const client = OpenFeature.getClient(domain)
+    let update: Promise<void> | undefined
+    client.addHooks({
+      after: () => {
+        optedOut = false
+        update = OpenFeature.setContext(domain, {})
+      },
+    })
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    await update
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(0)
+    expect(rum).not.toHaveBeenCalled()
+    expect(events('exposures')).toHaveLength(1)
+    expect(fetchAssignments).toHaveBeenCalledTimes(1)
+
+    client.clearHooks()
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(1)
+    expect(rum).toHaveBeenCalledTimes(1)
+  })
+
+  it('updates policy during a pending refresh without another request or cache reset', async () => {
+    const pending = createDeferred<{
+      ok: boolean
+      statusText?: string
+      json: () => Promise<typeof precomputedResponse>
+    }>()
+    const fetchAssignments = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+      .mockReturnValueOnce(pending.promise)
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: true,
+      flagConfigurationFetch: fetchAssignments,
+    })
+    const context = { targetingKey: 'user', [attribute]: false }
+    await OpenFeature.setProviderAndWait(domain, provider, context)
+    const client = OpenFeature.getClient(domain)
+    const refresh = OpenFeature.setContext(domain, context)
+    const optOut = OpenFeature.setContext(domain, { ...context, [attribute]: true })
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(fetchAssignments).toHaveBeenCalledTimes(2)
+    expect(provider.status).toBe(ProviderStatus.RECONCILING)
+    pending.resolve({ ok: false, statusText: 'offline', json: async () => precomputedResponse })
+    await Promise.all([refresh, optOut])
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(0)
+    expect(events('exposures')).toHaveLength(1)
+
+    await OpenFeature.setContext(domain, context)
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(fetchAssignments).toHaveBeenCalledTimes(2)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(1)
+  })
+
+  it('keeps policy independent from a late initial response and another provider', async () => {
+    const pending = createDeferred<{ ok: true; json: () => Promise<typeof precomputedResponse> }>()
+    const fetchAssignments = jest.fn().mockReturnValue(pending.promise)
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: true,
+      flagConfigurationFetch: fetchAssignments,
+    })
+    const context = { targetingKey: 'user', [attribute]: false }
+    const ready = OpenFeature.setProviderAndWait(domain, provider, context)
+    await jest.advanceTimersByTimeAsync(0)
+    const update = OpenFeature.setContext(domain, { ...context, [attribute]: true })
+    const client = OpenFeature.getClient(domain)
+    expect(client.getBooleanDetails('boolean-flag', false).errorCode).toBe('PROVIDER_NOT_READY')
+    pending.resolve({ ok: true, json: async () => precomputedResponse })
+    await Promise.all([ready, update])
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(fetchAssignments).toHaveBeenCalledTimes(1)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(0)
+
+    const other = new DatadogProvider({
+      ...options,
+      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+    })
+    await OpenFeature.setProviderAndWait('other-opt-out-provider', other, { targetingKey: 'other', [attribute]: true })
+    expect(OpenFeature.getClient('other-opt-out-provider').getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(1)
+    expect(evaluations()[0].targeting_key).toBe('other')
+  })
+
+  it('preserves opt-out through the Datadog developer-tools wrapper', async () => {
+    const provider = new DatadogDevtools(
+      new DatadogProvider({
+        ...options,
+        enableEvaluationTelemetryOptOutParameter: true,
+        flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+      })
+    )
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'user', [attribute]: true })
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(0)
+    expect(events('exposures')).toHaveLength(1)
+    expect(rum).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])('counts emissions with activation=%s and boolean true', async (activated) => {
+    const fetchAssignments = jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse })
+    const configuration = {
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: activated,
+      flagConfigurationFetch: fetchAssignments,
+    }
+    const provider = new DatadogProvider(configuration)
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'user', [attribute]: true })
+    const client = OpenFeature.getClient(domain)
+    const customerHook = jest.fn()
+    client.addHooks({ finally: customerHook })
+
+    expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({
+      value: true,
+      variant: 'variation-124',
+      reason: 'TARGETING_MATCH',
+    })
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(client.getBooleanValue('missing-flag', false)).toBe(false)
+    expect(client.getStringValue('boolean-flag', 'fallback')).toBe('fallback')
+    jest.advanceTimersByTime(31_000)
+
+    expect(evaluations().reduce((count, event) => count + event.evaluation_count, 0)).toBe(activated ? 0 : 4)
+    expect(events('exposures')).toHaveLength(1)
+    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 2)
+    expect(customerHook).toHaveBeenCalledTimes(4)
+    expect(fetchAssignments).toHaveBeenCalledTimes(1)
+    expect(fetchAssignments.mock.calls[0][1].body.includes(attribute)).toBe(!activated)
+  })
+
+  function events(track: string): Record<string, unknown>[] {
+    return uploads.mock.calls
+      .filter(([url]) => url.includes(`/${track}`))
+      .flatMap(([, request]) =>
+        request.body
+          .trim()
+          .split('\n')
+          .map((line: string) => JSON.parse(line))
+      )
+  }
+
+  function evaluations(): FlagEvaluationEvent[] {
+    return events('flagevaluation') as unknown as FlagEvaluationEvent[]
+  }
+
+  function evaluationCount(): number {
+    return evaluations().reduce((count, event) => count + event.evaluation_count, 0)
+  }
+})
