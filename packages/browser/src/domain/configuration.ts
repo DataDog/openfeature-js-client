@@ -5,6 +5,15 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
 
+export interface EvaluationTelemetryOptOutConfiguration {
+  /**
+   * Enable the local `dd_evaluation_telemetry_opt_out` context attribute (default: false).
+   * Only boolean true suppresses new evaluation telemetry and automatic RUM flag annotations.
+   * Flag results and experiment exposures remain unchanged.
+   */
+  enableEvaluationTelemetryOptOutParameter?: boolean
+}
+
 /**
  * Init Configuration for the Flagging SDK.
  */
@@ -57,7 +66,8 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
 /**
  * Init Configuration for the online Flagging provider.
  */
-export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfiguration {
+export interface FlaggingInitConfiguration
+  extends FlaggingTrackingInitConfiguration, EvaluationTelemetryOptOutConfiguration {
   /**
    * Initial flags configuration (precomputed flags)
    */

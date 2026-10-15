@@ -1,5 +1,5 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
-import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
 import { createExposureLoggingHook } from './exposures'
@@ -30,7 +30,7 @@ export function createProviderTracking({
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration)))
+    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration, getTrackingContext)))
   }
 
   let exposureCache: AssignmentCache | undefined
@@ -40,7 +40,7 @@ export function createProviderTracking({
     trackingHooks.push(
       createTrackingHookController(async () => {
         await runTrackingLifecycleOperation(() => cache.init())
-        return createExposureLoggingHook(configuration, cache)
+        return createExposureLoggingHook(configuration, cache, getTrackingContext)
       })
     )
   }
@@ -49,27 +49,5 @@ export function createProviderTracking({
   return {
     ...tracking,
     exposureCache,
-    hooks: getTrackingContext
-      ? tracking.hooks.map((hook) => withTrackingContext(hook, getTrackingContext))
-      : tracking.hooks,
-  }
-}
-
-function withTrackingContext(hook: Hook, getTrackingContext: (context: EvaluationContext) => EvaluationContext): Hook {
-  if (!hook.finally) {
-    return hook
-  }
-
-  return {
-    ...hook,
-    finally: (hookContext, details, hookHints) =>
-      hook.finally?.(
-        {
-          ...hookContext,
-          context: getTrackingContext(hookContext.context),
-        } as HookContext,
-        details,
-        hookHints
-      ),
   }
 }
