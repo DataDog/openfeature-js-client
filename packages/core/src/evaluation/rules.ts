@@ -58,6 +58,18 @@ type NotOneOfCondition = {
   value: string[]
 }
 
+export type FlagEvaluation = {
+  key: string
+}
+
+type FlagEvaluationCondition = {
+  operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF
+  flagEvaluation: FlagEvaluation
+  value: string[]
+}
+
+export type ResolveFlagEvaluation = (flagEvaluation: FlagEvaluation) => string | undefined
+
 type NumericCondition = {
   operator: NumericOperator
   attribute: string
@@ -81,6 +93,7 @@ export type Condition =
   | NotMatchesCondition
   | OneOfCondition
   | NotOneOfCondition
+  | FlagEvaluationCondition
   | NumericCondition
   | NullCondition
   | SemVerCondition
@@ -95,47 +108,73 @@ export function isValidRule(rule: unknown): rule is Rule {
   }
 
   return rule.conditions.every((condition) => {
-    if (!isRecord(condition) || typeof condition.attribute !== 'string' || typeof condition.operator !== 'string') {
+    if (!isRecord(condition) || typeof condition.operator !== 'string') {
       return false
     }
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (isNumericOperator(condition.operator)) {
-      return typeof condition.value === 'number' && Number.isFinite(condition.value)
-    }
-    if (condition.operator === OperatorType.ONE_OF || condition.operator === OperatorType.NOT_ONE_OF) {
-      return Array.isArray(condition.value) && condition.value.every((value) => typeof value === 'string')
-    }
-    if (condition.operator === OperatorType.IS_NULL) {
-      return typeof condition.value === 'boolean'
-    }
-    if (isSemVerOperator(condition.operator)) {
-      return parseSemver(condition.value) !== null
-    }
-    if (typeof condition.value !== 'string') {
+    const hasAttribute = Object.prototype.hasOwnProperty.call(condition, 'attribute')
+    const hasFlagEvaluation = Object.prototype.hasOwnProperty.call(condition, 'flagEvaluation')
+    if (hasAttribute === hasFlagEvaluation) {
       return false
     }
-    try {
-      compileRegex(condition.value)
-      return true
-    } catch {
+    if (hasFlagEvaluation) {
+      if (!isValidFlagEvaluation(condition.flagEvaluation) || !isFlagEvaluationOperator(condition.operator)) {
+        return false
+      }
+    } else if (typeof condition.attribute !== 'string') {
       return false
     }
+    return isValidOperatorOperand(condition.operator, condition.value)
   })
 }
 
-export function matchesRule(rule: Rule, subjectAttributes: EvaluationContext): boolean {
-  const conditionEvaluations = evaluateRuleConditions(subjectAttributes, rule.conditions)
-  // TODO: short-circuit return when false condition is found
-  return !conditionEvaluations.includes(false)
+function isValidOperatorOperand(operator: string, value: unknown): boolean {
+  if (isNumericOperator(operator)) {
+    return typeof value === 'number' && Number.isFinite(value)
+  }
+  if (operator === OperatorType.ONE_OF || operator === OperatorType.NOT_ONE_OF) {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string')
+  }
+  if (operator === OperatorType.IS_NULL) {
+    return typeof value === 'boolean'
+  }
+  if (isSemVerOperator(operator)) {
+    return parseSemver(value) !== null
+  }
+  if (typeof value !== 'string') {
+    return false
+  }
+  try {
+    compileRegex(value)
+    return true
+  } catch {
+    return false
+  }
 }
 
-function evaluateRuleConditions(subjectAttributes: EvaluationContext, conditions: Condition[]): boolean[] {
-  return conditions.map((condition) => evaluateCondition(subjectAttributes, condition))
+export function matchesRule(
+  rule: Rule,
+  subjectAttributes: EvaluationContext,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
+): boolean {
+  return rule.conditions.every((condition) => evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation))
 }
 
-function evaluateCondition(subjectAttributes: EvaluationContext, condition: Condition): boolean {
+function evaluateCondition(
+  subjectAttributes: EvaluationContext,
+  condition: Condition,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
+): boolean {
+  if ('flagEvaluation' in condition) {
+    const flagValue = resolveFlagEvaluation?.(condition.flagEvaluation)
+    if (flagValue === undefined) {
+      return false
+    }
+    return evaluateStringCondition(flagValue, condition.operator, condition.value)
+  }
+
   const value = subjectAttributes[condition.attribute]
   if (condition.operator === OperatorType.IS_NULL) {
     if (condition.value) {
@@ -192,8 +231,34 @@ function evaluateCondition(subjectAttributes: EvaluationContext, condition: Cond
   return false
 }
 
+function evaluateStringCondition(
+  value: string,
+  operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF,
+  comparand: string[]
+): boolean {
+  switch (operator) {
+    case OperatorType.ONE_OF:
+      return isOneOf(value, comparand)
+    case OperatorType.NOT_ONE_OF:
+      return isNotOneOf(value, comparand)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isValidFlagEvaluation(value: unknown): value is FlagEvaluation {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    value.key.length > 0 &&
+    Object.keys(value).every((key) => key === 'key')
+  )
+}
+
+function isFlagEvaluationOperator(operator: string): boolean {
+  return operator === OperatorType.ONE_OF || operator === OperatorType.NOT_ONE_OF
 }
 
 function isNumericOperator(operator: string): operator is NumericOperator {

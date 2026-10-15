@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ufc.proto.
  */
 export const file_ufc: GenFile = /*@__PURE__*/
-  fileDesc("Cgl1ZmMucHJvdG8SG2RhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MSKRBAoSRmxhZ3NDb25maWd1cmF0aW9uEi4KCmNyZWF0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhgKEGVudmlyb25tZW50X25hbWUYAiABKAkSSQoFZmxhZ3MYAyADKAsyOi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZ3NDb25maWd1cmF0aW9uLkZsYWdzRW50cnkSQwoKYXR0cmlidXRlcxgEIAMoCzIvLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5BdHRyaWJ1dGVSZWZlcmVuY2USDwoHc3RyaW5ncxgFIAMoCRIPCgdyZWdleGVzGAYgAygJEjYKCHZlcnNpb25zGAcgAygLMiQuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlZlcnNpb24SFAoManNvbl9zdHJpbmdzGAggAygJEjoKCmNvbmRpdGlvbnMYCSADKAsyJi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQ29uZGl0aW9uEiQKHG9ic2VydmVfZnVsbF9ldmFsdWF0aW9uX2RhdGEYCiABKAgaTwoKRmxhZ3NFbnRyeRILCgNrZXkYASABKAkSMAoFdmFsdWUYAiABKAsyIS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZzoCOAEiMQoHVmVyc2lvbhISCgpjb21wb25lbnRzGAEgAygJEhIKCnByZXJlbGVhc2UYAiADKAki4wEKBEZsYWcSHQoVbWluaW11bV9mZWF0dXJlX2xldmVsGAEgASgNEkIKDnZhcmlhdGlvbl90eXBlGAIgASgOMiouZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlZhcmlhdGlvblR5cGUSOgoKdmFyaWF0aW9ucxgDIAMoCzImLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WYXJpYXRpb24SPAoLYWxsb2NhdGlvbnMYBCADKAsyJy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQWxsb2NhdGlvbiK0AQoJVmFyaWF0aW9uEhgKEGtleV9zdHJpbmdfaW5kZXgYASABKA0SHAoSc3RyaW5nX3ZhbHVlX2luZGV4GAIgASgNSAASFwoNaW50ZWdlcl92YWx1ZRgDIAEoA0gAEhcKDW51bWVyaWNfdmFsdWUYBCABKAFIABIXCg1ib29sZWFuX3ZhbHVlGAUgASgISAASGwoRanNvbl9zdHJpbmdfaW5kZXgYBiABKA1IAEIHCgV2YWx1ZSLxAQoKQWxsb2NhdGlvbhILCgNrZXkYASABKAkSJgoZdGFyZ2V0aW5nX2NvbmRpdGlvbl9pbmRleBgCIAEoDUgAiAEBEkAKDXBhcnRpdGlvbl9rZXkYAyADKAsyKS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuUGFydGl0aW9uS2V5EjIKBnNwbGl0cxgEIAMoCzIiLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TcGxpdBIaChJsb2dfZXhwb3N1cmVfZXZlbnQYBSABKAhCHAoaX3RhcmdldGluZ19jb25kaXRpb25faW5kZXgikwEKEkF0dHJpYnV0ZVJlZmVyZW5jZRIvCg10YXJnZXRpbmdfa2V5GAEgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAASRAoOYXR0cmlidXRlX3BhdGgYAiABKAsyKi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQXR0cmlidXRlUGF0aEgAQgYKBGtpbmQiVAoNQXR0cmlidXRlUGF0aBJDCghzZWdtZW50cxgBIAMoCzIxLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5BdHRyaWJ1dGVQYXRoU2VnbWVudCJYChRBdHRyaWJ1dGVQYXRoU2VnbWVudBIhChdvYmplY3Rfa2V5X3N0cmluZ19pbmRleBgBIAEoDUgAEhUKC2FycmF5X2luZGV4GAIgASgNSABCBgoEa2luZCKLBgoJQ29uZGl0aW9uEj0KA2FsbBgBIAEoCzIuLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5Db25kaXRpb25PcGVyYW5kc0gAEj0KA2FueRgCIAEoCzIuLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5Db25kaXRpb25PcGVyYW5kc0gAEkAKB251bWVyaWMYAyABKAsyLS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuTnVtZXJpY0NvbmRpdGlvbkgAEjwKBXJlZ2V4GAQgASgLMisuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlJlZ2V4Q29uZGl0aW9uSAASUwoRc3RyaW5nX21lbWJlcnNoaXAYBSABKAsyNi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3RyaW5nTWVtYmVyc2hpcENvbmRpdGlvbkgAElMKEXNoYTI1Nl9tZW1iZXJzaGlwGAYgASgLMjYuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlNoYTI1Nk1lbWJlcnNoaXBDb25kaXRpb25IABJVChJhdHRyaWJ1dGVfcHJlc2VuY2UYByABKAsyNy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQXR0cmlidXRlUHJlc2VuY2VDb25kaXRpb25IABJACgd2ZXJzaW9uGAggASgLMi0uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlZlcnNpb25Db25kaXRpb25IABJTChFzdHJpbmdfY29tcGFyaXNvbhgJIAEoCzI2LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TdHJpbmdDb21wYXJpc29uQ29uZGl0aW9uSAASYAoYc2hhMjU2X3N0cmluZ19jb21wYXJpc29uGAogASgLMjwuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlNoYTI1NlN0cmluZ0NvbXBhcmlzb25Db25kaXRpb25IAEIGCgRraW5kIi4KEUNvbmRpdGlvbk9wZXJhbmRzEhkKEWNvbmRpdGlvbl9pbmRleGVzGAEgAygNIoIBChBOdW1lcmljQ29uZGl0aW9uEhcKD2F0dHJpYnV0ZV9pbmRleBgBIAEoDRJCCgpjb21wYXJhdG9yGAIgASgOMi4uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLk51bWVyaWNDb21wYXJhdG9yEhEKCWNvbXBhcmFuZBgDIAEoASJOCg5SZWdleENvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SEwoLcmVnZXhfaW5kZXgYAiABKA0SDgoGbmVnYXRlGAMgASgIIlwKGVN0cmluZ01lbWJlcnNoaXBDb25kaXRpb24SFwoPYXR0cmlidXRlX2luZGV4GAEgASgNEhYKDnN0cmluZ19pbmRleGVzGAIgAygNEg4KBm5lZ2F0ZRgDIAEoCCKdAQoZU3RyaW5nQ29tcGFyaXNvbkNvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SQQoKY29tcGFyYXRvchgCIAEoDjItLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TdHJpbmdDb21wYXJhdG9yEhQKDHN0cmluZ19pbmRleBgDIAEoDRIOCgZuZWdhdGUYBCABKAgiwQEKH1NoYTI1NlN0cmluZ0NvbXBhcmlzb25Db25kaXRpb24SFwoPYXR0cmlidXRlX2luZGV4GAEgASgNEgwKBHNhbHQYAiABKAwSRwoKY29tcGFyYXRvchgDIAEoDjIzLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TaGEyNTZTdHJpbmdDb21wYXJhdG9yEg4KBmxlbmd0aBgEIAEoDRIOCgZzaGEyNTYYBSABKAwSDgoGbmVnYXRlGAYgASgIImIKGVNoYTI1Nk1lbWJlcnNoaXBDb25kaXRpb24SFwoPYXR0cmlidXRlX2luZGV4GAEgASgNEgwKBHNhbHQYAiABKAwSDgoGc2hhMjU2GAMgAygMEg4KBm5lZ2F0ZRgEIAEoCCJKChpBdHRyaWJ1dGVQcmVzZW5jZUNvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SEwoLZXhwZWN0X251bGwYAiABKAgihgEKEFZlcnNpb25Db25kaXRpb24SFwoPYXR0cmlidXRlX2luZGV4GAEgASgNEkIKCmNvbXBhcmF0b3IYAiABKA4yLi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVmVyc2lvbkNvbXBhcmF0b3ISFQoNdmVyc2lvbl9pbmRleBgDIAEoDSKdAQoMUGFydGl0aW9uS2V5Ej0KBHRpbWUYASABKAsyLS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVGltZVBhcnRpdGlvbktleUgAEkYKCXNoYXJkX21kNRgCIAEoCzIxLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5NZDVTaGFyZFBhcnRpdGlvbktleUgAQgYKBGtpbmQiEgoQVGltZVBhcnRpdGlvbktleSJTChRNZDVTaGFyZFBhcnRpdGlvbktleRIMCgRzYWx0GAEgASgJEhcKD2F0dHJpYnV0ZV9pbmRleBgCIAEoDRIUCgx0b3RhbF9zaGFyZHMYAyABKAQiuAEKBVNwbGl0EjsKBnJhbmdlcxgBIAMoCzIrLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5QYXJ0aXRpb25SYW5nZRIXCg92YXJpYXRpb25faW5kZXgYAiABKA0SFgoJc2VyaWFsX2lkGAMgASgFSACIAQESMwoGcmVhc29uGAQgASgOMiMuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlJlYXNvbkIMCgpfc2VyaWFsX2lkIkQKDlBhcnRpdGlvblJhbmdlEhEKBGZyb20YASABKARIAIgBARIPCgJ0bxgCIAEoBEgBiAEBQgcKBV9mcm9tQgUKA190byq3AQoNVmFyaWF0aW9uVHlwZRIeChpWQVJJQVRJT05fVFlQRV9VTlNQRUNJRklFRBAAEhkKFVZBUklBVElPTl9UWVBFX1NUUklORxABEhoKFlZBUklBVElPTl9UWVBFX0lOVEVHRVIQAhIaChZWQVJJQVRJT05fVFlQRV9OVU1FUklDEAMSGgoWVkFSSUFUSU9OX1RZUEVfQk9PTEVBThAEEhcKE1ZBUklBVElPTl9UWVBFX0pTT04QBSrXAQoRTnVtZXJpY0NvbXBhcmF0b3ISIgoeTlVNRVJJQ19DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASIAocTlVNRVJJQ19DT01QQVJBVE9SX0xFU1NfVEhBThABEikKJU5VTUVSSUNfQ09NUEFSQVRPUl9MRVNTX1RIQU5fT1JfRVFVQUwQAhIjCh9OVU1FUklDX0NPTVBBUkFUT1JfR1JFQVRFUl9USEFOEAMSLAooTlVNRVJJQ19DT01QQVJBVE9SX0dSRUFURVJfVEhBTl9PUl9FUVVBTBAEKpkBChBTdHJpbmdDb21wYXJhdG9yEiEKHVNUUklOR19DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASIQodU1RSSU5HX0NPTVBBUkFUT1JfU1RBUlRTX1dJVEgQARIfChtTVFJJTkdfQ09NUEFSQVRPUl9FTkRTX1dJVEgQAhIeChpTVFJJTkdfQ09NUEFSQVRPUl9DT05UQUlOUxADKpQBChZTaGEyNTZTdHJpbmdDb21wYXJhdG9yEigKJFNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9VTlNQRUNJRklFRBAAEigKJFNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9TVEFSVFNfV0lUSBABEiYKIlNIQTI1Nl9TVFJJTkdfQ09NUEFSQVRPUl9FTkRTX1dJVEgQAiqXAgoRVmVyc2lvbkNvbXBhcmF0b3ISIgoeVkVSU0lPTl9DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASHAoYVkVSU0lPTl9DT01QQVJBVE9SX0VRVUFMEAESIAocVkVSU0lPTl9DT01QQVJBVE9SX05PVF9FUVVBTBACEiAKHFZFUlNJT05fQ09NUEFSQVRPUl9MRVNTX1RIQU4QAxIpCiVWRVJTSU9OX0NPTVBBUkFUT1JfTEVTU19USEFOX09SX0VRVUFMEAQSIwofVkVSU0lPTl9DT01QQVJBVE9SX0dSRUFURVJfVEhBThAFEiwKKFZFUlNJT05fQ09NUEFSQVRPUl9HUkVBVEVSX1RIQU5fT1JfRVFVQUwQBip1CgZSZWFzb24SFgoSUkVBU09OX1VOU1BFQ0lGSUVEEAASGgoWUkVBU09OX1RBUkdFVElOR19NQVRDSBABEhAKDFJFQVNPTl9TUExJVBACEhEKDVJFQVNPTl9TVEFUSUMQAxISCg5SRUFTT05fREVGQVVMVBAEQkJaQGdpdGh1Yi5jb20vRGF0YURvZy9kZC1zb3VyY2UvZG9tYWlucy9mZmUvbGlicy9mbGFnZ2luZy91ZmMvdWZjcGJiBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("Cgl1ZmMucHJvdG8SG2RhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MSLZBAoSRmxhZ3NDb25maWd1cmF0aW9uEi4KCmNyZWF0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhgKEGVudmlyb25tZW50X25hbWUYAiABKAkSSQoFZmxhZ3MYAyADKAsyOi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZ3NDb25maWd1cmF0aW9uLkZsYWdzRW50cnkSQwoKYXR0cmlidXRlcxgEIAMoCzIvLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5BdHRyaWJ1dGVSZWZlcmVuY2USDwoHc3RyaW5ncxgFIAMoCRIPCgdyZWdleGVzGAYgAygJEjYKCHZlcnNpb25zGAcgAygLMiQuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlZlcnNpb24SFAoManNvbl9zdHJpbmdzGAggAygJEjoKCmNvbmRpdGlvbnMYCSADKAsyJi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQ29uZGl0aW9uEiQKHG9ic2VydmVfZnVsbF9ldmFsdWF0aW9uX2RhdGEYCiABKAgSRgoQZXZhbHVhdG9yX3BhcmFtcxgLIAEoCzIsLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5FdmFsdWF0b3JQYXJhbXMaTwoKRmxhZ3NFbnRyeRILCgNrZXkYASABKAkSMAoFdmFsdWUYAiABKAsyIS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuRmxhZzoCOAEiTQoPRXZhbHVhdG9yUGFyYW1zEiEKFG1heF9kZXBlbmRlbmN5X2RlcHRoGAEgASgESACIAQFCFwoVX21heF9kZXBlbmRlbmN5X2RlcHRoIjEKB1ZlcnNpb24SEgoKY29tcG9uZW50cxgBIAMoCRISCgpwcmVyZWxlYXNlGAIgAygJIuMBCgRGbGFnEh0KFW1pbmltdW1fZmVhdHVyZV9sZXZlbBgBIAEoDRJCCg52YXJpYXRpb25fdHlwZRgCIAEoDjIqLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WYXJpYXRpb25UeXBlEjoKCnZhcmlhdGlvbnMYAyADKAsyJi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuVmFyaWF0aW9uEjwKC2FsbG9jYXRpb25zGAQgAygLMicuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkFsbG9jYXRpb24itAEKCVZhcmlhdGlvbhIYChBrZXlfc3RyaW5nX2luZGV4GAEgASgNEhwKEnN0cmluZ192YWx1ZV9pbmRleBgCIAEoDUgAEhcKDWludGVnZXJfdmFsdWUYAyABKANIABIXCg1udW1lcmljX3ZhbHVlGAQgASgBSAASFwoNYm9vbGVhbl92YWx1ZRgFIAEoCEgAEhsKEWpzb25fc3RyaW5nX2luZGV4GAYgASgNSABCBwoFdmFsdWUi8QEKCkFsbG9jYXRpb24SCwoDa2V5GAEgASgJEiYKGXRhcmdldGluZ19jb25kaXRpb25faW5kZXgYAiABKA1IAIgBARJACg1wYXJ0aXRpb25fa2V5GAMgAygLMikuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlBhcnRpdGlvbktleRIyCgZzcGxpdHMYBCADKAsyIi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3BsaXQSGgoSbG9nX2V4cG9zdXJlX2V2ZW50GAUgASgIQhwKGl90YXJnZXRpbmdfY29uZGl0aW9uX2luZGV4IpMBChJBdHRyaWJ1dGVSZWZlcmVuY2USLwoNdGFyZ2V0aW5nX2tleRgBIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUgAEkQKDmF0dHJpYnV0ZV9wYXRoGAIgASgLMiouZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkF0dHJpYnV0ZVBhdGhIAEIGCgRraW5kIlQKDUF0dHJpYnV0ZVBhdGgSQwoIc2VnbWVudHMYASADKAsyMS5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQXR0cmlidXRlUGF0aFNlZ21lbnQiWAoUQXR0cmlidXRlUGF0aFNlZ21lbnQSIQoXb2JqZWN0X2tleV9zdHJpbmdfaW5kZXgYASABKA1IABIVCgthcnJheV9pbmRleBgCIAEoDUgAQgYKBGtpbmQi/gYKCUNvbmRpdGlvbhI9CgNhbGwYASABKAsyLi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQ29uZGl0aW9uT3BlcmFuZHNIABI9CgNhbnkYAiABKAsyLi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuQ29uZGl0aW9uT3BlcmFuZHNIABJACgdudW1lcmljGAMgASgLMi0uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLk51bWVyaWNDb25kaXRpb25IABI8CgVyZWdleBgEIAEoCzIrLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5SZWdleENvbmRpdGlvbkgAElMKEXN0cmluZ19tZW1iZXJzaGlwGAUgASgLMjYuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlN0cmluZ01lbWJlcnNoaXBDb25kaXRpb25IABJTChFzaGEyNTZfbWVtYmVyc2hpcBgGIAEoCzI2LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TaGEyNTZNZW1iZXJzaGlwQ29uZGl0aW9uSAASVQoSYXR0cmlidXRlX3ByZXNlbmNlGAcgASgLMjcuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkF0dHJpYnV0ZVByZXNlbmNlQ29uZGl0aW9uSAASQAoHdmVyc2lvbhgIIAEoCzItLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WZXJzaW9uQ29uZGl0aW9uSAASUwoRc3RyaW5nX2NvbXBhcmlzb24YCSABKAsyNi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuU3RyaW5nQ29tcGFyaXNvbkNvbmRpdGlvbkgAEmAKGHNoYTI1Nl9zdHJpbmdfY29tcGFyaXNvbhgKIAEoCzI8LmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5TaGEyNTZTdHJpbmdDb21wYXJpc29uQ29uZGl0aW9uSAAScQohZmxhZ19ldmFsdWF0aW9uX3N0cmluZ19tZW1iZXJzaGlwGAsgASgLMkQuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLkZsYWdFdmFsdWF0aW9uU3RyaW5nTWVtYmVyc2hpcENvbmRpdGlvbkgAQgYKBGtpbmQicAonRmxhZ0V2YWx1YXRpb25TdHJpbmdNZW1iZXJzaGlwQ29uZGl0aW9uEh0KFWZsYWdfa2V5X3N0cmluZ19pbmRleBgBIAEoDRIWCg5zdHJpbmdfaW5kZXhlcxgCIAMoDRIOCgZuZWdhdGUYAyABKAgiLgoRQ29uZGl0aW9uT3BlcmFuZHMSGQoRY29uZGl0aW9uX2luZGV4ZXMYASADKA0iggEKEE51bWVyaWNDb25kaXRpb24SFwoPYXR0cmlidXRlX2luZGV4GAEgASgNEkIKCmNvbXBhcmF0b3IYAiABKA4yLi5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuTnVtZXJpY0NvbXBhcmF0b3ISEQoJY29tcGFyYW5kGAMgASgBIk4KDlJlZ2V4Q29uZGl0aW9uEhcKD2F0dHJpYnV0ZV9pbmRleBgBIAEoDRITCgtyZWdleF9pbmRleBgCIAEoDRIOCgZuZWdhdGUYAyABKAgiXAoZU3RyaW5nTWVtYmVyc2hpcENvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SFgoOc3RyaW5nX2luZGV4ZXMYAiADKA0SDgoGbmVnYXRlGAMgASgIIp0BChlTdHJpbmdDb21wYXJpc29uQ29uZGl0aW9uEhcKD2F0dHJpYnV0ZV9pbmRleBgBIAEoDRJBCgpjb21wYXJhdG9yGAIgASgOMi0uZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlN0cmluZ0NvbXBhcmF0b3ISFAoMc3RyaW5nX2luZGV4GAMgASgNEg4KBm5lZ2F0ZRgEIAEoCCLBAQofU2hhMjU2U3RyaW5nQ29tcGFyaXNvbkNvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SDAoEc2FsdBgCIAEoDBJHCgpjb21wYXJhdG9yGAMgASgOMjMuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlNoYTI1NlN0cmluZ0NvbXBhcmF0b3ISDgoGbGVuZ3RoGAQgASgNEg4KBnNoYTI1NhgFIAEoDBIOCgZuZWdhdGUYBiABKAgiYgoZU2hhMjU2TWVtYmVyc2hpcENvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SDAoEc2FsdBgCIAEoDBIOCgZzaGEyNTYYAyADKAwSDgoGbmVnYXRlGAQgASgIIkoKGkF0dHJpYnV0ZVByZXNlbmNlQ29uZGl0aW9uEhcKD2F0dHJpYnV0ZV9pbmRleBgBIAEoDRITCgtleHBlY3RfbnVsbBgCIAEoCCKGAQoQVmVyc2lvbkNvbmRpdGlvbhIXCg9hdHRyaWJ1dGVfaW5kZXgYASABKA0SQgoKY29tcGFyYXRvchgCIAEoDjIuLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5WZXJzaW9uQ29tcGFyYXRvchIVCg12ZXJzaW9uX2luZGV4GAMgASgNIp0BCgxQYXJ0aXRpb25LZXkSPQoEdGltZRgBIAEoCzItLmRhdGFkb2cuZmZlLmZsYWdnaW5nLnVmYy52MS5UaW1lUGFydGl0aW9uS2V5SAASRgoJc2hhcmRfbWQ1GAIgASgLMjEuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLk1kNVNoYXJkUGFydGl0aW9uS2V5SABCBgoEa2luZCISChBUaW1lUGFydGl0aW9uS2V5IlMKFE1kNVNoYXJkUGFydGl0aW9uS2V5EgwKBHNhbHQYASABKAkSFwoPYXR0cmlidXRlX2luZGV4GAIgASgNEhQKDHRvdGFsX3NoYXJkcxgDIAEoBCK4AQoFU3BsaXQSOwoGcmFuZ2VzGAEgAygLMisuZGF0YWRvZy5mZmUuZmxhZ2dpbmcudWZjLnYxLlBhcnRpdGlvblJhbmdlEhcKD3ZhcmlhdGlvbl9pbmRleBgCIAEoDRIWCglzZXJpYWxfaWQYAyABKAVIAIgBARIzCgZyZWFzb24YBCABKA4yIy5kYXRhZG9nLmZmZS5mbGFnZ2luZy51ZmMudjEuUmVhc29uQgwKCl9zZXJpYWxfaWQiRAoOUGFydGl0aW9uUmFuZ2USEQoEZnJvbRgBIAEoBEgAiAEBEg8KAnRvGAIgASgESAGIAQFCBwoFX2Zyb21CBQoDX3RvKrcBCg1WYXJpYXRpb25UeXBlEh4KGlZBUklBVElPTl9UWVBFX1VOU1BFQ0lGSUVEEAASGQoVVkFSSUFUSU9OX1RZUEVfU1RSSU5HEAESGgoWVkFSSUFUSU9OX1RZUEVfSU5URUdFUhACEhoKFlZBUklBVElPTl9UWVBFX05VTUVSSUMQAxIaChZWQVJJQVRJT05fVFlQRV9CT09MRUFOEAQSFwoTVkFSSUFUSU9OX1RZUEVfSlNPThAFKtcBChFOdW1lcmljQ29tcGFyYXRvchIiCh5OVU1FUklDX0NPTVBBUkFUT1JfVU5TUEVDSUZJRUQQABIgChxOVU1FUklDX0NPTVBBUkFUT1JfTEVTU19USEFOEAESKQolTlVNRVJJQ19DT01QQVJBVE9SX0xFU1NfVEhBTl9PUl9FUVVBTBACEiMKH05VTUVSSUNfQ09NUEFSQVRPUl9HUkVBVEVSX1RIQU4QAxIsCihOVU1FUklDX0NPTVBBUkFUT1JfR1JFQVRFUl9USEFOX09SX0VRVUFMEAQqmQEKEFN0cmluZ0NvbXBhcmF0b3ISIQodU1RSSU5HX0NPTVBBUkFUT1JfVU5TUEVDSUZJRUQQABIhCh1TVFJJTkdfQ09NUEFSQVRPUl9TVEFSVFNfV0lUSBABEh8KG1NUUklOR19DT01QQVJBVE9SX0VORFNfV0lUSBACEh4KGlNUUklOR19DT01QQVJBVE9SX0NPTlRBSU5TEAMqlAEKFlNoYTI1NlN0cmluZ0NvbXBhcmF0b3ISKAokU0hBMjU2X1NUUklOR19DT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASKAokU0hBMjU2X1NUUklOR19DT01QQVJBVE9SX1NUQVJUU19XSVRIEAESJgoiU0hBMjU2X1NUUklOR19DT01QQVJBVE9SX0VORFNfV0lUSBACKpcCChFWZXJzaW9uQ29tcGFyYXRvchIiCh5WRVJTSU9OX0NPTVBBUkFUT1JfVU5TUEVDSUZJRUQQABIcChhWRVJTSU9OX0NPTVBBUkFUT1JfRVFVQUwQARIgChxWRVJTSU9OX0NPTVBBUkFUT1JfTk9UX0VRVUFMEAISIAocVkVSU0lPTl9DT01QQVJBVE9SX0xFU1NfVEhBThADEikKJVZFUlNJT05fQ09NUEFSQVRPUl9MRVNTX1RIQU5fT1JfRVFVQUwQBBIjCh9WRVJTSU9OX0NPTVBBUkFUT1JfR1JFQVRFUl9USEFOEAUSLAooVkVSU0lPTl9DT01QQVJBVE9SX0dSRUFURVJfVEhBTl9PUl9FUVVBTBAGKnUKBlJlYXNvbhIWChJSRUFTT05fVU5TUEVDSUZJRUQQABIaChZSRUFTT05fVEFSR0VUSU5HX01BVENIEAESEAoMUkVBU09OX1NQTElUEAISEQoNUkVBU09OX1NUQVRJQxADEhIKDlJFQVNPTl9ERUZBVUxUEARCQlpAZ2l0aHViLmNvbS9EYXRhRG9nL2RkLXNvdXJjZS9kb21haW5zL2ZmZS9saWJzL2ZsYWdnaW5nL3VmYy91ZmNwYmIGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * FlagsConfiguration is a compiled rules-based flag configuration.
@@ -82,6 +82,14 @@ export type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfi
    * @generated from field: bool observe_full_evaluation_data = 10;
    */
   observeFullEvaluationData: boolean;
+
+  /**
+   * Optional evaluator behavior overrides. Evaluators use their hard-coded
+   * defaults when this message or one of its fields is absent.
+   *
+   * @generated from field: datadog.ffe.flagging.ufc.v1.EvaluatorParams evaluator_params = 11;
+   */
+  evaluatorParams?: EvaluatorParams | undefined;
 };
 
 /**
@@ -90,6 +98,27 @@ export type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfi
  */
 export const FlagsConfigurationSchema: GenMessage<FlagsConfiguration> = /*@__PURE__*/
   messageDesc(file_ufc, 0);
+
+/**
+ * @generated from message datadog.ffe.flagging.ufc.v1.EvaluatorParams
+ */
+export type EvaluatorParams = Message<"datadog.ffe.flagging.ufc.v1.EvaluatorParams"> & {
+  /**
+   * Maximum dependency-edge depth, counted from a root flag at depth zero.
+   * The maximum is inclusive, and zero rejects every dependency edge. Values
+   * must not exceed 255.
+   *
+   * @generated from field: optional uint64 max_dependency_depth = 1;
+   */
+  maxDependencyDepth?: bigint | undefined;
+};
+
+/**
+ * Describes the message datadog.ffe.flagging.ufc.v1.EvaluatorParams.
+ * Use `create(EvaluatorParamsSchema)` to create a new message.
+ */
+export const EvaluatorParamsSchema: GenMessage<EvaluatorParams> = /*@__PURE__*/
+  messageDesc(file_ufc, 1);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.Version
@@ -115,7 +144,7 @@ export type Version = Message<"datadog.ffe.flagging.ufc.v1.Version"> & {
  * Use `create(VersionSchema)` to create a new message.
  */
 export const VersionSchema: GenMessage<Version> = /*@__PURE__*/
-  messageDesc(file_ufc, 1);
+  messageDesc(file_ufc, 2);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.Flag
@@ -153,7 +182,7 @@ export type Flag = Message<"datadog.ffe.flagging.ufc.v1.Flag"> & {
  * Use `create(FlagSchema)` to create a new message.
  */
 export const FlagSchema: GenMessage<Flag> = /*@__PURE__*/
-  messageDesc(file_ufc, 2);
+  messageDesc(file_ufc, 3);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.Variation
@@ -214,7 +243,7 @@ export type Variation = Message<"datadog.ffe.flagging.ufc.v1.Variation"> & {
  * Use `create(VariationSchema)` to create a new message.
  */
 export const VariationSchema: GenMessage<Variation> = /*@__PURE__*/
-  messageDesc(file_ufc, 3);
+  messageDesc(file_ufc, 4);
 
 /**
  * An allocation first selects subjects matching its targeting expression. It
@@ -261,7 +290,7 @@ export type Allocation = Message<"datadog.ffe.flagging.ufc.v1.Allocation"> & {
  * Use `create(AllocationSchema)` to create a new message.
  */
 export const AllocationSchema: GenMessage<Allocation> = /*@__PURE__*/
-  messageDesc(file_ufc, 4);
+  messageDesc(file_ufc, 5);
 
 /**
  * AttributeReference identifies either the targeting key or a value reached by
@@ -294,7 +323,7 @@ export type AttributeReference = Message<"datadog.ffe.flagging.ufc.v1.AttributeR
  * Use `create(AttributeReferenceSchema)` to create a new message.
  */
 export const AttributeReferenceSchema: GenMessage<AttributeReference> = /*@__PURE__*/
-  messageDesc(file_ufc, 5);
+  messageDesc(file_ufc, 6);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.AttributePath
@@ -313,7 +342,7 @@ export type AttributePath = Message<"datadog.ffe.flagging.ufc.v1.AttributePath">
  * Use `create(AttributePathSchema)` to create a new message.
  */
 export const AttributePathSchema: GenMessage<AttributePath> = /*@__PURE__*/
-  messageDesc(file_ufc, 6);
+  messageDesc(file_ufc, 7);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.AttributePathSegment
@@ -344,7 +373,7 @@ export type AttributePathSegment = Message<"datadog.ffe.flagging.ufc.v1.Attribut
  * Use `create(AttributePathSegmentSchema)` to create a new message.
  */
 export const AttributePathSegmentSchema: GenMessage<AttributePathSegment> = /*@__PURE__*/
-  messageDesc(file_ufc, 7);
+  messageDesc(file_ufc, 8);
 
 /**
  * Leaf conditions are grouped by the attribute value type they operate on,
@@ -423,6 +452,12 @@ export type Condition = Message<"datadog.ffe.flagging.ufc.v1.Condition"> & {
      */
     value: Sha256StringComparisonCondition;
     case: "sha256StringComparison";
+  } | {
+    /**
+     * @generated from field: datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition flag_evaluation_string_membership = 11;
+     */
+    value: FlagEvaluationStringMembershipCondition;
+    case: "flagEvaluationStringMembership";
   } | { case: undefined; value?: undefined };
 };
 
@@ -431,7 +466,44 @@ export type Condition = Message<"datadog.ffe.flagging.ufc.v1.Condition"> & {
  * Use `create(ConditionSchema)` to create a new message.
  */
 export const ConditionSchema: GenMessage<Condition> = /*@__PURE__*/
-  messageDesc(file_ufc, 8);
+  messageDesc(file_ufc, 9);
+
+/**
+ * Evaluates another flag and tests its variant key for membership. This is a
+ * dedicated condition kind so flag evaluations cannot be used as attribute
+ * sources for other comparators or as partition keys.
+ *
+ * @generated from message datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition
+ */
+export type FlagEvaluationStringMembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition"> & {
+  /**
+   * Index into FlagsConfiguration.strings for the flag key.
+   *
+   * @generated from field: uint32 flag_key_string_index = 1;
+   */
+  flagKeyStringIndex: number;
+
+  /**
+   * Indices into FlagsConfiguration.strings for expected variant keys.
+   *
+   * @generated from field: repeated uint32 string_indexes = 2;
+   */
+  stringIndexes: number[];
+
+  /**
+   * True negates membership.
+   *
+   * @generated from field: bool negate = 3;
+   */
+  negate: boolean;
+};
+
+/**
+ * Describes the message datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition.
+ * Use `create(FlagEvaluationStringMembershipConditionSchema)` to create a new message.
+ */
+export const FlagEvaluationStringMembershipConditionSchema: GenMessage<FlagEvaluationStringMembershipCondition> = /*@__PURE__*/
+  messageDesc(file_ufc, 10);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.ConditionOperands
@@ -450,7 +522,7 @@ export type ConditionOperands = Message<"datadog.ffe.flagging.ufc.v1.ConditionOp
  * Use `create(ConditionOperandsSchema)` to create a new message.
  */
 export const ConditionOperandsSchema: GenMessage<ConditionOperands> = /*@__PURE__*/
-  messageDesc(file_ufc, 9);
+  messageDesc(file_ufc, 11);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.NumericCondition
@@ -477,7 +549,7 @@ export type NumericCondition = Message<"datadog.ffe.flagging.ufc.v1.NumericCondi
  * Use `create(NumericConditionSchema)` to create a new message.
  */
 export const NumericConditionSchema: GenMessage<NumericCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 10);
+  messageDesc(file_ufc, 12);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.RegexCondition
@@ -508,7 +580,7 @@ export type RegexCondition = Message<"datadog.ffe.flagging.ufc.v1.RegexCondition
  * Use `create(RegexConditionSchema)` to create a new message.
  */
 export const RegexConditionSchema: GenMessage<RegexCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 11);
+  messageDesc(file_ufc, 13);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.StringMembershipCondition
@@ -539,7 +611,7 @@ export type StringMembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.Str
  * Use `create(StringMembershipConditionSchema)` to create a new message.
  */
 export const StringMembershipConditionSchema: GenMessage<StringMembershipCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 12);
+  messageDesc(file_ufc, 14);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.StringComparisonCondition
@@ -575,7 +647,7 @@ export type StringComparisonCondition = Message<"datadog.ffe.flagging.ufc.v1.Str
  * Use `create(StringComparisonConditionSchema)` to create a new message.
  */
 export const StringComparisonConditionSchema: GenMessage<StringComparisonCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 13);
+  messageDesc(file_ufc, 15);
 
 /**
  * Compares a prefix or suffix without exposing its plaintext value. For
@@ -634,7 +706,7 @@ export type Sha256StringComparisonCondition = Message<"datadog.ffe.flagging.ufc.
  * Use `create(Sha256StringComparisonConditionSchema)` to create a new message.
  */
 export const Sha256StringComparisonConditionSchema: GenMessage<Sha256StringComparisonCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 14);
+  messageDesc(file_ufc, 16);
 
 /**
  * True when SHA-256(salt || attribute_value) matches one of sha256 values.
@@ -672,7 +744,7 @@ export type Sha256MembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.Sha
  * Use `create(Sha256MembershipConditionSchema)` to create a new message.
  */
 export const Sha256MembershipConditionSchema: GenMessage<Sha256MembershipCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 15);
+  messageDesc(file_ufc, 17);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.AttributePresenceCondition
@@ -697,7 +769,7 @@ export type AttributePresenceCondition = Message<"datadog.ffe.flagging.ufc.v1.At
  * Use `create(AttributePresenceConditionSchema)` to create a new message.
  */
 export const AttributePresenceConditionSchema: GenMessage<AttributePresenceCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 16);
+  messageDesc(file_ufc, 18);
 
 /**
  * @generated from message datadog.ffe.flagging.ufc.v1.VersionCondition
@@ -726,7 +798,7 @@ export type VersionCondition = Message<"datadog.ffe.flagging.ufc.v1.VersionCondi
  * Use `create(VersionConditionSchema)` to create a new message.
  */
 export const VersionConditionSchema: GenMessage<VersionCondition> = /*@__PURE__*/
-  messageDesc(file_ufc, 17);
+  messageDesc(file_ufc, 19);
 
 /**
  * PartitionKey computes one coordinate of the composite key used to select a
@@ -758,7 +830,7 @@ export type PartitionKey = Message<"datadog.ffe.flagging.ufc.v1.PartitionKey"> &
  * Use `create(PartitionKeySchema)` to create a new message.
  */
 export const PartitionKeySchema: GenMessage<PartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 18);
+  messageDesc(file_ufc, 20);
 
 /**
  * Time is the current Unix timestamp in milliseconds.
@@ -773,7 +845,7 @@ export type TimePartitionKey = Message<"datadog.ffe.flagging.ufc.v1.TimePartitio
  * Use `create(TimePartitionKeySchema)` to create a new message.
  */
 export const TimePartitionKeySchema: GenMessage<TimePartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 19);
+  messageDesc(file_ufc, 21);
 
 /**
  * Partition value is computed as follows:
@@ -809,7 +881,7 @@ export type Md5ShardPartitionKey = Message<"datadog.ffe.flagging.ufc.v1.Md5Shard
  * Use `create(Md5ShardPartitionKeySchema)` to create a new message.
  */
 export const Md5ShardPartitionKeySchema: GenMessage<Md5ShardPartitionKey> = /*@__PURE__*/
-  messageDesc(file_ufc, 20);
+  messageDesc(file_ufc, 22);
 
 /**
  * Split.ranges is a Cartesian-product range over Allocation.partition_key.
@@ -846,7 +918,7 @@ export type Split = Message<"datadog.ffe.flagging.ufc.v1.Split"> & {
  * Use `create(SplitSchema)` to create a new message.
  */
 export const SplitSchema: GenMessage<Split> = /*@__PURE__*/
-  messageDesc(file_ufc, 21);
+  messageDesc(file_ufc, 23);
 
 /**
  * A half-open range: from <= partition coordinate < to. Time coordinates are
@@ -871,7 +943,7 @@ export type PartitionRange = Message<"datadog.ffe.flagging.ufc.v1.PartitionRange
  * Use `create(PartitionRangeSchema)` to create a new message.
  */
 export const PartitionRangeSchema: GenMessage<PartitionRange> = /*@__PURE__*/
-  messageDesc(file_ufc, 22);
+  messageDesc(file_ufc, 24);
 
 /**
  * @generated from enum datadog.ffe.flagging.ufc.v1.VariationType
