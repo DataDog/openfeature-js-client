@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
-import { configurationFromString } from '@datadog/flagging-core/rules-based'
+import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { InvalidContextError, OpenFeature, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
@@ -46,6 +46,76 @@ function providerWithConfiguration(configuration: FlagsConfiguration): DatadogCo
 }
 
 describe('DatadogCoreProvider', () => {
+  it('canonicalizes nested JSON keys while preserving array order and the original configuration', () => {
+    const precomputed = precomputedConfiguration.precomputed!
+    const configurationWithValue = (value: { items: { a: number; b: number }[] }): FlagsConfiguration => ({
+      precomputed: {
+        ...precomputed,
+        response: {
+          data: {
+            attributes: {
+              ...precomputed.response.data.attributes,
+              flags: {
+                'static-flag': {
+                  ...precomputed.response.data.attributes.flags['static-flag']!,
+                  variationType: 'object',
+                  variationValue: value,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    const initial = configurationWithValue({
+      items: [
+        { a: 1, b: 2 },
+        { a: 3, b: 4 },
+      ],
+    })
+    const reordered = configurationWithValue({
+      items: [
+        { b: 2, a: 1 },
+        { b: 4, a: 3 },
+      ],
+    })
+    const initialWire = configurationToString(initial)
+    const reorderedWire = configurationToString(reordered)
+    expect(reordered).toEqual(initial)
+    expect(reorderedWire).not.toBe(initialWire)
+    const provider = providerWithConfiguration(initial)
+    const evaluate = () => provider.resolveObjectEvaluation('static-flag', {}, precomputed.context!, logger)
+    const first = evaluate()
+    expect(first.errorCode).toBeUndefined()
+    expect(first.value).toEqual({
+      items: [
+        { a: 1, b: 2 },
+        { a: 3, b: 4 },
+      ],
+    })
+    const identity = first.flagMetadata!.__dd_core_configuration_id
+    provider.setConfiguration(reordered)
+    expect(evaluate().flagMetadata!.__dd_core_configuration_id).toBe(identity)
+    expect(configurationToString(initial)).toBe(initialWire)
+    expect(configurationToString(reordered)).toBe(reorderedWire)
+
+    provider.setConfiguration(
+      configurationWithValue({
+        items: [
+          { a: 3, b: 4 },
+          { a: 1, b: 2 },
+        ],
+      })
+    )
+    expect(evaluate().flagMetadata!.__dd_core_configuration_id).not.toBe(identity)
+    expect(evaluate().value).toEqual({
+      items: [
+        { a: 3, b: 4 },
+        { a: 1, b: 2 },
+      ],
+    })
+  })
+
   it('has core provider metadata', () => {
     const provider = providerWithConfiguration(rulesConfiguration)
 
