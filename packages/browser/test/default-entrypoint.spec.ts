@@ -13,12 +13,17 @@ import {
   createDatadogExposureLoggingHook,
   createDatadogRumTrackingHook,
   DatadogProvider,
+  enrichRumContext,
   getPrecomputedContext,
 } from '../src'
 
 describe('default entry point', () => {
   it('exports the provider without loading Protobuf-ES', () => {
     expect(DatadogProvider).toBeDefined()
+    expect(enrichRumContext).toBeDefined()
+    expect((globalThis as { DD_FLAGGING?: { enrichRumContext?: unknown } }).DD_FLAGGING?.enrichRumContext).toBe(
+      enrichRumContext
+    )
     expect(composeDatadogTrackingHooks).toBeDefined()
     expect(createDatadogExposureLoggingHook).toBeDefined()
     expect(createDatadogEvaluationLoggingHook).toBeDefined()
