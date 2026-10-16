@@ -22,6 +22,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
+import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -62,6 +63,11 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+  private readonly debugMode: boolean
+  private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
+  private initializationTimer?: ReturnType<typeof setTimeout>
+  private initializationStarted = false
+  private initializationFinished = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -103,6 +109,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    this.debugMode = options.debugMode === true
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
@@ -124,11 +131,45 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    if (!this.initializationStarted) {
+      this.initializationStarted = true
+      if (this.debugMode) {
+        logDiagnostic(
+          'Initializing. If no remote events arrive, check the client token, site, network, and Content Security Policy.'
+        )
+      }
+      try {
+        if (this.configuration) {
+          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.debugMode)
+          this.lifecycleTelemetry.emit('sdk_init_started')
+          // Observe slow startup without aborting or changing OpenFeature initialization.
+          this.initializationTimer = setTimeout(() => this.lifecycleTelemetry?.emit('init_timeout'), 30_000)
+        }
+      } catch {
+        if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
+      }
+    }
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context)
+    try {
+      return await this.setContext(context)
+    } catch (error) {
+      this.lifecycleTelemetry?.emit('init_failed')
+      if (this.debugMode)
+        logDiagnostic('Initialization failed. Inspect the configuration request in browser developer tools.')
+      throw error
+    } finally {
+      this.initializationFinished = true
+      clearTimeout(this.initializationTimer)
+    }
   }
 
   async onClose(): Promise<void> {
+    clearTimeout(this.initializationTimer)
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Diagnostic shutdown must not interrupt application shutdown.
+    }
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
@@ -187,6 +228,9 @@ export class DatadogProvider extends DatadogProviderBase {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          if (!fromCache && config.precomputed) {
+            this.lifecycleTelemetry?.emit('provider_ready')
+          }
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -238,9 +282,22 @@ export class DatadogProvider extends DatadogProviderBase {
 
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
+      if (!signal.aborted) {
+        if (config.precomputed) {
+          this.lifecycleTelemetry?.emit('configuration_received')
+        } else if (config.precomputedError) {
+          this.lifecycleTelemetry?.emit('provider_error')
+          if (!this.initializationFinished) this.lifecycleTelemetry?.emit('init_failed')
+          if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
+        }
+      }
       this.flagsCache?.set(config, context)
       return { config, fromCache: false }
     } catch (err) {
+      if (!signal.aborted) {
+        this.lifecycleTelemetry?.emit('provider_error')
+        if (this.debugMode) logDiagnostic('Configuration fetch failed. Cached configuration may still be available.')
+      }
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
@@ -273,12 +330,14 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluatePrecomputedConfiguration(
+    const details = evaluatePrecomputedConfiguration(
       this.flagsConfiguration,
       type,
       flagKey,
       defaultValue,
       this.evaluationContext ?? {}
     )
+    if (this.debugMode) logDiagnostic('Evaluation details', { flagKey, ...details })
+    return details
   }
 }

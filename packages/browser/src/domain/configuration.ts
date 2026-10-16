@@ -10,6 +10,12 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
  */
 export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
   /**
+   * Enable local diagnostic output (default: false). Lifecycle telemetry is emitted independently of this option.
+   * Local evaluation output may contain sensitive flag values. Use temporarily while troubleshooting.
+   */
+  debugMode?: boolean
+
+  /**
    * The RUM application ID.
    */
   applicationId?: string
