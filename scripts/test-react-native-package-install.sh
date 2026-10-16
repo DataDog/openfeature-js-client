@@ -14,7 +14,9 @@ trap cleanup EXIT
 cp \
   "$FIXTURE_DIR/package.json" \
   "$FIXTURE_DIR/index.js" \
+  "$FIXTURE_DIR/configurations.js" \
   "$FIXTURE_DIR/default-entrypoint.js" \
+  "$FIXTURE_DIR/legacy-entrypoint.js" \
   "$FIXTURE_DIR/metro.config.js" \
   "$SMOKE_DIR/"
 
@@ -29,17 +31,23 @@ npm install --ignore-scripts --no-audit --no-fund
 echo "Checking that the root entry point does not load protobuf..."
 node default-entrypoint.js
 
+echo "Checking the packed physical rules-based entry point..."
+node legacy-entrypoint.js
+
 echo "Bundling the packed core package with the React Native Metro configuration..."
 mkdir -p dist
-for platform in android ios; do
-  ./node_modules/.bin/metro build index.js \
-    --config metro.config.js \
-    --platform "$platform" \
-    --dev false \
-    --minify false \
-    --max-workers 2 \
-    --out "dist/index.$platform.bundle.js"
-done
+for mode in modern legacy-cjs legacy-esm; do
+  for platform in android ios; do
+    echo "Building $platform with $mode resolution..."
+    CORE_SMOKE_MODE="$mode" ./node_modules/.bin/metro build index.js \
+      --config metro.config.js \
+      --platform "$platform" \
+      --dev false \
+      --minify false \
+      --max-workers 2 \
+      --out "dist/index.$mode.$platform.bundle.js"
 
-echo "Executing the Metro bundle without TextEncoder, TextDecoder, or BigInt..."
-node dist/index.android.bundle.js
+    echo "Executing $mode/$platform without TextEncoder, TextDecoder, or BigInt..."
+    node "dist/index.$mode.$platform.bundle.js"
+  done
+done

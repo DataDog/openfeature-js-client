@@ -65,6 +65,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     needs: validate-release
+    env:
+      # Packing and publishing run prepack, which rebuilds the packages.
+      BUILD_MODE: release
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -77,9 +80,7 @@ jobs:
         run: yarn install --immutable && yarn allow-scripts
 
       - name: Build packages
-        run: |
-          export BUILD_MODE=release
-          yarn build
+        run: yarn build
 
       - name: Create packages
         run: yarn lerna run pack --stream

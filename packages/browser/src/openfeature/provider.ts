@@ -14,20 +14,18 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
-import { assignmentCacheFactory } from '../cache/assignment-cache-factory'
-import { chromeStorageIfAvailable, hasIndexedDB } from '../cache/helpers'
+import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
-import { DatadogCoreProvider } from './core-provider'
 import { toProviderErrorEvent } from './error-event'
-import { createExposureLoggingHook } from './exposures'
-import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
-import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from './rumIntegration'
+import { DatadogProviderBase } from './provider-base'
+import { createProviderTracking, type ProviderTracking } from './provider-tracking'
+import { enrichEvaluationContextWithRumUser } from './rumIntegration'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -54,7 +52,7 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // We need to use a class here to properly implement the OpenFeature Provider interface
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
-export class DatadogProvider extends DatadogCoreProvider {
+export class DatadogProvider extends DatadogProviderBase {
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
@@ -78,7 +76,9 @@ export class DatadogProvider extends DatadogCoreProvider {
   // result before calling the resolver and subsequent hooks. Return this stored context, not a
   // fresh RUM lookup, so targeting, flag configuration, and telemetry stay on the same identity.
   /** Effective context associated with the active flags configuration. */
-  private evaluationContext: EvaluationContext = {}
+  private evaluationContext: EvaluationContext | undefined
+  /** Request context used for tracking until a configuration has been accepted. */
+  private requestedEvaluationContext: EvaluationContext = {}
 
   status: ProviderStatus
 
@@ -87,6 +87,7 @@ export class DatadogProvider extends DatadogCoreProvider {
 
   private exposureCache: AssignmentCache | undefined
   private exposureCacheReady: Promise<void> | undefined
+  private readonly tracking: ProviderTracking
 
   /**
    * Concurrency control for initialize/onContextChange:
@@ -99,10 +100,9 @@ export class DatadogProvider extends DatadogCoreProvider {
    * Solution:
    * 1. `contextUpdateAbortController`: allows aborting previous operation.
    * 2. `latestContextUpdate`: the last-called context update
-   *    operation. When context updates finish, they check if they
-   *    were aborted (meaning there's a newer context update) and
-   *    delegate to it. This makes sure that all concurrent context
-   *    updates resolve to the same result.
+   *    operation. Aborted updates delegate to it so all concurrent
+   *    updates resolve to the same result. On close, it is replaced
+   *    with a settled promise so aborted updates can finish.
    */
   private latestContextUpdate: Promise<void> = Promise.resolve()
   private contextUpdateAbortController: AbortController = new AbortController()
@@ -112,29 +112,15 @@ export class DatadogProvider extends DatadogCoreProvider {
     this.debugMode = options.debugMode === true
     this.configuration = validateAndBuildFlaggingConfiguration(options)
 
-    // Set up provider-managed hooks and events
-    this.hooks = []
-
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
-    if (this.isRumIntegrationEnabled) {
-      this.hooks.push(createRumTrackingHook())
-    }
-
-    // Add EVP flag evaluation hook.
-    const isEvaluationTrackingEnabled = options.enableFlagEvaluationTracking ?? true
-    if (isEvaluationTrackingEnabled && this.configuration) {
-      this.hooks.push(createFlagEvalEVPHook(this.configuration, () => this.evaluationContext))
-    }
-
-    // Add proper exposure logging hook (creates batch internally)
-    const isExposureLoggingEnabled = options.enableExposureLogging ?? true
-    if (isExposureLoggingEnabled && this.configuration) {
-      this.exposureCache = assignmentCacheFactory({
-        chromeStorage: chromeStorageIfAvailable(),
-        storageKeySuffix: 'dd-of-browser',
-      })
-      this.hooks.push(createExposureLoggingHook(this.configuration, this.exposureCache, () => this.evaluationContext))
-    }
+    this.tracking = createProviderTracking({
+      options,
+      configuration: this.configuration,
+      enabledByDefault: true,
+      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
+    })
+    this.hooks = this.tracking.hooks
+    this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
@@ -163,7 +149,7 @@ export class DatadogProvider extends DatadogCoreProvider {
         if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
       }
     }
-    this.exposureCacheReady = this.exposureCache?.init()
+    this.exposureCacheReady = this.tracking.initialize()
     try {
       return await this.setContext(context)
     } catch (error) {
@@ -177,12 +163,27 @@ export class DatadogProvider extends DatadogCoreProvider {
     }
   }
 
+  async onClose(): Promise<void> {
+    clearTimeout(this.initializationTimer)
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Diagnostic shutdown must not interrupt application shutdown.
+    }
+    // Aborted updates must not delegate to their own pending promise during shutdown.
+    this.latestContextUpdate = Promise.resolve()
+    this.contextUpdateAbortController.abort()
+    await this.tracking.shutdown()
+    this.status = ProviderStatus.NOT_READY
+  }
+
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
     return this.setContext(context)
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
     const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    this.requestedEvaluationContext = evaluationContext
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -204,13 +205,8 @@ export class DatadogProvider extends DatadogCoreProvider {
     // `signal`, so we don't block OF SDK unnecessarily.
     this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
       .then((result) =>
-        // New configuration might require clearing exposure
-        // cache. One example of this is updating experiment
-        // boundaries: if we previously emitted exposure events for an
-        // experiment and the new configuration bumped experiment
-        // start time, we need to emit at least one new event within
-        // the new experiment timeframe. We do that by clearing our
-        // exposure
+        // Preserve the existing timestamp-based reset for experiment reporting.
+        // createdAt is a configuration timestamp, not an experiment revision.
         this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
@@ -220,8 +216,7 @@ export class DatadogProvider extends DatadogCoreProvider {
       .then(
         ({ config, fromCache }) => {
           if (signal.aborted) {
-            // If signal was aborted, another setContext call has updated
-            // this.latestContextUpdate, so we delegate to it.
+            // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           }
 
@@ -253,8 +248,7 @@ export class DatadogProvider extends DatadogCoreProvider {
         },
         (error) => {
           if (signal.aborted) {
-            // If signal was aborted, another setContext call has updated
-            // this.latestContextUpdate, so we delegate to it.
+            // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
@@ -341,18 +335,9 @@ export class DatadogProvider extends DatadogCoreProvider {
       type,
       flagKey,
       defaultValue,
-      this.evaluationContext
+      this.evaluationContext ?? {}
     )
     if (this.debugMode) logDiagnostic('Evaluation details', { flagKey, ...details })
     return details
-  }
-
-  async onClose(): Promise<void> {
-    clearTimeout(this.initializationTimer)
-    try {
-      this.lifecycleTelemetry?.stop()
-    } catch {
-      // Diagnostic shutdown must not interrupt application shutdown.
-    }
   }
 }

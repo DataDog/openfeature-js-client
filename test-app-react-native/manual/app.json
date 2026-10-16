@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Flagging Core Runtime Check",
+    "slug": "flagging-core-runtime-check",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "jsEngine": "hermes",
+    "ios": {
+      "bundleIdentifier": "com.datadog.flaggingcore.example"
+    },
+    "android": {
+      "package": "com.datadog.flaggingcore.example"
+    }
+  }
+}

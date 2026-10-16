@@ -120,7 +120,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
       ...options,
       flagConfigurationFetch: () => Promise.resolve(new Response('{}', { status: 200 })),
     })
-    await provider.initialize()
+    await expect(provider.initialize()).rejects.toThrow('Precomputed configuration response is missing data')
     expect(eventTypes(provider)).toEqual(['sdk_init_started', 'provider_error', 'init_failed'])
   })
 

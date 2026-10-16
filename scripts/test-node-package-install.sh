@@ -57,8 +57,8 @@ cat > package.json << 'PKGJSON'
   "private": true,
   "description": "Test app for validating @datadog/openfeature-node-server installation scenarios",
   "scripts": {
-    "test": "node test.js",
-    "typecheck": "tsc --noEmit"
+    "test": "node test.js && node --test configuration.test.mjs browser-bootstrap.test.cjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit --module Node16 --moduleResolution Node16 && tsc --noEmit --module NodeNext --moduleResolution NodeNext"
   },
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",
@@ -143,6 +143,12 @@ echo ""
 echo "Running runtime tests..."
 echo ""
 yarn test
+
+if [ "$WITH_OPENFEATURE" = false ]; then
+  echo "Building and checking Node entrypoint bundles..."
+  node "$REPO_ROOT/scripts/report-node-entrypoint-bundle-sizes.js" "$TEST_APP_DIR"
+  node --test bundle.test.cjs
+fi
 
 echo ""
 if [ "$WITH_OPENFEATURE" = true ]; then

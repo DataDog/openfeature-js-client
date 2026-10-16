@@ -4,8 +4,8 @@
   "private": true,
   "description": "Test app for validating @datadog/openfeature-node-server installation scenarios",
   "scripts": {
-    "test": "node test.js",
-    "typecheck": "tsc --noEmit"
+    "test": "node test.js && node --test configuration.test.mjs browser-bootstrap.test.cjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit --module Node16 --moduleResolution Node16 && tsc --noEmit --module NodeNext --moduleResolution NodeNext"
   },
   "dependencies": {
     "@datadog/flagging-core": "file:./core.tgz",

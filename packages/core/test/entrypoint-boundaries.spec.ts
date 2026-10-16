@@ -14,6 +14,16 @@ type RuntimeImport = {
 
 const coreSourceRoot = path.resolve(process.cwd(), 'src')
 const browserSourceRoot = path.resolve(process.cwd(), '../browser/src')
+const nodeSourceRoot = path.resolve(process.cwd(), '../node-server/src')
+const { getCoreEntrypoints } = require('../../../scripts/lib/coreEntrypoints')
+const corePackage = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'))
+const coreEntrypoints = getCoreEntrypoints(corePackage) as Array<{ subpath: string; source: string }>
+const coreSubpathSources = new Map(
+  coreEntrypoints.map((entry) => [
+    `@datadog/flagging-core${entry.subpath.slice(1)}`,
+    path.join(coreSourceRoot, `${entry.source}.ts`),
+  ])
+)
 
 const defaultEntrypoints: Entrypoint[] = [
   {
@@ -24,9 +34,14 @@ const defaultEntrypoints: Entrypoint[] = [
     name: '@datadog/openfeature-browser',
     file: path.join(browserSourceRoot, 'index.ts'),
   },
+  {
+    name: '@datadog/openfeature-node-server',
+    file: path.join(nodeSourceRoot, 'index.ts'),
+  },
 ]
 
 const forbiddenSourcePaths = new Map([
+  [path.resolve(process.cwd(), 'bundle/legacy'), 'legacy compatibility bundles'],
   [path.join(coreSourceRoot, 'configuration/generated'), 'generated protobuf definitions'],
   [path.join(coreSourceRoot, 'configuration/protobuf-text-encoding.ts'), 'protobuf text-encoding setup'],
   [path.join(coreSourceRoot, 'configuration/rules-wire.ts'), 'rules-based wire parser'],
@@ -139,9 +154,8 @@ function resolveSourceFile(fromFile: string, specifier: string): string | undefi
   if (specifier === '@datadog/flagging-core') {
     return path.join(coreSourceRoot, 'index.ts')
   }
-  if (specifier === '@datadog/flagging-core/rules-based') {
-    return path.join(coreSourceRoot, 'rules-based-configuration-wire.ts')
-  }
+  const coreSubpath = coreSubpathSources.get(specifier)
+  if (coreSubpath) return coreSubpath
   if (specifier === '@datadog/openfeature-browser') {
     return path.join(browserSourceRoot, 'index.ts')
   }

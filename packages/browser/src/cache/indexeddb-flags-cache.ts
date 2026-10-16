@@ -1,24 +1,7 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-
-const DB_NAME = 'dd-flagging'
-const DB_VERSION = 1
-const STORE_NAME = 'configurations'
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
+import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
   const tokenSuffix = buildStorageKeySuffix(clientToken)
@@ -38,14 +21,35 @@ export class IndexedDBFlagsCache {
   /** Read cached config for the given context. Returns undefined on miss or any error. */
   async get(context: EvaluationContext): Promise<FlagsConfiguration | undefined> {
     try {
-      const configKey = buildConfigKey(this.clientToken, context)
+      const legacyKey = buildConfigKey(this.clientToken, context)
+      const configKey = `v2-${legacyKey}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readonly')
           const store = tx.objectStore(STORE_NAME)
           const request = store.get(configKey)
-          request.onsuccess = () => resolve(request.result as FlagsConfiguration | undefined)
+          request.onsuccess = () => {
+            if (request.result !== undefined) {
+              resolve(request.result as FlagsConfiguration)
+              return
+            }
+            // Read older plaintext entries on upgrade. Never expose encoded
+            // snapshots written by a prerelease SDK through the legacy key.
+            const legacy = store.get(legacyKey)
+            legacy.onerror = () => reject(legacy.error)
+            legacy.onsuccess = () => {
+              const config = legacy.result as FlagsConfiguration | undefined
+              const attributes = config?.precomputed?.response?.data?.attributes
+              resolve(
+                attributes &&
+                  (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
+                  attributes.obfuscation === undefined
+                  ? config
+                  : undefined
+              )
+            }
+          }
           request.onerror = () => reject(request.error)
         })
         if (!config || typeof config !== 'object') {
@@ -62,7 +66,9 @@ export class IndexedDBFlagsCache {
 
   /** Fire-and-forget persist. Never throws. */
   set(config: FlagsConfiguration, context: EvaluationContext): void {
-    const configKey = buildConfigKey(this.clientToken, context)
+    // One namespace for new writes keeps plaintext rollback and encoded
+    // refreshes in the same slot without changing what older SDKs can read.
+    const configKey = `v2-${buildConfigKey(this.clientToken, context)}`
     openDB()
       .then((db) => {
         const tx = db.transaction(STORE_NAME, 'readwrite')

@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - 'packages/*/package.json'
-      - 'packages/core/src/**'
-      - 'scripts/test-react-native-package-install.sh'
+      - 'packages/core/**'
+      - 'scripts/**'
       - 'test-app-react-native/**'
       - 'yarn.lock'
       - 'lerna.json'
@@ -24,6 +24,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --immutable && yarn allow-scripts
+
+      - name: Check generated entrypoint metadata
+        run: yarn check:entrypoints
 
       - name: Build packages
         run: yarn build

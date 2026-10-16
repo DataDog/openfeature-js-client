@@ -102,6 +102,43 @@ describe('DatadogNodeServerProvider', () => {
     return modifiedConfiguration
   }
 
+  it.each([true, false])(
+    'preserves evaluation consent %p after a configuration swap and exception',
+    async (consent) => {
+      const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+      const initial = { ...configuration, observeFullEvaluationData: consent }
+      provider.setConfiguration(initial)
+      const result = await provider.resolveBooleanEvaluation('kill-switch', false, { targetingKey: 'user' }, logger)
+      expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
+
+      const replacement = structuredClone(configuration)
+      replacement.observeFullEvaluationData = !consent
+      Object.defineProperty(replacement.flags['kill-switch'], 'enabled', {
+        get() {
+          throw new Error('pii-canary')
+        },
+      })
+      provider.setConfiguration(replacement)
+      const failed = await provider.resolveBooleanEvaluation(
+        'kill-switch',
+        false,
+        { targetingKey: 'user' },
+        { ...logger, error: jest.fn() }
+      )
+      expect(failed.errorCode).toBe('GENERAL')
+      expect(failed.flagMetadata?.__dd_observe_full_evaluation_data).toBe(!consent)
+      expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
+      expect(JSON.stringify(failed)).not.toContain('pii-canary')
+    }
+  )
+
+  it('uses protected consent before a provider configuration is available', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
+    expect(result.errorCode).toBe('PROVIDER_NOT_READY')
+    expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(false)
+  })
+
   it('should allow hooks to be set', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
