@@ -3,6 +3,7 @@ export * from './configuration'
 export * from './evaluation'
 export * from './obfuscation'
 export * from './time'
+export { buildEndpointHost } from './transport/endpoint'
 
 // Build environment placeholder for testing
 const _SDK_VERSION = __BUILD_ENV__SDK_VERSION__

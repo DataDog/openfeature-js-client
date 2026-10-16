@@ -8,11 +8,11 @@ import {
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
 import { prepareRulesResponse } from '../configuration/prepared-rules-response'
-import { timeStampNow } from '../time'
+import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
-import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { createEvaluationMetadata, createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
@@ -123,7 +123,29 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
+  // Snapshot consent once at the start of this evaluation. The provider can receive a new
+  // configuration later, but hooks must see the consent from the configuration that produced this result.
+  const observeFullEvaluationData = config?.observeFullEvaluationData === true
+  const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
+  let details: ResolutionDetails<FlagTypeToValue<T>>
+  try {
+    details = evaluateRules(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs)
+  } catch (error) {
+    logger.error('Error evaluating flag', { error })
+    details = { value: defaultValue, reason: 'ERROR', errorCode: 'GENERAL' as ErrorCode }
+  }
+  return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
+}
 
+function evaluateRules<T extends FlagValueType>(
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration | undefined,
+  type: T,
+  flagKey: string,
+  defaultValue: FlagTypeToValue<T>,
+  context: EvaluationContext,
+  logger: Logger,
+  evaluationTimestampMs: TimeStamp
+): ResolutionDetails<FlagTypeToValue<T>> {
   if (!config) {
     return {
       value: defaultValue,

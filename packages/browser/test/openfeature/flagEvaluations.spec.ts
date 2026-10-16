@@ -1,51 +1,67 @@
 import { FlagEvaluationAggregator } from '@datadog/flagging-core'
-import type { EvaluationDetails, HookContext } from '@openfeature/web-sdk'
-import type { FlaggingConfiguration } from '../../src/domain/configuration'
+import { ErrorCode, type EvaluationDetails, type HookContext } from '@openfeature/web-sdk'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
 
-const mockConfiguration: FlaggingConfiguration = {
+const mockConfiguration = validateAndBuildFlaggingTrackingConfiguration({
+  clientToken: 'tracking-token',
   flagEvaluationTrackingInterval: 1000,
   applicationId: 'test-app-id',
-  fetchFlagsConfiguration: jest.fn(),
   service: 'test-service',
-  exposuresEndpointBuilder: jest.fn() as any,
-  flagEvaluationEndpointBuilder: jest.fn() as any,
-  // Add required Configuration properties
-  site: 'datadoghq.com',
-  version: '1.0.0',
-  sessionSampleRate: 100,
-  telemetrySampleRate: 20,
-  // `as unknown as FlaggingConfiguration` is intentional: FlaggingConfiguration inherits many required
-  // fields from Configuration/TransportConfiguration (beforeSend, logsEndpointBuilder, sdkVersion, etc.)
-  // that createFlagEvalEVPHook never reads. All @datadog/browser-core imports used by
-  // createFlagEvalEVPHook are mocked at the module level below, so missing fields don't
-  // cause runtime failures.
-} as unknown as FlaggingConfiguration
+})!
 
 jest.mock('@datadog/browser-core', () => ({
+  ...jest.requireActual('@datadog/browser-core'),
   addTelemetryDebug: jest.fn(),
   createBatch: jest.fn(() => ({
     add: jest.fn(),
+    stop: jest.fn(),
   })),
   createFlushController: jest.fn(),
   createHttpRequest: jest.fn(),
   createIdentityEncoder: jest.fn(),
   createPageMayExitObservable: jest.fn(() => ({
-    subscribe: jest.fn(),
+    subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
   })),
-  Observable: jest.fn().mockImplementation(() => ({})),
-  dateNow: jest.fn(() => 1234567890),
+  Observable: jest.fn().mockImplementation(() => ({ notify: jest.fn() })),
 }))
 
 describe('createFlagEvalEVPHook', () => {
-  it('should create a hook that tracks flag evaluations', () => {
-    const hook = createFlagEvalEVPHook(mockConfiguration)
+  let hook: ReturnType<typeof createFlagEvalEVPHook> | undefined
 
-    expect(hook).toBeDefined()
-    expect(hook.after).toBeDefined()
+  beforeEach(() => {
+    jest.useFakeTimers()
+    hook = undefined
   })
 
-  it('should handle evaluation tracking in after hook', () => {
+  afterEach(() => {
+    try {
+      hook?.shutdown()
+      expect(jest.getTimerCount()).toBe(0)
+    } finally {
+      jest.restoreAllMocks()
+      jest.useRealTimers()
+    }
+  })
+
+  it('should create a hook that tracks flag evaluations', () => {
+    hook = createFlagEvalEVPHook(mockConfiguration)
+
+    expect(hook).toBeDefined()
+    expect(hook.after).toBeUndefined()
+    expect(hook.finally).toBeDefined()
+  })
+
+  it.each([
+    { errorCode: undefined, errorMessage: undefined, expectedError: undefined },
+    ...Object.values(ErrorCode).map((errorCode) => ({
+      errorCode,
+      errorMessage: 'Invalid user private@example.com',
+      expectedError: errorCode,
+    })),
+    { errorCode: ErrorCode.TYPE_MISMATCH, errorMessage: '', expectedError: ErrorCode.TYPE_MISMATCH },
+    { errorCode: ErrorCode.PROVIDER_NOT_READY, errorMessage: undefined, expectedError: ErrorCode.PROVIDER_NOT_READY },
+  ])('tracks evaluation details in finally: $expectedError', ({ errorCode, errorMessage, expectedError }) => {
     const mockContext: HookContext = {
       flagKey: 'test-flag',
       defaultValue: true,
@@ -80,8 +96,10 @@ describe('createFlagEvalEVPHook', () => {
     const mockDetails: EvaluationDetails<boolean> = {
       flagKey: 'test-flag',
       value: true,
-      variant: 'variant-a',
-      reason: 'TARGETING_MATCH',
+      variant: errorCode ? undefined : 'variant-a',
+      reason: errorCode ? 'ERROR' : 'TARGETING_MATCH',
+      errorCode,
+      errorMessage,
       flagMetadata: {
         allocationKey: 'allocation-123',
         targetingRuleKey: 'rule-456',
@@ -93,12 +111,12 @@ describe('createFlagEvalEVPHook', () => {
       user_email: 'rum@example.com',
     }
     const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
-    const hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
+    hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
 
     expect(() => {
-      hook.after?.(mockContext, mockDetails)
+      hook?.finally?.(mockContext, mockDetails)
     }).not.toThrow()
-    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails)
-    addEvaluationSpy.mockRestore()
+    expect(addEvaluationSpy).toHaveBeenCalledTimes(1)
+    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails, expectedError)
   })
 })

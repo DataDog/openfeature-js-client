@@ -22,9 +22,12 @@ if (!restoredRootConfiguration.precomputed || restoredRootConfiguration.rules) {
   throw new Error('Root parser did not preserve precomputed-only behavior')
 }
 
-const loadedProtobufModules = Object.keys(require.cache).filter((path) => path.includes('@bufbuild/protobuf'))
-if (loadedProtobufModules.length > 0) {
-  throw new Error(`Default entry point loaded protobuf modules:\n${loadedProtobufModules.join('\n')}`)
+const loadedHeavyModules = Object.keys(require.cache).filter((filename) => {
+  const normalized = filename.replace(/\\/g, '/')
+  return normalized.includes('@bufbuild/protobuf') || normalized.includes('/bundle/legacy/')
+})
+if (loadedHeavyModules.length > 0) {
+  throw new Error(`Default entry point loaded protobuf or compatibility bundles:\n${loadedHeavyModules.join('\n')}`)
 }
 
-console.log('Root entry point does not load protobuf')
+console.log('Root entry point does not load protobuf or compatibility bundles')

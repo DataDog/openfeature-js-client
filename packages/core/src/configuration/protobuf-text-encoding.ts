@@ -29,7 +29,7 @@ function hasUsableTextEncoding(): boolean {
 
 export function decodeUtf8(bytes: Uint8Array): string {
   let value = ''
-  for (let index = 0; index < bytes.length; ) {
+  for (let index = 0; index < bytes.length;) {
     const first = bytes[index++]
     let codePoint: number
     let continuationCount: number

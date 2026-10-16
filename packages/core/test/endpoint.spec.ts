@@ -1,4 +1,4 @@
-import { buildEndpointHost } from '../../src/transport/endpoint'
+import { buildEndpointHost } from '../src/transport/endpoint'
 
 describe('buildEndpointHost', () => {
   describe('with default customer subdomain (preview)', () => {
@@ -112,6 +112,13 @@ describe('buildEndpointHost', () => {
   })
 
   describe('edge cases', () => {
+    it.each(['constructor', '__proto__', 'toString', 'datadoghq.com.attacker.invalid', 'datadoghq.com/path'])(
+      'rejects unsupported site %s',
+      (site) => {
+        expect(() => buildEndpointHost(site)).toThrow(`Unsupported site: ${site}.`)
+      }
+    )
+
     const edgeTestCases = [
       {
         description: 'empty custDomain',

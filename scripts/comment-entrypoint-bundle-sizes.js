@@ -5,30 +5,81 @@ const path = require('path')
 
 const COMMENT_MARKER = '<!-- datadog-openfeature-entrypoint-bundle-sizes -->'
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+const bundleDirectories = [
+  'packages/browser/',
+  'packages/core/',
+  'packages/node-server/',
+  'test-app/',
+  'test-app-node/',
+  'scripts/build/',
+  'scripts/lib/',
+  '.yarn/',
+]
+const bundleFiles = new Set([
+  'scripts/webpack-runner.js',
+  'scripts/test-package-install.sh',
+  'scripts/test-node-package-install.sh',
+  'scripts/report-entrypoint-bundle-sizes.js',
+  'scripts/report-node-entrypoint-bundle-sizes.js',
+  'scripts/comment-entrypoint-bundle-sizes.js',
+  'package.json',
+  'yarn.lock',
+  'lerna.json',
+  '.yarnrc.yml',
+  '.npmrc',
+  '.github/workflows/ci.yaml',
+])
+
+function isBundleReportPath(filename) {
+  if (!filename || /\.(md|markdown)$/i.test(filename)) return false
+
+  return (
+    bundleDirectories.some((directory) => filename.startsWith(directory)) ||
+    bundleFiles.has(filename) ||
+    /^(tsconfig[^/]*\.json|webpack[^/]*\.js)$/.test(filename)
+  )
+}
+
+async function hasBundleRelevantChanges(request, pullRequestPath) {
+  // GitHub caps PR file listings at 3,000 files. At the cap, publish conservatively.
+  for (let page = 1; page <= 30; page++) {
+    const files = await request(`${pullRequestPath}/files?per_page=100&page=${page}`)
+    if (files.some((file) => isBundleReportPath(file.filename) || isBundleReportPath(file.previous_filename))) {
+      return true
+    }
+    if (files.length < 100) return false
+  }
+
+  console.log('PR file listing reached the GitHub limit; publishing the bundle-size report conservatively.')
+  return true
+}
 
 async function main() {
-  const reportPath = process.argv[2] || process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH
+  const reportPaths = process.argv.slice(2)
+  if (reportPaths.length === 0 && process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH) {
+    reportPaths.push(process.env.ENTRYPOINT_BUNDLE_SIZE_REPORT_PATH)
+  }
 
-  if (!reportPath) {
+  if (reportPaths.length === 0) {
     console.log('Skipping entrypoint bundle-size PR comment: report path was not provided.')
     return
   }
 
-  const resolvedReportPath = path.resolve(reportPath)
-  if (!fs.existsSync(resolvedReportPath)) {
-    console.log(`Skipping entrypoint bundle-size PR comment: report was not found at ${resolvedReportPath}.`)
+  const reports = reportPaths.map((reportPath) => {
+    const resolvedPath = path.resolve(reportPath)
+    return fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf8').trim() : ''
+  })
+  if (!reports.some(Boolean)) {
+    console.log('Skipping entrypoint bundle-size PR comment: no nonempty reports were found.')
     return
   }
-
-  const report = fs.readFileSync(resolvedReportPath, 'utf8').trim()
-  if (!report) {
-    console.log(`Skipping entrypoint bundle-size PR comment: report at ${resolvedReportPath} is empty.`)
-    return
-  }
+  const report = reports
+    .map(
+      (content, index) =>
+        content ||
+        `Bundle report unavailable: \`${path.basename(reportPaths[index])}\` (missing or empty). Check the CI logs.`
+    )
+    .join('\n\n')
 
   const token = process.env.GITHUB_TOKEN
   const repository = process.env.GITHUB_REPOSITORY
@@ -49,6 +100,11 @@ async function main() {
   const issueNumber = event.pull_request.number
   const body = `${COMMENT_MARKER}\n${report}\n\n_This report shows current PR artifact sizes only; it does not compare against the base branch._`
   const request = createGithubRequest(token)
+  if (!(await hasBundleRelevantChanges(request, `/repos/${owner}/${repo}/pulls/${issueNumber}`))) {
+    console.log('Skipping entrypoint bundle-size PR comment: no bundle-relevant paths changed in this pull request.')
+    return
+  }
+
   const comments = await request(`/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`)
   const existingComment = comments.find(
     (comment) => typeof comment.body === 'string' && comment.body.includes(COMMENT_MARKER)
@@ -98,3 +154,12 @@ function createGithubRequest(token) {
     return response.json()
   }
 }
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}
+
+module.exports = { main, isBundleReportPath, hasBundleRelevantChanges }

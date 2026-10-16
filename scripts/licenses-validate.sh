@@ -45,11 +45,11 @@ csv_components=$(tail -n +2 "$LICENSE_FILE" | cut -d',' -f1 | sed 's/"//g' | sor
 missing=()
 while IFS= read -r pkg; do
     # Skip workspace packages.
-    if echo "$workspace_packages" | grep -qxF "$pkg"; then
+    if grep -qxF "$pkg" <<< "$workspace_packages"; then
         continue
     fi
     # Check if the package is in the CSV.
-    if ! echo "$csv_components" | grep -qxF "$pkg"; then
+    if ! grep -qxF "$pkg" <<< "$csv_components"; then
         missing+=("$pkg")
     fi
 done <<< "$lockfile_packages"

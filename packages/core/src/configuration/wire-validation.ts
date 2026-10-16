@@ -1,5 +1,6 @@
 import type { EvaluationContext } from '@openfeature/core'
 import type { PrecomputedConfigurationResponse, PrecomputedFlag } from './configuration'
+import { isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
 
 type WireEntry = {
   response: string
@@ -33,7 +34,9 @@ export function parsePrecomputedConfigurationResponse(
   if (!isRecord(value.data.attributes)) {
     return { error: 'Precomputed configuration response is missing attributes' }
   }
-  const { createdAt, flags } = value.data.attributes
+  const { createdAt, flags, obfuscated, obfuscation } = value.data.attributes
+  const encoding = readFlagKeyObfuscation(obfuscated, obfuscation)
+  if ('error' in encoding) return encoding
   if (typeof createdAt !== 'string' && (typeof createdAt !== 'number' || !Number.isFinite(createdAt))) {
     return { error: 'Precomputed configuration createdAt is invalid' }
   }
@@ -41,6 +44,9 @@ export function parsePrecomputedConfigurationResponse(
 
   const flagErrors: Array<[string, string]> = []
   for (const [key, flag] of Object.entries(flags)) {
+    if (encoding.encoding && !isLowercaseHex(key, 32)) {
+      return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
+    }
     if (!isPrecomputedFlag(flag)) {
       flagErrors.push([key, 'Invalid precomputed flag configuration'])
     }

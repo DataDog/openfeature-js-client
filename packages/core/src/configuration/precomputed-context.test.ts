@@ -54,7 +54,7 @@ describe('getPrecomputedContext', () => {
     firstProfile.groups[1] = { name: 'changed' }
     firstProfile.enrolledAt.setUTCFullYear(2030)
 
-    const second = getPrecomputedContext(configuration)
+    const second = getPrecomputedContext(configuration) as EvaluationContext
     expect(second).toEqual({
       targetingKey: 'user-1',
       profile: {
@@ -63,8 +63,8 @@ describe('getPrecomputedContext', () => {
       },
     })
     expect(second).not.toBe(first)
-    expect((second?.profile as { groups: unknown[] }).groups).not.toBe(firstProfile.groups)
-    expect((second?.profile as { enrolledAt: Date }).enrolledAt).not.toBe(date)
+    expect((second.profile as { groups: unknown[] }).groups).not.toBe(firstProfile.groups)
+    expect((second.profile as { enrolledAt: Date }).enrolledAt).not.toBe(date)
   })
 
   it('copies a Date from another JavaScript realm', () => {

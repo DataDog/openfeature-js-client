@@ -44,14 +44,39 @@ The project uses **independent versioning**, meaning each package can have its o
    yarn lint:fix  # Auto-fix issues
    ```
 
+## Manual React Native Example
+
+Run `yarn example:react-native` to build and pack the local core package and prepare
+an isolated Expo app. The same command reuses a per-checkout cache directory outside
+the repository and reinstalls a fresh core tarball on every run. Stop Metro before
+refreshing, then follow the printed `cd` / `npm start` commands to launch Expo Go
+on an iOS/Android simulator or device. The app verifies evaluation on Hermes and
+supports exports-enabled, legacy CommonJS, and legacy ESM Metro modes.
+
+See [the manual app README](test-app-react-native/manual/README.md) for prerequisites,
+expected results, and how to rebuild after SDK changes. Unlike the automated
+`yarn test:react-native-install` smoke test, this runs the code in a native JS runtime,
+not Node.
+
 ## Entrypoint Guardrails
 
 The default `@datadog/flagging-core` and `@datadog/openfeature-browser` entrypoints are expected to stay optimized for precomputed configurations. Rules-based parsing and its Protobuf-ES dependency must remain behind the `./rules-based` entrypoints.
 
-Two recurring checks help keep that boundary visible:
+For a new core subpath, add its source module and `package.json.exports` mapping, then run the
+normal core build. Compatibility manifests, declaration mappings, publish-file lists, bundles,
+and smoke-test imports are derived automatically. See [Adding a public entry point](packages/core/README.md#adding-a-public-entry-point).
+Commit the generated metadata; `yarn check:entrypoints` rejects drift before CI builds or packing.
+
+Recurring checks keep these contracts visible:
+
+- `yarn test:build` checks generated entrypoint metadata and tests the generator, including adding a second/nested export without bundler registration.
+- `yarn test:react-native-install` discovers every packed JavaScript subpath and checks modern and legacy resolution in the Metro matrix.
 
 - `packages/core/test/entrypoint-boundaries.spec.ts` walks runtime imports from the default core/browser source entrypoints and fails if they reach generated protobuf code, Protobuf-ES, or rules-only parser modules.
-- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`, which prints a raw/gzip JS size table for the root, precomputed, and rules-based browser entrypoints. In GitHub Actions the table is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers.
+- `yarn test:browser-install` builds the packed browser smoke app and runs `scripts/report-entrypoint-bundle-sizes.js`. The report compares `DatadogProvider` (precomputed fetching) with `DatadogCoreProvider` plus `fetchRulesConfiguration` (local rules evaluation), using the same OpenFeature initialization, boolean evaluation, and context-change flow with telemetry disabled for both. Playwright supplies configuration responses outside the measured bundles. These are complete scenario JS sizes, including OpenFeature and the shared harness, not isolated SDK or decoder sizes. Additional parser/fetch-wrapper smoke scenarios remain part of the dependency checks, summarized as a pass/fail result rather than a size table. Tracking-hook sizes are reported separately. In GitHub Actions the report is also appended to the step summary, pull request CI updates a sticky comment with the same report, and the script fails if default/precomputed bundles contain protobuf markers or rules-based bundles lack them.
+- `yarn test:node-install` builds independent Webpack production bundles from the installed tarballs for the Node provider, SSR helpers (fetch client rules and serialize), and both together. `scripts/report-node-entrypoint-bundle-sizes.js` reports raw/gzip JS sizes and the same-build cost of adding SSR helpers to the provider. It selects the ESM `module` export condition, bundles dependencies except Node built-ins, and checks Webpack module statistics to ensure that only SSR bundles include Protobuf runtime or generated schema modules. The bundled functions are tested with fixture responses; the fixtures are not bundled. OpenFeature and dd-trace are not included. These are bundler scenario sizes, not npm install sizes, unbundled Node import costs, payload sizes, latency, or a direct comparison with the browser scenarios. To regenerate the report after installation, run `node scripts/report-node-entrypoint-bundle-sizes.js` and `node --test test-app-node/bundle.test.cjs`.
+
+The sticky PR comment combines browser and Node reports after package-install checks. If only one report was generated, it identifies the missing report. The comment is only created or updated when the PR changes a bundle-relevant path. The allowlist in `scripts/comment-entrypoint-bundle-sizes.js` covers `packages/browser/**`, `packages/core/**`, `packages/node-server/**`, `test-app/**`, `test-app-node/**`, `scripts/build/**`, `scripts/lib/**`, the package-install/report/webpack-runner scripts, root dependency and build configuration, `.yarn/**`, and `.github/workflows/ci.yaml`. Markdown files are excluded. The filter checks the full PR diff, including deletions and both paths of renames, and publishes conservatively if GitHub's 3,000-file listing limit is reached. Report generation, the CI summary, smoke tests, and dependency checks still run regardless of the changed paths. `yarn test:build` covers the reports, filter, and comment creation/update behavior with mocked GitHub responses.
 
 ## Release Process
 
@@ -78,14 +103,20 @@ The project supports different build modes that affect how the SDK version is de
 #### 2. Release Mode (`release`)
 
 - Used for public releases
-- SDK version uses the actual version from `lerna.json`
+- SDK version uses the version from the package's `package.json`
 - This is the mode used for production releases
 
 #### 3. Canary Mode (`canary`)
 
 - Used on staging and production Datadog web app
-- SDK version format: `{lerna-version}-{commit-sha}`
+- SDK version format: `{package-version}-{commit-sha}`
 - Example: `0.1.0-alpha.2-a1b2c3d4`
+
+Run builds through `yarn build`, `yarn workspace <package-name> build`, or from the package directory. The build scripts read `package.json` from their working directory; release and canary builds fail if the package version cannot be read. Development builds continue to use `dev`.
+
+`yarn test:build` verifies package-specific version stamping and runs in regular CI.
+
+The publishing job sets `BUILD_MODE=release` for all steps, including the `prepack` rebuilds triggered by packing and publishing. CI also runs the packed-browser smoke test in release mode and verifies that configuration requests report the installed package's version.
 
 ### SDK Setups
 

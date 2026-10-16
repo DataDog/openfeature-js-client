@@ -1,5 +1,11 @@
 import { getGlobalObject } from '@datadog/browser-core'
-import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import {
+  ErrorCode,
+  type EvaluationContext,
+  type EvaluationDetails,
+  type FlagValue,
+  type HookContext,
+} from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
   createRumTrackingHook,
@@ -24,21 +30,22 @@ describe('createRumTrackingHook', () => {
     globalObject.DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
 
     const hook = createRumTrackingHook()
-    hook.after!(mockHookContext, makeDetails('test-flag', 'variant-a', true))
+    expect(hook.after).toBeUndefined()
+    hook.finally!(mockHookContext, makeDetails('test-flag', 'variant-a', true))
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('test-flag', 'variant-a')
   })
 
   it('should be a no-op when DD_RUM is absent', () => {
     const hook = createRumTrackingHook()
-    expect(() => hook.after!(mockHookContext, makeDetails('test-flag', 'variant-a', 'foo-bar-baz'))).not.toThrow()
+    expect(() => hook.finally!(mockHookContext, makeDetails('test-flag', 'variant-a', 'foo-bar-baz'))).not.toThrow()
   })
 
   it('should detect DD_RUM that loads after hook creation (lazy detection)', () => {
     const hook = createRumTrackingHook()
 
     // First call: DD_RUM not yet loaded
-    hook.after!(mockHookContext, makeDetails('flag-1', 'variant-key-a', 'foo-bar-baz'))
+    hook.finally!(mockHookContext, makeDetails('flag-1', 'variant-key-a', 'foo-bar-baz'))
 
     // Now DD_RUM loads
     const mockAddFeatureFlagEvaluation = jest.fn()
@@ -46,7 +53,7 @@ describe('createRumTrackingHook', () => {
     globalObject.DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
 
     // Second call: should pick up DD_RUM
-    hook.after!(mockHookContext, makeDetails('flag-2', 'variant-key-b', 'qux-quux-quuz'))
+    hook.finally!(mockHookContext, makeDetails('flag-2', 'variant-key-b', 'qux-quux-quuz'))
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledTimes(1)
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('flag-2', 'variant-key-b')
@@ -58,7 +65,7 @@ describe('createRumTrackingHook', () => {
     globalObject.DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
 
     const hook = createRumTrackingHook()
-    hook.after!(mockHookContext, {
+    hook.finally!(mockHookContext, {
       flagKey: 'test-flag',
       variant: undefined,
       value: 'default',
@@ -67,12 +74,29 @@ describe('createRumTrackingHook', () => {
     expect(mockAddFeatureFlagEvaluation).not.toHaveBeenCalled()
   })
 
+  it.each([{ errorCode: ErrorCode.GENERAL }, { reason: 'ERROR' }])(
+    'does not track errors even when a variant is present: %j',
+    (errorDetails) => {
+      const mockAddFeatureFlagEvaluation = jest.fn()
+      getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+        addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation,
+      }
+
+      createRumTrackingHook().finally!(mockHookContext, {
+        ...makeDetails('test-flag', 'variant-a', true),
+        ...errorDetails,
+      })
+
+      expect(mockAddFeatureFlagEvaluation).not.toHaveBeenCalled()
+    }
+  )
+
   it('should be a no-op when DD_RUM exists but lacks addFeatureFlagEvaluation', () => {
     const globalObject = getGlobalObject<{ DD_RUM?: Partial<DDRum> }>()
     globalObject.DD_RUM = {} as DDRum
 
     const hook = createRumTrackingHook()
-    expect(() => hook.after!(mockHookContext, makeDetails('test-flag', 'variant-key-a', 'foo-bar-baz'))).not.toThrow()
+    expect(() => hook.finally!(mockHookContext, makeDetails('test-flag', 'variant-key-a', 'foo-bar-baz'))).not.toThrow()
   })
 
   it('should pass the variant key, not the value', () => {
@@ -83,7 +107,7 @@ describe('createRumTrackingHook', () => {
     const hook = createRumTrackingHook()
 
     const details = makeDetails('my-flag', 'variant-key-a', true)
-    hook.after!(mockHookContext, details)
+    hook.finally!(mockHookContext, details)
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('my-flag', 'variant-key-a')
   })

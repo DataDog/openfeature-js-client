@@ -1,5 +1,6 @@
 import type { EvaluationContext, FlagValueType, JsonValue, ResolutionReason } from '@openfeature/core'
 import type { TimeStamp } from '../time'
+import type { FlagKeyObfuscation } from './flag-key-obfuscation'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
 /**
@@ -50,6 +51,10 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      /** Absent or false for legacy plaintext assignments. */
+      obfuscated?: boolean
+      /** Required when obfuscated is true; retained with the map in caches. */
+      obfuscation?: FlagKeyObfuscation
       flags: Record<string, PrecomputedFlag>
     }
   }
@@ -75,11 +80,12 @@ export type PrecomputedFlagMetadata = {
   variationType?: FlagValueType
   doLog?: boolean
 
-  // Server-side tracing keys (consumed by dd-trace-js)
+  // Server-side evaluation metadata (consumed by dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
+  __dd_observe_full_evaluation_data?: boolean
 }
 
 /**

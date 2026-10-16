@@ -191,7 +191,42 @@ the custom `targetingKey`. Set `targetingKey` in your application context to cho
 
 For asynchronous CDN initialization, call the helper inside `DD_RUM.onReady()` after setting the RUM user.
 
-## Offline configuration parsing
+## Flag-key obfuscation
+
+Requests to the Datadog Precompute endpoint automatically send
+`X-DD-FEATURE-FLAGS-CAPABILITIES: assignment-encoding-flag-key-256-v1`.
+This declares support for the `flag-key-sha256-v1` response encoding.
+Datadog controls its server rollout.
+Requests through `flaggingProxy` do not send this header by default. Proxy owners
+can opt in through `customHeaders`. The proxy must forward the header and, for
+cross-origin requests, allow it in its CORS response before enabling it.
+The provider accepts both plaintext and obfuscated responses without an
+application configuration change.
+
+Continue evaluating the original flag key. The shared core hashes it with the
+response's public salt before lookup. Flag values do not change. Evaluation
+details, exposure events, and RUM annotations retain the original flag key. Portable
+configuration and IndexedDB storage retain the descriptor with the assignments.
+Unsupported or malformed encodings are rejected, not interpreted as plaintext.
+
+Encoded portable snapshots use wire version 2, which older readers reject.
+Plaintext and rules-only snapshots keep version 1. New readers accept both versions.
+This version applies to SDK serialization, not the Precompute API response.
+
+New IndexedDB writes use a separate cache key namespace for both response formats.
+Older SDKs cannot read any entries in the new namespace, including plaintext.
+New SDKs can read legacy plaintext
+entries when the new namespace has no entry. A plaintext rollout rollback replaces
+the encoded entry in the new namespace. It does not update an older SDK's cache.
+A snapshot containing both encoded assignments and rules uses version 2.
+Older readers reject that entire snapshot, including its rules.
+
+Obfuscation removes readable flag-map keys. It is not encryption, authorization,
+or response signing. Values, variation names, allocation names, telemetry,
+and application code can still reveal a feature's purpose. Do not put sensitive
+information in client-facing variant values, including JSON objects.
+
+## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
 the Protobuf-ES dependency. Rules-based entries are ignored:
@@ -231,22 +266,22 @@ import {
 } from '@datadog/openfeature-browser/rules-based'
 ```
 
-### Using DatadogOfflineProvider with portable configuration
+### Using DatadogCoreProvider with portable configuration
 
-`DatadogOfflineProvider` is an opt-in provider for applications that supply their own flags configuration, such as an SSR bootstrap or offline init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration.
+`DatadogCoreProvider` is a minimal evaluation-only provider for applications that supply their own flags configuration, such as an SSR bootstrap or local init payload. The application controls configuration delivery through `setConfiguration()`; changing the OpenFeature context does not fetch or poll configuration, and the provider does not install tracking hooks or send telemetry.
 
-For static offline initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
+For static initialization, a context-specific precomputed configuration must use the OpenFeature context for which it was computed. Use `getPrecomputedContext()` to access a detached copy through the supported API. An empty context (`{}`) is treated literally and does not select the embedded context.
 
 ```javascript
 import {
   configurationFromString,
   getPrecomputedContext,
-  DatadogOfflineProvider,
+  DatadogCoreProvider,
 } from '@datadog/openfeature-browser/rules-based'
 import { OpenFeature } from '@openfeature/web-sdk'
 
 const configuration = configurationFromString('...flags configuration string...')
-const provider = new DatadogOfflineProvider()
+const provider = new DatadogCoreProvider()
 provider.setConfiguration(configuration)
 const context = getPrecomputedContext(configuration)
 
@@ -261,6 +296,81 @@ const enabled = client.getBooleanValue('new-checkout', false)
 ```
 
 For dynamic context, use the `@datadog/openfeature-browser/rules-based` entry point and a rules-based configuration wire. After registering the provider, use `OpenFeature.setContext()` normally; context changes are evaluated locally without fetching configuration.
+
+To send the same exposure, flag-evaluation, and RUM tracking events as `DatadogProvider`, compose the Datadog tracking hooks you need and register them with OpenFeature. This only enables telemetry transport—flag configuration remains application-managed. Import only the hook factories your application uses.
+
+```javascript
+import {
+  DatadogCoreProvider,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
+  composeDatadogTrackingHooks,
+} from '@datadog/openfeature-browser/rules-based'
+
+const trackingOptions = {
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  service: 'storefront',
+}
+
+const tracking = composeDatadogTrackingHooks(
+  createDatadogExposureLoggingHook(trackingOptions),
+  createDatadogEvaluationLoggingHook(trackingOptions),
+  createDatadogRumTrackingHook()
+)
+
+await tracking.initialize()
+
+const provider = new DatadogCoreProvider()
+provider.setConfiguration(configuration)
+
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
+client.addHooks(...tracking.hooks)
+
+// Later, when replacing the active flag configuration before another evaluation:
+provider.setConfiguration(nextConfiguration)
+
+// When this client no longer needs tracking:
+client.clearHooks()
+await tracking.shutdown()
+```
+
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+
+`tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
+
+`tracking.shutdown()` flushes pending exposure/evaluation events and stops their timers and subscriptions. Requests already handed to the browser transport may still complete or retry. Both lifecycle methods are idempotent, and initialization after shutdown starts tracking again without clearing persisted exposure deduplication. Individual exposure and evaluation controllers also expose these methods. Lifecycle failures do not interrupt flag evaluation.
+
+The application owns manually registered hooks: clearing client hooks or removing `DatadogCoreProvider` does not shut down their resources. Unregister them and call `tracking.shutdown()` when they are no longer needed. The regular `DatadogProvider` shuts down its own tracking resources through OpenFeature's provider lifecycle.
+
+Precomputed assignments retain the existing exposure-reset behavior for plaintext and obfuscated responses.
+On a refresh, `DatadogProvider` clears exposure deduplication when a previously loaded `createdAt` changes.
+It does not clear on the first fetch without an initial configuration.
+`DatadogCoreProvider` includes the configuration identity in exposure deduplication. Replacing the configuration,
+including a changed `createdAt` or obfuscation salt, permits another exposure.
+Reapplying the same configuration preserves deduplication. Neither provider emits an exposure until the application evaluates a flag.
+`createdAt` is a configuration timestamp, not an experiment revision. This behavior does not depend on it changing on every request.
+
+Exposure caches retain up to 50,000 entries per scope, matching the Node provider's limit.
+Exposure checks use a bounded in-memory cache. Background IndexedDB transactions merge newly recorded exposures
+with the stored entries, so instances sharing a scope preserve each other's writes without replaying their loaded snapshots.
+Memory removes the least recently used entries; persistence removes the oldest written entries when it reaches its limit.
+Evicted entries can produce another exposure.
+Clearing a scope stores an empty cache with an incremented invalidation counter. Other instances reject pending or retried
+writes with an older counter. On their next write, they discard stale memory and pending entries, then load the current cache.
+This can produce repeat exposures. Other tabs' memory caches are not updated immediately, and concurrent tabs can still log
+the same exposure. The cache reduces duplicates; it does not guarantee exactly-once logging across tabs.
+If IndexedDB is unavailable or a storage operation fails, evaluation and in-memory deduplication continue.
+An abrupt page exit can lose an unfinished write and permit a repeat exposure after reload.
+
+For rules-based configurations, `DatadogCoreProvider` also includes the rules configuration identity. Changed rules allow new exposures without clearing application-managed hook state. Retrieval metadata (`fetchedAt` and `etag`) and the server's `createdAt` build timestamp do not change that identity. These fields remain available on the configuration and in its portable wire representation.
+
+Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Existing localStorage and Chrome storage entries are not migrated or deleted, so upgrading can produce repeat exposures. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
+
+To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
 
 ## End-user license agreement
 

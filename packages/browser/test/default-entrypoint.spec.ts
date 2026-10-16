@@ -6,8 +6,12 @@ jest.mock('@bufbuild/protobuf/wire', () => {
 })
 
 import {
+  composeDatadogTrackingHooks,
   configurationFromString,
   configurationToString,
+  createDatadogEvaluationLoggingHook,
+  createDatadogExposureLoggingHook,
+  createDatadogRumTrackingHook,
   DatadogProvider,
   enrichRumContext,
   getPrecomputedContext,
@@ -20,11 +24,15 @@ describe('default entry point', () => {
     expect((globalThis as { DD_FLAGGING?: { enrichRumContext?: unknown } }).DD_FLAGGING?.enrichRumContext).toBe(
       enrichRumContext
     )
+    expect(composeDatadogTrackingHooks).toBeDefined()
+    expect(createDatadogExposureLoggingHook).toBeDefined()
+    expect(createDatadogEvaluationLoggingHook).toBeDefined()
+    expect(createDatadogRumTrackingHook).toBeDefined()
   })
 
-  it('does not export or register the offline provider', () => {
-    expect('DatadogOfflineProvider' in jest.requireActual('../src')).toBe(false)
-    expect((globalThis as { DD_FLAGGING?: { OfflineProvider?: unknown } }).DD_FLAGGING?.OfflineProvider).toBeUndefined()
+  it('does not export or register the core provider', () => {
+    expect('DatadogCoreProvider' in jest.requireActual('../src')).toBe(false)
+    expect((globalThis as { DD_FLAGGING?: { CoreProvider?: unknown } }).DD_FLAGGING?.CoreProvider).toBeUndefined()
   })
 
   it('parses and serializes precomputed configuration while ignoring rules', () => {

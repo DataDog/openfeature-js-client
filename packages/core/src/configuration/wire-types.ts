@@ -6,7 +6,7 @@ export type FlagsConfigurationWire = string
 export const INVALID_CONFIGURATION_WIRE_ERROR = 'Invalid flags configuration wire format'
 
 export type ConfigurationWireContents = {
-  version: 1
+  version: 1 | 2
   precomputed?: {
     context?: EvaluationContext
     response: string
@@ -27,7 +27,12 @@ export function parseConfigurationWire(wire: FlagsConfigurationWire): Configurat
   } catch {
     return undefined
   }
-  if (typeof serialized !== 'object' || serialized === null || !('version' in serialized) || serialized.version !== 1) {
+  if (
+    typeof serialized !== 'object' ||
+    serialized === null ||
+    !('version' in serialized) ||
+    (serialized.version !== 1 && serialized.version !== 2)
+  ) {
     return undefined
   }
   return serialized as ConfigurationWireContents

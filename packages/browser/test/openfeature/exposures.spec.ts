@@ -1,10 +1,13 @@
 import { type Context, getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { FlagEvaluationAggregator } from '@datadog/flagging-core'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
+import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { createDatadogExposureLoggingHook } from '../../src/openfeature/exposures'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import { enrichRumContext } from '../../src/openfeature/rumIntegration'
+import { nextWrite } from '../cache/indexeddb-test-helpers'
 import precomputedServerResponse from '../data/precomputed-v1.json'
 
 describe('Exposures End-to-End', () => {
@@ -52,12 +55,36 @@ describe('Exposures End-to-End', () => {
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
     delete globalObject.DD_RUM
 
-    // Clear localStorage to reset assignment cache between tests
-    localStorage.clear()
+    // Reset IndexedDB to clear assignment cache between tests
+    globalThis.indexedDB = new IDBFactory()
 
     // Mock current time to get deterministic timestamps
     jest.setSystemTime(new Date('2025-08-04T17:00:00.000Z'))
   })
+
+  it.each([{ errorCode: ErrorCode.GENERAL }, { reason: 'ERROR' }, { variant: undefined }])(
+    'does not track errors or runtime defaults in finally: %j',
+    async (fallbackDetails) => {
+      const tracking = createDatadogExposureLoggingHook(baseProviderConfig)
+      await tracking.initialize()
+      try {
+        const hook = tracking.hooks[0]
+        expect(hook.after).toBeUndefined()
+        expect(hook.finally).toBeDefined()
+        hook.finally!({ context: { targetingKey: 'test-user' } } as HookContext, {
+          flagKey: 'test-flag',
+          value: false,
+          variant: 'variant-a',
+          reason: 'TARGETING_MATCH',
+          flagMetadata: { allocationKey: 'allocation-a', doLog: true },
+          ...fallbackDetails,
+        })
+      } finally {
+        await tracking.shutdown?.()
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
 
   it('should send exposure events to correct endpoint with proper payload', async () => {
     // Mock server responses
@@ -232,7 +259,8 @@ describe('Exposures End-to-End', () => {
 
       expect(addEvaluationSpy).toHaveBeenCalledWith(
         { targetingKey: 'rum-user', ...expectedAttributes },
-        expect.objectContaining({ flagKey: 'string-flag' })
+        expect.objectContaining({ flagKey: 'string-flag' }),
+        undefined
       )
       const exposureEvents = parseExposureEvents(getExposuresCalls()[0][1].body)
       expect(exposureEvents[0].subject).toEqual({
@@ -288,7 +316,7 @@ describe('Exposures End-to-End', () => {
     triggerBatch()
 
     exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
-    expect(exposureEvents.at(-1)?.subject).toEqual({
+    expect(exposureEvents[exposureEvents.length - 1]?.subject).toEqual({
       id: 'rum-user-b',
       attributes: { user_email: 'b@example.com', region: 'us' },
     })
@@ -309,7 +337,7 @@ describe('Exposures End-to-End', () => {
     OpenFeature.getClient().getStringValue('string-flag', 'default')
     triggerBatch()
     exposureEvents = getExposuresCalls().flatMap(([, request]) => parseExposureEvents(request.body))
-    expect(exposureEvents.at(-1)?.subject).toEqual({ id: '', attributes: { region: 'us' } })
+    expect(exposureEvents[exposureEvents.length - 1]?.subject).toEqual({ id: '', attributes: { region: 'us' } })
   })
 
   it('should include explicitly enriched RUM user properties when RUM feature flag tracking is disabled', async () => {
@@ -838,14 +866,15 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch new configuration with different createdAt (cache should be cleared)
+      // Fetch the same assignment with a changed configuration timestamp.
       await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
 
-      // Evaluate same flag - should log again because cache was cleared
+      // Receiving configuration does not itself emit an exposure.
+      expect(getExposuresCalls()).toHaveLength(1)
+      // The next evaluation can emit another exposure despite identical assignment IDs.
       client.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      // Should have 2 exposure calls (cache was cleared)
       expect(getExposuresCalls()).toHaveLength(2)
     })
 
@@ -886,13 +915,15 @@ describe('Exposures End-to-End', () => {
       await OpenFeature.setProviderAndWait(provider1)
       const client1 = OpenFeature.getClient()
 
+      const written = nextWrite()
       client1.getStringValue('string-flag', 'default')
       triggerBatch()
+      await written
 
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Simulate page reload: clear providers but keep localStorage
+      // Simulate page reload: clear providers but keep IndexedDB
       await OpenFeature.clearProviders()
       fetchMock.mockClear()
 
@@ -901,11 +932,11 @@ describe('Exposures End-to-End', () => {
       await OpenFeature.setProviderAndWait(provider2)
       const client2 = OpenFeature.getClient()
 
-      // Evaluate same flag - should NOT log because cache persisted from localStorage
+      // Evaluate same flag - should NOT log because cache persisted from IndexedDB
       client2.getStringValue('string-flag', 'default')
       triggerBatch()
 
-      // Should have no new exposure calls (cache was loaded from localStorage)
+      // Should have no new exposure calls (cache was loaded from IndexedDB)
       expect(getExposuresCalls()).toHaveLength(0)
     })
 

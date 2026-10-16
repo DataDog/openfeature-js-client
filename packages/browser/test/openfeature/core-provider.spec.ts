@@ -2,7 +2,7 @@ import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import { InvalidContextError, OpenFeature, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
-import { DatadogOfflineProvider } from '../../src/openfeature/offline-provider'
+import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import precomputedWire from '../data/precomputed-v1-wire.json'
 import rulesWire from '../data/rules-v1-wire.json'
 
@@ -39,17 +39,17 @@ const precomputedConfiguration: FlagsConfiguration = {
   },
 }
 
-function providerWithConfiguration(configuration: FlagsConfiguration): DatadogOfflineProvider {
-  const provider = new DatadogOfflineProvider()
+function providerWithConfiguration(configuration: FlagsConfiguration): DatadogCoreProvider {
+  const provider = new DatadogCoreProvider()
   provider.setConfiguration(configuration)
   return provider
 }
 
-describe('DatadogOfflineProvider', () => {
-  it('has offline provider metadata', () => {
+describe('DatadogCoreProvider', () => {
+  it('has core provider metadata', () => {
     const provider = providerWithConfiguration(rulesConfiguration)
 
-    expect(provider.metadata).toEqual({ name: 'datadog-offline' })
+    expect(provider.metadata).toEqual({ name: 'datadog-core' })
     expect(provider.runsOn).toBe('client')
   })
 
@@ -211,7 +211,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('accepts configuration before registration and validates it against the initialization context', async () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     const errorHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
 
@@ -220,7 +220,7 @@ describe('DatadogOfflineProvider', () => {
     expect(errorHandler).not.toHaveBeenCalled()
     try {
       await expect(
-        OpenFeature.setProviderAndWait('offline-provider-ordering', provider, {
+        OpenFeature.setProviderAndWait('core-provider-ordering', provider, {
           targetingKey: 'static-user',
           plan: 'free',
         })
@@ -232,7 +232,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('emits Ready when setConfiguration recovers from an invalid configuration', async () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     const readyHandler = jest.fn()
     const changedHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Ready, readyHandler)
@@ -284,7 +284,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('uses parse errors for malformed configured capabilities', async () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
     const errorHandler = jest.fn()
     provider.events.addHandler(ProviderEvents.Error, errorHandler)
     provider.setConfiguration({ rulesError: 'Malformed rules data' })
@@ -300,7 +300,7 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('returns provider not ready when no evaluatable configuration is available', () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
 
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
       value: true,
@@ -311,13 +311,13 @@ describe('DatadogOfflineProvider', () => {
   })
 
   it('throws ProviderNotReadyError when initialized without evaluatable configuration', async () => {
-    const provider = new DatadogOfflineProvider()
+    const provider = new DatadogCoreProvider()
 
     await expect(provider.initialize({})).rejects.toBeInstanceOf(ProviderNotReadyError)
   })
 })
 
-describe('DatadogOfflineProvider precomputed lifecycle', () => {
+describe('DatadogCoreProvider precomputed lifecycle', () => {
   beforeEach(async () => {
     await OpenFeature.clearProviders()
     await OpenFeature.clearContext()
