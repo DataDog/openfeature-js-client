@@ -56,7 +56,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   initialize(context: EvaluationContext = {}): Promise<void> {
     this.telemetryPolicy.setContext(context)
-    this.context = this.telemetryPolicy.assignmentContext(context)
+    this.context = context
 
     const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     return error ? Promise.reject(error) : Promise.resolve()
@@ -64,7 +64,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     this.telemetryPolicy.setContext(newContext)
-    this.context = this.telemetryPolicy.assignmentContext(newContext)
+    this.context = newContext
     const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
       throw error
@@ -79,14 +79,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
     return withCoreConfigurationId(
-      evaluate(
-        this.flagsConfiguration,
-        type,
-        flagKey,
-        defaultValue,
-        this.telemetryPolicy.assignmentContext(context),
-        logger
-      ),
+      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
       this.flagsConfigurationId
     )
   }

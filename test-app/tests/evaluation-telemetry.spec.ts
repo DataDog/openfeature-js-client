@@ -14,7 +14,7 @@ for (const mode of ['online', 'rules', 'precomputed']) {
   for (const scenario of [
     { name: 'disabled', activated: false, values: [true], evaluations: 4, rum: 2 },
     { name: 'opted out', activated: true, values: [true], evaluations: 0, rum: 0 },
-    { name: 'local transitions', activated: true, values: [false, true, false], evaluations: 8, rum: 4 },
+    { name: 'context transitions', activated: true, values: [false, true, false], evaluations: 8, rum: 4 },
   ]) {
     test(`${mode}: counts real uploads for ${scenario.name}`, async ({ page }) => {
       const assignments: unknown[] = []
@@ -85,11 +85,20 @@ for (const mode of ['online', 'rules', 'precomputed']) {
       const result = await page.evaluate(() => window.telemetryTest.close())
       await page.waitForLoadState('networkidle')
       expect(evaluations.reduce((total, event) => total + event.evaluation_count, 0)).toBe(scenario.evaluations)
-      expect(exposures).toHaveLength(1)
+      expect(exposures).toHaveLength(new Set(scenario.values).size)
+      expect(exposures).toEqual(
+        [...new Set(scenario.values)].map((value) =>
+          expect.objectContaining({
+            subject: expect.objectContaining({
+              attributes: expect.objectContaining({ dd_evaluation_telemetry_opt_out: value }),
+            }),
+          })
+        )
+      )
       expect(result.rum).toHaveLength(scenario.rum)
       expect(result.customerHooks).toBe(scenario.values.length * 4)
-      expect(assignments).toHaveLength(mode === 'rules' ? 0 : 1)
-      if (scenario.activated) expect(JSON.stringify(assignments)).not.toContain('dd_evaluation_telemetry_opt_out')
+      expect(assignments).toHaveLength(mode === 'rules' ? 0 : scenario.values.length)
+      if (mode !== 'rules') expect(JSON.stringify(assignments)).toContain('dd_evaluation_telemetry_opt_out')
       expect(unexpectedRequests).toEqual([])
       expect(errors).toEqual([])
     })

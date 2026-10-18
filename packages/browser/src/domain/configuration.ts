@@ -7,9 +7,9 @@ import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration
 
 export interface EvaluationTelemetryOptOutConfiguration {
   /**
-   * Enable the local `dd_evaluation_telemetry_opt_out` context attribute (default: false).
+   * Enable evaluation telemetry suppression through `dd_evaluation_telemetry_opt_out` (default: false).
    * Only boolean true suppresses new evaluation telemetry and automatic RUM flag annotations.
-   * Flag results and experiment exposures remain unchanged.
+   * The attribute remains available to targeting and exposure reporting.
    */
   enableEvaluationTelemetryOptOutParameter?: boolean
 }

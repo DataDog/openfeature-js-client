@@ -13,7 +13,6 @@ import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
-import { telemetryAssignmentContext } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHook, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
@@ -50,7 +49,7 @@ export function createExposureLoggingHook(
         return
       }
       const timestamp = timeStampNow()
-      const exposureEvent = createExposureEvent(getEvaluationContext(telemetryAssignmentContext(hookContext)), details)
+      const exposureEvent = createExposureEvent(getEvaluationContext(hookContext.context), details)
       if (!exposureEvent) {
         return
       }

@@ -51,9 +51,11 @@ describe('evaluation telemetry opt-out', () => {
 
   describe.each(['online', 'rules', 'precomputed'] as const)('%s', (mode) => {
     const flag = mode === 'rules' ? 'test-flag' : 'boolean-flag'
+    let coreProvider: DatadogCoreProvider | undefined
 
     async function initialize(activated: boolean, value: EvaluationContext[string] | undefined) {
       const context = { targetingKey: 'user', country: 'US', ...(value !== undefined && { [attribute]: value }) }
+      coreProvider = undefined
       const client = OpenFeature.getClient(domain)
       if (mode === 'online') {
         const provider = new DatadogProvider({
@@ -64,6 +66,7 @@ describe('evaluation telemetry opt-out', () => {
         await OpenFeature.setProviderAndWait(domain, provider, context)
       } else {
         const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated })
+        coreProvider = provider
         provider.setConfiguration(
           mode === 'rules'
             ? configurationFromString(JSON.stringify(rulesWire))
@@ -71,7 +74,7 @@ describe('evaluation telemetry opt-out', () => {
                 JSON.stringify({
                   version: 1,
                   precomputed: {
-                    context: activated ? { targetingKey: 'user', country: 'US' } : context,
+                    context,
                     response: JSON.stringify(precomputedResponse),
                   },
                 })
@@ -129,21 +132,47 @@ describe('evaluation telemetry opt-out', () => {
       expect(customerFinally).toHaveBeenCalledTimes(1)
     })
 
-    it('keeps previously queued evaluations and exposures across local policy updates', async () => {
+    it('keeps queued telemetry and normal exposure deduplication across context updates', async () => {
       const client = await initialize(true, false)
+      const update = async (value: boolean) => {
+        const context = { targetingKey: 'user', country: 'US', [attribute]: value }
+        // Portable precompute callers supply assignments for the complete new context.
+        if (mode === 'precomputed') {
+          coreProvider!.setConfiguration(
+            configurationFromString(
+              JSON.stringify({ version: 1, precomputed: { context, response: JSON.stringify(precomputedResponse) } })
+            )
+          )
+        }
+        await OpenFeature.setContext(domain, context)
+      }
       expect(client.getBooleanValue(flag, false)).toBe(true)
-      await OpenFeature.setContext(domain, { targetingKey: 'user', country: 'US', [attribute]: true })
+      await update(true)
       expect(client.getBooleanValue(flag, false)).toBe(true)
-      await OpenFeature.setContext(domain, { targetingKey: 'user', country: 'US', [attribute]: false })
+      await update(false)
       expect(client.getBooleanValue(flag, false)).toBe(true)
       jest.advanceTimersByTime(31_000)
       expect(evaluationCount()).toBe(2)
-      expect(events('exposures')).toHaveLength(1)
+      expect(events('exposures')).toHaveLength(2)
       expect(rum).toHaveBeenCalledTimes(2)
       // Explicit application instrumentation remains outside this control.
       getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM?.addFeatureFlagEvaluation('manual-flag', 'manual-value')
       expect(rum).toHaveBeenLastCalledWith('manual-flag', 'manual-value')
     })
+  })
+
+  it.each([false, true])('allows rules to target the attribute with activation=%s', async (activated) => {
+    const configuration = configurationFromString(JSON.stringify(rulesWire))
+    const rules = configuration.rules!.response
+    rules.strings = rules.strings.map((value) => (value === 'country' ? attribute : value === 'US' ? 'true' : value))
+    rules.regexes = rules.regexes.map((value) => (value === '^US$' ? '^true$' : value))
+    const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated })
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'user', [attribute]: true })
+    const client = OpenFeature.getClient(domain)
+    expect(client.getBooleanDetails('test-flag', false).flagMetadata).toMatchObject({ allocationKey: 'allocation' })
+    await OpenFeature.setContext(domain, { targetingKey: 'user', [attribute]: false })
+    expect(client.getBooleanDetails('test-flag', false).flagMetadata).toMatchObject({ allocationKey: 'fallback' })
   })
 
   it('does not restore RUM-derived telemetry admission during an evaluation', async () => {
@@ -173,7 +202,7 @@ describe('evaluation telemetry opt-out', () => {
     expect(evaluationCount()).toBe(0)
     expect(rum).not.toHaveBeenCalled()
     expect(events('exposures')).toHaveLength(1)
-    expect(fetchAssignments).toHaveBeenCalledTimes(1)
+    expect(fetchAssignments).toHaveBeenCalledTimes(2)
 
     client.clearHooks()
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
@@ -182,7 +211,7 @@ describe('evaluation telemetry opt-out', () => {
     expect(rum).toHaveBeenCalledTimes(1)
   })
 
-  it('updates policy during a pending refresh without another request or cache reset', async () => {
+  it('refreshes the full context and keeps telemetry suppressed when that refresh fails', async () => {
     const pending = createDeferred<{
       ok: boolean
       statusText?: string
@@ -192,6 +221,8 @@ describe('evaluation telemetry opt-out', () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
       .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce({ ok: false, statusText: 'offline', json: async () => precomputedResponse })
+      .mockResolvedValue({ ok: true, json: async () => precomputedResponse })
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: true,
@@ -203,11 +234,12 @@ describe('evaluation telemetry opt-out', () => {
     const refresh = OpenFeature.setContext(domain, context)
     const optOut = OpenFeature.setContext(domain, { ...context, [attribute]: true })
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
-    expect(fetchAssignments).toHaveBeenCalledTimes(2)
+    expect(fetchAssignments).toHaveBeenCalledTimes(3)
     expect(provider.status).toBe(ProviderStatus.RECONCILING)
     pending.resolve({ ok: false, statusText: 'offline', json: async () => precomputedResponse })
     await Promise.all([refresh, optOut])
-    expect(provider.status).toBe(ProviderStatus.STALE)
+    expect(provider.status).toBe(ProviderStatus.ERROR)
+    // The online provider preserves its previous assignment after transport failure.
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(0)
@@ -215,7 +247,7 @@ describe('evaluation telemetry opt-out', () => {
 
     await OpenFeature.setContext(domain, context)
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
-    expect(fetchAssignments).toHaveBeenCalledTimes(2)
+    expect(fetchAssignments).toHaveBeenCalledTimes(4)
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(1)
   })
@@ -237,7 +269,7 @@ describe('evaluation telemetry opt-out', () => {
     pending.resolve({ ok: true, json: async () => precomputedResponse })
     await Promise.all([ready, update])
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
-    expect(fetchAssignments).toHaveBeenCalledTimes(1)
+    expect(fetchAssignments).toHaveBeenCalledTimes(2)
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(0)
 
@@ -296,7 +328,8 @@ describe('evaluation telemetry opt-out', () => {
     expect(rum).toHaveBeenCalledTimes(activated ? 0 : 2)
     expect(customerHook).toHaveBeenCalledTimes(4)
     expect(fetchAssignments).toHaveBeenCalledTimes(1)
-    expect(fetchAssignments.mock.calls[0][1].body.includes(attribute)).toBe(!activated)
+    expect(fetchAssignments.mock.calls[0][1].body.includes(attribute)).toBe(true)
+    expect(events('exposures')[0]).toMatchObject({ subject: { attributes: { [attribute]: true } } })
   })
 
   function events(track: string): Record<string, unknown>[] {

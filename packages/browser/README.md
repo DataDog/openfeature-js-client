@@ -147,7 +147,7 @@ const client = OpenFeature.getClient()
 const enabled = client.getBooleanValue('new-feature', false)
 ```
 
-Only boolean `true` suppresses new evaluation events, evaluation counts, and automatic RUM flag annotations. Missing, false, null, and other types preserve telemetry. Without explicit activation, the attribute is an ordinary context attribute and has no special behavior.
+Only boolean `true` suppresses new evaluation events, evaluation counts, and automatic RUM flag annotations. Missing, false, null, and other types preserve telemetry. Without explicit activation, the attribute does not suppress telemetry.
 
 Use `OpenFeature.setContext()` to update the decision. Preserve the subject and its other attributes:
 
@@ -158,11 +158,11 @@ await OpenFeature.setContext({
 })
 ```
 
-Changes to only this attribute apply locally. They do not request assignments or clear cached values. The online provider removes the activated attribute from assignment requests. A real targeting-context change still requests new assignments.
+The attribute remains in the evaluation context, assignment requests, and exposure attributes. You can use it in targeting rules. Changing it follows the normal context refresh path and can produce another exposure under the existing deduplication rules.
 
-Flag values, experiment participation, exposures, customer hooks, and unrelated application telemetry remain unchanged. The control does not remove queued events or existing RUM annotations. It is not a general consent system. Exposures and assignment requests can still contain subject data.
+The telemetry control does not override flag results, exclude subjects from experiments, or suppress exposures. Targeting rules that use this attribute can change assignments. Customer hooks and unrelated application telemetry remain unchanged. The control does not remove queued events or existing RUM annotations. It is not a general consent system. Exposures and assignment requests can still contain subject data.
 
-For portable configuration, use `new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: true })`. The separately composed Datadog evaluation and RUM tracking hooks honor that provider's policy. Exposure hooks remain enabled. The core provider consumes the attribute locally before configuration matching or rules evaluation. When fetching precomputed configuration separately, pass only targeting attributes to `fetchPrecomputedConfiguration`; keep this local control in the OpenFeature context.
+For portable configuration, use `new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: true })`. The separately composed Datadog evaluation and RUM tracking hooks honor that provider's policy. Exposure hooks remain enabled. Rules evaluation receives the complete context. When fetching precomputed configuration separately, pass the same context, including this attribute, to `fetchPrecomputedConfiguration` and OpenFeature.
 
 ### RUM User Context
 

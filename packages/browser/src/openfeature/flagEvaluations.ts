@@ -18,7 +18,7 @@ import {
 } from '@openfeature/web-sdk'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
-import { telemetryAssignmentContext, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
+import { withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
@@ -93,7 +93,7 @@ export function createFlagEvalEVPHook(
           details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
             ? details.errorCode
             : ErrorCode.GENERAL
-        aggregator.addEvaluation(getEvaluationContext(telemetryAssignmentContext(hookContext)), details, errorCode)
+        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details, errorCode)
       } catch (error) {
         addTelemetryDebug('Error adding evaluation to aggregator', {
           'error.message': error instanceof Error ? error.message : String(error),

@@ -9,7 +9,6 @@ const policies = new WeakMap<ProviderMetadata, EvaluationTelemetryPolicy>()
 
 export interface EvaluationTelemetryPolicy {
   setContext(context: EvaluationContext): void
-  assignmentContext(context: EvaluationContext): EvaluationContext
   allowsTelemetry(context: EvaluationContext): boolean
 }
 
@@ -23,22 +22,12 @@ export function createEvaluationTelemetryPolicy(
     setContext(context: EvaluationContext) {
       currentContext = { ...context }
     },
-    assignmentContext(context: EvaluationContext) {
-      if (!enabled) return context
-      const result = { ...context }
-      delete result[attribute]
-      return result
-    },
     allowsTelemetry(context: EvaluationContext) {
       return !enabled || !(isOptedOut(context) || isOptedOut(currentContext))
     },
   }
   policies.set(metadata, policy)
   return policy
-}
-
-export function telemetryAssignmentContext(hookContext: HookContext): EvaluationContext {
-  return policies.get(hookContext.providerMetadata)?.assignmentContext(hookContext.context) ?? hookContext.context
 }
 
 export function inheritEvaluationTelemetryPolicy(metadata: ProviderMetadata, innerMetadata: ProviderMetadata): void {

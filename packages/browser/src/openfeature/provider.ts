@@ -2,7 +2,6 @@ import {
   type AssignmentCache,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
-  evaluationContextsEqual,
   type FlagsConfiguration,
   type FlagTypeToValue,
 } from '@datadog/flagging-core'
@@ -75,7 +74,6 @@ export class DatadogProvider extends DatadogProviderBase {
   private evaluationContext: EvaluationContext | undefined
   /** Request context used for tracking until a configuration has been accepted. */
   private requestedEvaluationContext: EvaluationContext = {}
-  private telemetryContext: EvaluationContext | undefined
   private readonly telemetryPolicy: EvaluationTelemetryPolicy
 
   status: ProviderStatus
@@ -147,16 +145,9 @@ export class DatadogProvider extends DatadogProviderBase {
 
   private setContext(context: EvaluationContext): Promise<void> {
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
-    const evaluationContext = this.telemetryPolicy.assignmentContext(effectiveContext)
-    const telemetryOnlyUpdate =
-      this.telemetryContext !== undefined &&
-      !evaluationContextsEqual(this.telemetryContext, effectiveContext) &&
-      evaluationContextsEqual(this.requestedEvaluationContext, evaluationContext)
-    this.telemetryContext = { ...effectiveContext }
+    const evaluationContext = effectiveContext
+    // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)
-
-    // Update local admission immediately without restarting or replacing a pending assignment operation.
-    if (telemetryOnlyUpdate) return this.latestContextUpdate
     this.requestedEvaluationContext = evaluationContext
 
     if (this.status === ProviderStatus.NOT_READY) {
