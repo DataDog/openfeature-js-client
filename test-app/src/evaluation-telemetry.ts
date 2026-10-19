@@ -77,8 +77,8 @@ async function run() {
         missing: client.getBooleanDetails('missing', false).errorCode,
         mismatch: client.getStringDetails(flag, 'fallback').errorCode,
       }),
-      update: async (optOut: boolean) => {
-        const nextContext = { ...subject, dd_evaluation_telemetry_opt_out: optOut }
+      update: async (optOut: boolean, targetingKey = subject.targetingKey) => {
+        const nextContext = { ...subject, targetingKey, dd_evaluation_telemetry_opt_out: optOut }
         if (mode === 'precomputed') coreProvider!.setConfiguration(await fetchAssignments(nextContext))
         await OpenFeature.setContext(nextContext)
       },

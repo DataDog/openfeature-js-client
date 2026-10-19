@@ -252,6 +252,64 @@ describe('evaluation telemetry opt-out', () => {
     expect(evaluationCount()).toBe(1)
   })
 
+  it.each([
+    { activated: true, nextSubject: 'B' },
+    { activated: true, nextSubject: 'A' },
+    { activated: false, nextSubject: 'B' },
+  ])('keeps assignment consent during refresh with %p', async ({ activated, nextSubject }) => {
+    const pending = createDeferred<{
+      ok: boolean
+      statusText?: string
+      json: () => Promise<typeof precomputedResponse>
+    }>()
+    const responseB = JSON.parse(JSON.stringify(precomputedResponse)) as typeof precomputedResponse
+    responseB.data.attributes.flags['boolean-flag'].variationValue = false
+    responseB.data.attributes.flags['boolean-flag'].variationKey = 'B-variant'
+    const fetchAssignments = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue({ ok: true, json: async () => responseB })
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: activated,
+      flagConfigurationFetch: fetchAssignments,
+    })
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'A', [attribute]: true })
+    const client = OpenFeature.getClient(domain)
+    const nextContext = { targetingKey: nextSubject, [attribute]: false }
+    const update = OpenFeature.setContext(domain, nextContext)
+
+    expect(provider.status).toBe(ProviderStatus.RECONCILING)
+    expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({ value: true, variant: 'variation-124' })
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(activated ? 0 : 1)
+    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
+    expect(events('exposures')).toHaveLength(1)
+
+    pending.resolve({ ok: false, statusText: 'offline', json: async () => responseB })
+    await update
+    expect(provider.status).toBe(ProviderStatus.ERROR)
+    expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({ value: true, variant: 'variation-124' })
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(activated ? 0 : 2)
+    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 2)
+    expect(events('exposures')).toHaveLength(1)
+
+    await OpenFeature.setContext(domain, nextContext)
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(client.getBooleanDetails('boolean-flag', true)).toMatchObject({ value: false, variant: 'B-variant' })
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(activated ? 1 : 3)
+    expect(rum).toHaveBeenCalledTimes(activated ? 1 : 3)
+    expect(evaluations().slice(-1)[0]).toMatchObject({
+      targeting_key: nextSubject,
+      context: { evaluation: { [attribute]: false } },
+      evaluation_count: 1,
+    })
+    expect(events('exposures')).toHaveLength(2)
+  })
+
   it('keeps policy independent from a late initial response and another provider', async () => {
     const pending = createDeferred<{ ok: true; json: () => Promise<typeof precomputedResponse> }>()
     const fetchAssignments = jest.fn().mockReturnValue(pending.promise)

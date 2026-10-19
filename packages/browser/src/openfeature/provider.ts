@@ -106,14 +106,15 @@ export class DatadogProvider extends DatadogProviderBase {
   constructor(options: FlaggingInitConfiguration) {
     super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
-    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
+    const getTrackingContext = () => this.evaluationContext ?? this.requestedEvaluationContext
+    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({
       options,
       configuration: this.configuration,
       enabledByDefault: true,
-      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
+      getTrackingContext,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache

@@ -14,7 +14,8 @@ export interface EvaluationTelemetryPolicy {
 
 export function createEvaluationTelemetryPolicy(
   metadata: ProviderMetadata,
-  configuration: EvaluationTelemetryOptOutConfiguration
+  configuration: EvaluationTelemetryOptOutConfiguration,
+  getTrackingContext?: () => EvaluationContext
 ): EvaluationTelemetryPolicy {
   const enabled = configuration.enableEvaluationTelemetryOptOutParameter === true
   let currentContext: EvaluationContext = {}
@@ -23,7 +24,11 @@ export function createEvaluationTelemetryPolicy(
       currentContext = { ...context }
     },
     allowsTelemetry(context: EvaluationContext) {
-      return !enabled || !(isOptedOut(context) || isOptedOut(currentContext))
+      // A pending or failed refresh can leave assignments from an opted-out context active.
+      return (
+        !enabled ||
+        !(isOptedOut(context) || isOptedOut(currentContext) || (getTrackingContext && isOptedOut(getTrackingContext())))
+      )
     },
   }
   policies.set(metadata, policy)
