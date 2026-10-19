@@ -15,6 +15,7 @@ import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
+import { serializeRequestBody } from './requestDiagnostics'
 
 const sourcePayload = {
   sdk_name: 'browser',
@@ -145,20 +146,23 @@ export async function fetchPrecomputedConfiguration(
     method: 'POST',
     headers: defaultHeaders,
     signal: options.signal,
-    body: JSON.stringify({
-      data: {
-        type: 'precompute-assignments-request',
-        attributes: {
-          env: envPayload,
-          source: sourcePayload,
-          ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-          subject: {
-            targeting_key: options.context.targetingKey || '',
-            targeting_attributes: stringifiedContext,
+    body: serializeRequestBody(
+      {
+        data: {
+          type: 'precompute-assignments-request',
+          attributes: {
+            env: envPayload,
+            source: sourcePayload,
+            ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+            subject: {
+              targeting_key: options.context.targetingKey || '',
+              targeting_attributes: stringifiedContext,
+            },
           },
         },
       },
-    }),
+      options.signal
+    ),
   })
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)

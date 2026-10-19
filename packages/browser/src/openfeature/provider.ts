@@ -24,6 +24,7 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
+import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -87,6 +88,8 @@ export class DatadogProvider extends DatadogProviderBase {
 
   status: ProviderStatus
 
+  private readonly requestDiagnostics: ReturnType<typeof createRequestDiagnostics>
+
   private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
@@ -115,6 +118,7 @@ export class DatadogProvider extends DatadogProviderBase {
   constructor(options: FlaggingInitConfiguration) {
     super()
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    this.requestDiagnostics = createRequestDiagnostics()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
     const getTrackingContext = () =>
       this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
@@ -143,7 +147,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context)
+    return this.setContext(context, 'initialization')
   }
 
   async onClose(): Promise<void> {
@@ -158,7 +162,7 @@ export class DatadogProvider extends DatadogProviderBase {
     return this.setContext(context)
   }
 
-  private setContext(context: EvaluationContext): Promise<void> {
+  private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
     const evaluationContext = { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
@@ -179,6 +183,7 @@ export class DatadogProvider extends DatadogProviderBase {
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
+    this.requestDiagnostics.accept(signal, trigger)
 
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect

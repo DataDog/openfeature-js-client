@@ -288,7 +288,9 @@ describe('DatadogProvider', () => {
 
       // Parse the request body to verify contents are correct
       const requestBody = JSON.parse(requestOptions.body)
-      expect(requestBody).toEqual({
+      const { diagnostics, ...assignmentRequest } = requestBody
+      expect(diagnostics).toMatchObject({ fetch: { trigger: 'context_change' } })
+      expect(assignmentRequest).toEqual({
         data: {
           type: 'precompute-assignments-request',
           attributes: {
