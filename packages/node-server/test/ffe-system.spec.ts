@@ -15,6 +15,7 @@ type SystemTestCase = {
   result: {
     value: FlagValue
     reason: string
+    errorCode?: string
   }
 }
 
@@ -83,6 +84,9 @@ describe('FFE system tests through DatadogNodeServerProvider', () => {
 
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
+      if (testCase.result.errorCode !== undefined) {
+        expect(details.errorCode).toEqual(testCase.result.errorCode)
+      }
     })
   })
 })

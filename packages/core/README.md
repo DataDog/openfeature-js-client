@@ -30,6 +30,14 @@ enabled and disabled, including legacy CommonJS and ESM resolution. It executes 
 in Node without `BigInt`, `TextEncoder`, or `TextDecoder`; this checks fallback behavior but does
 not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
+## JSON allocation validation
+
+Every UFC JSON allocation must include `doLog` as a boolean. Both `true` and `false` are valid.
+Missing, `null`, or incorrectly typed values invalidate the affected flag. Evaluation returns
+the application's default with reason `ERROR` and error code `PARSE_ERROR`. Other flags remain usable.
+All allocations are checked before selection, including allocations after an unconditional match.
+This requirement does not change protobuf field-presence rules.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.

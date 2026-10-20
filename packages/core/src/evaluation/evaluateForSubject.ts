@@ -110,12 +110,12 @@ export function evaluateForSubject<T extends FlagValueType>(
             ...createEvaluationTimestampMetadata(evaluationTimestampMs),
             // Keys for dd-trace-js
             __dd_allocation_key: allocation.key,
-            __dd_do_log: !!allocation.doLog,
+            __dd_do_log: allocation.doLog,
             __dd_split_serial_id: selectedSplit.serialId,
             // Legacy keys (internal) - to be removed from server-side
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
-            doLog: !!allocation.doLog,
+            doLog: allocation.doLog,
           } as PrecomputedFlagMetadata,
         }
       }
@@ -178,6 +178,7 @@ function isValidFlag(flag: unknown): boolean {
   return flag.allocations.every(
     (allocation) =>
       isRecord(allocation) &&
+      typeof allocation.doLog === 'boolean' &&
       Array.isArray(allocation.splits) &&
       allocation.splits.every(
         (split) =>
