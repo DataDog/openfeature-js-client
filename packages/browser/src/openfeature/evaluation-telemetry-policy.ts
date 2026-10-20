@@ -19,16 +19,24 @@ export function createEvaluationTelemetryPolicy(
 ): EvaluationTelemetryPolicy {
   const enabled = configuration.enableEvaluationTelemetryOptOutParameter === true
   let currentContext: EvaluationContext = {}
+  const subjects = new Map<string | undefined, boolean>()
   const policy = {
     setContext(context: EvaluationContext) {
       currentContext = { ...context }
+      if (enabled) {
+        subjects.set(context.targetingKey, isOptedOut(context))
+        // Superseded fetches cannot install assignments. Retain only the
+        // requested subject and the subject whose assignments remain active.
+        const activeSubject = getTrackingContext?.().targetingKey
+        for (const subject of subjects.keys()) {
+          if (subject !== context.targetingKey && subject !== activeSubject) subjects.delete(subject)
+        }
+      }
     },
     allowsTelemetry(context: EvaluationContext) {
-      // A pending or failed refresh can leave assignments from an opted-out context active.
-      return (
-        !enabled ||
-        !(isOptedOut(context) || isOptedOut(currentContext) || (getTrackingContext && isOptedOut(getTrackingContext())))
-      )
+      const tracking = getTrackingContext?.()
+      const activeOptedOut = tracking && (subjects.get(tracking.targetingKey) ?? isOptedOut(tracking))
+      return !enabled || !(isOptedOut(context) || isOptedOut(currentContext) || activeOptedOut)
     },
   }
   policies.set(metadata, policy)

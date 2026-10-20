@@ -278,13 +278,14 @@ describe('evaluation telemetry opt-out', () => {
     await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'A', [attribute]: true })
     const client = OpenFeature.getClient(domain)
     const nextContext = { targetingKey: nextSubject, [attribute]: false }
+    const suppressed = activated && nextSubject !== 'A'
     const update = OpenFeature.setContext(domain, nextContext)
 
     expect(provider.status).toBe(ProviderStatus.RECONCILING)
     expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({ value: true, variant: 'variation-124' })
     jest.advanceTimersByTime(31_000)
-    expect(evaluationCount()).toBe(activated ? 0 : 1)
-    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
+    expect(evaluationCount()).toBe(suppressed ? 0 : 1)
+    expect(rum).toHaveBeenCalledTimes(suppressed ? 0 : 1)
     expect(events('exposures')).toHaveLength(1)
 
     pending.resolve({ ok: false, statusText: 'offline', json: async () => responseB })
@@ -292,22 +293,47 @@ describe('evaluation telemetry opt-out', () => {
     expect(provider.status).toBe(ProviderStatus.ERROR)
     expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({ value: true, variant: 'variation-124' })
     jest.advanceTimersByTime(31_000)
-    expect(evaluationCount()).toBe(activated ? 0 : 2)
-    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 2)
+    expect(evaluationCount()).toBe(suppressed ? 0 : 2)
+    expect(rum).toHaveBeenCalledTimes(suppressed ? 0 : 2)
     expect(events('exposures')).toHaveLength(1)
 
     await OpenFeature.setContext(domain, nextContext)
     expect(provider.status).toBe(ProviderStatus.READY)
     expect(client.getBooleanDetails('boolean-flag', true)).toMatchObject({ value: false, variant: 'B-variant' })
     jest.advanceTimersByTime(31_000)
-    expect(evaluationCount()).toBe(activated ? 1 : 3)
-    expect(rum).toHaveBeenCalledTimes(activated ? 1 : 3)
+    expect(evaluationCount()).toBe(suppressed ? 1 : 3)
+    expect(rum).toHaveBeenCalledTimes(suppressed ? 1 : 3)
     expect(evaluations().slice(-1)[0]).toMatchObject({
       targeting_key: nextSubject,
       context: { evaluation: { [attribute]: false } },
       evaluation_count: 1,
     })
     expect(events('exposures')).toHaveLength(2)
+  })
+
+  it('honors A explicit opt-in while B is pending', async () => {
+    const pendingA = createDeferred<{ ok: boolean; json: () => Promise<typeof precomputedResponse> }>()
+    const pendingB = createDeferred<{ ok: boolean; json: () => Promise<typeof precomputedResponse> }>()
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: true,
+      flagConfigurationFetch: jest
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+        .mockReturnValueOnce(pendingA.promise)
+        .mockReturnValueOnce(pendingB.promise),
+    })
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'A', [attribute]: true })
+    const refreshA = OpenFeature.setContext(domain, { targetingKey: 'A', [attribute]: false })
+    const refreshB = OpenFeature.setContext(domain, { targetingKey: 'B', [attribute]: false })
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(1)
+    expect(rum).toHaveBeenCalledTimes(1)
+    expect(events('exposures')).toHaveLength(1)
+    pendingA.resolve({ ok: true, json: async () => precomputedResponse })
+    pendingB.resolve({ ok: true, json: async () => precomputedResponse })
+    await Promise.all([refreshA, refreshB])
   })
 
   it('keeps policy independent from a late initial response and another provider', async () => {
