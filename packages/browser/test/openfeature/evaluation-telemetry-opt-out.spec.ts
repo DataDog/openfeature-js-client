@@ -1,6 +1,13 @@
 import { getGlobalObject } from '@datadog/browser-core'
 import type { FlagEvaluationEvent } from '@datadog/flagging-core'
-import { type EvaluationContext, OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
+import {
+  type EvaluationContext,
+  InMemoryProvider,
+  MultiProvider,
+  OpenFeature,
+  ProviderStatus,
+} from '@openfeature/web-sdk'
+import { createEvaluationTelemetryPolicy } from '../../src/openfeature/evaluation-telemetry-policy'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
@@ -159,6 +166,135 @@ describe('evaluation telemetry opt-out', () => {
       getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM?.addFeatureFlagEvaluation('manual-flag', 'manual-value')
       expect(rum).toHaveBeenLastCalledWith('manual-flag', 'manual-value')
     })
+  })
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])('preserves opt-out through MultiProvider with activation=%s, nested=%s', async (activated, nested) => {
+    const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated })
+    provider.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+    const inner = new MultiProvider([{ provider }])
+    await OpenFeature.setProviderAndWait(domain, nested ? new MultiProvider([{ provider: inner }]) : inner, {
+      targetingKey: 'user',
+      country: 'US',
+      [attribute]: true,
+    })
+    tracking = composeDatadogTrackingHooks(
+      createDatadogEvaluationLoggingHook(options),
+      createDatadogExposureLoggingHook(options),
+      createDatadogRumTrackingHook()
+    )
+    await tracking.initialize()
+    const client = OpenFeature.getClient(domain)
+    client.addHooks(...tracking.hooks)
+    expect(client.getBooleanValue('test-flag', false)).toBe(true)
+    client.addHooks({
+      before: () => {
+        throw new Error('Customer hook failure')
+      },
+    })
+    expect(client.getBooleanDetails('test-flag', false)).toMatchObject({ value: false, reason: 'ERROR' })
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(activated ? 0 : 2)
+    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
+    expect(events('exposures')).toHaveLength(1)
+  })
+
+  it.each([false, true])('does not copy unrelated attributes with activation=%s', (activated) => {
+    const readUnrelated = jest.fn(() => 'unrelated')
+    const context = { targetingKey: 'user', [attribute]: true }
+    Object.defineProperty(context, 'unrelated', { enumerable: true, get: readUnrelated })
+    const policy = createEvaluationTelemetryPolicy(
+      { name: 'test' },
+      { enableEvaluationTelemetryOptOutParameter: activated }
+    )
+    policy.setContext(context)
+    expect(policy.allowsTelemetry({})).toBe(!activated)
+    expect(readUnrelated).not.toHaveBeenCalled()
+  })
+
+  it('uses the selected MultiProvider child policy', async () => {
+    const context = { targetingKey: 'user', [attribute]: true }
+    const createChild = (flagKey: string, enabled: boolean) => {
+      const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: enabled })
+      const response = {
+        ...precomputedResponse,
+        data: {
+          ...precomputedResponse.data,
+          attributes: {
+            ...precomputedResponse.data.attributes,
+            flags: { [flagKey]: precomputedResponse.data.attributes.flags['boolean-flag'] },
+          },
+        },
+      }
+      provider.setConfiguration(
+        configurationFromString(
+          JSON.stringify({ version: 1, precomputed: { context, response: JSON.stringify(response) } })
+        )
+      )
+      return provider
+    }
+    const provider = new MultiProvider([
+      { provider: createChild('suppressed', true) },
+      { provider: createChild('reported', false) },
+    ])
+    await OpenFeature.setProviderAndWait(domain, provider, context)
+    tracking = composeDatadogTrackingHooks(createDatadogEvaluationLoggingHook(options), createDatadogRumTrackingHook())
+    await tracking.initialize()
+    const client = OpenFeature.getClient(domain)
+    client.addHooks(...tracking.hooks)
+
+    expect(client.getBooleanValue('suppressed', false)).toBe(true)
+    expect(client.getBooleanValue('reported', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(1)
+    expect(rum).toHaveBeenCalledTimes(1)
+    expect(rum).toHaveBeenCalledWith('reported', 'variation-124')
+  })
+
+  it.each([false, true])('binds built-in online hooks through MultiProvider with activation=%s', async (activated) => {
+    const provider = new DatadogProvider({
+      ...options,
+      enableEvaluationTelemetryOptOutParameter: activated,
+      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+    })
+    await OpenFeature.setProviderAndWait(domain, new MultiProvider([{ provider }]), {
+      targetingKey: 'user',
+      [attribute]: true,
+    })
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean-flag', false)).toBe(true)
+    jest.advanceTimersByTime(31_000)
+    expect(evaluationCount()).toBe(activated ? 0 : 1)
+    expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
+    expect(events('exposures')).toHaveLength(1)
+  })
+
+  it('does not apply a Datadog child policy to an unrelated provider result', async () => {
+    const datadog = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: true })
+    datadog.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+    const fallback = new InMemoryProvider({
+      unrelated: { defaultVariant: 'on', variants: { on: true }, disabled: false },
+    })
+    await OpenFeature.setProviderAndWait(domain, new MultiProvider([{ provider: datadog }, { provider: fallback }]), {
+      targetingKey: 'user',
+      [attribute]: true,
+    })
+    tracking = composeDatadogTrackingHooks(createDatadogEvaluationLoggingHook(options), createDatadogRumTrackingHook())
+    await tracking.initialize()
+    const client = OpenFeature.getClient(domain)
+    client.addHooks(...tracking.hooks)
+
+    expect(client.getBooleanDetails('unrelated', false)).toMatchObject({
+      value: true,
+      variant: 'on',
+      reason: 'STATIC',
+    })
+    jest.advanceTimersByTime(31_000)
+    expect(rum).toHaveBeenCalledWith('unrelated', 'on')
+    expect(evaluationCount()).toBe(1)
   })
 
   it.each([false, true])('allows rules to target the attribute with activation=%s', async (activated) => {

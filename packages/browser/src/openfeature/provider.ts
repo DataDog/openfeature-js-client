@@ -22,7 +22,11 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
-import { createEvaluationTelemetryPolicy, type EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -115,6 +119,7 @@ export class DatadogProvider extends DatadogProviderBase {
       configuration: this.configuration,
       enabledByDefault: true,
       getTrackingContext,
+      telemetryPolicy: this.telemetryPolicy,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -280,12 +285,15 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluatePrecomputedConfiguration(
-      this.flagsConfiguration,
-      type,
-      flagKey,
-      defaultValue,
-      this.evaluationContext ?? {}
+    return bindEvaluationTelemetryResult(
+      evaluatePrecomputedConfiguration(
+        this.flagsConfiguration,
+        type,
+        flagKey,
+        defaultValue,
+        this.evaluationContext ?? {}
+      ),
+      this.telemetryPolicy
     )
   }
 }

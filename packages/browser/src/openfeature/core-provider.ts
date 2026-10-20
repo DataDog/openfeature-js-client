@@ -12,7 +12,11 @@ import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError 
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
-import { createEvaluationTelemetryPolicy, type EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
 import { DatadogProviderBase } from './provider-base'
 
 export class DatadogCoreProvider extends DatadogProviderBase {
@@ -78,9 +82,12 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return withCoreConfigurationId(
-      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
-      this.flagsConfigurationId
+    return bindEvaluationTelemetryResult(
+      withCoreConfigurationId(
+        evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+        this.flagsConfigurationId
+      ),
+      this.telemetryPolicy
     )
   }
 

@@ -2,6 +2,7 @@ import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
+import type { EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
@@ -17,20 +18,24 @@ export function createProviderTracking({
   configuration,
   enabledByDefault,
   getTrackingContext,
+  telemetryPolicy,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
+  telemetryPolicy?: EvaluationTelemetryPolicy
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
 
   if (options.enableRumFeatureFlagTracking ?? enabledByDefault) {
-    trackingHooks.push({ hooks: [createRumTrackingHook()] })
+    trackingHooks.push({ hooks: [createRumTrackingHook(telemetryPolicy)] })
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration, getTrackingContext)))
+    trackingHooks.push(
+      createTrackingHookController(() => createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy))
+    )
   }
 
   let exposureCache: AssignmentCache | undefined

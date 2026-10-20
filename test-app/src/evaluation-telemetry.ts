@@ -9,7 +9,7 @@ import {
   type DatadogTrackingHooks,
   fetchPrecomputedConfiguration,
 } from '@datadog/openfeature-browser/rules-based'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { MultiProvider, OpenFeature, type Provider } from '@openfeature/web-sdk'
 import rulesWire from '../../packages/browser/test/data/rules-v1-wire.json'
 import { reportError, reportSuccess } from './smoke'
 
@@ -18,6 +18,8 @@ async function run() {
   const mode = parameters.get('mode') || 'online'
   const activated = parameters.get('activated') === 'true'
   const optedOut = parameters.get('optedOut') === 'true'
+  const wrapProvider = (provider: Provider) =>
+    parameters.get('multi') === 'true' ? new MultiProvider([{ provider }]) : provider
   const subject = { targetingKey: 'browser-subject', country: 'US' }
   const context = { ...subject, dd_evaluation_telemetry_opt_out: optedOut }
   const options = {
@@ -40,11 +42,13 @@ async function run() {
   const client = OpenFeature.getClient()
   if (mode === 'online') {
     await OpenFeature.setProviderAndWait(
-      new DatadogProvider({
-        ...options,
-        enableEvaluationTelemetryOptOutParameter: activated,
-        flaggingProxy: new URL('/assignments', location.href).toString(),
-      }),
+      wrapProvider(
+        new DatadogProvider({
+          ...options,
+          enableEvaluationTelemetryOptOutParameter: activated,
+          flaggingProxy: new URL('/assignments', location.href).toString(),
+        })
+      ),
       context
     )
   } else {
@@ -53,7 +57,7 @@ async function run() {
     const configuration =
       mode === 'rules' ? configurationFromString(JSON.stringify(rulesWire)) : await fetchAssignments(context)
     provider.setConfiguration(configuration)
-    await OpenFeature.setProviderAndWait(provider, context)
+    await OpenFeature.setProviderAndWait(wrapProvider(provider), context)
     tracking = composeDatadogTrackingHooks(
       createDatadogEvaluationLoggingHook(options),
       createDatadogExposureLoggingHook(options),
