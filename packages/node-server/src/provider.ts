@@ -21,6 +21,7 @@ import type {
 } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+import { ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { InitializationController } from './initialization-controller'
 import { NodeProviderEventEmitter } from './provider-event-emitter'
 
@@ -46,6 +47,8 @@ export interface DatadogNodeServerProviderOptions {
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+  /** Explicit Disabled or Immediate overrides DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE. */
+  experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -60,8 +63,11 @@ export class DatadogNodeServerProvider implements Provider {
   private readonly exposureCache: AssignmentCache | undefined
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
+  private readonly experimentationOptOutImmediate: boolean
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
+    this.experimentationOptOutImmediate =
+      resolveExperimentationOptOutMode(options.experimentationOptOutMode) === ExperimentationOptOutMode.Immediate
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
@@ -144,7 +150,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger, this.experimentationOptOutImmediate)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -155,7 +161,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger, this.experimentationOptOutImmediate)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -166,7 +172,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger, this.experimentationOptOutImmediate)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -189,7 +195,8 @@ export class DatadogNodeServerProvider implements Provider {
       flagKey,
       defaultValue,
       context,
-      _logger
+      _logger,
+      this.experimentationOptOutImmediate
     ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails

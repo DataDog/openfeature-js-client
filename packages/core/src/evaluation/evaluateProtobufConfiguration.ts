@@ -38,7 +38,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp = timeStampNow()
+  evaluationTimestampMs: TimeStamp = timeStampNow(),
+  excludeExperiments = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
@@ -74,6 +75,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
 
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
+      if (excludeExperiments && allocation.logExposureEvent) continue
       if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
         continue
       }

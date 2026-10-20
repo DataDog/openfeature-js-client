@@ -36,7 +36,7 @@ describe('Universal Flag Configuration V1', () => {
     return JSON.parse(testCases) as TestCase[]
   }
 
-  const evaluateDetails = (testCase: TestCase, context: EvaluationContext): ResolutionDetails<FlagValue> => {
+  const evaluateDetails = (testCase: TestCase, context: EvaluationContext, immediate = false): ResolutionDetails<FlagValue> => {
     const configuration = getUFC()
     if (testCase.variationType === 'BOOLEAN') {
       return evaluateRulesBasedConfiguration(
@@ -45,7 +45,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as boolean,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'STRING') {
@@ -55,7 +56,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as string,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'INTEGER' || testCase.variationType === 'NUMERIC') {
@@ -65,7 +67,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as number,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'JSON') {
@@ -75,7 +78,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as JsonValue,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
@@ -108,5 +112,19 @@ describe('Universal Flag Configuration V1', () => {
         expect(details.errorCode).toEqual(testCase.result.errorCode)
       }
     })
+
+    for (const testCase of testCases) {
+      const expected = testCase.capabilities?.experimentationOptOutImmediate
+      if (!expected) continue
+      it(`honors immediate opt-out: ${JSON.stringify(testCase.attributes)}`, () => {
+        const context = { targetingKey: testCase.targetingKey, ...testCase.attributes } as EvaluationContext
+        const details = evaluateDetails(testCase, context, true)
+        expect(details).toMatchObject(expected)
+      })
+    }
+  })
+  it('loads the immediate opt-out capability cases', () => {
+    const cases = getTestCaseFileNames().flatMap(getTestCases)
+    expect(cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)).toHaveLength(18)
   })
 })

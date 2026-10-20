@@ -1,4 +1,5 @@
 export type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+export { ExperimentationOptOutMode } from './experimentation-opt-out'
 export * from './provider'
 
 // Build environment placeholder for testing
