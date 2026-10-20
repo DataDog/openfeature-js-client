@@ -36,7 +36,11 @@ describe('Universal Flag Configuration V1', () => {
     return JSON.parse(testCases) as TestCase[]
   }
 
-  const evaluateDetails = (testCase: TestCase, context: EvaluationContext, immediate = false): ResolutionDetails<FlagValue> => {
+  const evaluateDetails = (
+    testCase: TestCase,
+    context: EvaluationContext,
+    immediate = false
+  ): ResolutionDetails<FlagValue> => {
     const configuration = getUFC()
     if (testCase.variationType === 'BOOLEAN') {
       return evaluateRulesBasedConfiguration(

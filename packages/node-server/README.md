@@ -58,9 +58,7 @@ const provider = new DatadogNodeServerProvider({ exposureChannel })
 // Supply the customer's stored preference with each evaluation.
 const context = {
   targetingKey: athlete.id,
-  ...(athlete.experimentationOptOutAt
-    ? { dd_experimentation_opt_out_at: athlete.experimentationOptOutAt }
-    : {}),
+  ...(athlete.experimentationOptOutAt ? { dd_experimentation_opt_out_at: athlete.experimentationOptOutAt } : {}),
 }
 ```
 

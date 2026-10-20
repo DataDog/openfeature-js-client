@@ -13,9 +13,16 @@ export function hasExperimentationOptOut(context: Record<string, unknown>): bool
   const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
   if (
-    m < 1 || m > 12 || d < 1 || d > days[m - 1] ||
-    Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59 ||
-    Number(offsetHour ?? 0) > 23 || Number(offsetMinute ?? 0) > 59
-  ) return undefined
+    m < 1 ||
+    m > 12 ||
+    d < 1 ||
+    d > days[m - 1] ||
+    Number(hour) > 23 ||
+    Number(minute) > 59 ||
+    Number(second) > 59 ||
+    Number(offsetHour ?? 0) > 23 ||
+    Number(offsetMinute ?? 0) > 59
+  )
+    return undefined
   return true
 }

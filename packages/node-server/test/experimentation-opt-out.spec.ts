@@ -10,7 +10,9 @@ const configuration = {
   createdAt: '2026-01-01T00:00:00Z',
   flags: {
     feature: {
-      key: 'feature', enabled: true, variationType: 'BOOLEAN',
+      key: 'feature',
+      enabled: true,
+      variationType: 'BOOLEAN',
       variations: { treatment: { key: 'treatment', value: true }, ordinary: { key: 'ordinary', value: false } },
       allocations: [
         { key: 'experiment', doLog: true, splits: [{ variationKey: 'treatment', shards: [] }] },
@@ -28,8 +30,11 @@ describe('immediate experimentation opt-out', () => {
   })
 
   it.each([
-    ['', undefined, true], ['disabled', undefined, true], ['immediate', undefined, false],
-    [' Immediate ', undefined, false], ['immediate', ExperimentationOptOutMode.Disabled, true],
+    ['', undefined, true],
+    ['disabled', undefined, true],
+    ['immediate', undefined, false],
+    [' Immediate ', undefined, false],
+    ['immediate', ExperimentationOptOutMode.Disabled, true],
     ['disabled', ExperimentationOptOutMode.Immediate, false],
     ['invalid', ExperimentationOptOutMode.Disabled, true],
     ['invalid', ExperimentationOptOutMode.Immediate, false],
@@ -41,17 +46,26 @@ describe('immediate experimentation opt-out', () => {
     })
     provider.setConfiguration(configuration)
     process.env.DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE = 'invalid-after-construction'
-    const result = await provider.resolveBooleanEvaluation('feature', true, {
-      targetingKey: 'athlete', dd_experimentation_opt_out_at: '2099-01-01T00:00:00Z',
-    }, logger)
+    const result = await provider.resolveBooleanEvaluation(
+      'feature',
+      true,
+      {
+        targetingKey: 'athlete',
+        dd_experimentation_opt_out_at: '2099-01-01T00:00:00Z',
+      },
+      logger
+    )
     expect(result.value).toBe(expected)
   })
 
   it('rejects unsupported configuration without including its value', () => {
     process.env.DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE = 'secret-value'
-    expect(() => new DatadogNodeServerProvider({
-      exposureChannel: channel('opt-out-invalid') as Channel<ExposureEvent>,
-    })).toThrow('DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE must be disabled or immediate')
+    expect(
+      () =>
+        new DatadogNodeServerProvider({
+          exposureChannel: channel('opt-out-invalid') as Channel<ExposureEvent>,
+        })
+    ).toThrow('DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE must be disabled or immediate')
   })
 
   it('preserves exposure deduplication across opt-out and resumption', async () => {
@@ -61,7 +75,8 @@ describe('immediate experimentation opt-out', () => {
     exposureChannel.subscribe(subscriber)
     try {
       const provider = new DatadogNodeServerProvider({
-        exposureChannel, experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+        exposureChannel,
+        experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
       })
       provider.setConfiguration(configuration)
       const eligible = { targetingKey: 'athlete' }
@@ -71,9 +86,15 @@ describe('immediate experimentation opt-out', () => {
         expect(result.value).toBe(!('dd_experimentation_opt_out_at' in context))
       }
       expect(exposures).toHaveLength(1)
-      const invalid = await provider.resolveBooleanEvaluation('feature', false, {
-        targetingKey: 'athlete', dd_experimentation_opt_out_at: null,
-      } as unknown as EvaluationContext, logger)
+      const invalid = await provider.resolveBooleanEvaluation(
+        'feature',
+        false,
+        {
+          targetingKey: 'athlete',
+          dd_experimentation_opt_out_at: null,
+        } as unknown as EvaluationContext,
+        logger
+      )
       expect(invalid).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'INVALID_CONTEXT' })
       expect(exposures).toHaveLength(1)
     } finally {

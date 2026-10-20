@@ -141,7 +141,16 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   }
   let details: ResolutionDetails<FlagTypeToValue<T>>
   try {
-    details = evaluateRules(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs, excludeExperiments)
+    details = evaluateRules(
+      config,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      logger,
+      evaluationTimestampMs,
+      excludeExperiments
+    )
   } catch (error) {
     logger.error('Error evaluating flag', { error })
     details = { value: defaultValue, reason: 'ERROR', errorCode: 'GENERAL' as ErrorCode }
@@ -200,7 +209,16 @@ function evaluateRules<T extends FlagValueType>(
 
   const flag = config.flags[flagKey]
   try {
-    return evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger, evaluationTimestampMs, excludeExperiments)
+    return evaluateForSubject(
+      flag,
+      type,
+      subjectKey,
+      subjectAttributes,
+      defaultValue,
+      logger,
+      evaluationTimestampMs,
+      excludeExperiments
+    )
   } catch (error) {
     if (error instanceof TargetingKeyMissingError) {
       return {
