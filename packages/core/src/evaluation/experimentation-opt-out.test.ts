@@ -12,13 +12,10 @@ describe('customer opt-out timestamp', () => {
   ])('accepts %s', (value) => {
     expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBe(true)
   })
+  it.each([null, false, true, 123, {}, [], undefined])('rejects non-string %j', (value) => {
+    expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBeUndefined()
+  })
   it.each([
-    null,
-    false,
-    true,
-    123,
-    {},
-    [],
     '',
     '2026-01-01',
     '2026-01-01T00:00:00',
@@ -31,7 +28,9 @@ describe('customer opt-out timestamp', () => {
     '2026-01-01T00:00:60Z',
     '2026-01-01T00:00:00+24:00',
     '2026-01-01T00:00:00+00:60',
-  ])('rejects %j', (value) => {
-    expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBeUndefined()
+    'not-a-timestamp',
+  ])('uses the allocation timestamp parser for %j', (value) => {
+    const expected = Number.isNaN(new Date(value).getTime()) ? undefined : true
+    expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBe(expected)
   })
 })

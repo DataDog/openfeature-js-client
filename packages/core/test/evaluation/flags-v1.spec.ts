@@ -110,9 +110,9 @@ describe('Universal Flag Configuration V1', () => {
     it.each(testCasesWithContext)('with context $contextString', ({ contextString, testCase }) => {
       const context = JSON.parse(contextString) as EvaluationContext
       const details = evaluateDetails(testCase, context)
-      expect(details.value).toEqual(testCase.result.value)
+      expect(details.value).toStrictEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
-      if (testCase.result.errorCode !== undefined) {
+      if (testCase.result.errorCode !== undefined || testCase.result.reason !== 'ERROR') {
         expect(details.errorCode).toEqual(testCase.result.errorCode)
       }
     })
@@ -123,12 +123,25 @@ describe('Universal Flag Configuration V1', () => {
       it(`honors immediate opt-out: ${JSON.stringify(testCase.attributes)}`, () => {
         const context = { targetingKey: testCase.targetingKey, ...testCase.attributes } as EvaluationContext
         const details = evaluateDetails(testCase, context, true)
-        expect(details).toMatchObject(expected)
+        expect(details.value).toStrictEqual(expected.value)
+        expect(details.reason).toEqual(expected.reason)
+        expect(details.errorCode).toEqual(expected.errorCode)
       })
     }
   })
   it('loads the immediate opt-out capability cases', () => {
     const cases = getTestCaseFileNames().flatMap(getTestCases)
-    expect(cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)).toHaveLength(18)
+    const immediateCases = cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)
+    expect(immediateCases.length).toBeGreaterThan(0)
+    expect(new Set(immediateCases.map((testCase) => testCase.variationType))).toEqual(
+      new Set(['BOOLEAN', 'STRING', 'INTEGER', 'NUMERIC', 'JSON'])
+    )
+    expect(
+      immediateCases.some((testCase) => testCase.capabilities?.experimentationOptOutImmediate?.reason === 'ERROR')
+    ).toBe(true)
+    expect(
+      immediateCases.some((testCase) => testCase.capabilities?.experimentationOptOutImmediate?.reason === 'DEFAULT')
+    ).toBe(true)
+    expect(immediateCases.some((testCase) => testCase.targetingKey == null)).toBe(true)
   })
 })

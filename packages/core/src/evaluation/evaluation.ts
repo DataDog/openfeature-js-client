@@ -135,7 +135,7 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
-      errorMessage: 'dd_experimentation_opt_out_at must be an RFC3339 timestamp string',
+      errorMessage: 'Set dd_experimentation_opt_out_at to a valid timestamp string, or omit the attribute',
       flagMetadata: metadata,
     }
   }
