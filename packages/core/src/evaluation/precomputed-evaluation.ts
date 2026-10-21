@@ -7,6 +7,8 @@ import {
   type PrecomputedFlagMetadata,
 } from '../configuration'
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
+import { timeStampNow } from '../time'
+import { createEvaluationMetadata } from './evaluationMetadata'
 import { getOwnProperty } from './getOwnProperty'
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
@@ -17,8 +19,15 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   context: EvaluationContext
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
+  // Capture the selected configuration's consent before evaluating the flag.
+  // No usable configuration (including a context mismatch) defaults to protected mode.
+  const metadata = createEvaluationMetadata(
+    timeStampNow(),
+    selection.kind === 'precomputed' && selection.configuration.response.data.attributes.observeFullEvaluationData
+  )
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue)
+    const details = evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue)
+    return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
   }
 
   const { error } = selection
@@ -26,6 +35,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
+    flagMetadata: metadata,
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
   }
 }

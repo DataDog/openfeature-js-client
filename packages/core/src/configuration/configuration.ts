@@ -51,6 +51,8 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      /** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
+      observeFullEvaluationData?: boolean
       /** Absent or false for legacy plaintext assignments. */
       obfuscated?: boolean
       /** Required when obfuscated is true; retained with the map in caches. */
@@ -80,7 +82,7 @@ export type PrecomputedFlagMetadata = {
   variationType?: FlagValueType
   doLog?: boolean
 
-  // Server-side evaluation metadata (consumed by dd-trace-js)
+  // Evaluation-time metadata (also consumed by server-side dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number

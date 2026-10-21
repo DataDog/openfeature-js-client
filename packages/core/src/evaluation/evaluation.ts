@@ -52,6 +52,7 @@ export function evaluate<T extends FlagValueType>(
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
+    flagMetadata: createEvaluationMetadata(timeStampNow(), false),
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
   }
 }
