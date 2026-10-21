@@ -204,7 +204,7 @@ function matchesLeafCondition(
     const flagKey = atIndex(configuration.strings, kind.value.flagKeyStringIndex, 'flag key')
     const variantKey = resolveFlagEvaluation(flagKey)
     if (variantKey === undefined) return false
-    const included = containsInternedString(kind.value.stringIndexes, variantKey, configuration.strings)
+    const included = containsInternedString(kind.value.variantKeyStringIndexes, variantKey, configuration.strings)
     return kind.value.negate ? !included : included
   }
   const attribute = atIndex(configuration.attributes, kind.value.attributeIndex, 'condition attribute')

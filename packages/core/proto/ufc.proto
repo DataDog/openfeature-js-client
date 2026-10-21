@@ -157,7 +157,7 @@ message FlagEvaluationStringMembershipCondition {
   // Index into FlagsConfiguration.strings for the flag key.
   uint32 flag_key_string_index = 1;
   // Indices into FlagsConfiguration.strings for expected variant keys.
-  repeated uint32 string_indexes = 2;
+  repeated uint32 variant_key_string_indexes = 2;
   // True negates membership.
   bool negate = 3;
 }

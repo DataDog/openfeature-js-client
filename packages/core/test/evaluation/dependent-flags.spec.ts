@@ -105,7 +105,7 @@ describe('dependent flag evaluation', () => {
     config.strings.push('off')
     const membership = config.conditions[0].kind
     if (membership.case !== 'flagEvaluationStringMembership') throw new Error('unexpected test condition')
-    membership.value.stringIndexes = [2]
+    membership.value.variantKeyStringIndexes = [2]
     membership.value.negate = true
 
     expect(evaluateProtobuf(roundTrip(config), logger).result).toMatchObject({ value: true, variant: 'on' })
@@ -143,7 +143,7 @@ describe('dependent flag evaluation', () => {
       create(ConditionSchema, {
         kind: {
           case: 'flagEvaluationStringMembership',
-          value: { flagKeyStringIndex: 2, stringIndexes: [0], negate: false },
+          value: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0], negate: false },
         },
       })
     )
@@ -164,7 +164,7 @@ describe('dependent flag evaluation', () => {
       create(ConditionSchema, {
         kind: {
           case: 'flagEvaluationStringMembership',
-          value: { flagKeyStringIndex: 2, stringIndexes: [0], negate: false },
+          value: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0], negate: false },
         },
       })
     )
@@ -190,13 +190,13 @@ describe('dependent flag evaluation', () => {
       create(ConditionSchema, {
         kind: {
           case: 'flagEvaluationStringMembership',
-          value: { flagKeyStringIndex: 1, stringIndexes: [0], negate: false },
+          value: { flagKeyStringIndex: 1, variantKeyStringIndexes: [0], negate: false },
         },
       }),
       create(ConditionSchema, {
         kind: {
           case: 'flagEvaluationStringMembership',
-          value: { flagKeyStringIndex: 2, stringIndexes: [0], negate: false },
+          value: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0], negate: false },
         },
       }),
       create(ConditionSchema, {
@@ -217,7 +217,7 @@ describe('dependent flag evaluation', () => {
     expect(config.attributes).toEqual([])
     expect(config.conditions[0].kind).toEqual({
       case: 'flagEvaluationStringMembership',
-      value: expect.objectContaining({ flagKeyStringIndex: 1, stringIndexes: [0], negate: false }),
+      value: expect.objectContaining({ flagKeyStringIndex: 1, variantKeyStringIndexes: [0], negate: false }),
     })
   })
 
@@ -468,7 +468,7 @@ function protobufDependentConfiguration(prerequisiteHasAllocation: boolean) {
       {
         kind: {
           case: 'flagEvaluationStringMembership',
-          value: { flagKeyStringIndex: 1, stringIndexes: [0], negate: false },
+          value: { flagKeyStringIndex: 1, variantKeyStringIndexes: [0], negate: false },
         },
       },
     ],

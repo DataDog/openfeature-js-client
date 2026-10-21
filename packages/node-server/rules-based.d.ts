@@ -470,9 +470,9 @@ type FlagEvaluationStringMembershipCondition = Message<"datadog.ffe.flagging.ufc
 	/**
 	 * Indices into FlagsConfiguration.strings for expected variant keys.
 	 *
-	 * @generated from field: repeated uint32 string_indexes = 2;
+	 * @generated from field: repeated uint32 variant_key_string_indexes = 2;
 	 */
-	stringIndexes: number[];
+	variantKeyStringIndexes: number[];
 	/**
 	 * True negates membership.
 	 *
