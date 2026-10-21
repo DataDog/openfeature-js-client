@@ -505,15 +505,18 @@ class DependencyEvaluationSession {
   }
 
   private emitEvaluation(evaluation: DependencyEvaluation): void {
-    const details: DependencyEvaluation['details'] = {
-      ...evaluation.details,
-      ...(evaluation.details.value === undefined ? {} : { value: cloneFlagValue(evaluation.details.value) }),
-      ...(evaluation.details.flagMetadata === undefined
-        ? {}
-        : { flagMetadata: { ...evaluation.details.flagMetadata } }),
+    if (this.onDependencyEvaluation === undefined) {
+      return
     }
     try {
-      this.onDependencyEvaluation?.({ flagKey: evaluation.flagKey, details })
+      const details: DependencyEvaluation['details'] = {
+        ...evaluation.details,
+        ...(evaluation.details.value === undefined ? {} : { value: cloneFlagValue(evaluation.details.value) }),
+        ...(evaluation.details.flagMetadata === undefined
+          ? {}
+          : { flagMetadata: { ...evaluation.details.flagMetadata } }),
+      }
+      this.onDependencyEvaluation({ flagKey: evaluation.flagKey, details })
     } catch {
       // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
     }

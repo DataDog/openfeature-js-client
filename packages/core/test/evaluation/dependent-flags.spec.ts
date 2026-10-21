@@ -387,6 +387,33 @@ describe('dependent flag evaluation', () => {
       }),
     ])
   })
+
+  it('isolates dependency resolution from telemetry snapshot failures', () => {
+    const cyclicValue: Record<string, unknown> = {}
+    cyclicValue.self = cyclicValue
+    const prerequisite: Flag = {
+      key: 'prerequisite',
+      enabled: true,
+      variationType: 'JSON',
+      variations: { on: { key: 'on', value: cyclicValue as never } },
+      allocations: [{ key: 'default', doLog: true, rules: [], splits: [{ variationKey: 'on', shards: [] }] }],
+    }
+    const config = configuration({
+      prerequisite,
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    const onDependency = jest.fn()
+    const onExposures = jest.fn()
+
+    expect(evaluate(config, 'root', logger, onDependency, {}, onExposures)).toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+    expect(onDependency).not.toHaveBeenCalled()
+    expect(onExposures).toHaveBeenCalledWith([
+      expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
+    ])
+  })
 })
 
 function evaluate(
