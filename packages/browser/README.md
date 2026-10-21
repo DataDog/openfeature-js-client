@@ -124,9 +124,9 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
-### Immediate experimentation opt-out
+### Experimentation opt-out
 
-Enable immediate experimentation opt-out once when you construct the provider. Your application owns the subject's preference and timestamp.
+Select an opt-out mode when you construct the provider. Your application owns and stores the subject's preference timestamp.
 
 ```typescript
 import { DatadogProvider, ExperimentationOptOutMode } from '@datadog/openfeature-browser'
@@ -147,10 +147,18 @@ await OpenFeature.setProviderAndWait(provider, {
 const enabled = OpenFeature.getClient().getBooleanValue('new-route-planner', false)
 ```
 
-`Disabled` is the default. In `Immediate` mode, omit the attribute for eligible subjects.
-Supply a timestamp string, such as `2026-10-19T12:00:00Z`, to exclude the subject immediately.
-Future timestamps also take effect immediately. They do not schedule exclusion.
-The parser matches allocation timestamps. Null, non-string, empty, and unusable values return the application default with `INVALID_CONTEXT`.
+| Mode                    | Behavior when the subject timestamp is present                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Disabled` (default)    | Ignore the attribute.                                                                                     |
+| `Immediate`             | Skip every allocation that logs experiment exposures.                                                     |
+| `FutureExperimentsOnly` | Keep only exposure allocations activated strictly before the timestamp. Skip missing activation metadata. |
+
+Use `ExperimentationOptOutMode.FutureExperimentsOnly` in the example to select the second policy.
+Omit the attribute for eligible subjects. Supply an RFC3339 timestamp, such as `2026-10-19T12:00:00Z`, for opted-out subjects.
+An invalid enabled timestamp returns the application default with `INVALID_CONTEXT` and does not send an assignment request.
+Future timestamps apply immediately; they do not schedule exclusion. Comparisons retain nanosecond precision.
+Future mode uses allocation activation, not prior enrollment. An older allocation can still assign a subject for the first time.
+Holdouts use the same policy. Removing the attribute permits experimentation again.
 
 Excluded subjects skip allocations that log experiment exposures. Evaluation continues through ordinary feature allocations in their existing order.
 If none match, the application receives its default value. Skipped allocations do not log exposures.
@@ -172,8 +180,9 @@ provider.setConfiguration(
 )
 ```
 
-Precompute delivery requires backend support. Opted-out requests send `evaluation_options.experimentation_opt_out=true`.
-The response must acknowledge that option. The provider rejects unsupported responses and cached assignments from a different subject or opt-out state.
+Precompute delivery requires backend support. Opted-out requests send `evaluation_options.experimentation_opt_out_mode`.
+Immediate responses acknowledge `experimentation_opt_out=true`. Future responses acknowledge the named mode and exact timestamp instant.
+The provider rejects unsupported responses and cached assignments from a different subject, mode, or opt-out timestamp.
 For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
 
 ### Subject-level evaluation telemetry opt-out

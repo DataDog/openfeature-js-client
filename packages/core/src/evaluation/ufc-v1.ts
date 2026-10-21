@@ -31,6 +31,7 @@ export interface Allocation {
   rules?: Rule[]
   startAt?: Date
   endAt?: Date
+  randomizationActivatedAt?: string
   splits: Split[]
   doLog?: boolean
 }

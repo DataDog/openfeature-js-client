@@ -15,7 +15,9 @@ import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
 import { createEvaluationMetadata, createEvaluationTimestampMetadata } from './evaluationMetadata'
 import {
   acknowledgesExperimentationOptOut,
-  hasExperimentationOptOut,
+  type ExperimentationOptOutOption,
+  type ExperimentationOptOutPolicy,
+  experimentationOptOutPolicy,
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
@@ -35,9 +37,9 @@ export function evaluate<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger = NOOP_LOGGER,
-  experimentationOptOutImmediate = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutImmediate)
+  const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutMode)
   if (selection.kind === 'precomputed') {
     return evaluatePrecomputedConfiguration(flagsConfiguration, type, flagKey, defaultValue, context)
   }
@@ -50,7 +52,7 @@ export function evaluate<T extends FlagValueType>(
       defaultValue,
       context,
       logger,
-      experimentationOptOutImmediate
+      experimentationOptOutMode
     )
   }
 
@@ -72,9 +74,9 @@ export type FlagsConfigurationError = {
 export function getFlagsConfigurationError(
   configuration: FlagsConfiguration | undefined,
   context: EvaluationContext,
-  experimentationOptOutImmediate = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): FlagsConfigurationError | undefined {
-  const selection = selectFlagsConfiguration(configuration, context, experimentationOptOutImmediate)
+  const selection = selectFlagsConfiguration(configuration, context, experimentationOptOutMode)
   return selection.kind === 'error' ? selection.error : undefined
 }
 
@@ -86,9 +88,9 @@ type FlagsConfigurationSelection =
 function selectFlagsConfiguration(
   configuration: FlagsConfiguration | undefined,
   context: EvaluationContext,
-  experimentationOptOutImmediate = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): FlagsConfigurationSelection {
-  const optedOut = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
     return { kind: 'error', error: { errorCode: 'INVALID_CONTEXT', errorMessage: INVALID_EXPERIMENTATION_OPT_OUT } }
   }
@@ -102,7 +104,8 @@ function selectFlagsConfiguration(
   if (
     configuration.precomputed &&
     configMatchesContext(configuration, context) &&
-    (!optedOut || (configuration.precomputed.context !== undefined && acknowledgesExperimentationOptOut(configuration)))
+    (!optedOut ||
+      (configuration.precomputed.context !== undefined && acknowledgesExperimentationOptOut(configuration, optedOut)))
   ) {
     return { kind: 'precomputed', configuration: configuration.precomputed }
   }
@@ -149,14 +152,14 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  experimentationOptOutImmediate = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
   // Snapshot consent once at the start of this evaluation. The provider can receive a new
   // configuration later, but hooks must see the consent from the configuration that produced this result.
   const observeFullEvaluationData = config?.observeFullEvaluationData === true
   const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
-  const excludeExperiments = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  const excludeExperiments = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (excludeExperiments === undefined) {
     return {
       value: defaultValue,
@@ -193,7 +196,7 @@ function evaluateRules<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger,
   evaluationTimestampMs: TimeStamp,
-  excludeExperiments: boolean
+  excludeExperiments: ExperimentationOptOutPolicy
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!config) {
     return {

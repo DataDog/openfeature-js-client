@@ -1,7 +1,8 @@
 import {
+  acknowledgesExperimentationOptOut,
   buildEndpointHost,
+  experimentationOptOutPolicy,
   type FlagsConfiguration,
-  hasExperimentationOptOut,
   INVALID_EXPERIMENTATION_OPT_OUT,
   parsePrecomputedConfigurationResponse,
   SUPPORTED_FLAGS_CAPABILITIES,
@@ -12,7 +13,7 @@ import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
-  isImmediateExperimentationOptOut,
+  getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
 
 const sourcePayload = {
@@ -114,7 +115,7 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  const optedOut = isImmediateExperimentationOptOut(options) ? hasExperimentationOptOut(options.context) : false
+  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
   const url = buildConfigurationUrl(requestOptions, 'precomputed')
@@ -150,7 +151,7 @@ export async function fetchPrecomputedConfiguration(
         attributes: {
           env: envPayload,
           source: sourcePayload,
-          ...(optedOut && { evaluation_options: { experimentation_opt_out: true } }),
+          ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
           subject: {
             targeting_key: options.context.targetingKey || '',
             targeting_attributes: stringifiedContext,
@@ -165,7 +166,7 @@ export async function fetchPrecomputedConfiguration(
   }
   const parsed = parsePrecomputedConfigurationResponse(await response.json())
   if ('error' in parsed) return { precomputedError: parsed.error }
-  if (optedOut && parsed.response.data.attributes.evaluation_options?.experimentation_opt_out !== true) {
+  if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }
 

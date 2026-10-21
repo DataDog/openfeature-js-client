@@ -21,7 +21,11 @@ async function run() {
   const options = {
     clientToken: 'local-experimentation-opt-out',
     env: 'test',
-    experimentationOptOutMode: active ? ExperimentationOptOutMode.Immediate : ExperimentationOptOutMode.Disabled,
+    experimentationOptOutMode: active
+      ? parameters.get('policy') === 'future'
+        ? ExperimentationOptOutMode.FutureExperimentsOnly
+        : ExperimentationOptOutMode.Immediate
+      : ExperimentationOptOutMode.Disabled,
     flagEvaluationTrackingInterval: 1000,
     enableRumFeatureFlagTracking: false,
     proxy: ({ path, parameters }: { path: string; parameters: string }) =>
@@ -32,7 +36,7 @@ async function run() {
     country: 'US',
     ...(value === undefined ? {} : { dd_experimentation_opt_out_at: value as string }),
   })
-  const initial = makeContext(optedOut ? '2026-10-19T12:00:00Z' : undefined)
+  const initial = makeContext(optedOut ? parameters.get('cutoff') || '2026-10-19T12:00:00Z' : undefined)
   const fetchConfig = (context: EvaluationContext) =>
     fetchPrecomputedConfiguration({
       ...options,
@@ -48,10 +52,16 @@ async function run() {
       : new DatadogCoreProvider(options)
   let tracking: DatadogTrackingHooks | undefined
   if (provider instanceof DatadogCoreProvider) {
+    const rules = configurationFromString(JSON.stringify(rulesWire))
+    if (parameters.get('policy') === 'future') {
+      rules.rules!.response.flags['test-flag'].allocations[0].randomizationActivatedAt = {
+        $typeName: 'google.protobuf.Timestamp',
+        seconds: BigInt(Date.parse('2026-10-01T12:00:00Z') / 1000),
+        nanos: 123456789,
+      }
+    }
     provider.setConfiguration(
-      mode === 'rules'
-        ? configurationFromString(JSON.stringify(rulesWire))
-        : configurationFromString(configurationToString(await fetchConfig(initial)))
+      mode === 'rules' ? rules : configurationFromString(configurationToString(await fetchConfig(initial)))
     )
     tracking = composeDatadogTrackingHooks(
       createDatadogEvaluationLoggingHook(options),

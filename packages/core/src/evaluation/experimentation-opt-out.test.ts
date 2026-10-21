@@ -29,8 +29,7 @@ describe('customer opt-out timestamp', () => {
     '2026-01-01T00:00:00+24:00',
     '2026-01-01T00:00:00+00:60',
     'not-a-timestamp',
-  ])('uses the allocation timestamp parser for %j', (value) => {
-    const expected = Number.isNaN(new Date(value).getTime()) ? undefined : true
-    expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBe(expected)
+  ])('rejects malformed RFC3339 %j', (value) => {
+    expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBeUndefined()
   })
 })

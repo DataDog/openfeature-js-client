@@ -9,7 +9,8 @@ import {
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import {
   acknowledgesExperimentationOptOut,
-  hasExperimentationOptOut,
+  type ExperimentationOptOutOption,
+  experimentationOptOutPolicy,
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
@@ -20,9 +21,9 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
-  experimentationOptOutImmediate = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const optedOut = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
     return {
       value: defaultValue,
@@ -33,7 +34,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   }
   if (
     optedOut &&
-    (!flagsConfiguration?.precomputed?.context || !acknowledgesExperimentationOptOut(flagsConfiguration))
+    (!flagsConfiguration?.precomputed?.context || !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut))
   ) {
     return {
       value: defaultValue,

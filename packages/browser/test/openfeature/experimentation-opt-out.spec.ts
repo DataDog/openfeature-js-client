@@ -1,5 +1,5 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
-import { configurationFromString } from '@datadog/flagging-core/rules-based'
+import { experimentationOptOutPolicy, type FlagsConfiguration } from '@datadog/flagging-core'
+import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
@@ -71,7 +71,7 @@ describe('immediate experimentation opt-out', () => {
       fetchPrecomputedConfiguration({ clientToken: 'test', env: 'test', context, fetch, ...options })
     ).rejects.toThrow('acknowledge')
     expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes.evaluation_options).toEqual({
-      experimentation_opt_out: true,
+      experimentation_opt_out_mode: 'immediate',
     })
   })
 
@@ -131,7 +131,7 @@ describe('immediate experimentation opt-out', () => {
     const provider = online(fetch)
     await provider.initialize(future)
     expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes.evaluation_options).toEqual({
-      experimentation_opt_out: true,
+      experimentation_opt_out_mode: 'immediate',
     })
     expect(provider.resolveBooleanEvaluation('boolean', false, future, logger).value).toBe(true)
     expect(provider.resolveStringEvaluation('string', '', future, logger).value).toBe('ordinary')
@@ -215,7 +215,80 @@ describe('immediate experimentation opt-out', () => {
 
   it.each(['future', null])('rejects unsupported configuration mode %j at construction', (mode) => {
     expect(() => new DatadogCoreProvider({ experimentationOptOutMode: mode as ExperimentationOptOutMode })).toThrow(
-      'disabled or immediate'
+      'disabled, immediate'
     )
+  })
+})
+
+describe('future experimentation opt-out', () => {
+  const future = { experimentationOptOutMode: ExperimentationOptOutMode.FutureExperimentsOnly }
+  const preciseContext = { ...context, dd_experimentation_opt_out_at: '2026-10-19T12:00:00.123456789Z' }
+  const futureResponse = (cutoff = preciseContext.dd_experimentation_opt_out_at, mode = 'future_experiments_only') => ({
+    ...response(),
+    data: {
+      attributes: {
+        ...response().data.attributes,
+        evaluation_options: {
+          experimentation_opt_out_mode: mode,
+          dd_experimentation_opt_out_at: cutoff,
+        },
+      },
+    },
+  })
+  const options = { ...future, clientToken: 'future', env: 'test', context: preciseContext }
+
+  it.each([
+    '2026-10-19T08:00:00.123456789-04:00',
+    '2026-10-19T12:00:00.1234567890Z',
+    '2026-10-19T12:00:00.1234567899Z',
+  ])('accepts equivalent acknowledgement %s and round-trips portable configuration', async (cutoff) => {
+    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff) })
+    const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
+    expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes.evaluation_options).toEqual({
+      experimentation_opt_out_mode: 'future_experiments_only',
+    })
+    const core = new DatadogCoreProvider(future)
+    core.setConfiguration(configurationFromString(configurationToString(configuration)))
+    await core.initialize(preciseContext)
+    expect(core.resolveBooleanEvaluation('boolean', false, preciseContext, logger).value).toBe(true)
+    const other = { ...preciseContext, dd_experimentation_opt_out_at: '2026-10-19T12:00:00.123456790Z' }
+    expect(core.resolveBooleanEvaluation('boolean', false, other, logger).errorCode).toBe('INVALID_CONTEXT')
+  })
+
+  it.each([
+    ['2026-10-19T12:00:00.123456788Z', 'future_experiments_only'],
+    ['2026-10-19T12:00:00.123456790Z', 'future_experiments_only'],
+    [preciseContext.dd_experimentation_opt_out_at, 'immediate'],
+    ['', 'future_experiments_only'],
+  ])('rejects wrong cutoff %s or mode %s', async (cutoff, mode) => {
+    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff, mode) })
+    await expect(fetchPrecomputedConfiguration({ ...options, fetch })).rejects.toThrow('acknowledge')
+  })
+
+  it('isolates IndexedDB cache across immediate, future, cutoff, and subject', async () => {
+    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse() })
+    const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
+    const cache = new IndexedDBFlagsCache('future-cache')
+    const policy = experimentationOptOutPolicy(preciseContext, 'future_experiments_only')!
+    cache.set(configuration, preciseContext, policy)
+    expect(await cache.get(preciseContext, policy)).toEqual(configuration)
+    expect(await cache.get(preciseContext, true)).toBeUndefined()
+    expect(await cache.get(preciseContext, false)).toBeUndefined()
+    const offline = jest.fn().mockRejectedValue(new Error('offline'))
+    const provider = new DatadogProvider({
+      ...future,
+      clientToken: 'future-cache',
+      env: 'test',
+      flagConfigurationFetch: offline,
+      enableExposureLogging: false,
+      enableFlagEvaluationTracking: false,
+      enableRumFeatureFlagTracking: false,
+    })
+    await provider.initialize(preciseContext)
+    expect(provider.resolveBooleanEvaluation('boolean', false, preciseContext, logger).value).toBe(true)
+    const changed = { ...preciseContext, dd_experimentation_opt_out_at: '2026-10-19T12:00:00.123456790Z' }
+    await expect(provider.onContextChange(preciseContext, changed)).rejects.toThrow('offline')
+    expect(provider.resolveBooleanEvaluation('boolean', false, changed, logger).value).toBe(false)
+    await provider.onClose()
   })
 })

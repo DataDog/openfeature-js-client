@@ -16,6 +16,7 @@ import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { type ExperimentationOptOutPolicy, excludesExperimentAt } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
@@ -39,7 +40,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow(),
-  excludeExperiments = false
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
@@ -73,9 +74,29 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       }
     }
 
+    if (
+      flag.allocations.some(
+        ({ randomizationActivatedAt: activation }) =>
+          activation &&
+          (Number(activation.seconds) < -62135596800 ||
+            Number(activation.seconds) > 253402300799 ||
+            activation.nanos < 0 ||
+            activation.nanos >= 1e9)
+      )
+    ) {
+      throw new FlagConfigurationError('Invalid randomization activation timestamp')
+    }
     const conditionResults = new Map<number, boolean>()
     for (const allocation of flag.allocations) {
-      if (excludeExperiments && allocation.logExposureEvent) continue
+      if (excludeExperiments && allocation.logExposureEvent) {
+        const activation = allocation.randomizationActivatedAt
+        if (excludeExperiments === true || excludeExperiments.mode === 'immediate') continue
+        const instant = activation && {
+          seconds: Number(activation.seconds),
+          fraction: String(activation.nanos).padStart(9, '0'),
+        }
+        if (excludesExperimentAt(excludeExperiments, true, instant)) continue
+      }
       if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
         continue
       }

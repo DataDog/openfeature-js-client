@@ -15,10 +15,11 @@ declare global {
 test('online: reload uses only acknowledged opted-out assignments from IndexedDB', async ({ page }) => {
   let offline = false
   let requests = 0
-  await page.route('**/assignments?*', async (route) => {
+  await page.route('**/assignments*', async (route) => {
     requests++
     if (offline) return route.fulfill({ status: 503, body: 'offline' })
-    const optedOut = route.request().postDataJSON().data.attributes.evaluation_options?.experimentation_opt_out === true
+    const optedOut =
+      route.request().postDataJSON().data.attributes.evaluation_options?.experimentation_opt_out_mode === 'immediate'
     return route.fulfill({
       json: {
         data: {
@@ -89,7 +90,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
     test(`${mode}: opted-out subjects, ordinary fallback, telemetry unchanged; disabled=${disabled}`, async ({
       page,
     }) => {
-      const requests: { evaluation_options?: { experimentation_opt_out?: boolean } }[] = []
+      const requests: { evaluation_options?: { experimentation_opt_out_mode?: string } }[] = []
       const evaluations: { evaluation_count: number }[] = []
       const exposures: unknown[] = []
       const errors: string[] = []
@@ -101,7 +102,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
         if (url.pathname === '/assignments') {
           const attributes = route.request().postDataJSON().data.attributes
           requests.push(attributes)
-          const optedOut = attributes.evaluation_options?.experimentation_opt_out === true
+          const optedOut = attributes.evaluation_options?.experimentation_opt_out_mode === 'immediate'
           const flags = Object.fromEntries(
             [
               ['boolean', true],
@@ -163,7 +164,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
           42,
           { ordinary: true },
         ])
-        expect(requests[1].evaluation_options?.experimentation_opt_out).toBe(disabled ? undefined : true)
+        expect(requests[1].evaluation_options?.experimentation_opt_out_mode).toBe(disabled ? undefined : 'immediate')
       }
       if (!disabled) {
         acknowledge = false
@@ -182,4 +183,96 @@ for (const mode of ['online', 'precomputed', 'rules']) {
       expect(errors).toEqual([])
     })
   }
+}
+
+for (const mode of ['online', 'precomputed', 'rules']) {
+  test(`${mode}: future policy retains older allocations and checks the precise acknowledgement`, async ({ page }) => {
+    const requests: Record<string, unknown>[] = []
+    let corruptAcknowledgement = false
+    let offline = false
+    await page.route('**/intake/**', (route) => route.fulfill({ json: {} }))
+    await page.route('**/assignments*', async (route) => {
+      if (offline) return route.fulfill({ status: 503, body: 'offline' })
+      const attributes = route.request().postDataJSON().data.attributes
+      requests.push(attributes)
+      const cutoff = attributes.subject.targeting_attributes.dd_experimentation_opt_out_at
+      // The mock origin has one allocation activated at ...789. Compare these fixed adjacent test instants.
+      const excluded = cutoff === '2026-10-01T12:00:00.123456789Z'
+      return route.fulfill({
+        json: {
+          data: {
+            attributes: {
+              createdAt: '2026-10-20T00:00:00Z',
+              ...(cutoff
+                ? {
+                    evaluation_options: {
+                      experimentation_opt_out_mode: 'future_experiments_only',
+                      dd_experimentation_opt_out_at: corruptAcknowledgement ? '2026-10-01T12:00:00.123456788Z' : cutoff,
+                    },
+                  }
+                : {}),
+              flags: {
+                boolean: {
+                  allocationKey: excluded ? 'ordinary' : 'older-experiment',
+                  variationKey: 'on',
+                  variationType: 'boolean',
+                  variationValue: true,
+                  doLog: !excluded,
+                  reason: 'STATIC',
+                },
+              },
+            },
+          },
+        },
+      })
+    })
+    await page.goto(`/experimentation-opt-out.html?mode=${mode}&policy=future`)
+    await page.waitForFunction(() => '__OPENFEATURE_SMOKE_RESULT__' in globalThis)
+    await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456790Z'))
+    expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(true)
+    await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456789Z'))
+    expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(false)
+    if (mode !== 'rules') {
+      expect(requests[1].evaluation_options).toEqual({ experimentation_opt_out_mode: 'future_experiments_only' })
+      if (mode === 'online') {
+        // Wait for the exact future-policy namespace written by the real SDK.
+        await page.waitForFunction(async () => {
+          for (const { name } of await indexedDB.databases()) {
+            if (!name) continue
+            const db = await new Promise<IDBDatabase>((resolve) => {
+              const request = indexedDB.open(name)
+              request.onsuccess = () => resolve(request.result)
+            })
+            for (const store of db.objectStoreNames) {
+              const keys = await new Promise<IDBValidKey[]>((resolve) => {
+                const request = db.transaction(store).objectStore(store).getAllKeys()
+                request.onsuccess = () => resolve(request.result)
+              })
+              if (
+                keys.some(
+                  (key) => String(key).startsWith('future_experiments_only:') && String(key).includes(':123456789-')
+                )
+              ) {
+                db.close()
+                return true
+              }
+            }
+            db.close()
+          }
+          return false
+        })
+        offline = true
+        await page.goto(
+          '/experimentation-opt-out.html?mode=online&policy=future&optedOut=true&cutoff=2026-10-01T12:00:00.123456789Z'
+        )
+        await page.waitForFunction(() => '__OPENFEATURE_SMOKE_RESULT__' in globalThis)
+        expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(false)
+        offline = false
+      }
+      corruptAcknowledgement = true
+      await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456789Z', 'other-subject'))
+      expect((await page.evaluate(() => window.experimentationTest.evaluate())).value).toBe(false)
+    }
+    await page.evaluate(() => window.experimentationTest.close())
+  })
 }

@@ -3,6 +3,7 @@ import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
 import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { type ExperimentationOptOutPolicy, excludesExperiment, parseOptOutInstant } from './experimentation-opt-out'
 import { matchesShard } from './matchesShard'
 import { isValidRule, matchesRule, type Rule } from './rules'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
@@ -15,7 +16,7 @@ export function evaluateForSubject<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow(),
-  excludeExperiments = false
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!isValidFlag(flag)) {
     logger.debug(`returning default assignment because flag configuration is invalid`, {
@@ -59,8 +60,17 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 
   const now = new Date(evaluationTimestampMs)
+  if (
+    flag.allocations.some(
+      (allocation) =>
+        allocation.randomizationActivatedAt != null && !parseOptOutInstant(allocation.randomizationActivatedAt)
+    )
+  ) {
+    return { value: defaultValue, reason: 'ERROR', errorCode: 'PARSE_ERROR' as ErrorCode }
+  }
   for (const allocation of flag.allocations) {
-    if (excludeExperiments && allocation.doLog !== false) continue
+    if (excludesExperiment(excludeExperiments, allocation.doLog !== false, allocation.randomizationActivatedAt))
+      continue
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,

@@ -1,6 +1,7 @@
 export enum ExperimentationOptOutMode {
   Disabled = 'disabled',
   Immediate = 'immediate',
+  FutureExperimentsOnly = 'future_experiments_only',
 }
 
 export interface ExperimentationOptOutConfiguration {
@@ -8,13 +9,17 @@ export interface ExperimentationOptOutConfiguration {
   experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
-export function isImmediateExperimentationOptOut(options: ExperimentationOptOutConfiguration): boolean {
+export function getExperimentationOptOutMode(options: ExperimentationOptOutConfiguration): ExperimentationOptOutMode {
   const mode =
     options.experimentationOptOutMode === undefined
       ? ExperimentationOptOutMode.Disabled
       : options.experimentationOptOutMode
-  if (mode !== ExperimentationOptOutMode.Disabled && mode !== ExperimentationOptOutMode.Immediate) {
-    throw new Error('experimentationOptOutMode must be disabled or immediate')
+  if (
+    mode !== ExperimentationOptOutMode.Disabled &&
+    mode !== ExperimentationOptOutMode.Immediate &&
+    mode !== ExperimentationOptOutMode.FutureExperimentsOnly
+  ) {
+    throw new Error('experimentationOptOutMode must be disabled, immediate, or future_experiments_only')
   }
-  return mode === ExperimentationOptOutMode.Immediate
+  return mode
 }
