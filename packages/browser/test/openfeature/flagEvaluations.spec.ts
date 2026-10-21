@@ -1,4 +1,4 @@
-import { FlagEvaluationAggregator } from '@datadog/flagging-core'
+import { bindPrecomputedDependencyEvaluations, FlagEvaluationAggregator } from '@datadog/flagging-core'
 import { ErrorCode, type EvaluationDetails, type HookContext } from '@openfeature/web-sdk'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
@@ -118,5 +118,39 @@ describe('createFlagEvalEVPHook', () => {
     }).not.toThrow()
     expect(addEvaluationSpy).toHaveBeenCalledTimes(1)
     expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails, expectedError)
+  })
+
+  it('tracks ordered dependency evaluations before the root evaluation', () => {
+    const flagMetadata = { allocationKey: 'root-allocation' }
+    bindPrecomputedDependencyEvaluations(flagMetadata, [
+      {
+        flagKey: 'parent',
+        allocationKey: 'parent-allocation',
+        variationKey: 'parent-on',
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+      { flagKey: 'missing-parent', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
+      { flagKey: 'failed-ancestor', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
+    ])
+    const details: EvaluationDetails<boolean> = {
+      flagKey: 'root',
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.FLAG_NOT_FOUND,
+      flagMetadata,
+    }
+    const context = { targetingKey: 'subject' }
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    hook = createFlagEvalEVPHook(mockConfiguration)
+
+    hook.finally?.({ context } as HookContext, details)
+
+    expect(addEvaluationSpy.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['parent', undefined],
+      ['missing-parent', ErrorCode.FLAG_NOT_FOUND],
+      ['failed-ancestor', ErrorCode.FLAG_NOT_FOUND],
+      ['root', ErrorCode.FLAG_NOT_FOUND],
+    ])
   })
 })

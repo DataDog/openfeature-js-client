@@ -92,7 +92,9 @@ describe('browser flag-key obfuscation', () => {
       flagMetadata: { allocationKey: 'allocation-1', doLog: true, __dd_split_serial_id: 123 },
     })
     const request = fetchMock.mock.calls[0][1]
-    expect(request.headers['X-DD-FEATURE-FLAGS-CAPABILITIES']).toBe('assignment-encoding-flag-key-256-v1')
+    expect(request.headers['X-DD-FEATURE-FLAGS-CAPABILITIES']).toBe(
+      'assignment-encoding-flag-key-256-v1,dependent-flag-variant-key-v1'
+    )
     expect(JSON.parse(request.body).data.attributes).not.toHaveProperty('supported_capabilities')
     expect(JSON.parse(request.body).data.attributes).toMatchObject({
       source: { sdk_name: 'browser', sdk_version: '1.0.0-test' },

@@ -7,7 +7,10 @@ const MAX_CACHED_KEYS = 1024
 const lookupCaches = new WeakMap<FlagKeyObfuscation, { salt: string; keys: Map<string, string> }>()
 
 /** Capabilities supported by the precomputed parser and evaluator. @internal */
-export const SUPPORTED_FLAGS_CAPABILITIES = ['assignment-encoding-flag-key-256-v1'] as const
+export const SUPPORTED_FLAGS_CAPABILITIES = [
+  'assignment-encoding-flag-key-256-v1',
+  'dependent-flag-variant-key-v1',
+] as const
 
 /** Public metadata stored with the encoded assignment map. @internal */
 export type FlagKeyObfuscation = {

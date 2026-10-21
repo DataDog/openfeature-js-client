@@ -200,7 +200,7 @@ describe('createFlagsConfigurationFetcher', () => {
       await fetcher(mockContext)
 
       expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
-        'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1',
+        'X-DD-FEATURE-FLAGS-CAPABILITIES': 'assignment-encoding-flag-key-256-v1,dependent-flag-variant-key-v1',
       })
     })
 

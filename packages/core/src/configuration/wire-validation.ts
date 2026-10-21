@@ -67,8 +67,9 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
 }
 
 function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
+  if (!isRecord(value) || !isDependencyEvaluations(value.dependencyEvaluations)) return false
+  if (value.reason === 'ERROR') return typeof value.errorCode === 'string'
   if (
-    !isRecord(value) ||
     typeof value.allocationKey !== 'string' ||
     typeof value.variationKey !== 'string' ||
     typeof value.variationType !== 'string' ||
@@ -89,6 +90,21 @@ function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
     )
   }
   return false
+}
+
+function isDependencyEvaluations(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(isDependencyEvaluation))
+}
+
+function isDependencyEvaluation(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.flagKey !== 'string' || typeof value.reason !== 'string') return false
+  if (value.reason === 'ERROR') return typeof value.errorCode === 'string'
+  return (
+    typeof value.allocationKey === 'string' &&
+    typeof value.variationKey === 'string' &&
+    typeof value.doLog === 'boolean' &&
+    (value.serialId === undefined || value.serialId === null || typeof value.serialId === 'number')
+  )
 }
 
 function isJsonValue(value: unknown): boolean {

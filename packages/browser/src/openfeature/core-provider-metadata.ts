@@ -1,3 +1,4 @@
+import { inheritPrecomputedDependencyEvaluations } from '@datadog/flagging-core'
 import type { EvaluationDetails, FlagValue, ResolutionDetails } from '@openfeature/web-sdk'
 
 const CORE_CONFIGURATION_ID_METADATA_KEY = '__dd_core_configuration_id'
@@ -16,12 +17,14 @@ export function withCoreConfigurationId<T extends FlagValue>(
     return details
   }
 
+  const flagMetadata = {
+    ...details.flagMetadata,
+    [CORE_CONFIGURATION_ID_METADATA_KEY]: configurationId,
+  }
+  inheritPrecomputedDependencyEvaluations(details.flagMetadata, flagMetadata)
   return {
     ...details,
-    flagMetadata: {
-      ...details.flagMetadata,
-      [CORE_CONFIGURATION_ID_METADATA_KEY]: configurationId,
-    },
+    flagMetadata,
   }
 }
 

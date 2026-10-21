@@ -5,6 +5,7 @@ import {
   createExposureEvent,
   type ExposureEvent,
   type ExposureEventWithTimestamp,
+  getPrecomputedDependencyEvaluations,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
@@ -48,32 +49,35 @@ export function createExposureLoggingHook(
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
         return
       }
-      const timestamp = timeStampNow()
-      const exposureEvent = createExposureEvent(getEvaluationContext(hookContext.context), details)
-      if (!exposureEvent) {
-        return
-      }
-      const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
-
-      const hasLoggedAssignment = exposureCache.has(exposureCacheEntry)
-      if (hasLoggedAssignment) {
-        return
-      }
-
+      const context = getEvaluationContext(hookContext.context)
+      const evaluations = [...getPrecomputedDependencyEvaluations(details), details]
       try {
-        const url = window?.location?.href
-        const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
-          ...exposureEvent,
-          ...(configuration.service ? { service: configuration.service } : {}),
-          rum: {
-            ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
-            ...(url && { view: { url } }),
-          },
-          timestamp,
+        const pending: Array<{ exposureEvent: ExposureEvent; exposureCacheEntry: ExposureCacheEntry }> = []
+        for (const evaluation of evaluations) {
+          const exposureDetails = evaluation as EvaluationDetails<FlagValue>
+          const exposureEvent = createExposureEvent(context, exposureDetails)
+          if (!exposureEvent) continue
+          // Dependency exposures belong to the same immutable configuration
+          // snapshot as the root result.
+          const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
+          if (!exposureCache.has(exposureCacheEntry)) pending.push({ exposureEvent, exposureCacheEntry })
         }
-        exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
-        // Only cache if batch.add() succeeds
-        exposureCache.set(exposureCacheEntry)
+        const timestamp = timeStampNow()
+        const url = window?.location?.href
+        for (const { exposureEvent, exposureCacheEntry } of pending) {
+          const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
+            ...exposureEvent,
+            ...(configuration.service ? { service: configuration.service } : {}),
+            rum: {
+              ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+              ...(url && { view: { url } }),
+            },
+            timestamp,
+          }
+          exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
+          // Only cache if batch.add() succeeds.
+          exposureCache.set(exposureCacheEntry)
+        }
       } catch (error) {
         addTelemetryDebug('Error adding exposure to batch', {
           'error.message': error instanceof Error ? error.message : String(error),

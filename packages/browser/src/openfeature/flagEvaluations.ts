@@ -8,7 +8,11 @@ import {
   createPageMayExitObservable,
   Observable,
 } from '@datadog/browser-core'
-import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
+import {
+  FlagEvaluationAggregator,
+  type FlagEvaluationEvent,
+  getPrecomputedDependencyEvaluations,
+} from '@datadog/flagging-core'
 import {
   ErrorCode,
   type EvaluationContext,
@@ -95,7 +99,15 @@ export function createFlagEvalEVPHook(
             details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
               ? details.errorCode
               : ErrorCode.GENERAL
-          aggregator.addEvaluation(getEvaluationContext(hookContext.context), details, errorCode)
+          const context = getEvaluationContext(hookContext.context)
+          for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+            const dependencyErrorCode =
+              dependency.errorCode === undefined || Object.values(ErrorCode).includes(dependency.errorCode)
+                ? dependency.errorCode
+                : ErrorCode.GENERAL
+            aggregator.addEvaluation(context, dependency as EvaluationDetails<FlagValue>, dependencyErrorCode)
+          }
+          aggregator.addEvaluation(context, details, errorCode)
         } catch (error) {
           addTelemetryDebug('Error adding evaluation to aggregator', {
             'error.message': error instanceof Error ? error.message : String(error),

@@ -8,6 +8,7 @@ import {
 } from '../configuration'
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { getOwnProperty } from './getOwnProperty'
+import { bindPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   flagsConfiguration: FlagsConfiguration | undefined,
@@ -115,6 +116,17 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  if ('errorCode' in flag) {
+    const flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(flagMetadata, flag.dependencyEvaluations)
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: flag.errorCode as ErrorCode,
+      flagMetadata,
+    }
+  }
+
   if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
     return {
       value: defaultValue,
@@ -123,15 +135,17 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  const flagMetadata = {
+    allocationKey: flag.allocationKey,
+    variationType: flag.variationType,
+    doLog: flag.doLog,
+    ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
+  } as PrecomputedFlagMetadata
+  bindPrecomputedDependencyEvaluations(flagMetadata, flag.dependencyEvaluations)
   return {
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
-    flagMetadata: {
-      allocationKey: flag.allocationKey,
-      variationType: flag.variationType,
-      doLog: flag.doLog,
-      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
-    } as PrecomputedFlagMetadata,
+    flagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
 }

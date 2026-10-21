@@ -1,4 +1,5 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
+import { bindPrecomputedDependencyEvaluations } from '@datadog/flagging-core'
 import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
@@ -65,12 +66,22 @@ describe('Exposures End-to-End', () => {
         const hook = tracking.hooks[0]
         expect(hook.after).toBeUndefined()
         expect(hook.finally).toBeDefined()
+        const flagMetadata = { allocationKey: 'allocation-a', doLog: true }
+        bindPrecomputedDependencyEvaluations(flagMetadata, [
+          {
+            flagKey: 'parent',
+            allocationKey: 'parent-allocation',
+            variationKey: 'parent-on',
+            reason: 'TARGETING_MATCH',
+            doLog: true,
+          },
+        ])
         hook.finally!({ context: { targetingKey: 'test-user' } } as HookContext, {
           flagKey: 'test-flag',
           value: false,
           variant: 'variant-a',
           reason: 'TARGETING_MATCH',
-          flagMetadata: { allocationKey: 'allocation-a', doLog: true },
+          flagMetadata,
           ...fallbackDetails,
         })
       } finally {
@@ -79,6 +90,43 @@ describe('Exposures End-to-End', () => {
       expect(fetchMock).not.toHaveBeenCalled()
     }
   )
+
+  it('emits dependency exposures before the root only after the graph succeeds', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 })
+    const tracking = createDatadogExposureLoggingHook(baseProviderConfig)
+    await tracking.initialize()
+    try {
+      const flagMetadata = { allocationKey: 'root-allocation', doLog: true }
+      bindPrecomputedDependencyEvaluations(flagMetadata, [
+        {
+          flagKey: 'parent',
+          allocationKey: 'parent-allocation',
+          variationKey: 'parent-on',
+          reason: 'TARGETING_MATCH',
+          doLog: true,
+          serialId: 12,
+        },
+      ])
+      tracking.hooks[0].finally!({ context: { targetingKey: 'subject' } } as HookContext, {
+        flagKey: 'root',
+        value: true,
+        variant: 'root-on',
+        reason: 'TARGETING_MATCH',
+        flagMetadata,
+      })
+      triggerBatch()
+
+      const events = parseExposureEvents(getExposuresCalls()[0][1].body)
+      expect(events.map((event) => event.flag.key)).toEqual(['parent', 'root'])
+      expect(events[0]).toMatchObject({
+        allocation: { key: 'parent-allocation' },
+        variant: { key: 'parent-on' },
+        serial_id: 12,
+      })
+    } finally {
+      await tracking.shutdown?.()
+    }
+  })
 
   it('should send exposure events to correct endpoint with proper payload', async () => {
     // Mock server responses
