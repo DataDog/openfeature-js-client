@@ -1,6 +1,6 @@
 import type { Channel } from 'node:diagnostics_channel'
 import { type ExposureEvent, type Flag, OperatorType, type UniversalFlagConfigurationV1 } from '@datadog/flagging-core'
-import type { Logger } from '@openfeature/server-sdk'
+import type { JsonValue, Logger } from '@openfeature/server-sdk'
 import { DatadogNodeServerProvider, type DependencyEvaluationEvent } from '../src/provider'
 
 const logger: Logger = {
@@ -135,6 +135,31 @@ describe('dependent flag exposures', () => {
       'root',
     ])
   })
+
+  it('does not snapshot dependency values without evaluation subscribers', async () => {
+    let valueReads = 0
+    const value: Record<string, JsonValue> = {}
+    Object.defineProperty(value, 'nested', {
+      enumerable: true,
+      get: () => {
+        valueReads += 1
+        return true
+      },
+    })
+    const exposureChannel = channel<ExposureEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['json-prerequisite']),
+        'json-prerequisite': jsonFlag('json-prerequisite', value),
+      })
+    )
+
+    await expect(
+      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
+    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    expect(valueReads).toBe(0)
+  })
 })
 
 function channel<T>(): jest.Mocked<Channel<T, T>> {
@@ -165,6 +190,16 @@ function booleanFlag(key: string): Flag {
     enabled: true,
     variationType: 'BOOLEAN',
     variations: { on: { key: 'on', value: true }, off: { key: 'off', value: false } },
+    allocations: [{ key: `${key}-allocation`, doLog: true, rules: [], splits: [{ variationKey: 'on', shards: [] }] }],
+  }
+}
+
+function jsonFlag(key: string, value: Record<string, JsonValue>): Flag {
+  return {
+    key,
+    enabled: true,
+    variationType: 'JSON',
+    variations: { on: { key: 'on', value } },
     allocations: [{ key: `${key}-allocation`, doLog: true, rules: [], splits: [{ variationKey: 'on', shards: [] }] }],
   }
 }

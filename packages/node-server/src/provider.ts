@@ -162,7 +162,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
@@ -182,7 +182,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
@@ -202,7 +202,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
@@ -228,11 +228,20 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      (evaluation) => this.handleDependencyEvaluation(context, evaluation),
+      this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
+  }
+
+  private dependencyEvaluationHandler(
+    context: EvaluationContext
+  ): ((evaluation: DependencyEvaluation) => void) | undefined {
+    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
+      return undefined
+    }
+    return (evaluation) => this.handleDependencyEvaluation(context, evaluation)
   }
 
   private handleDependencyEvaluation(context: EvaluationContext, evaluation: DependencyEvaluation): void {
