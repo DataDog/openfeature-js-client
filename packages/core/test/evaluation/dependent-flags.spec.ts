@@ -152,6 +152,7 @@ describe('dependent flag evaluation', () => {
     const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies).toMatchObject([
+      { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
     expect(onExposures).not.toHaveBeenCalled()
@@ -207,7 +208,7 @@ describe('dependent flag evaluation', () => {
 
     const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
-    expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite'])
+    expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
     expect(onExposures).not.toHaveBeenCalled()
   })
 

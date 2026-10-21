@@ -352,7 +352,7 @@ function dependencyGraphFailure<T extends FlagValue>(
 
 export type DependencyEvaluation = {
   flagKey: string
-  details: ResolutionDetails<FlagValue>
+  details: Omit<ResolutionDetails<FlagValue>, 'value'> & { value?: FlagValue }
 }
 
 export type DependencyExposureCandidate = {
@@ -414,6 +414,7 @@ class DependencyEvaluationSession {
 
     const flag = this.getFlag(flagKey)
     if (flag === undefined) {
+      this.emitMissingFlagEvaluation(flagKey)
       throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
     }
 
@@ -487,6 +488,7 @@ class DependencyEvaluationSession {
     const flag = this.getFlag(flagKey)
     if (flag === undefined) {
       this.logger.warn('prerequisite flag is missing', { flagKey })
+      this.emitMissingFlagEvaluation(flagKey)
       throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
     }
 
@@ -508,6 +510,18 @@ class DependencyEvaluationSession {
     } catch {
       // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
     }
+  }
+
+  private emitMissingFlagEvaluation(flagKey: string): void {
+    this.emitEvaluation({
+      flagKey,
+      details: {
+        reason: 'ERROR',
+        errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+        errorMessage: 'prerequisite flag is missing',
+        flagMetadata: createEvaluationMetadata(this.evaluationTimestampMs, this.observeFullEvaluationData),
+      },
+    })
   }
 
   private toDependencyGraphError(flagKey: string, error: unknown): DependencyGraphError {

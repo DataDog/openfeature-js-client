@@ -56,7 +56,7 @@ export interface DatadogNodeServerProviderOptions {
 
 export type DependencyEvaluationEvent = {
   context: EvaluationContext
-  details: EvaluationDetails<FlagValue>
+  details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
 }
 
 export class DatadogNodeServerProvider implements Provider {
