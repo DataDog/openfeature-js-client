@@ -25,6 +25,8 @@ export const MAX_FLAG_SELECTION_KEY_PATTERN_BYTES = 200
 // String.prototype.trim differs: it also trims U+FEFF and does not trim U+0085.
 const WHITE_SPACE = '[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]'
 const SURROUNDING_WHITE_SPACE = new RegExp(`^${WHITE_SPACE}+|${WHITE_SPACE}+$`, 'g')
+// Not String.prototype.isWellFormed (ES2024, outside the ES2018 target) or lookbehind (unsupported before Safari 16.4).
+const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
 /**
  * Canonicalizes and validates a flag selection the same way Compute and ffe-service do.
@@ -33,10 +35,6 @@ const SURROUNDING_WHITE_SPACE = new RegExp(`^${WHITE_SPACE}+|${WHITE_SPACE}+$`, 
 export function canonicalizeFlagSelection(input: unknown): CanonicalizeFlagSelectionResult {
   if (input === undefined || input === null) return {}
   if (typeof input !== 'object' || Array.isArray(input)) return { error: 'malformed_selection' }
-  if (Object.keys(input).some((key) => key !== 'tags' && key !== 'keyPatterns')) {
-    return { error: 'malformed_selection' }
-  }
-
   const { tags: rawTags, keyPatterns: rawKeyPatterns } = input as Record<string, unknown>
   if (!isOptionalStringList(rawTags) || !isOptionalStringList(rawKeyPatterns)) {
     return { error: 'malformed_selection' }
@@ -60,7 +58,11 @@ export function canonicalizeFlagSelection(input: unknown): CanonicalizeFlagSelec
 }
 
 function isOptionalStringList(value: unknown): value is string[] | undefined | null {
-  return value === undefined || value === null || (Array.isArray(value) && value.every((v) => typeof v === 'string'))
+  return (
+    value === undefined ||
+    value === null ||
+    (Array.isArray(value) && value.every((v) => typeof v === 'string' && !UNPAIRED_SURROGATE.test(v)))
+  )
 }
 
 function canonicalizeList(values: string[]): string[] {
