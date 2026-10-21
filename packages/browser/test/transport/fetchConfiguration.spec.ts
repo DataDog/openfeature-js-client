@@ -541,7 +541,9 @@ describe('createFlagsConfigurationFetcher', () => {
           tags: ['beta', 'team:web'],
           key_patterns: ['ffe-*'],
         })
-        expect(mockFetch.mock.calls[0][0]).toBe('https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test')
+        expect(mockFetch.mock.calls[0][0]).toBe(
+          'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test'
+        )
         expect(displayError).not.toHaveBeenCalled()
         expect(addTelemetryDebug).not.toHaveBeenCalled()
       })
@@ -586,24 +588,27 @@ describe('createFlagsConfigurationFetcher', () => {
           'k'.repeat(201),
         ],
         ['malformed_selection', { tags: 'secret-tag' }, 'string arrays', 'secret-tag'],
-      ])('drops a %s selection, loads the full configuration, and reports it once', async (reason, flagSelection, limit, value) => {
-        const fetcher = createFlagsConfigurationFetcher({
-          ...baseConfig,
-          flagSelection: flagSelection as FlaggingInitConfiguration['flagSelection'],
-        })
+      ])(
+        'drops a %s selection, loads the full configuration, and reports it once',
+        async (reason, flagSelection, limit, value) => {
+          const fetcher = createFlagsConfigurationFetcher({
+            ...baseConfig,
+            flagSelection: flagSelection as FlaggingInitConfiguration['flagSelection'],
+          })
 
-        await expect(fetcher(mockContext)).resolves.toHaveProperty('precomputed')
-        await fetcher(mockContext)
+          await expect(fetcher(mockContext)).resolves.toHaveProperty('precomputed')
+          await fetcher(mockContext)
 
-        expect(requestBody(0).data.attributes).not.toHaveProperty('flag_selection')
-        expect(requestBody(1).data.attributes).not.toHaveProperty('flag_selection')
-        expect(displayError).toHaveBeenCalledTimes(1)
-        expect(displayError.mock.calls[0][0]).toContain(reason)
-        expect(displayError.mock.calls[0][0]).toContain(limit)
-        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
-        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection dropped', { reason })
-        expectNoTelemetryValues(value)
-      })
+          expect(requestBody(0).data.attributes).not.toHaveProperty('flag_selection')
+          expect(requestBody(1).data.attributes).not.toHaveProperty('flag_selection')
+          expect(displayError).toHaveBeenCalledTimes(1)
+          expect(displayError.mock.calls[0][0]).toContain(reason)
+          expect(displayError.mock.calls[0][0]).toContain(limit)
+          expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+          expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection dropped', { reason })
+          expectNoTelemetryValues(value)
+        }
+      )
 
       it('reports a selection ignored by the server once per response and keeps the full configuration', async () => {
         mockFetch.mockResolvedValue({
@@ -652,7 +657,11 @@ describe('createFlagsConfigurationFetcher', () => {
       ])('percent-encodes %j as %s', async (value, encoded) => {
         const customFetch = jest.fn().mockResolvedValue(rulesResponse())
 
-        await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { keyPatterns: [value] } })
+        await fetchRulesConfiguration({
+          ...baseFetchOptions,
+          fetch: customFetch,
+          flagSelection: { keyPatterns: [value] },
+        })
 
         expect(customFetch.mock.calls[0][0]).toBe(`${rulesUrl}?dd_env=test&selected_flag_key_patterns=${encoded}`)
       })
@@ -684,7 +693,11 @@ describe('createFlagsConfigurationFetcher', () => {
         const customFetch = jest.fn().mockResolvedValue(rulesResponse())
         const keyPatterns = Array.from({ length: 31 }, (_, index) => `${index}`.padEnd(200, '*'))
 
-        const result = await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { keyPatterns } })
+        const result = await fetchRulesConfiguration({
+          ...baseFetchOptions,
+          fetch: customFetch,
+          flagSelection: { keyPatterns },
+        })
 
         expect(result.rules).toBeDefined()
         expect(customFetch).toHaveBeenCalledTimes(1)
@@ -700,7 +713,10 @@ describe('createFlagsConfigurationFetcher', () => {
       it('sends the selection when the URL is exactly 8192 bytes', async () => {
         const customFetch = jest.fn().mockResolvedValue(rulesResponse())
         const keyPatterns = Array.from({ length: 31 }, (_, index) => `${index}`.padEnd(200, 'k'))
-        const patternsLength = keyPatterns.reduce((total, pattern) => total + '&selected_flag_key_patterns='.length + pattern.length, 0)
+        const patternsLength = keyPatterns.reduce(
+          (total, pattern) => total + '&selected_flag_key_patterns='.length + pattern.length,
+          0
+        )
         const tagRoom = 8192 - `${rulesUrl}?dd_env=test`.length - patternsLength
         const tagCount = Math.ceil(tagRoom / 200)
         const tagValueBytes = tagRoom - tagCount * '&selected_flag_tags='.length
@@ -715,9 +731,9 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       it('reports a selection ignored by the server and keeps the full configuration', async () => {
-        const customFetch = jest.fn().mockResolvedValue(
-          rulesResponse({ 'DD-Flag-Selection-Ignored': 'too_many_values' })
-        )
+        const customFetch = jest
+          .fn()
+          .mockResolvedValue(rulesResponse({ 'DD-Flag-Selection-Ignored': 'too_many_values' }))
 
         const result = await fetchRulesConfiguration({
           ...baseFetchOptions,

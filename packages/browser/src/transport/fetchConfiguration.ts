@@ -114,7 +114,9 @@ export function buildConfigurationHeaders(
   }
 }
 
-export function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration> {
+export function fetchPrecomputedConfiguration(
+  options: PrecomputedConfigurationFetchOptions
+): Promise<FlagsConfiguration> {
   return requestPrecomputedConfiguration(options)
 }
 
