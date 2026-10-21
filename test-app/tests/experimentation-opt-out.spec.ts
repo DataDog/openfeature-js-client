@@ -1,5 +1,18 @@
 import { expect, test } from '@playwright/test'
 
+type EvaluationEvent = {
+  flag: { key: string }
+  evaluation_count: number
+  runtime_default_used: boolean
+  error?: unknown
+  allocation?: { key: string }
+  context?: { evaluation?: { dd_experimentation_opt_out_at?: string } }
+}
+type ExposureEvent = {
+  allocation: { key: string }
+  subject: { attributes?: { dd_experimentation_opt_out_at?: string } }
+}
+
 declare global {
   interface Window {
     experimentationTest: {
@@ -91,7 +104,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
       page,
     }) => {
       const requests: { evaluation_options?: { experimentation_opt_out_mode?: string } }[] = []
-      const evaluations: { evaluation_count: number }[] = []
+      const evaluations: EvaluationEvent[] = []
       const exposures: unknown[] = []
       const errors: string[] = []
       let acknowledge = true
@@ -179,6 +192,21 @@ for (const mode of ['online', 'precomputed', 'rules']) {
       await page.evaluate(() => window.experimentationTest.close())
       await page.waitForLoadState('networkidle')
       expect(evaluations.reduce((sum, e) => sum + e.evaluation_count, 0)).toBeGreaterThanOrEqual(2)
+      const successfulOptedOut = evaluations.filter(
+        (event) =>
+          event.context?.evaluation?.dd_experimentation_opt_out_at === '2099-01-01T00:00:00Z' &&
+          !event.error &&
+          !event.runtime_default_used
+      )
+      expect(successfulOptedOut.map((event) => event.flag.key).sort()).toEqual(
+        mode === 'rules' ? ['test-flag'] : ['boolean', 'number', 'object', 'string']
+      )
+      expect(
+        successfulOptedOut.every(
+          (event) =>
+            event.allocation?.key === (disabled ? (mode === 'rules' ? 'allocation' : 'experiment') : 'fallback')
+        )
+      ).toBe(true)
       expect(exposures.length).toBe(disabled ? (mode === 'rules' ? 2 : 5) : 1)
       expect(errors).toEqual([])
     })
@@ -190,7 +218,20 @@ for (const mode of ['online', 'precomputed', 'rules']) {
     const requests: Record<string, unknown>[] = []
     let corruptAcknowledgement = false
     let offline = false
-    await page.route('**/intake/**', (route) => route.fulfill({ json: {} }))
+    const evaluations: EvaluationEvent[] = []
+    const exposures: ExposureEvent[] = []
+    await page.route('**/intake/**', async (route) => {
+      const url = new URL(route.request().url())
+      const events = route
+        .request()
+        .postData()!
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+      if (url.pathname.endsWith('/flagevaluation')) evaluations.push(...events)
+      else if (url.pathname.endsWith('/exposures')) exposures.push(...events)
+      await route.fulfill({ json: {} })
+    })
     await page.route('**/assignments*', async (route) => {
       if (offline) return route.fulfill({ status: 503, body: 'offline' })
       const attributes = route.request().postDataJSON().data.attributes
@@ -232,6 +273,36 @@ for (const mode of ['online', 'precomputed', 'rules']) {
     expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(true)
     await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456789Z'))
     expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(false)
+    // Flush before navigation so this assertion cannot pass on an unrelated eligible evaluation.
+    await page.evaluate(() => window.experimentationTest.close())
+    await page.waitForLoadState('networkidle')
+    expect(evaluations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          allocation: { key: mode === 'rules' ? 'allocation' : 'older-experiment' },
+          runtime_default_used: false,
+          context: expect.objectContaining({
+            evaluation: expect.objectContaining({
+              dd_experimentation_opt_out_at: '2026-10-01T12:00:00.123456790Z',
+            }),
+          }),
+        }),
+      ])
+    )
+    expect(exposures).toEqual([
+      expect.objectContaining({
+        allocation: expect.objectContaining({ key: mode === 'rules' ? 'allocation' : 'older-experiment' }),
+        subject: expect.objectContaining({
+          attributes: expect.objectContaining({
+            dd_experimentation_opt_out_at: '2026-10-01T12:00:00.123456790Z',
+          }),
+        }),
+      }),
+    ])
+    // Restore the provider for the cache and acknowledgement checks below.
+    await page.reload()
+    await page.waitForFunction(() => '__OPENFEATURE_SMOKE_RESULT__' in globalThis)
+    await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456789Z'))
     if (mode !== 'rules') {
       expect(requests[1].evaluation_options).toEqual({ experimentation_opt_out_mode: 'future_experiments_only' })
       if (mode === 'online') {

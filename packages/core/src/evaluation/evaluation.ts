@@ -41,7 +41,14 @@ export function evaluate<T extends FlagValueType>(
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutMode)
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedConfiguration(flagsConfiguration, type, flagKey, defaultValue, context)
+    return evaluatePrecomputedConfiguration(
+      flagsConfiguration,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      experimentationOptOutMode
+    )
   }
 
   if (selection.kind === 'rules') {
@@ -104,8 +111,8 @@ function selectFlagsConfiguration(
   if (
     configuration.precomputed &&
     configMatchesContext(configuration, context) &&
-    (!optedOut ||
-      (configuration.precomputed.context !== undefined && acknowledgesExperimentationOptOut(configuration, optedOut)))
+    (!optedOut || configuration.precomputed.context !== undefined) &&
+    acknowledgesExperimentationOptOut(configuration, optedOut)
   ) {
     return { kind: 'precomputed', configuration: configuration.precomputed }
   }

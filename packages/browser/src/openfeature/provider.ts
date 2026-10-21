@@ -116,7 +116,10 @@ export class DatadogProvider extends DatadogProviderBase {
     super()
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.configuration = validateAndBuildFlaggingConfiguration(options)
-    const getTrackingContext = () => this.evaluationContext ?? this.requestedEvaluationContext
+    const getTrackingContext = () =>
+      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+        ? this.requestedEvaluationContext
+        : (this.evaluationContext ?? this.requestedEvaluationContext)
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
@@ -252,7 +255,8 @@ export class DatadogProvider extends DatadogProviderBase {
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
     const canUse = (config: FlagsConfiguration | undefined) =>
       configMatchesContext(config, context) &&
-      (!optedOut || (config?.precomputed?.context !== undefined && acknowledgesExperimentationOptOut(config, optedOut)))
+      (!optedOut || config?.precomputed?.context !== undefined) &&
+      acknowledgesExperimentationOptOut(config, optedOut)
 
     // Prefer current config over cache if it matches the requested context
     const cachedConfigPromise = canUse(this.flagsConfiguration)
@@ -297,18 +301,21 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
+    const context =
+      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+        ? this.requestedEvaluationContext
+        : (this.evaluationContext ?? {})
     return bindEvaluationTelemetryResult(
       evaluatePrecomputedConfiguration(
         this.flagsConfiguration,
         type,
         flagKey,
         defaultValue,
-        this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
-          ? this.requestedEvaluationContext
-          : (this.evaluationContext ?? {}),
+        context,
         this.experimentationOptOutMode
       ),
-      this.telemetryPolicy
+      this.telemetryPolicy,
+      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled ? context : undefined
     )
   }
 }

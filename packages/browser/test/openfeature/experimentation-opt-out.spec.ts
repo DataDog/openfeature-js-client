@@ -1,11 +1,18 @@
-import { experimentationOptOutPolicy, type FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  evaluate,
+  evaluatePrecomputedConfiguration,
+  experimentationOptOutPolicy,
+  type FlagsConfiguration,
+} from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
+import { type EvaluationContext, OpenFeature } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import rulesWire from '../data/rules-v1-wire.json'
+import { createDeferred } from '../transport/fetchTestUtils'
 
 const context = { targetingKey: 'subject', country: 'US', dd_experimentation_opt_out_at: '2026-10-19T12:00:00Z' }
 const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
@@ -50,6 +57,79 @@ const online = (fetch: typeof globalThis.fetch, token = 'test') =>
   })
 
 describe('immediate experimentation opt-out', () => {
+  describe.each(['immediate', 'future_experiments_only'] as const)('snapshot filtered by %s', (mode) => {
+    const filtered = (boundContext: EvaluationContext = context): FlagsConfiguration => {
+      const payload = response(true)
+      return {
+        precomputed: {
+          context: boundContext,
+          response: {
+            ...payload,
+            data: {
+              attributes: {
+                ...payload.data.attributes,
+                evaluation_options: {
+                  experimentation_opt_out: true,
+                  experimentation_opt_out_mode: mode,
+                  dd_experimentation_opt_out_at: context.dd_experimentation_opt_out_at,
+                },
+              },
+            },
+          },
+        },
+      } as FlagsConfiguration
+    }
+
+    it.each([
+      [ExperimentationOptOutMode.Disabled, context],
+      [ExperimentationOptOutMode.Immediate, eligible],
+      [ExperimentationOptOutMode.FutureExperimentsOnly, eligible],
+    ])('rejects it without effective exclusion: %s, %j', async (policy, subject) => {
+      const config = filtered(subject)
+      const core = new DatadogCoreProvider({ experimentationOptOutMode: policy })
+      core.setConfiguration(config)
+      await expect(core.initialize(subject)).rejects.toThrow()
+      expect(evaluatePrecomputedConfiguration(config, 'boolean', 'boolean', false, subject, policy).errorCode).toBe(
+        'INVALID_CONTEXT'
+      )
+      expect(evaluate(config, 'boolean', 'boolean', false, subject, logger, policy).errorCode).toBe('INVALID_CONTEXT')
+      core.setConfiguration({ ...config, ...configurationFromString(JSON.stringify(rulesWire)) })
+      await core.initialize(subject)
+      expect(core.resolveBooleanEvaluation('test-flag', false, subject, logger).flagMetadata?.doLog).toBe(true)
+    })
+
+    it.each(['initial', 'persistent'] as const)('rejects an offline %s snapshot when disabled', async (source) => {
+      const config = filtered()
+      const token = `disabled-${mode}-${source}`
+      if (source === 'persistent') {
+        const cache = new IndexedDBFlagsCache(token)
+        cache.set(config, context, false)
+        await cache.get(context, false)
+      }
+      const provider = new DatadogProvider({
+        clientToken: token,
+        env: 'test',
+        initialFlagsConfiguration: source === 'initial' ? config : undefined,
+        experimentationOptOutMode: ExperimentationOptOutMode.Disabled,
+        flagConfigurationFetch: jest.fn().mockRejectedValue(new Error('offline')),
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+      await expect(provider.initialize(context)).rejects.toThrow('offline')
+      expect(provider.resolveBooleanEvaluation('boolean', false, context, logger).value).toBe(false)
+      await provider.onClose()
+    })
+  })
+
+  it.each([undefined, context])('preserves unmarked legacy snapshots with context %j', async (boundContext) => {
+    const config = { precomputed: { context: boundContext, response: response() } } as FlagsConfiguration
+    const core = new DatadogCoreProvider()
+    core.setConfiguration(config)
+    await core.initialize(context)
+    expect(core.resolveBooleanEvaluation('boolean', false, context, logger).value).toBe(true)
+  })
+
   it('skips local experiment allocations before selecting the ordinary fallback', async () => {
     const options = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
     const provider = new DatadogCoreProvider({ ...options, enableEvaluationTelemetryOptOutParameter: false })
@@ -217,6 +297,134 @@ describe('immediate experimentation opt-out', () => {
     expect(() => new DatadogCoreProvider({ experimentationOptOutMode: mode as ExperimentationOptOutMode })).toThrow(
       'disabled, immediate'
     )
+  })
+})
+
+describe('experimentation opt-out tracking identity', () => {
+  const domain = 'experimentation-tracking'
+  let originalFetch: typeof globalThis.fetch
+  let intake: jest.Mock
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    originalFetch = globalThis.fetch
+    intake = jest.fn().mockResolvedValue({ ok: true, status: 200 })
+    globalThis.fetch = intake
+  })
+  afterEach(async () => {
+    OpenFeature.getClient(domain).clearHooks()
+    await OpenFeature.clearProviders()
+    await OpenFeature.clearContext()
+    globalThis.fetch = originalFetch
+    jest.useRealTimers()
+  })
+  const events = (channel: string) =>
+    intake.mock.calls
+      .filter(([url]) => String(url).includes(`/${channel}`))
+      .flatMap(([, options]) =>
+        String(options.body)
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line))
+      )
+
+  const trackingProvider = (fetch: typeof globalThis.fetch, mode = ExperimentationOptOutMode.Immediate) =>
+    new DatadogProvider({
+      experimentationOptOutMode: mode,
+      clientToken: 'tracking-identity',
+      env: 'test',
+      flagConfigurationFetch: fetch,
+      flagEvaluationTrackingInterval: 1000,
+      enableEvaluationTelemetryOptOutParameter: true,
+      enableExposureLogging: true,
+      enableFlagEvaluationTracking: true,
+      enableRumFeatureFlagTracking: false,
+    })
+
+  it.each(['failed', 'completed'] as const)(
+    'uses the requested subject while pending and after a %s refresh',
+    async (outcome) => {
+      const pending = createDeferred<ReturnType<typeof fetchResponse>>()
+      const fetch = jest.fn().mockResolvedValueOnce(fetchResponse()).mockReturnValueOnce(pending.promise)
+      const provider = trackingProvider(fetch)
+      const a = { targetingKey: 'subject-A' }
+      const b = { ...context, targetingKey: 'subject-B' }
+      await OpenFeature.setProviderAndWait(domain, provider, a)
+      const client = OpenFeature.getClient(domain)
+      const update = OpenFeature.setContext(domain, b).catch(() => {})
+      expect(client.getBooleanDetails('boolean', false)).toMatchObject({ value: false, errorCode: 'INVALID_CONTEXT' })
+      if (outcome === 'failed') pending.resolve(Promise.reject(new Error('offline')))
+      else pending.resolve(fetchResponse(true))
+      await update
+      expect(client.getBooleanValue('boolean', false)).toBe(outcome === 'completed')
+      await provider.onClose()
+      const evaluations = events('flagevaluation')
+      expect(evaluations.reduce((total, event) => total + event.evaluation_count, 0)).toBe(2)
+      expect(evaluations.every((event) => event.targeting_key === 'subject-B')).toBe(true)
+    }
+  )
+
+  it('keeps the resolved subject when a customer after hook starts another context change', async () => {
+    const pending = createDeferred<ReturnType<typeof fetchResponse>>()
+    const payload = response()
+    payload.data.attributes.flags.boolean.doLog = true
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => payload })
+      .mockReturnValueOnce(pending.promise)
+    const provider = trackingProvider(fetch)
+    const a = { targetingKey: 'subject-A' }
+    await OpenFeature.setProviderAndWait(domain, provider, a)
+    const client = OpenFeature.getClient(domain)
+    let update: Promise<void> | undefined
+    client.addHooks({
+      after: () => {
+        update = OpenFeature.setContext(domain, { ...context, targetingKey: 'subject-B' })
+      },
+    })
+    expect(client.getBooleanValue('boolean', false)).toBe(true)
+    pending.resolve(fetchResponse(true))
+    await update
+    await provider.onClose()
+    expect(events('flagevaluation')).toEqual([
+      expect.objectContaining({ targeting_key: 'subject-A', evaluation_count: 1 }),
+    ])
+    expect(events('exposures')).toEqual([
+      expect.objectContaining({ subject: expect.objectContaining({ id: 'subject-A' }) }),
+    ])
+  })
+
+  it('keeps telemetry opt-out independent while a context update is pending', async () => {
+    const pending = createDeferred<ReturnType<typeof fetchResponse>>()
+    const fetch = jest.fn().mockResolvedValueOnce(fetchResponse()).mockReturnValueOnce(pending.promise)
+    const provider = trackingProvider(fetch)
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'subject-A' })
+    const update = OpenFeature.setContext(domain, {
+      ...context,
+      targetingKey: 'subject-B',
+      dd_evaluation_telemetry_opt_out: true,
+    })
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean', false)).toBe(false)
+    pending.resolve(fetchResponse(true))
+    await update
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean', false)).toBe(true)
+    await provider.onClose()
+    expect(events('flagevaluation')).toEqual([])
+  })
+
+  it('preserves active assignment attribution in disabled mode', async () => {
+    const pending = createDeferred<ReturnType<typeof fetchResponse>>()
+    const fetch = jest.fn().mockResolvedValueOnce(fetchResponse()).mockReturnValueOnce(pending.promise)
+    const provider = trackingProvider(fetch, ExperimentationOptOutMode.Disabled)
+    await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'subject-A' })
+    const update = OpenFeature.setContext(domain, { ...context, targetingKey: 'subject-B' })
+    expect(OpenFeature.getClient(domain).getBooleanValue('boolean', false)).toBe(true)
+    pending.resolve(fetchResponse())
+    await update
+    await provider.onClose()
+    expect(events('flagevaluation')).toEqual([
+      expect.objectContaining({ targeting_key: 'subject-A', evaluation_count: 1 }),
+    ])
   })
 })
 

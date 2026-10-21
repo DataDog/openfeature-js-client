@@ -96,13 +96,18 @@ export function hasExperimentationOptOut(context: Record<string, unknown>): bool
   return parseOptOutInstant(value) ? true : undefined
 }
 
-/** The edge must acknowledge exclusion before a precomputed snapshot can serve opted-out subjects. */
+/** Checks that a precomputed snapshot used the requested exclusion policy, including disabled mode. */
 export function acknowledgesExperimentationOptOut(
   configuration: FlagsConfiguration | undefined,
   policy: ExperimentationOptOutPolicy = { mode: 'immediate', cutoff: { seconds: 0, fraction: '' } }
 ): boolean {
-  if (!policy) return true
   const acknowledgement = configuration?.precomputed?.response.data.attributes.evaluation_options
+  if (!policy)
+    return (
+      acknowledgement?.experimentation_opt_out !== true &&
+      acknowledgement?.experimentation_opt_out_mode !== 'immediate' &&
+      acknowledgement?.experimentation_opt_out_mode !== 'future_experiments_only'
+    )
   if (policy.mode === 'immediate')
     return (
       acknowledgement?.experimentation_opt_out === true &&

@@ -33,15 +33,15 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
     }
   }
   if (
-    optedOut &&
-    (!flagsConfiguration?.precomputed?.context || !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut))
+    (optedOut && !flagsConfiguration?.precomputed?.context) ||
+    !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut)
   ) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       errorMessage:
-        'Precomputed configuration must match the opted-out subject and acknowledge experimentation opt-out',
+        'Precomputed configuration must match the subject and acknowledge the requested experimentation opt-out policy',
     }
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
