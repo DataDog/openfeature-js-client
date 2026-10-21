@@ -124,9 +124,24 @@ describe('canonicalizeFlagSelection', () => {
       ['keyPatterns that is not an array', { keyPatterns: { 0: 'a*' } }],
       ['a non-string tag', { tags: ['beta', 1] }],
       ['a non-string key pattern', { keyPatterns: [null] }],
-      ['an unknown key', { tags: ['beta'], key_patterns: ['a*'] }],
+      ['a tag with a lone high surrogate', { tags: ['beta\uD83D'] }],
+      ['a tag with a lone low surrogate', { tags: ['\uDE00beta'] }],
+      ['a key pattern with a lone high surrogate', { keyPatterns: ['a\uD83Db*'] }],
+      ['a key pattern with a lone low surrogate', { keyPatterns: ['a*\uDE00'] }],
     ])('returns malformed_selection for %s', (_, input) => {
       expect(canonicalizeFlagSelection(input)).toEqual({ error: 'malformed_selection' })
+    })
+
+    it('accepts well-formed surrogate pairs', () => {
+      expect(canonicalizeFlagSelection({ tags: ['team:\uD83D\uDE00'], keyPatterns: ['😀-*'] })).toEqual({
+        selection: { tags: ['team:😀'], keyPatterns: ['😀-*'] },
+      })
+    })
+
+    it('ignores unknown keys (selection still built from tags/keyPatterns)', () => {
+      expect(canonicalizeFlagSelection({ tags: ['beta'], keyPatterns: ['a*'], key_patterns: ['b*'] })).toEqual({
+        selection: { tags: ['beta'], keyPatterns: ['a*'] },
+      })
     })
   })
 
