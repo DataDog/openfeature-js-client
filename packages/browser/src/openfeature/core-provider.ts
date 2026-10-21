@@ -9,8 +9,14 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
+import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
 import { DatadogProviderBase } from './provider-base'
 
 export class DatadogCoreProvider extends DatadogProviderBase {
@@ -22,9 +28,11 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   private flagsConfigurationId: string | undefined
   private fallbackConfigurationSequence = 0
   private context: EvaluationContext | undefined
+  private readonly telemetryPolicy: EvaluationTelemetryPolicy
 
-  constructor() {
+  constructor(options: EvaluationTelemetryOptOutConfiguration = {}) {
     super()
+    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
   }
 
   getConfiguration(): FlagsConfiguration | undefined {
@@ -51,13 +59,15 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   }
 
   initialize(context: EvaluationContext = {}): Promise<void> {
+    this.telemetryPolicy.setContext(context)
     this.context = context
 
-    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, context))
+    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     return error ? Promise.reject(error) : Promise.resolve()
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
+    this.telemetryPolicy.setContext(newContext)
     this.context = newContext
     const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
     if (error) {
@@ -72,9 +82,12 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return withCoreConfigurationId(
-      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
-      this.flagsConfigurationId
+    return bindEvaluationTelemetryResult(
+      withCoreConfigurationId(
+        evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+        this.flagsConfigurationId
+      ),
+      this.telemetryPolicy
     )
   }
 
