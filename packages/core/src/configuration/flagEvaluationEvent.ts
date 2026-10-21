@@ -1,5 +1,6 @@
 import type { EvaluationContextValue } from '@openfeature/core'
 import type { TimeStamp } from '../time'
+import { sanitizeEvaluationError } from './evaluation-privacy'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 interface FlagEvaluationAggregationData {
@@ -35,8 +36,9 @@ export function createFlagEvaluationEvent(
     event.targeting_key = data.targetingKey
   }
 
-  if (data.error) {
-    event.error = { message: data.error }
+  const error = sanitizeEvaluationError(data.error)
+  if (error !== undefined) {
+    event.error = { message: error }
   }
 
   if (data.variantKey) {

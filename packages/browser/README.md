@@ -60,6 +60,22 @@ The custom Fetch implementation applies only to flag configuration requests. Exp
 requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
 authentication and any configured custom headers, and may route or transform the request as needed.
 
+### Evaluation telemetry privacy
+
+Flag-evaluation telemetry uses the `observeFullEvaluationData` setting from the configuration used
+for each evaluation. Only boolean `true` enables full data. Otherwise, nonempty valid targeting keys
+are sent as `sha256_` followed by the lowercase SHA-256 digest of their exact UTF-8 bytes, and
+`context.evaluation` is omitted. Empty keys remain empty; absent or malformed keys are omitted
+without losing the evaluation count. Datadog service/RUM metadata is retained.
+
+Cached configurations retain their setting until a normal refresh succeeds. A refresh does not
+change evaluations already queued for upload. Older configurations without the setting use protected
+telemetry. With full data enabled, evaluation context is copied before buffering.
+
+In both modes, telemetry errors contain stable codes rather than exception messages; unknown errors
+use `GENERAL`. Setting `enableFlagEvaluationTracking: false` still disables this telemetry entirely.
+The privacy setting does not change evaluation inputs, assignments, exposure logging, or RUM callbacks.
+
 ### Request Timeouts and Retries for npm Consumers
 
 The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose

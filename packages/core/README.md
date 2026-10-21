@@ -30,6 +30,19 @@ enabled and disabled, including legacy CommonJS and ESM resolution. It executes 
 in Node without `BigInt`, `TextEncoder`, or `TextDecoder`; this checks fallback behavior but does
 not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
+## Evaluation telemetry
+
+`FlagEvaluationAggregator` reads `__dd_observe_full_evaluation_data` from the evaluation result.
+Only literal `true` allows full data. Otherwise it hashes valid nonempty targeting keys with
+SHA-256 over exact UTF-8, preserves empty keys, omits invalid/missing keys, and discards evaluation
+context before aggregation. It keeps full-data and protected evaluations in separate groups.
+
+Full-data context is captured as an owned JSON copy; unserializable context is omitted while retaining
+the evaluation. The aggregator never consults a newer configuration during flush. Both modes use only
+`PROVIDER_NOT_READY`, `PROVIDER_FATAL`, `FLAG_NOT_FOUND`, `PARSE_ERROR`, `TYPE_MISMATCH`,
+`TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, or `GENERAL` for telemetry errors. Successful evaluations
+have no error field. This behavior applies to evaluation telemetry, not targeting inputs or exposures.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.

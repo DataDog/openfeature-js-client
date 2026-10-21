@@ -95,7 +95,7 @@ describe('createFlagEvaluationEvent', () => {
       2000 as TimeStamp
     )
 
-    expect(event.error).toEqual({ message: 'Test error message' })
+    expect(event.error).toEqual({ message: 'GENERAL' })
   })
 
   it('should include targeting context when present', () => {

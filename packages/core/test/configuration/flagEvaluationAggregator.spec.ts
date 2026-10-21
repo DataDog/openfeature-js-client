@@ -25,6 +25,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
@@ -54,7 +55,7 @@ describe('FlagEvaluationAggregator', () => {
       flagKey: 'test-flag',
       value: false,
       reason: 'DEFAULT',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
 
     aggregator.addEvaluation(mockContext, mockDetails)
@@ -79,7 +80,7 @@ describe('FlagEvaluationAggregator', () => {
       flagKey: 'test-flag',
       value: false,
       reason: 'ERROR',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
 
     aggregator.addEvaluation(mockContext, mockDetails, 'Test error message')
@@ -92,7 +93,7 @@ describe('FlagEvaluationAggregator', () => {
         flag: { key: 'test-flag' },
         evaluation_count: 1,
         runtime_default_used: true,
-        error: { message: 'Test error message' },
+        error: { message: 'GENERAL' },
         targeting_key: 'user123',
         timestamp: expect.any(Number),
       }),
@@ -107,6 +108,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
@@ -154,6 +156,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
         __dd_eval_timestamp_ms: 1771771771000,
       },
@@ -163,6 +166,7 @@ describe('FlagEvaluationAggregator', () => {
     aggregator.addEvaluation(mockContext, {
       ...mockDetails,
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
         __dd_eval_timestamp_ms: 1771771775000,
       },
@@ -192,6 +196,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
         __dd_eval_timestamp_ms: Number.NaN,
       },
@@ -222,6 +227,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a', // Same variant
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
@@ -266,7 +272,7 @@ describe('FlagEvaluationAggregator', () => {
       flagKey: 'default-flag',
       value: false,
       reason: 'DEFAULT',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, defaultDetails)
 
@@ -274,7 +280,7 @@ describe('FlagEvaluationAggregator', () => {
       flagKey: 'error-flag',
       value: false,
       reason: 'ERROR',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, errorDetails, 'Some error')
 
@@ -283,7 +289,7 @@ describe('FlagEvaluationAggregator', () => {
       value: true,
       reason: 'TARGETING_MATCH',
       variant: 'variant-a',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, targetingDetails)
 
@@ -292,7 +298,7 @@ describe('FlagEvaluationAggregator', () => {
       value: true,
       reason: 'DEFAULT',
       variant: 'variant-a',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, reasonOnlyDefaultDetails)
 
@@ -301,7 +307,7 @@ describe('FlagEvaluationAggregator', () => {
       value: true,
       reason: 'ERROR',
       variant: 'variant-a',
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, reasonOnlyErrorDetails)
 
@@ -311,7 +317,7 @@ describe('FlagEvaluationAggregator', () => {
       reason: 'ERROR',
       variant: 'variant-a',
       errorCode: ErrorCode.GENERAL,
-      flagMetadata: {},
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
     }
     aggregator.addEvaluation(mockContext, generalErrorWithVariantDetails)
 
@@ -355,6 +361,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
@@ -425,6 +432,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
@@ -469,6 +477,7 @@ describe('FlagEvaluationAggregator', () => {
       variant: 'variant-a',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_observe_full_evaluation_data: true,
         allocationKey: 'allocation-123',
       },
     }
