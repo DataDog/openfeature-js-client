@@ -14,7 +14,8 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp = timeStampNow()
+  evaluationTimestampMs: TimeStamp = timeStampNow(),
+  excludeExperiments = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!isValidFlag(flag)) {
     logger.debug(`returning default assignment because flag configuration is invalid`, {
@@ -59,6 +60,7 @@ export function evaluateForSubject<T extends FlagValueType>(
 
   const now = new Date(evaluationTimestampMs)
   for (const allocation of flag.allocations) {
+    if (excludeExperiments && allocation.doLog !== false) continue
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,

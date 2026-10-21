@@ -7,6 +7,11 @@ import {
   type PrecomputedFlagMetadata,
 } from '../configuration'
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
+import {
+  acknowledgesExperimentationOptOut,
+  hasExperimentationOptOut,
+  INVALID_EXPERIMENTATION_OPT_OUT,
+} from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
@@ -14,8 +19,30 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  context: EvaluationContext
+  context: EvaluationContext,
+  experimentationOptOutImmediate = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const optedOut = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  if (optedOut === undefined) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
+    }
+  }
+  if (
+    optedOut &&
+    (!flagsConfiguration?.precomputed?.context || !acknowledgesExperimentationOptOut(flagsConfiguration))
+  ) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      errorMessage:
+        'Precomputed configuration must match the opted-out subject and acknowledge experimentation opt-out',
+    }
+  }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   if (selection.kind === 'precomputed') {
     return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue)

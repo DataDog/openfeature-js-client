@@ -17,6 +17,7 @@ import {
   createEvaluationTelemetryPolicy,
   type EvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
+import { type ExperimentationOptOutConfiguration, isImmediateExperimentationOptOut } from './experimentation-opt-out'
 import { DatadogProviderBase } from './provider-base'
 
 export class DatadogCoreProvider extends DatadogProviderBase {
@@ -29,9 +30,11 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   private fallbackConfigurationSequence = 0
   private context: EvaluationContext | undefined
   private readonly telemetryPolicy: EvaluationTelemetryPolicy
+  private readonly experimentationOptOutImmediate: boolean
 
-  constructor(options: EvaluationTelemetryOptOutConfiguration = {}) {
+  constructor(options: EvaluationTelemetryOptOutConfiguration & ExperimentationOptOutConfiguration = {}) {
     super()
+    this.experimentationOptOutImmediate = isImmediateExperimentationOptOut(options)
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
   }
 
@@ -46,7 +49,9 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
     if (this.context === undefined) return
 
-    const error = toOpenFeatureError(getFlagsConfigurationError(configuration, this.context))
+    const error = toOpenFeatureError(
+      getFlagsConfigurationError(configuration, this.context, this.experimentationOptOutImmediate)
+    )
     if (error) {
       this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
       return
@@ -62,14 +67,18 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     this.telemetryPolicy.setContext(context)
     this.context = context
 
-    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
+    const error = toOpenFeatureError(
+      getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutImmediate)
+    )
     return error ? Promise.reject(error) : Promise.resolve()
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     this.telemetryPolicy.setContext(newContext)
     this.context = newContext
-    const error = toOpenFeatureError(getFlagsConfigurationError(this.flagsConfiguration, this.context))
+    const error = toOpenFeatureError(
+      getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutImmediate)
+    )
     if (error) {
       throw error
     }
@@ -84,7 +93,15 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   ): ResolutionDetails<FlagTypeToValue<T>> {
     return bindEvaluationTelemetryResult(
       withCoreConfigurationId(
-        evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger),
+        evaluate(
+          this.flagsConfiguration,
+          type,
+          flagKey,
+          defaultValue,
+          context,
+          logger,
+          this.experimentationOptOutImmediate
+        ),
         this.flagsConfigurationId
       ),
       this.telemetryPolicy
@@ -92,7 +109,10 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   }
 
   private canEvaluateCurrentContext(): boolean {
-    return this.context !== undefined && !getFlagsConfigurationError(this.flagsConfiguration, this.context)
+    return (
+      this.context !== undefined &&
+      !getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutImmediate)
+    )
   }
 
   private computeConfigurationId(configuration: FlagsConfiguration): string {

@@ -13,6 +13,11 @@ import { TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import { evaluateProtobufConfiguration } from './evaluateProtobufConfiguration'
 import { createEvaluationMetadata, createEvaluationTimestampMetadata } from './evaluationMetadata'
+import {
+  acknowledgesExperimentationOptOut,
+  hasExperimentationOptOut,
+  INVALID_EXPERIMENTATION_OPT_OUT,
+} from './experimentation-opt-out'
 import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
 import type { UniversalFlagConfigurationV1 } from './ufc-v1'
 
@@ -29,9 +34,10 @@ export function evaluate<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
-  logger: Logger = NOOP_LOGGER
+  logger: Logger = NOOP_LOGGER,
+  experimentationOptOutImmediate = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
-  const selection = selectFlagsConfiguration(flagsConfiguration, context)
+  const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutImmediate)
   if (selection.kind === 'precomputed') {
     return evaluatePrecomputedConfiguration(flagsConfiguration, type, flagKey, defaultValue, context)
   }
@@ -43,7 +49,8 @@ export function evaluate<T extends FlagValueType>(
       flagKey,
       defaultValue,
       context,
-      logger
+      logger,
+      experimentationOptOutImmediate
     )
   }
 
@@ -64,9 +71,10 @@ export type FlagsConfigurationError = {
 /** Return the lifecycle/evaluation error when no configuration capability can serve the context. */
 export function getFlagsConfigurationError(
   configuration: FlagsConfiguration | undefined,
-  context: EvaluationContext
+  context: EvaluationContext,
+  experimentationOptOutImmediate = false
 ): FlagsConfigurationError | undefined {
-  const selection = selectFlagsConfiguration(configuration, context)
+  const selection = selectFlagsConfiguration(configuration, context, experimentationOptOutImmediate)
   return selection.kind === 'error' ? selection.error : undefined
 }
 
@@ -77,8 +85,13 @@ type FlagsConfigurationSelection =
 
 function selectFlagsConfiguration(
   configuration: FlagsConfiguration | undefined,
-  context: EvaluationContext
+  context: EvaluationContext,
+  experimentationOptOutImmediate = false
 ): FlagsConfigurationSelection {
+  const optedOut = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  if (optedOut === undefined) {
+    return { kind: 'error', error: { errorCode: 'INVALID_CONTEXT', errorMessage: INVALID_EXPERIMENTATION_OPT_OUT } }
+  }
   if (configuration === undefined) {
     return {
       kind: 'error',
@@ -86,11 +99,26 @@ function selectFlagsConfiguration(
     }
   }
 
-  if (configuration.precomputed && configMatchesContext(configuration, context)) {
+  if (
+    configuration.precomputed &&
+    configMatchesContext(configuration, context) &&
+    (!optedOut || (configuration.precomputed.context !== undefined && acknowledgesExperimentationOptOut(configuration)))
+  ) {
     return { kind: 'precomputed', configuration: configuration.precomputed }
   }
   if (configuration.rules) {
     return { kind: 'rules', configuration: configuration.rules }
+  }
+
+  if (optedOut && configuration.precomputed) {
+    return {
+      kind: 'error',
+      error: {
+        errorCode: 'INVALID_CONTEXT',
+        errorMessage:
+          'Precomputed configuration must match the opted-out subject and acknowledge experimentation opt-out',
+      },
+    }
   }
 
   const parseError = configuration.configurationError ?? configuration.rulesError ?? configuration.precomputedError
@@ -120,16 +148,36 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
-  logger: Logger
+  logger: Logger,
+  experimentationOptOutImmediate = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
   // Snapshot consent once at the start of this evaluation. The provider can receive a new
   // configuration later, but hooks must see the consent from the configuration that produced this result.
   const observeFullEvaluationData = config?.observeFullEvaluationData === true
   const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
+  const excludeExperiments = experimentationOptOutImmediate ? hasExperimentationOptOut(context) : false
+  if (excludeExperiments === undefined) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
+      flagMetadata: metadata,
+    }
+  }
   let details: ResolutionDetails<FlagTypeToValue<T>>
   try {
-    details = evaluateRules(config, type, flagKey, defaultValue, context, logger, evaluationTimestampMs)
+    details = evaluateRules(
+      config,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      logger,
+      evaluationTimestampMs,
+      excludeExperiments
+    )
   } catch (error) {
     logger.error('Error evaluating flag', { error })
     details = { value: defaultValue, reason: 'ERROR', errorCode: 'GENERAL' as ErrorCode }
@@ -144,7 +192,8 @@ function evaluateRules<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp
+  evaluationTimestampMs: TimeStamp,
+  excludeExperiments: boolean
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!config) {
     return {
@@ -163,7 +212,8 @@ function evaluateRules<T extends FlagValueType>(
       defaultValue,
       context,
       logger,
-      evaluationTimestampMs
+      evaluationTimestampMs,
+      excludeExperiments
     )
   }
 
@@ -186,7 +236,16 @@ function evaluateRules<T extends FlagValueType>(
 
   const flag = config.flags[flagKey]
   try {
-    return evaluateForSubject(flag, type, subjectKey, subjectAttributes, defaultValue, logger, evaluationTimestampMs)
+    return evaluateForSubject(
+      flag,
+      type,
+      subjectKey,
+      subjectAttributes,
+      defaultValue,
+      logger,
+      evaluationTimestampMs,
+      excludeExperiments
+    )
   } catch (error) {
     if (error instanceof TargetingKeyMissingError) {
       return {

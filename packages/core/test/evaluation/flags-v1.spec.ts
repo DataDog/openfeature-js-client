@@ -36,7 +36,11 @@ describe('Universal Flag Configuration V1', () => {
     return JSON.parse(testCases) as TestCase[]
   }
 
-  const evaluateDetails = (testCase: TestCase, context: EvaluationContext): ResolutionDetails<FlagValue> => {
+  const evaluateDetails = (
+    testCase: TestCase,
+    context: EvaluationContext,
+    immediate = false
+  ): ResolutionDetails<FlagValue> => {
     const configuration = getUFC()
     if (testCase.variationType === 'BOOLEAN') {
       return evaluateRulesBasedConfiguration(
@@ -45,7 +49,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as boolean,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'STRING') {
@@ -55,7 +60,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as string,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'INTEGER' || testCase.variationType === 'NUMERIC') {
@@ -65,7 +71,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as number,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     if (testCase.variationType === 'JSON') {
@@ -75,7 +82,8 @@ describe('Universal Flag Configuration V1', () => {
         testCase.flag,
         testCase.defaultValue as JsonValue,
         context,
-        logger
+        logger,
+        immediate
       )
     }
     throw new Error(`Unsupported variation type: ${testCase.variationType}`)
@@ -102,11 +110,38 @@ describe('Universal Flag Configuration V1', () => {
     it.each(testCasesWithContext)('with context $contextString', ({ contextString, testCase }) => {
       const context = JSON.parse(contextString) as EvaluationContext
       const details = evaluateDetails(testCase, context)
-      expect(details.value).toEqual(testCase.result.value)
+      expect(details.value).toStrictEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
-      if (testCase.result.errorCode !== undefined) {
+      if (testCase.result.errorCode !== undefined || testCase.result.reason !== 'ERROR') {
         expect(details.errorCode).toEqual(testCase.result.errorCode)
       }
     })
+
+    for (const testCase of testCases) {
+      const expected = testCase.capabilities?.experimentationOptOutImmediate
+      if (!expected) continue
+      it(`honors immediate opt-out: ${JSON.stringify(testCase.attributes)}`, () => {
+        const context = { targetingKey: testCase.targetingKey, ...testCase.attributes } as EvaluationContext
+        const details = evaluateDetails(testCase, context, true)
+        expect(details.value).toStrictEqual(expected.value)
+        expect(details.reason).toEqual(expected.reason)
+        expect(details.errorCode).toEqual(expected.errorCode)
+      })
+    }
+  })
+  it('loads the immediate opt-out capability cases', () => {
+    const cases = getTestCaseFileNames().flatMap(getTestCases)
+    const immediateCases = cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)
+    expect(immediateCases.length).toBeGreaterThan(0)
+    expect(new Set(immediateCases.map((testCase) => testCase.variationType))).toEqual(
+      new Set(['BOOLEAN', 'STRING', 'INTEGER', 'NUMERIC', 'JSON'])
+    )
+    expect(
+      immediateCases.some((testCase) => testCase.capabilities?.experimentationOptOutImmediate?.reason === 'ERROR')
+    ).toBe(true)
+    expect(
+      immediateCases.some((testCase) => testCase.capabilities?.experimentationOptOutImmediate?.reason === 'DEFAULT')
+    ).toBe(true)
+    expect(immediateCases.some((testCase) => testCase.targetingKey == null)).toBe(true)
   })
 })

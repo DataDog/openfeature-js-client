@@ -124,6 +124,58 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### Immediate experimentation opt-out
+
+Enable immediate experimentation opt-out once when you construct the provider. Your application owns the subject's preference and timestamp.
+
+```typescript
+import { DatadogProvider, ExperimentationOptOutMode } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const provider = new DatadogProvider({
+  clientToken: '<CLIENT_TOKEN>',
+  env: 'production',
+  experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+})
+
+await OpenFeature.setProviderAndWait(provider, {
+  targetingKey: user.id,
+  ...(user.experimentationOptOutAt && {
+    dd_experimentation_opt_out_at: user.experimentationOptOutAt,
+  }),
+})
+const enabled = OpenFeature.getClient().getBooleanValue('new-route-planner', false)
+```
+
+`Disabled` is the default. In `Immediate` mode, omit the attribute for eligible subjects.
+Supply a timestamp string, such as `2026-10-19T12:00:00Z`, to exclude the subject immediately.
+Future timestamps also take effect immediately. They do not schedule exclusion.
+The parser matches allocation timestamps. Null, non-string, empty, and unusable values return the application default with `INVALID_CONTEXT`.
+
+Excluded subjects skip allocations that log experiment exposures. Evaluation continues through ordinary feature allocations in their existing order.
+If none match, the application receives its default value. Skipped allocations do not log exposures.
+This option does not suppress evaluation telemetry. Immediate withdrawal can change an enrolled subject's experience; account for this in experiment analysis.
+
+`DatadogCoreProvider` accepts the same option. It applies exclusion locally for rules-based configurations.
+For portable Precompute configurations, pass the same option to `fetchPrecomputedConfiguration` and the provider:
+
+```typescript
+const optOut = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
+const provider = new DatadogCoreProvider(optOut)
+provider.setConfiguration(
+  await fetchPrecomputedConfiguration({
+    ...optOut,
+    clientToken: '<CLIENT_TOKEN>',
+    env: 'production',
+    context,
+  })
+)
+```
+
+Precompute delivery requires backend support. Opted-out requests send `evaluation_options.experimentation_opt_out=true`.
+The response must acknowledge that option. The provider rejects unsupported responses and cached assignments from a different subject or opt-out state.
+For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
+
 ### Subject-level evaluation telemetry opt-out
 
 Enable the control when creating the provider. Your application supplies its decision as a typed boolean in the evaluation context.
