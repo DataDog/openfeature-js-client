@@ -1,7 +1,8 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
-import type { EvaluationContext, Hook, HookContext } from '@openfeature/web-sdk'
+import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
+import type { EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
 import { createRumTrackingHook } from './rumIntegration'
@@ -17,20 +18,24 @@ export function createProviderTracking({
   configuration,
   enabledByDefault,
   getTrackingContext,
+  telemetryPolicy,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
+  telemetryPolicy?: EvaluationTelemetryPolicy
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
 
   if (options.enableRumFeatureFlagTracking ?? enabledByDefault) {
-    trackingHooks.push({ hooks: [createRumTrackingHook()] })
+    trackingHooks.push({ hooks: [createRumTrackingHook(telemetryPolicy)] })
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration)))
+    trackingHooks.push(
+      createTrackingHookController(() => createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy))
+    )
   }
 
   let exposureCache: AssignmentCache | undefined
@@ -40,7 +45,7 @@ export function createProviderTracking({
     trackingHooks.push(
       createTrackingHookController(async () => {
         await runTrackingLifecycleOperation(() => cache.init())
-        return createExposureLoggingHook(configuration, cache)
+        return createExposureLoggingHook(configuration, cache, getTrackingContext)
       })
     )
   }
@@ -49,27 +54,5 @@ export function createProviderTracking({
   return {
     ...tracking,
     exposureCache,
-    hooks: getTrackingContext
-      ? tracking.hooks.map((hook) => withTrackingContext(hook, getTrackingContext))
-      : tracking.hooks,
-  }
-}
-
-function withTrackingContext(hook: Hook, getTrackingContext: (context: EvaluationContext) => EvaluationContext): Hook {
-  if (!hook.finally) {
-    return hook
-  }
-
-  return {
-    ...hook,
-    finally: (hookContext, details, hookHints) =>
-      hook.finally?.(
-        {
-          ...hookContext,
-          context: getTrackingContext(hookContext.context),
-        } as HookContext,
-        details,
-        hookHints
-      ),
   }
 }

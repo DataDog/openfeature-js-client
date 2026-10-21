@@ -12,6 +12,7 @@ export default defineConfig({
         protobuf: fileURLToPath(new URL('./protobuf.html', import.meta.url)),
         precomputed: fileURLToPath(new URL('./precomputed.html', import.meta.url)),
         obfuscation: fileURLToPath(new URL('./obfuscation.html', import.meta.url)),
+        evaluationTelemetry: fileURLToPath(new URL('./evaluation-telemetry.html', import.meta.url)),
         trackingBaseline: fileURLToPath(new URL('./tracking-baseline.html', import.meta.url)),
         trackingExposure: fileURLToPath(new URL('./tracking-exposure.html', import.meta.url)),
         trackingEvaluation: fileURLToPath(new URL('./tracking-evaluation.html', import.meta.url)),

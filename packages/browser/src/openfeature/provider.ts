@@ -22,6 +22,11 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -73,6 +78,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private evaluationContext: EvaluationContext | undefined
   /** Request context used for tracking until a configuration has been accepted. */
   private requestedEvaluationContext: EvaluationContext = {}
+  private readonly telemetryPolicy: EvaluationTelemetryPolicy
 
   status: ProviderStatus
 
@@ -104,13 +110,16 @@ export class DatadogProvider extends DatadogProviderBase {
   constructor(options: FlaggingInitConfiguration) {
     super()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
+    const getTrackingContext = () => this.evaluationContext ?? this.requestedEvaluationContext
+    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({
       options,
       configuration: this.configuration,
       enabledByDefault: true,
-      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
+      getTrackingContext,
+      telemetryPolicy: this.telemetryPolicy,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -141,7 +150,10 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
-    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    const evaluationContext = effectiveContext
+    // Apply telemetry admission before the ordinary assignment refresh completes.
+    this.telemetryPolicy.setContext(effectiveContext)
     this.requestedEvaluationContext = evaluationContext
 
     if (this.status === ProviderStatus.NOT_READY) {
@@ -273,12 +285,15 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluatePrecomputedConfiguration(
-      this.flagsConfiguration,
-      type,
-      flagKey,
-      defaultValue,
-      this.evaluationContext ?? {}
+    return bindEvaluationTelemetryResult(
+      evaluatePrecomputedConfiguration(
+        this.flagsConfiguration,
+        type,
+        flagKey,
+        defaultValue,
+        this.evaluationContext ?? {}
+      ),
+      this.telemetryPolicy
     )
   }
 }

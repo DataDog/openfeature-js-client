@@ -6,6 +6,23 @@
 
 ---
 
+## @datadog/openfeature-node-server@2.5.0
+
+**Features:**
+
+- Add standalone `fetchRulesConfiguration` with a server distribution channel by default and an explicit `distributionChannel: 'client'` option for browser bootstrap data. Support custom Fetch, request cancellation, timeouts, and typed fetch errors ([#409](https://github.com/DataDog/openfeature-js-client/pull/409)) [NODE-SERVER]
+- Export rules fetching, parsing, and portable configuration serialization through `@datadog/openfeature-node-server/rules-based`, without initializing a tracer or provider. Keep the protobuf decoder out of the root provider entrypoint ([#408](https://github.com/DataDog/openfeature-js-client/pull/408)) [NODE-SERVER]
+
+**Usage Notes:**
+
+- Only forward client-distributed configuration to browsers. Serialization does not remove server-only flags. Customer-facing exports through `dd-trace/openfeature` require a separate integration; this package remains internal to Datadog. [NODE-SERVER]
+- Package imports are now limited to `@datadog/openfeature-node-server`, `@datadog/openfeature-node-server/rules-based`, and `@datadog/openfeature-node-server/package.json`. Replace internal deep imports such as `@datadog/openfeature-node-server/cjs/index.js` with the root import. Existing root imports continue to work ([#408](https://github.com/DataDog/openfeature-js-client/pull/408)) [NODE-SERVER]
+
+**Internal Changes:**
+
+- Use the already-published exact `@datadog/flagging-core@3.2.0` dependency, including shared endpoint construction. Core and browser package versions are unchanged by this release.
+- Add packed-package SSR round-trip checks, self-contained declarations, and provider/SSR bundle-size and dependency-boundary reports ([#408](https://github.com/DataDog/openfeature-js-client/pull/408), [#410](https://github.com/DataDog/openfeature-js-client/pull/410)) [NODE-SERVER]
+
 ## @datadog/openfeature-browser@2.1.0, @datadog/flagging-core@3.2.0
 
 **Features:**
