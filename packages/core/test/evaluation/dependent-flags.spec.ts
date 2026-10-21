@@ -357,6 +357,36 @@ describe('dependent flag evaluation', () => {
       })
     ).toMatchObject({ value: true, variant: 'on' })
   })
+
+  it('isolates dependency resolution and exposures from telemetry sink mutation', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    const onExposures = jest.fn()
+
+    const result = evaluate(
+      config,
+      'root',
+      logger,
+      (dependency) => {
+        dependency.flagKey = 'mutated'
+        dependency.details.value = false
+        delete dependency.details.variant
+        delete dependency.details.flagMetadata?.evaluationTimestamp
+      },
+      {},
+      onExposures
+    )
+
+    expect(result).toMatchObject({ value: true, variant: 'on' })
+    expect(onExposures).toHaveBeenCalledWith([
+      expect.objectContaining({
+        flagKey: 'prerequisite',
+        details: expect.objectContaining({ value: true, variant: 'on' }),
+      }),
+    ])
+  })
 })
 
 function evaluate(

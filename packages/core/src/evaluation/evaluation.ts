@@ -505,8 +505,15 @@ class DependencyEvaluationSession {
   }
 
   private emitEvaluation(evaluation: DependencyEvaluation): void {
+    const details: DependencyEvaluation['details'] = {
+      ...evaluation.details,
+      ...(evaluation.details.value === undefined ? {} : { value: cloneFlagValue(evaluation.details.value) }),
+      ...(evaluation.details.flagMetadata === undefined
+        ? {}
+        : { flagMetadata: { ...evaluation.details.flagMetadata } }),
+    }
     try {
-      this.onDependencyEvaluation?.(evaluation)
+      this.onDependencyEvaluation?.({ flagKey: evaluation.flagKey, details })
     } catch {
       // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
     }
@@ -534,6 +541,16 @@ class DependencyEvaluationSession {
     this.logger.error('Error evaluating prerequisite flag', { flagKey, error })
     return new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'prerequisite flag evaluation failed')
   }
+}
+
+function cloneFlagValue(value: FlagValue): FlagValue {
+  if (Array.isArray(value)) {
+    return value.map(cloneFlagValue)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneFlagValue(child)]))
+  }
+  return value
 }
 
 type DependencyFlag = {

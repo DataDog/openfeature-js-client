@@ -89,6 +89,52 @@ describe('dependent flag exposures', () => {
       ['subject-a', 'root-a'],
     ])
   })
+
+  it('rolls back provider exposures and deduplication when a nested dependency fails', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['successful', 'parent']),
+        successful: booleanFlag('successful'),
+        parent: dependentFlag('parent', ['missing']),
+      })
+    )
+
+    await expect(
+      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
+    ).resolves.toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
+        const event = published as DependencyEvaluationEvent
+        return [event.details.flagKey, event.details.reason, event.details.errorCode]
+      })
+    ).toEqual([
+      ['successful', 'STATIC', undefined],
+      ['missing', 'ERROR', 'FLAG_NOT_FOUND'],
+      ['parent', 'ERROR', 'FLAG_NOT_FOUND'],
+    ])
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
+
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['successful', 'parent']),
+        successful: booleanFlag('successful'),
+        parent: dependentFlag('parent', ['missing']),
+        missing: booleanFlag('missing'),
+      })
+    )
+    await expect(
+      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
+    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'successful',
+      'missing',
+      'parent',
+      'root',
+    ])
+  })
 })
 
 function channel<T>(): jest.Mocked<Channel<T, T>> {

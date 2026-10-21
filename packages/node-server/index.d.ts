@@ -601,7 +601,9 @@ export interface DatadogNodeServerProviderOptions {
 }
 export type DependencyEvaluationEvent = {
 	context: EvaluationContext;
-	details: EvaluationDetails<FlagValue>;
+	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
+		value?: FlagValue;
+	};
 };
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
