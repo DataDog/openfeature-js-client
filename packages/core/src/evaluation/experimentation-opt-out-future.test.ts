@@ -1,12 +1,13 @@
 import { fromJson } from '@bufbuild/protobuf'
 import { FlagsConfigurationSchema } from '../configuration/generated/ufc_pb'
-import { prepareUniversalFlagConfiguration } from '../configuration/prepared-activation'
+import { prepareJsonFlagActivations, prepareUniversalFlagConfiguration } from '../configuration/prepared-activation'
 import { prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { decodeFlagsConfiguration, encodeFlagsConfiguration } from '../configuration/ufc-protobuf'
 import { evaluateRulesBasedConfiguration } from './evaluation'
 import {
   acknowledgesExperimentationOptOut,
   compareOptOutInstants,
+  excludesExperimentAt,
   experimentationOptOutPolicy,
   parseOptOutInstant,
 } from './experimentation-opt-out'
@@ -110,33 +111,46 @@ describe.each([
   })
 })
 
-it.each(['disabled', 'immediate', 'future_experiments_only'] as const)(
-  'rejects malformed activation on the affected flag in %s, including unreachable allocations',
+describe.each(['disabled', 'immediate', 'future_experiments_only'] as const)(
+  'invalid activation in %s mode',
   (optOutMode) => {
-    const json = jsonRules('garbage')
-    json.flags.flag.allocations.reverse()
-    json.flags.neighbor = { ...json.flags.flag, key: 'neighbor', allocations: [json.flags.flag.allocations[0]] }
-    prepareUniversalFlagConfiguration(json)
-    expect(evaluateRulesBasedConfiguration(json, 'boolean', 'flag', false, context, logger, optOutMode).errorCode).toBe(
-      'PARSE_ERROR'
-    )
-    expect(
-      evaluateRulesBasedConfiguration(json, 'boolean', 'neighbor', true, context, logger, optOutMode)
-    ).toMatchObject({
-      value: false,
-      reason: 'STATIC',
+    it.each([false, true])('isolates the affected flag only when activation is needed (opted out: %s)', (optedOut) => {
+      const subject = optedOut ? context : { targetingKey: 'subject' }
+      const expected = optOutMode === 'future_experiments_only' && optedOut ? 'PARSE_ERROR' : undefined
+      const json = jsonRules('garbage')
+      json.flags.flag.allocations.reverse()
+      json.flags.neighbor = { ...json.flags.flag, key: 'neighbor', allocations: [json.flags.flag.allocations[0]] }
+      prepareUniversalFlagConfiguration(json)
+      const proto = rawProtobufRules(cutoff)
+      proto.flags.flag.allocations[0].randomizationActivatedAt!.nanos = 1e9
+      proto.flags.neighbor = { ...proto.flags.flag, allocations: [proto.flags.flag.allocations[1]] }
+      proto.flags.flag.allocations.reverse()
+      prepareRulesResponse(proto)
+      for (const configuration of [json, proto]) {
+        const result = evaluateRulesBasedConfiguration(
+          configuration,
+          'boolean',
+          'flag',
+          true,
+          subject,
+          logger,
+          optOutMode
+        )
+        expect(result.errorCode).toBe(expected)
+        expect(result.value).toBe(expected !== undefined)
+        const neighbor = evaluateRulesBasedConfiguration(
+          configuration,
+          'boolean',
+          'neighbor',
+          true,
+          subject,
+          logger,
+          optOutMode
+        )
+        expect(neighbor).toMatchObject({ value: false, reason: 'STATIC' })
+        expect(neighbor.errorCode).toBeUndefined()
+      }
     })
-    const proto = rawProtobufRules(cutoff)
-    proto.flags.flag.allocations[0].randomizationActivatedAt!.nanos = 1e9
-    proto.flags.neighbor = { ...proto.flags.flag, allocations: [proto.flags.flag.allocations[1]] }
-    proto.flags.flag.allocations.reverse()
-    prepareRulesResponse(proto)
-    expect(
-      evaluateRulesBasedConfiguration(proto, 'boolean', 'flag', false, context, logger, optOutMode).errorCode
-    ).toBe('PARSE_ERROR')
-    expect(evaluateRulesBasedConfiguration(proto, 'boolean', 'neighbor', true, context, logger, optOutMode).value).toBe(
-      false
-    )
   }
 )
 
@@ -188,13 +202,29 @@ describe.each([
   })
 })
 
-it('validates activation even without a subject opt-out attribute', () => {
+it('retains invalid activation separately from missing metadata for future consumers', () => {
   const configuration = prepareUniversalFlagConfiguration(jsonRules('garbage'))
-  expect(evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', true, {}, logger, mode)).toMatchObject({
-    value: true,
-    errorCode: 'PARSE_ERROR',
-    reason: 'ERROR',
-  })
+  const prepared = prepareJsonFlagActivations(configuration.flags.flag)
+  expect(prepared.valid).toBe(false)
+  expect(prepared.allocations.map(({ activation }) => activation.kind)).toEqual(['invalid', 'missing'])
+  const policy = experimentationOptOutPolicy(context, mode)!
+  expect(() => excludesExperimentAt(policy, true, prepared.allocations[0].activation)).toThrow(
+    'Invalid randomization activation timestamp'
+  )
+})
+
+it('allows an unreadable activation on the selected allocation when it is not needed', () => {
+  const json = prepareUniversalFlagConfiguration(jsonRules('garbage'))
+  const proto = rawProtobufRules(cutoff)
+  proto.flags.flag.allocations[0].randomizationActivatedAt!.nanos = 1e9
+  prepareRulesResponse(proto)
+  for (const configuration of [json, proto]) {
+    for (const optOutMode of ['disabled', 'immediate', 'future_experiments_only'] as const) {
+      const result = evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', false, {}, logger, optOutMode)
+      expect(result).toMatchObject({ value: true, reason: 'STATIC' })
+      expect(result.errorCode).toBeUndefined()
+    }
+  }
 })
 
 it.each(['2026-10-01 12:00:00Z', '2026-10-01T12:00:00.1234567890Z'])(

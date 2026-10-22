@@ -1,4 +1,6 @@
 import type { FlagsConfiguration } from '../configuration/configuration'
+import type { RandomizationActivation } from '../configuration/prepared-activation'
+import { FlagConfigurationError } from './errors'
 
 export type ExperimentationOptOutModeValue = 'disabled' | 'immediate' | 'future_experiments_only'
 // Boolean arguments preserve the existing shared-core immediate API.
@@ -57,18 +59,21 @@ export function experimentationOptOutPolicy(
   return cutoff ? { mode: mode === true ? 'immediate' : mode, cutoff } : undefined
 }
 
+/** Only an opted-out subject in future mode needs activation metadata. */
+export function needsActivation(policy: ExperimentationOptOutPolicy | boolean): boolean {
+  return typeof policy === 'object' && policy.mode === 'future_experiments_only'
+}
+
 export function excludesExperimentAt(
   policy: ExperimentationOptOutPolicy | boolean,
   doLog: boolean,
-  activation?: OptOutInstant
+  activation: RandomizationActivation
 ): boolean {
   if (!policy || !doLog) return false
-  return (
-    policy === true ||
-    policy.mode === 'immediate' ||
-    !activation ||
-    compareOptOutInstants(activation, policy.cutoff) >= 0
-  )
+  if (policy === true || policy.mode === 'immediate') return true
+  // Invalid metadata must never become an absent activation for a future consumer.
+  if (activation.kind === 'invalid') throw new FlagConfigurationError('Invalid randomization activation timestamp')
+  return activation.kind === 'missing' || compareOptOutInstants(activation.instant, policy.cutoff) >= 0
 }
 
 export function experimentationOptOutCacheKey(policy: ExperimentationOptOutPolicy): string {

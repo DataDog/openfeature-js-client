@@ -816,13 +816,20 @@ interface OptOutInstant {
 	readonly seconds: number;
 	readonly fraction: string;
 }
-type PreparedAllocations<T> = {
-	valid: false;
+type RandomizationActivation = {
+	kind: "missing";
 } | {
-	valid: true;
-	allocations: ReadonlyArray<{
+	kind: "valid";
+	instant: OptOutInstant;
+} | {
+	kind: "invalid";
+};
+type PreparedAllocations<T> = {
+	/** False when any activation is invalid, including on unreachable allocations. */
+	readonly valid: boolean;
+	readonly allocations: ReadonlyArray<{
 		allocation: T;
-		activation: OptOutInstant | undefined;
+		activation: RandomizationActivation;
 	}>;
 };
 type CachedJsonValue = {

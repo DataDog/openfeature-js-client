@@ -5,7 +5,7 @@ import {
   type FlagsConfiguration,
 } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
-import { type EvaluationContext, OpenFeature } from '@openfeature/web-sdk'
+import { ClientProviderStatus, type EvaluationContext, OpenFeature } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
@@ -294,6 +294,26 @@ describe('immediate experimentation opt-out', () => {
     await provider.onClose()
   })
 
+  it.each([ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.FutureExperimentsOnly])(
+    'keeps configuration parse errors in %s mode',
+    (mode) => {
+      const provider = new DatadogProvider({
+        experimentationOptOutMode: mode,
+        clientToken: 'parse-error',
+        env: 'test',
+        initialFlagsConfiguration: { precomputedError: 'Precomputed configuration flags must be an object' },
+        enableExposureLogging: false,
+        enableFlagEvaluationTracking: false,
+        enableRumFeatureFlagTracking: false,
+      })
+      expect(provider.resolveBooleanEvaluation('boolean', false, {}, logger)).toMatchObject({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
+    }
+  )
+
   it.each(['future', null])('rejects unsupported configuration mode %j at construction', (mode) => {
     expect(() => new DatadogCoreProvider({ experimentationOptOutMode: mode as ExperimentationOptOutMode })).toThrow(
       'disabled, immediate'
@@ -353,7 +373,10 @@ describe('experimentation opt-out tracking identity', () => {
       await OpenFeature.setProviderAndWait(domain, provider, a)
       const client = OpenFeature.getClient(domain)
       const update = OpenFeature.setContext(domain, b).catch(() => {})
-      expect(client.getBooleanDetails('boolean', false)).toMatchObject({ value: false, errorCode: 'INVALID_CONTEXT' })
+      expect(client.getBooleanDetails('boolean', false)).toMatchObject({
+        value: false,
+        errorCode: 'PROVIDER_NOT_READY',
+      })
       if (outcome === 'failed') pending.resolve(Promise.reject(new Error('offline')))
       else pending.resolve(fetchResponse(true))
       await update
@@ -362,6 +385,47 @@ describe('experimentation opt-out tracking identity', () => {
       const evaluations = events('flagevaluation')
       expect(evaluations.reduce((total, event) => total + event.evaluation_count, 0)).toBe(2)
       expect(evaluations.every((event) => event.targeting_key === 'subject-B')).toBe(true)
+    }
+  )
+
+  describe.each([ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.FutureExperimentsOnly])(
+    'context changes in %s mode',
+    (mode) => {
+      it.each(['completed', 'failed', 'unacknowledged'] as const)(
+        'distinguishes waiting for assignments from malformed input after a %s refresh',
+        async (outcome) => {
+          const pending = createDeferred<ReturnType<typeof fetchResponse>>()
+          const fetch = jest.fn().mockResolvedValueOnce(fetchResponse()).mockReturnValueOnce(pending.promise)
+          const provider = trackingProvider(fetch, mode)
+          const a = { targetingKey: 'subject-A' }
+          const b =
+            outcome === 'unacknowledged' ? { ...context, targetingKey: 'subject-B' } : { targetingKey: 'subject-B' }
+          await OpenFeature.setProviderAndWait(domain, provider, a)
+          const client = OpenFeature.getClient(domain)
+          expect(client.getBooleanValue('boolean', false)).toBe(true)
+          const update = OpenFeature.setContext(domain, b).catch(() => {})
+          expect(client.providerStatus).toBe(ClientProviderStatus.RECONCILING)
+          expect(client.getBooleanDetails('boolean', false)).toMatchObject({
+            value: false,
+            errorCode: 'PROVIDER_NOT_READY',
+          })
+          if (outcome === 'failed') pending.resolve(Promise.reject(new Error('offline')))
+          else pending.resolve(fetchResponse())
+          await update
+          const result = client.getBooleanDetails('boolean', false)
+          expect(result.value).toBe(outcome === 'completed')
+          expect(result.errorCode).toBe(outcome === 'completed' ? undefined : 'PROVIDER_NOT_READY')
+          const invalid = { ...b, dd_experimentation_opt_out_at: 'not-a-time' }
+          await OpenFeature.setContext(domain, invalid)
+          expect(client.providerStatus).toBe(ClientProviderStatus.ERROR)
+          expect(client.getBooleanDetails('boolean', false)).toMatchObject({
+            value: false,
+            errorCode: 'INVALID_CONTEXT',
+          })
+          expect(fetch).toHaveBeenCalledTimes(2)
+          await provider.onClose()
+        }
+      )
     }
   )
 
