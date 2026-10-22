@@ -9,6 +9,12 @@ import {
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { timeStampNow } from '../time'
 import { createEvaluationMetadata } from './evaluationMetadata'
+import {
+  acknowledgesExperimentationOptOut,
+  type ExperimentationOptOutOption,
+  experimentationOptOutPolicy,
+  INVALID_EXPERIMENTATION_OPT_OUT,
+} from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
@@ -16,8 +22,32 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  context: EvaluationContext
+  context: EvaluationContext,
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
+  if (optedOut === undefined) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      flagMetadata: createEvaluationMetadata(timeStampNow(), false),
+      errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
+    }
+  }
+  if (
+    (optedOut && !flagsConfiguration?.precomputed?.context) ||
+    !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut)
+  ) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      flagMetadata: createEvaluationMetadata(timeStampNow(), false),
+      errorMessage:
+        'Precomputed configuration must match the subject and acknowledge the requested experimentation opt-out policy',
+    }
+  }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   // Capture the selected configuration's consent before evaluating the flag.
   // No usable configuration (including a context mismatch) defaults to protected mode.

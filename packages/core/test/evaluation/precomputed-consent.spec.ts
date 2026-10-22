@@ -7,6 +7,7 @@ import {
 import { configurationFromRulesString } from '../../src/configuration/rules-wire'
 import { parsePrecomputedConfigurationResponse } from '../../src/configuration/wire-validation'
 import { evaluate } from '../../src/evaluation/evaluation'
+import type { ExperimentationOptOutOption } from '../../src/evaluation/experimentation-opt-out'
 import { evaluatePrecomputedConfiguration } from '../../src/evaluation/precomputed-evaluation'
 
 const metadataKey = '__dd_observe_full_evaluation_data'
@@ -135,4 +136,72 @@ it('uses the consent from the selected capability when rules and precomputed dis
     errorCode: 'FLAG_NOT_FOUND',
     flagMetadata: { [metadataKey]: false },
   })
+})
+
+// Both public evaluation paths must combine the opt-out policy with the consent
+// of the configuration actually used, including when that configuration is rejected.
+describe.each([
+  [
+    'combined',
+    (config: FlagsConfiguration, subject: typeof context, mode: ExperimentationOptOutOption) =>
+      evaluate(config, 'boolean', 'flag', false, subject, undefined, mode),
+  ],
+  [
+    'precomputed',
+    (config: FlagsConfiguration, subject: typeof context, mode: ExperimentationOptOutOption) =>
+      evaluatePrecomputedConfiguration(config, 'boolean', 'flag', false, subject, mode),
+  ],
+] as const)('%s evaluation consent with experimentation opt-out', (_name, evaluator) => {
+  const cutoff = '2026-10-21T00:00:00Z'
+  const optedOutContext = { ...context, dd_experimentation_opt_out_at: cutoff }
+
+  it.each(['immediate', 'future_experiments_only'] as const)(
+    'preserves consent and acknowledged %s policy through a configuration round trip',
+    (mode) => {
+      for (const consent of [true, false]) {
+        const config = configuration(consent)
+        config.precomputed.context = optedOutContext
+        const options = {
+          experimentation_opt_out: true,
+          experimentation_opt_out_mode: mode,
+          dd_experimentation_opt_out_at: cutoff,
+        }
+        config.precomputed.response.data.attributes.evaluation_options = options
+        const restored = configurationFromPrecomputedString(configurationToPrecomputedString(config))
+        expect(restored.precomputed?.response.data.attributes.evaluation_options).toEqual(options)
+        expect(evaluator(restored, optedOutContext, mode)).toMatchObject({
+          value: true,
+          flagMetadata: { [metadataKey]: consent, __dd_eval_timestamp_ms: expect.any(Number) },
+        })
+      }
+    }
+  )
+
+  it.each(['invalid timestamp', 'missing acknowledgement', 'wrong cutoff', 'missing subject', 'disabled policy'])(
+    'defaults consent to false when rejecting a configuration with %s',
+    (scenario) => {
+      const config = configuration(true)
+      const subject = { ...optedOutContext }
+      let mode: ExperimentationOptOutOption = 'future_experiments_only'
+      config.precomputed.context = subject
+      const options = {
+        experimentation_opt_out: true,
+        experimentation_opt_out_mode: 'future_experiments_only',
+        dd_experimentation_opt_out_at: cutoff,
+      }
+      config.precomputed.response.data.attributes.evaluation_options = options
+      if (scenario === 'invalid timestamp') subject.dd_experimentation_opt_out_at = 'invalid'
+      if (scenario === 'missing acknowledgement') delete config.precomputed.response.data.attributes.evaluation_options
+      if (scenario === 'wrong cutoff') {
+        options.dd_experimentation_opt_out_at = '2026-10-20T00:00:00Z'
+      }
+      if (scenario === 'missing subject') delete config.precomputed.context
+      if (scenario === 'disabled policy') mode = 'disabled'
+      expect(evaluator(config, subject, mode)).toMatchObject({
+        value: false,
+        errorCode: 'INVALID_CONTEXT',
+        flagMetadata: { [metadataKey]: false, __dd_eval_timestamp_ms: expect.any(Number) },
+      })
+    }
+  )
 })

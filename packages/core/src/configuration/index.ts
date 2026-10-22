@@ -10,5 +10,6 @@ export {
   configurationFromPrecomputedString as configurationFromString,
   configurationToPrecomputedString as configurationToString,
 } from './precomputed-wire'
+export { prepareUniversalFlagConfiguration } from './prepared-activation'
 export type { FlagsConfigurationWire } from './wire-types'
 export { parsePrecomputedConfigurationResponse } from './wire-validation'
