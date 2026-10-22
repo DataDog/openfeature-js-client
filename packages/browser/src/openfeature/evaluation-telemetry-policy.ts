@@ -16,6 +16,7 @@ const policies = new WeakMap<ProviderMetadata, EvaluationTelemetryPolicy>()
 // OpenFeature preserves flagMetadata identity through MultiProvider resolution.
 // Keep this association private instead of adding policy fields to customer results.
 const resultPolicies = new WeakMap<object, EvaluationTelemetryPolicy>()
+const resultContexts = new WeakMap<object, EvaluationContext>()
 
 export interface EvaluationTelemetryPolicy {
   setContext(context: EvaluationContext): void
@@ -61,10 +62,24 @@ export function inheritEvaluationTelemetryPolicy(metadata: ProviderMetadata, inn
 
 export function bindEvaluationTelemetryResult<T extends FlagValue>(
   result: ResolutionDetails<T>,
-  policy: EvaluationTelemetryPolicy
+  policy: EvaluationTelemetryPolicy,
+  context?: EvaluationContext
 ): ResolutionDetails<T> {
+  // Preserve the resolver's identity when a customer hook changes context before tracking runs.
+  // Error results also need a private association; no marker enters public metadata.
+  if (context) {
+    result.flagMetadata ??= {}
+    resultContexts.set(result.flagMetadata, context)
+  }
   if (result.flagMetadata) resultPolicies.set(result.flagMetadata, policy)
   return result
+}
+
+export function getEvaluationTrackingContext(
+  result: ResolutionDetails<FlagValue>,
+  fallback: () => EvaluationContext
+): EvaluationContext {
+  return (result.flagMetadata && resultContexts.get(result.flagMetadata)) ?? fallback()
 }
 
 function getPolicies(metadata: ProviderMetadata | undefined, visited = new Set<object>()): EvaluationTelemetryPolicy[] {

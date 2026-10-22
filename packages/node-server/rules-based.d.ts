@@ -309,6 +309,12 @@ type Allocation = Message<"datadog.ffe.flagging.ufc.v1.Allocation"> & {
 	 * @generated from field: bool log_exposure_event = 5;
 	 */
 	logExposureEvent: boolean;
+	/**
+	 * First randomization activation, independent of later allocation edits.
+	 *
+	 * @generated from field: google.protobuf.Timestamp randomization_activated_at = 6;
+	 */
+	randomizationActivatedAt?: Timestamp | undefined;
 };
 type AttributeReference = Message<"datadog.ffe.flagging.ufc.v1.AttributeReference"> & {
 	/**
@@ -806,6 +812,26 @@ declare enum Reason {
 	 */
 	DEFAULT = 4
 }
+interface OptOutInstant {
+	readonly seconds: number;
+	readonly fraction: string;
+}
+type RandomizationActivation = {
+	kind: "missing";
+} | {
+	kind: "valid";
+	instant: OptOutInstant;
+} | {
+	kind: "invalid";
+};
+type PreparedAllocations<T> = {
+	/** False when any activation is invalid, including on unreachable allocations. */
+	readonly valid: boolean;
+	readonly allocations: ReadonlyArray<{
+		allocation: T;
+		activation: RandomizationActivation;
+	}>;
+};
 type CachedJsonValue = {
 	valid: true;
 	value: FlagValue;
@@ -815,6 +841,8 @@ type CachedJsonValue = {
 type PreparedRulesResponse = FlagsConfiguration & {
 	evaluationRegexCache: Map<number, RegExp | null>;
 	evaluationJsonCache: Map<number, CachedJsonValue>;
+	/** Validated once at decode time; evaluation must not read raw activation timestamps. */
+	randomizationActivations: ReadonlyMap<Flag, PreparedAllocations<Allocation>>;
 };
 /**
  * Internal flags configuration for DatadogProvider.
@@ -855,6 +883,12 @@ type PrecomputedConfigurationResponse = {
 		attributes: {
 			/** When configuration was generated. */
 			createdAt: string;
+			/** Effective server evaluation options, retained in portable and persisted configurations. */
+			evaluation_options?: {
+				experimentation_opt_out?: boolean;
+				experimentation_opt_out_mode?: string;
+				dd_experimentation_opt_out_at?: string;
+			};
 			/** Absent or false for legacy plaintext assignments. */
 			obfuscated?: boolean;
 			/** Required when obfuscated is true; retained with the map in caches. */

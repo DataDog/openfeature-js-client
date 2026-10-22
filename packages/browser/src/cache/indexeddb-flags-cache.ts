@@ -1,5 +1,10 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
-import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
+import {
+  buildStorageKeySuffix,
+  type ExperimentationOptOutPolicy,
+  experimentationOptOutCacheKey,
+  getMD5Hash,
+} from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
@@ -19,10 +24,13 @@ export class IndexedDBFlagsCache {
   }
 
   /** Read cached config for the given context. Returns undefined on miss or any error. */
-  async get(context: EvaluationContext): Promise<FlagsConfiguration | undefined> {
+  async get(
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy = false
+  ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `v2-${legacyKey}`
+      const configKey = `${policyPrefix(optedOut)}-${legacyKey}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -32,6 +40,10 @@ export class IndexedDBFlagsCache {
           request.onsuccess = () => {
             if (request.result !== undefined) {
               resolve(request.result as FlagsConfiguration)
+              return
+            }
+            if (optedOut) {
+              resolve(undefined)
               return
             }
             // Read older plaintext entries on upgrade. Never expose encoded
@@ -65,10 +77,11 @@ export class IndexedDBFlagsCache {
   }
 
   /** Fire-and-forget persist. Never throws. */
-  set(config: FlagsConfiguration, context: EvaluationContext): void {
+  set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
-    const configKey = `v2-${buildConfigKey(this.clientToken, context)}`
+    const prefix = policyPrefix(optedOut)
+    const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}`
     openDB()
       .then((db) => {
         const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -82,4 +95,8 @@ export class IndexedDBFlagsCache {
         // Silently fail — persistence should never break the SDK
       })
   }
+}
+
+function policyPrefix(policy: ExperimentationOptOutPolicy): string {
+  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
 }

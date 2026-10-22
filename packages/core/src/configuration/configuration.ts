@@ -51,6 +51,12 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      /** Effective server evaluation options, retained in portable and persisted configurations. */
+      evaluation_options?: {
+        experimentation_opt_out?: boolean
+        experimentation_opt_out_mode?: string
+        dd_experimentation_opt_out_at?: string
+      }
       /** Absent or false for legacy plaintext assignments. */
       obfuscated?: boolean
       /** Required when obfuscated is true; retained with the map in caches. */
