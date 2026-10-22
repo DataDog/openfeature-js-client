@@ -120,7 +120,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     expect(eventTypes(provider)).toEqual(['failed'])
   })
 
-  it('reports timeout once, without aborting a slow successful initialization', async () => {
+  it('waits for a slow successful initialization without a timed report', async () => {
     let finish: ((response: Response) => void) | undefined
     const fetch: typeof globalThis.fetch = () =>
       new Promise((resolve) => {
@@ -129,9 +129,10 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
     const initializing = provider.initialize()
     await jest.advanceTimersByTimeAsync(31_000)
+    expect(mockSend).not.toHaveBeenCalled()
     finish?.(new Response(JSON.stringify(precomputedResponse), { status: 200 }))
     await initializing
-    expect(eventTypes(provider)).toEqual(['incomplete', 'ready'])
+    expect(eventTypes(provider)).toEqual(['ready'])
   })
 
   it('only logs evaluation details in debug mode, without changing values or uploading flag data', async () => {

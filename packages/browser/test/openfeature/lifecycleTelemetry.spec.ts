@@ -66,7 +66,6 @@ describe('lifecycle diagnostic transport', () => {
           outcome,
           started_at: Date.now() - 110,
           duration_ms: 110,
-          sequence: 0,
           final: true,
           milestones:
             outcome === 'ready'
@@ -84,25 +83,19 @@ describe('lifecycle diagnostic transport', () => {
     expect(mockSend).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['ready', 'failed', 'cached_fallback'] as const)('pairs one deadline snapshot with late %s', (outcome) => {
+  it.each(['ready', 'failed', 'cached_fallback'] as const)('waits for slow %s without a timed snapshot', (outcome) => {
     const telemetry = createLifecycleTelemetry(configuration())
     jest.advanceTimersByTime(100)
     telemetry.configurationReceived()
     jest.advanceTimersByTime(60_000)
+    expect(mockSend).not.toHaveBeenCalled()
+    expect(mockSendOnExit).not.toHaveBeenCalled()
     telemetry.settle(outcome)
     telemetry.stop()
     const payloads = records().map((record) => record.payload)
-    expect(payloads).toHaveLength(2)
-    expect(payloads[0].initialization).toMatchObject({
-      outcome: 'incomplete',
-      reason: 'deadline',
-      sequence: 0,
-      final: false,
-      duration_ms: 30_000,
-    })
-    expect(payloads[1].initialization).toMatchObject({ outcome, sequence: 1, final: true, duration_ms: 60_100 })
-    expect(payloads[1].runtime_id).toBe(payloads[0].runtime_id)
-    expect(payloads[1].initialization.started_at).toBe(payloads[0].initialization.started_at)
+    expect(payloads).toHaveLength(1)
+    expect(payloads[0].initialization).toMatchObject({ outcome, final: true, duration_ms: 60_100 })
+    expect(payloads[0].initialization).not.toHaveProperty('sequence')
   })
 
   it('queues a pending page-exit snapshot before the existing exit transport flushes', () => {
@@ -123,11 +116,11 @@ describe('lifecycle diagnostic transport', () => {
     telemetry.configurationReceived()
     telemetry.settle('ready')
     telemetry.stop()
-    expect(records()[0].payload.initialization).toMatchObject({ outcome: 'ready', sequence: 1 })
+    expect(records()[0].payload.initialization).toMatchObject({ outcome: 'ready', final: true })
     expect(records()[0].payload.runtime_id).toBe(snapshot.runtime_id)
   })
 
-  it('reports provider close while pending once and releases the observation timer', () => {
+  it('reports provider close while pending once', () => {
     const telemetry = createLifecycleTelemetry(configuration())
     telemetry.stop()
     jest.advanceTimersByTime(60_000)
@@ -136,18 +129,17 @@ describe('lifecycle diagnostic transport', () => {
     expect(records()[0].payload.initialization).toMatchObject({
       outcome: 'incomplete',
       reason: 'provider_closed',
-      sequence: 0,
       final: false,
     })
     expect(mockSendOnExit).not.toHaveBeenCalled()
   })
 
-  it('does not emit another incomplete report on close after the deadline', () => {
+  it('reports only provider close after a long pending initialization', () => {
     const telemetry = createLifecycleTelemetry(configuration())
     jest.advanceTimersByTime(30_000)
     telemetry.stop()
     expect(records()).toHaveLength(1)
-    expect(records()[0].payload.initialization.reason).toBe('deadline')
+    expect(records()[0].payload.initialization.reason).toBe('provider_closed')
   })
 
   it('bounds provider errors to one after initialization settles', () => {

@@ -61,7 +61,6 @@
         "outcome",
         "started_at",
         "duration_ms",
-        "sequence",
         "final",
         "milestones"
       ],
@@ -78,11 +77,6 @@
           "type": "number",
           "minimum": 0,
           "maximum": 86400000
-        },
-        "sequence": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1
         },
         "final": {
           "const": true
@@ -118,7 +112,6 @@
         "outcome",
         "started_at",
         "duration_ms",
-        "sequence",
         "final",
         "milestones"
       ],
@@ -135,11 +128,6 @@
           "type": "number",
           "minimum": 0,
           "maximum": 86400000
-        },
-        "sequence": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1
         },
         "final": {
           "const": true
@@ -163,7 +151,6 @@
         "outcome",
         "started_at",
         "duration_ms",
-        "sequence",
         "final",
         "milestones"
       ],
@@ -180,11 +167,6 @@
           "type": "number",
           "minimum": 0,
           "maximum": 86400000
-        },
-        "sequence": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1
         },
         "final": {
           "const": true
@@ -204,7 +186,6 @@
         "outcome",
         "started_at",
         "duration_ms",
-        "sequence",
         "final",
         "milestones",
         "reason"
@@ -223,11 +204,6 @@
           "minimum": 0,
           "maximum": 86400000
         },
-        "sequence": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 0
-        },
         "final": {
           "const": false
         },
@@ -242,7 +218,7 @@
           }
         },
         "reason": {
-          "enum": ["deadline", "page_exit", "provider_closed"]
+          "enum": ["page_exit", "provider_closed"]
         }
       }
     },

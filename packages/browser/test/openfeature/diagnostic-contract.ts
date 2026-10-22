@@ -1,7 +1,7 @@
 import Ajv from 'ajv'
 import schema from '../data/sdkdiagnostic-v1.json'
 
-// Exact copy of dd-source PR #98932's canonical schema, blob 4684d81842d6a824a1c957916cb94d9ca8de9fc1.
+// Exact copy of the canonical flageval-worker schemas/sdkdiagnostic.json, blob fc4edae7e0acc310d1d0911455be96c8849ab4e5.
 // Keep this fixture synchronized when the wire contract changes.
 const validate = new Ajv({ strict: false, allErrors: true }).compile(schema)
 
@@ -26,7 +26,6 @@ export function diagnosticRecords(data: string) {
         expect(ready.elapsed_ms).toBeGreaterThanOrEqual(config.elapsed_ms)
         expect(ready.elapsed_ms).toBeLessThanOrEqual(report.duration_ms)
       }
-      if (report.reason === 'deadline') expect(report.duration_ms).toBeGreaterThanOrEqual(30_000)
     }
     return record
   })

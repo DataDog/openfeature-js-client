@@ -13,7 +13,7 @@ for (const scenario of ['success', 'failure'] as const) {
       payload: {
         event_type: string
         runtime_id: string
-        initialization?: { outcome: string; sequence: number; final: boolean }
+        initialization?: { outcome: string; final: boolean }
         error_code?: string
       }
     }[] = []
@@ -37,7 +37,7 @@ for (const scenario of ['success', 'failure'] as const) {
     await expect.poll(() => records.length).toBe(1)
     expect(records[0].payload).toMatchObject({
       event_type: 'sdk_initialization',
-      initialization: { outcome: scenario === 'success' ? 'ready' : 'failed', sequence: 0, final: true },
+      initialization: { outcome: scenario === 'success' ? 'ready' : 'failed', final: true },
     })
     expect(records[0].payload.error_code).toBe(scenario === 'success' ? undefined : 'INIT_FAILED')
     expect(new Set(records.map((record) => record.payload.runtime_id)).size).toBe(1)
@@ -86,14 +86,13 @@ for (const debugMode of [false, true]) {
   })
 }
 
-test('slow initialization sends an incomplete snapshot followed by a correlated final report', async ({ page }) => {
+test('slow initialization sends only its settled report', async ({ page }) => {
   const records: {
     payload: {
       runtime_id: string
       initialization: {
         outcome: string
         started_at: number
-        sequence: number
         final: boolean
         reason?: string
         duration_ms: number
@@ -118,23 +117,13 @@ test('slow initialization sends an incomplete snapshot followed by a correlated 
   await page.getByLabel('Application ID').fill('test-app')
   await page.getByLabel('Configuration request').selectOption('slow')
   await page.getByRole('button', { name: 'Initialize provider' }).click()
-  await page.clock.runFor(35_001)
+  await page.clock.runFor(30_001)
+  expect(records).toEqual([])
+  await page.clock.runFor(5_000)
   await expect(page.locator('#status')).toContainText('Initialization completed')
   await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
-  await expect.poll(() => records.length).toBe(2)
-  const [snapshot, final] = records.map((record) => record.payload)
-  expect(snapshot.initialization).toMatchObject({
-    outcome: 'incomplete',
-    sequence: 0,
-    final: false,
-    reason: 'deadline',
-  })
-  expect(snapshot.initialization.duration_ms).toBeGreaterThanOrEqual(30_000)
-  expect(final.initialization).toMatchObject({
-    outcome: 'ready',
-    sequence: 1,
-    final: true,
-    started_at: snapshot.initialization.started_at,
-  })
-  expect(final.runtime_id).toBe(snapshot.runtime_id)
+  await expect.poll(() => records.length).toBe(1)
+  expect(records[0].payload.initialization).toMatchObject({ outcome: 'ready', final: true })
+  expect(records[0].payload.initialization.duration_ms).toBeGreaterThanOrEqual(35_000)
+  expect(records[0].payload.initialization).not.toHaveProperty('sequence')
 })

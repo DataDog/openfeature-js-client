@@ -12,7 +12,7 @@ import type { FlaggingConfiguration } from '../domain/configuration'
 
 type Milestone = { elapsed_ms: number }
 type InitializationTiming = { started_at: number; duration_ms: number }
-type FinalTiming = InitializationTiming & { sequence: 0 | 1; final: true }
+type FinalTiming = InitializationTiming & { final: true }
 type Diagnostic =
   | {
       event_type: 'sdk_initialization'
@@ -37,9 +37,8 @@ type Diagnostic =
       error_code?: never
       initialization: InitializationTiming & {
         outcome: 'incomplete'
-        sequence: 0
         final: false
-        reason: 'deadline' | 'page_exit' | 'provider_closed'
+        reason: 'page_exit' | 'provider_closed'
         milestones: { configuration_received?: Milestone }
       }
     }
@@ -85,7 +84,6 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
     snapshot('page_exit')
     pageExit.notify(event)
   })
-  let deadline = setTimeout(() => snapshot('deadline'), 30_000)
 
   function elapsed() {
     return Math.max(0, performance.now() - monotonicStart)
@@ -135,22 +133,17 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
     }
   }
 
-  function snapshot(reason: 'deadline' | 'page_exit' | 'provider_closed') {
+  function snapshot(reason: 'page_exit' | 'provider_closed') {
     if (stopped || settled || snapshotSent) return
     const duration = elapsed()
-    if (reason === 'deadline' && duration < 30_000) {
-      deadline = setTimeout(() => snapshot('deadline'), Math.ceil(30_000 - duration))
-      return
-    }
     snapshotSent = true
-    clearTimeout(deadline)
+
     emit({
       event_type: 'sdk_initialization',
       initialization: {
         outcome: 'incomplete',
         started_at: startedAt,
         duration_ms: duration,
-        sequence: 0,
         final: false,
         reason,
         milestones: configurationReceived ? { configuration_received: configurationReceived } : {},
@@ -163,11 +156,10 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
     // Readiness requires evidence of a fresh, usable configuration.
     if (outcome === 'ready' && !configurationReceived) return
     settled = true
-    clearTimeout(deadline)
+
     const timing = {
       started_at: startedAt,
       duration_ms: elapsed(),
-      sequence: snapshotSent ? (1 as const) : (0 as const),
       final: true as const,
     }
     if (outcome === 'ready' && configurationReceived) {
@@ -215,7 +207,7 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
       if (stopped) return
       snapshot('provider_closed')
       stopped = true
-      clearTimeout(deadline)
+
       try {
         if (batch.flushController.messagesCount > 0) flushOnClose.notify()
       } finally {
