@@ -4,6 +4,7 @@ import {
   createExposureEvent,
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
+  prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
@@ -21,7 +22,7 @@ import type {
 } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
-import { ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
+import { type ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { InitializationController } from './initialization-controller'
 import { NodeProviderEventEmitter } from './provider-event-emitter'
 
@@ -47,7 +48,7 @@ export interface DatadogNodeServerProviderOptions {
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
-  /** Explicit Disabled or Immediate overrides DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE. */
+  /** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
   experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
@@ -63,11 +64,10 @@ export class DatadogNodeServerProvider implements Provider {
   private readonly exposureCache: AssignmentCache | undefined
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
-  private readonly experimentationOptOutImmediate: boolean
+  private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
-    this.experimentationOptOutImmediate =
-      resolveExperimentationOptOutMode(options.experimentationOptOutMode) === ExperimentationOptOutMode.Immediate
+    this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
@@ -84,6 +84,7 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
+    prepareUniversalFlagConfiguration(configuration)
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
 
@@ -157,7 +158,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      this.experimentationOptOutImmediate
+      this.experimentationOptOutMode
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -176,7 +177,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      this.experimentationOptOutImmediate
+      this.experimentationOptOutMode
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -195,7 +196,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      this.experimentationOptOutImmediate
+      this.experimentationOptOutMode
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -220,7 +221,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      this.experimentationOptOutImmediate
+      this.experimentationOptOutMode
     ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails

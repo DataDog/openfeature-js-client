@@ -419,31 +419,6 @@ interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unkno
 	 */
 	finally?(hookContext: Readonly<HookContext<T, TData>>, evaluationDetails: EvaluationDetails<T>, hookHints?: HookHints): HooksReturn;
 }
-interface ExposureEvent {
-	allocation: {
-		key: string;
-	};
-	flag: {
-		key: string;
-	};
-	variant: {
-		key: string;
-	};
-	serial_id?: number;
-	subject: {
-		id: string;
-		attributes: EvaluationContext;
-	};
-	service?: string;
-	rum?: {
-		application?: {
-			id?: string;
-		};
-		view?: {
-			url?: string;
-		};
-	};
-}
 declare enum OperatorType {
 	MATCHES = "MATCHES",
 	NOT_MATCHES = "NOT_MATCHES",
@@ -527,8 +502,10 @@ interface Allocation {
 	rules?: Rule[];
 	startAt?: Date;
 	endAt?: Date;
+	randomizationActivatedAt?: string;
 	splits: Split[];
-	doLog?: boolean;
+	/** Required by the UFC JSON schema; the producer always supplies an explicit boolean. */
+	doLog: boolean;
 }
 interface Flag {
 	key: string;
@@ -546,8 +523,32 @@ export interface UniversalFlagConfigurationV1 {
 	};
 	flags: Record<string, Flag>;
 }
+interface ExposureEvent {
+	allocation: {
+		key: string;
+	};
+	flag: {
+		key: string;
+	};
+	variant: {
+		key: string;
+	};
+	serial_id?: number;
+	subject: {
+		id: string;
+		attributes: EvaluationContext;
+	};
+	service?: string;
+	rum?: {
+		application?: {
+			id?: string;
+		};
+		view?: {
+			url?: string;
+		};
+	};
+}
 export declare enum ExperimentationOptOutMode {
-	Default = "default",
 	Disabled = "disabled",
 	Immediate = "immediate"
 }
@@ -588,7 +589,7 @@ export interface DatadogNodeServerProviderOptions {
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
-	/** Explicit Disabled or Immediate overrides DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE. */
+	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
 	experimentationOptOutMode?: ExperimentationOptOutMode;
 }
 export declare class DatadogNodeServerProvider implements Provider {
@@ -600,7 +601,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
 	private readonly exposureCache;
 	private configuration?;
-	private readonly experimentationOptOutImmediate;
+	private readonly experimentationOptOutMode;
 	constructor(options: DatadogNodeServerProviderOptions);
 	/**
 	 * Used by dd-source-js

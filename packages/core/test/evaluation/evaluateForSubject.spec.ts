@@ -261,6 +261,7 @@ describe('evaluateForSubject', () => {
         allocations: [
           {
             key: 'allocation',
+            doLog: false,
             splits: [{ variationKey: 'constructor', shards: [] }],
           },
         ],
@@ -288,6 +289,7 @@ describe('evaluateForSubject', () => {
         allocations: [
           {
             key: 'default',
+            doLog: false,
             splits: [
               {
                 variationKey: 'on',

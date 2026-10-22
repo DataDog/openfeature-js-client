@@ -8,6 +8,7 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { TypeMismatchError } from '@openfeature/web-sdk'
+import { inheritEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 
 const OVERRIDES_KEY = 'dd.dd_flag.overrides'
 const DEVTOOLS_MARKER_KEY = 'dd.dd_flag.devtools'
@@ -62,7 +63,9 @@ export class DatadogDevtools implements Provider {
   private overrides: Record<string, DDFlagOverride> = {}
   private readonly markerOwner = Symbol()
 
-  constructor(private readonly inner: Provider) {}
+  constructor(private readonly inner: Provider) {
+    inheritEvaluationTelemetryPolicy(this.metadata, inner.metadata)
+  }
 
   get hooks() {
     return this.inner.hooks

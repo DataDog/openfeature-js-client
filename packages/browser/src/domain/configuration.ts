@@ -2,8 +2,18 @@ import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog
 import { validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
+
+export interface EvaluationTelemetryOptOutConfiguration {
+  /**
+   * Enable evaluation telemetry suppression through `dd_evaluation_telemetry_opt_out` (default: false).
+   * Only boolean true suppresses new evaluation telemetry and automatic RUM flag annotations.
+   * The attribute remains available to targeting and exposure reporting.
+   */
+  enableEvaluationTelemetryOptOutParameter?: boolean
+}
 
 /**
  * Init Configuration for the Flagging SDK.
@@ -57,7 +67,11 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
 /**
  * Init Configuration for the online Flagging provider.
  */
-export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfiguration {
+export interface FlaggingInitConfiguration
+  extends
+    FlaggingTrackingInitConfiguration,
+    EvaluationTelemetryOptOutConfiguration,
+    ExperimentationOptOutConfiguration {
   /**
    * Initial flags configuration (precomputed flags)
    */

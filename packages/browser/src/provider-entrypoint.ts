@@ -1,5 +1,13 @@
-export type { FlaggingInitConfiguration, FlaggingTrackingInitConfiguration } from './domain/configuration'
+export type {
+  EvaluationTelemetryOptOutConfiguration,
+  FlaggingInitConfiguration,
+  FlaggingTrackingInitConfiguration,
+} from './domain/configuration'
 export { DatadogDevtools } from './openfeature/devtools-provider'
+export {
+  type ExperimentationOptOutConfiguration,
+  ExperimentationOptOutMode,
+} from './openfeature/experimentation-opt-out'
 export type { DatadogExposureLoggingHook } from './openfeature/exposures'
 export { createDatadogExposureLoggingHook } from './openfeature/exposures'
 export { createDatadogEvaluationLoggingHook } from './openfeature/flagEvaluations'

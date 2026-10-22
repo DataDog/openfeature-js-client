@@ -49,12 +49,18 @@ Applications own retries, polling, storage, tracking, and fallback.
 
 ## Per-subject experimentation opt-out
 
-Set `DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE=immediate` before constructing the provider.
-The default is `disabled`. An explicit `experimentationOptOutMode` provider option overrides the environment.
-Unsupported mode values throw during provider construction.
+Set the `experimentationOptOutMode` provider option to `ExperimentationOptOutMode.Immediate`.
+The default is `Disabled`. Unsupported mode values throw during provider construction.
+The provider uses the explicit option only. When using `dd-trace-js`, the tracer owns
+`DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE` and passes the resolved mode to this provider.
 
 ```typescript
-const provider = new DatadogNodeServerProvider({ exposureChannel })
+import { DatadogNodeServerProvider, ExperimentationOptOutMode } from '@datadog/openfeature-node-server'
+
+const provider = new DatadogNodeServerProvider({
+  exposureChannel,
+  experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+})
 // Supply the customer's stored preference with each evaluation.
 const context = {
   targetingKey: athlete.id,

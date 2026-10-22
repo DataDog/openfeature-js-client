@@ -16,6 +16,7 @@ import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { type ExperimentationOptOutPolicy, excludesExperimentAt } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
@@ -39,7 +40,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   context: EvaluationContext,
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow(),
-  excludeExperiments = false
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
@@ -73,9 +74,13 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       }
     }
 
+    const prepared = configuration.randomizationActivations.get(flag)
+    if (!prepared?.valid) {
+      throw new FlagConfigurationError('Invalid randomization activation timestamp')
+    }
     const conditionResults = new Map<number, boolean>()
-    for (const allocation of flag.allocations) {
-      if (excludeExperiments && allocation.logExposureEvent) continue
+    for (const { allocation, activation } of prepared.allocations) {
+      if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
       if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
         continue
       }

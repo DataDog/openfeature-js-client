@@ -1,7 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { EvaluationContext, FlagValue, JsonValue, Logger, ResolutionDetails } from '@openfeature/core'
-import { evaluateRulesBasedConfiguration, type UniversalFlagConfigurationV1 } from '../../src/evaluation'
+import {
+  type ExperimentationOptOutOption,
+  evaluateRulesBasedConfiguration,
+  type UniversalFlagConfigurationV1,
+} from '../../src/evaluation'
 import type { TestCase } from '../TestCaseResult.types'
 
 describe('Universal Flag Configuration V1', () => {
@@ -39,7 +43,7 @@ describe('Universal Flag Configuration V1', () => {
   const evaluateDetails = (
     testCase: TestCase,
     context: EvaluationContext,
-    immediate = false
+    immediate: ExperimentationOptOutOption = false
   ): ResolutionDetails<FlagValue> => {
     const configuration = getUFC()
     if (testCase.variationType === 'BOOLEAN') {
@@ -117,22 +121,30 @@ describe('Universal Flag Configuration V1', () => {
       }
     })
 
-    for (const testCase of testCases) {
-      const expected = testCase.capabilities?.experimentationOptOutImmediate
-      if (!expected) continue
-      it(`honors immediate opt-out: ${JSON.stringify(testCase.attributes)}`, () => {
-        const context = { targetingKey: testCase.targetingKey, ...testCase.attributes } as EvaluationContext
-        const details = evaluateDetails(testCase, context, true)
-        expect(details.value).toStrictEqual(expected.value)
-        expect(details.reason).toEqual(expected.reason)
-        expect(details.errorCode).toEqual(expected.errorCode)
-      })
+    for (const [capability, mode] of [
+      ['experimentationOptOutImmediate', 'immediate'],
+      ['experimentationOptOutFutureExperimentsOnly', 'future_experiments_only'],
+    ] as const) {
+      for (const testCase of testCases) {
+        const expected = testCase.capabilities?.[capability]
+        if (!expected) continue
+        it(`honors ${mode} opt-out: ${JSON.stringify(testCase.attributes)}`, () => {
+          const context = { targetingKey: testCase.targetingKey, ...testCase.attributes } as EvaluationContext
+          const details = evaluateDetails(testCase, context, mode)
+          expect(details.value).toStrictEqual(expected.value)
+          expect(details.reason).toEqual(expected.reason)
+          expect(details.errorCode).toEqual(expected.errorCode)
+        })
+      }
     }
   })
   it('loads the immediate opt-out capability cases', () => {
     const cases = getTestCaseFileNames().flatMap(getTestCases)
     const immediateCases = cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)
-    expect(immediateCases.length).toBeGreaterThan(0)
+    expect(immediateCases.length).toBe(26)
+    expect(cases.filter((testCase) => testCase.capabilities?.experimentationOptOutFutureExperimentsOnly)).toHaveLength(
+      42
+    )
     expect(new Set(immediateCases.map((testCase) => testCase.variationType))).toEqual(
       new Set(['BOOLEAN', 'STRING', 'INTEGER', 'NUMERIC', 'JSON'])
     )
