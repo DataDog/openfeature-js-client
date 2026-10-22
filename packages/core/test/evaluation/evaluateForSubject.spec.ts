@@ -210,6 +210,53 @@ describe('evaluateForSubject', () => {
   })
 
   describe('malformed flag configuration', () => {
+    const validFlag = (): Flag => ({
+      key: 'dolog-flag',
+      enabled: true,
+      variationType: 'STRING',
+      variations: { on: { key: 'on', value: 'assigned' } },
+      allocations: [{ key: 'allocation', doLog: true, splits: [{ variationKey: 'on', shards: [] }] }],
+    })
+
+    it.each([true, false])('preserves explicit doLog=%s in assignment metadata', (doLog) => {
+      const flag = validFlag()
+      flag.allocations[0].doLog = doLog
+
+      expect(evaluateForSubject(flag, 'string', 'subject', {}, 'default', logger)).toMatchObject({
+        value: 'assigned',
+        reason: 'STATIC',
+        flagMetadata: { __dd_do_log: doLog, doLog },
+      })
+    })
+
+    it.each([undefined, null, 'true', 'false', 0, 1, [], {}])('rejects malformed doLog=%j', (doLog) => {
+      const flag = validFlag()
+      // Simulate untrusted configuration before runtime validation.
+      Object.assign(flag.allocations[0], { doLog })
+
+      const result = evaluateForSubject(flag, 'string', 'subject', {}, 'default', logger)
+      expect(result).toMatchObject({ value: 'default', reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+      expect(result.variant).toBeUndefined()
+      expect(result.flagMetadata?.__dd_do_log).toBeUndefined()
+      expect(result.flagMetadata?.__dd_allocation_key).toBeUndefined()
+    })
+
+    it.each(['before', 'after'])('rejects invalid doLog %s a valid matching allocation', (position) => {
+      const flag = validFlag()
+      const invalidAllocation = { key: 'invalid', splits: [{ variationKey: 'on', shards: [] }] }
+      const allocations =
+        position === 'before'
+          ? [invalidAllocation, ...flag.allocations]
+          : [...flag.allocations, invalidAllocation]
+      Object.assign(flag, { allocations })
+
+      expect(evaluateForSubject(flag, 'string', 'subject', {}, 'default', logger)).toMatchObject({
+        value: 'default',
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR',
+      })
+    })
+
     it('returns a parse error for a present null flag definition', () => {
       const config = {
         createdAt: '2026-08-19T00:00:00Z',
@@ -261,6 +308,7 @@ describe('evaluateForSubject', () => {
         allocations: [
           {
             key: 'allocation',
+            doLog: false,
             splits: [{ variationKey: 'constructor', shards: [] }],
           },
         ],
@@ -288,6 +336,7 @@ describe('evaluateForSubject', () => {
         allocations: [
           {
             key: 'default',
+            doLog: false,
             splits: [
               {
                 variationKey: 'on',

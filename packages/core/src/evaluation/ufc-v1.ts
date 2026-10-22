@@ -32,7 +32,7 @@ export interface Allocation {
   startAt?: Date
   endAt?: Date
   splits: Split[]
-  doLog?: boolean
+  doLog: boolean
 }
 
 export interface Flag {

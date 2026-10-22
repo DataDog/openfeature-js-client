@@ -127,7 +127,7 @@ interface Allocation {
 	startAt?: Date;
 	endAt?: Date;
 	splits: Split[];
-	doLog?: boolean;
+	doLog: boolean;
 }
 interface Flag {
 	key: string;

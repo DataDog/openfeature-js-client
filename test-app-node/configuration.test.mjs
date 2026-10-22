@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { channel } from 'node:diagnostics_channel'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
+import { DatadogNodeServerProvider } from '@datadog/openfeature-node-server'
 import {
   ConfigurationFetchError,
   configurationFromRulesBinary,
@@ -12,6 +15,29 @@ import {
 
 const require = createRequire(import.meta.url)
 const cjs = require('@datadog/openfeature-node-server/rules-based')
+
+const fixtureRoot = new URL('../packages/core/test/ffe-system-test-data/', import.meta.url)
+const configuration = JSON.parse(readFileSync(new URL('ufc-config.json', fixtureRoot), 'utf8'))
+const doLogCases = JSON.parse(
+  readFileSync(new URL('evaluation-cases/test-case-dolog-required.json', fixtureRoot), 'utf8')
+)
+const provider = new DatadogNodeServerProvider({ exposureChannel: channel('test:required-dolog') })
+provider.setConfiguration(configuration)
+const logger = { error() {}, warn() {}, info() {}, debug() {} }
+
+for (const [index, testCase] of doLogCases.entries()) {
+  test(`packed provider: required doLog case ${index} (${testCase.flag})`, async () => {
+    const details = await provider.resolveStringEvaluation(
+      testCase.flag,
+      testCase.defaultValue,
+      { targetingKey: testCase.targetingKey, ...testCase.attributes },
+      logger
+    )
+    assert.equal(details.value, testCase.result.value)
+    assert.equal(details.reason, testCase.result.reason)
+    assert.equal(details.errorCode, testCase.result.errorCode)
+  })
+}
 
 for (const mode of ['require', 'import']) {
   test(`${mode}: root entrypoint does not load protobuf; rules-based entrypoint opts in`, () => {
