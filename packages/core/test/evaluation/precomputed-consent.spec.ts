@@ -115,6 +115,41 @@ describe.each([false, true])('precomputed consent (obfuscated: %s)', (obfuscated
 
 describe.each([evaluate, evaluatePrecomputedConfiguration])('unusable configuration consent', (evaluator) => {
   it.each([
+    ['missing descriptor', 'Invalid precomputed flag-key obfuscation metadata'],
+    ['unsupported scheme', 'Unsupported precomputed flag-key obfuscation scheme'],
+    ['invalid salt', 'Precomputed flag-key salt must contain 32 lowercase hexadecimal characters'],
+  ])('defaults to false for a matching direct configuration with %s', (scenario, errorMessage) => {
+    // Initial configurations and persistent caches can bypass the wire parser.
+    const config = configuration(true, true)
+    const attributes = config.precomputed.response.data.attributes
+    if (scenario === 'missing descriptor') delete attributes.obfuscation
+    if (scenario === 'unsupported scheme') attributes.obfuscation = { ...encoding, scheme: 'unsupported' } as never
+    if (scenario === 'invalid salt') attributes.obfuscation = { ...encoding, salt: 'invalid' }
+
+    expect(evaluator(config, 'boolean', 'flag', false, context)).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage,
+      flagMetadata: { [metadataKey]: false, __dd_eval_timestamp_ms: expect.any(Number) },
+    })
+  })
+
+  it('retains consent for an individual flag error in a usable direct configuration', () => {
+    const config = configuration(true, true)
+    const flagKey = Object.keys(config.precomputed.response.data.attributes.flags)[0]
+    config.precomputed.flagErrors = { [flagKey]: 'Invalid precomputed flag configuration' }
+
+    expect(evaluator(config, 'boolean', 'flag', false, context)).toEqual({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Invalid precomputed flag configuration',
+      flagMetadata: { [metadataKey]: true, __dd_eval_timestamp_ms: expect.any(Number) },
+    })
+  })
+
+  it.each([
     ['PROVIDER_NOT_READY', undefined],
     ['PARSE_ERROR', {}],
     ['PARSE_ERROR', { configurationError: 'invalid' }],
