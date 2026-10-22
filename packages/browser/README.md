@@ -156,7 +156,9 @@ const enabled = OpenFeature.getClient().getBooleanValue('new-route-planner', fal
 Use `ExperimentationOptOutMode.FutureExperimentsOnly` in the example to select the second policy.
 Omit the attribute for eligible subjects. Supply an RFC3339 timestamp, such as `2026-10-19T12:00:00Z`, for opted-out subjects.
 An invalid enabled timestamp returns the application default with `INVALID_CONTEXT` and does not send an assignment request.
-Future timestamps apply immediately; they do not schedule exclusion. Comparisons retain nanosecond precision.
+In `Immediate` mode, any valid timestamp, including a future one, excludes the subject from exposure-logging allocations now.
+In `FutureExperimentsOnly` mode, the SDK applies the cutoff now: it keeps exposure-logging allocations activated before the timestamp and skips those activated at or after it, or with missing activation metadata.
+A future cutoff therefore keeps the subject eligible for experiments activated after now but before that cutoff. Comparisons retain nanosecond precision.
 Future mode uses allocation activation, not prior enrollment. An older allocation can still assign a subject for the first time.
 Holdouts use the same policy. Removing the attribute permits experimentation again.
 
