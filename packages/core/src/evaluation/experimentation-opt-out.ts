@@ -16,8 +16,7 @@ export type ExperimentationOptOutPolicy =
 export function parseOptOutInstant(value: unknown): OptOutInstant | undefined {
   if (typeof value !== 'string') return undefined
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value)
-  // JavaScript's $ anchor also matches before a final newline.
-  if (!match || match[0] !== value) return undefined
+  if (!match) return undefined
   const [, year, month, day, hour, minute, second, fraction = '', zone, sign, zoneHour = '0', zoneMinute = '0'] = match
   const date = new Date(0)
   date.setUTCFullYear(+year, +month - 1, +day)
