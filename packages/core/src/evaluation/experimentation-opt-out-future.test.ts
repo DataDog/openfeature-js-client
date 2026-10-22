@@ -197,6 +197,20 @@ it('validates activation even without a subject opt-out attribute', () => {
   })
 })
 
+it.each(['2026-10-01 12:00:00Z', '2026-10-01T12:00:00.1234567890Z'])(
+  'requires the canonical timestamp format for received JSON activation %s',
+  (activation) => {
+    const configuration = prepareUniversalFlagConfiguration(jsonRules(activation))
+    expect(
+      evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', true, context, logger, mode)
+    ).toMatchObject({
+      value: true,
+      errorCode: 'PARSE_ERROR',
+      reason: 'ERROR',
+    })
+  }
+)
+
 it('preserves the JSON wire representation and prepares replacement flags independently', () => {
   const configuration = jsonRules('2026-10-01T12:00:00.123456788Z')
   const serialized = JSON.stringify(configuration)
@@ -243,8 +257,8 @@ it('prepares valid and invalid protobuf replacements at decode time without chan
 
 it.each([
   ['2026-10-01T08:00:00.123456789-04:00', true],
-  ['2026-10-01T12:00:00.1234567890Z', true],
-  ['2026-10-01T12:00:00.1234567899Z', true],
+  ['2026-10-01T12:00:00.1234567890Z', false],
+  ['2026-10-01T12:00:00.1234567899Z', false],
   ['2026-10-01T12:00:00.123456788Z', false],
   ['2026-10-01T12:00:00.123456790Z', false],
 ])('acknowledgement %s matches: %s', (timestamp, expected) => {
@@ -263,5 +277,6 @@ it.each([
     },
   }
   expect(acknowledgesExperimentationOptOut(configuration, policy)).toBe(expected)
-  expect(compareOptOutInstants(parseOptOutInstant(cutoff)!, parseOptOutInstant(timestamp)!) === 0).toBe(expected)
+  const acknowledged = parseOptOutInstant(timestamp)
+  expect(!!acknowledged && compareOptOutInstants(parseOptOutInstant(cutoff)!, acknowledged) === 0).toBe(expected)
 })

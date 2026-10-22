@@ -177,13 +177,13 @@ describe('immediate experimentation opt-out', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes).not.toHaveProperty('evaluation_options')
   })
 
-  it.each([null, true, false, 42, {}, [], '', 'garbage'])(
-    'rejects invalid typed input %j before fetching or evaluation',
+  it.each([null, true, false, 42, {}, [], '', 'garbage', '2026-01-01t00:00:00Z', '2026-01-01T00:00:00.1234567890Z'])(
+    'rejects invalid opt-out input %j before fetching or evaluation',
     async (value) => {
       const invalid = { ...context, dd_experimentation_opt_out_at: value }
       const fetch = jest.fn().mockResolvedValue(fetchResponse(true))
       const provider = online(fetch)
-      await expect(provider.initialize(invalid)).rejects.toThrow('valid timestamp')
+      await expect(provider.initialize(invalid)).rejects.toThrow(/dd_experimentation_opt_out_at.*YYYY-MM-DDTHH:mm:ss/)
       expect(fetch).not.toHaveBeenCalled()
       expect(provider.resolveBooleanEvaluation('boolean', false, invalid, logger)).toMatchObject({
         value: false,
@@ -193,7 +193,7 @@ describe('immediate experimentation opt-out', () => {
       await provider.onClose()
       const core = new DatadogCoreProvider(immediate)
       core.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
-      await expect(core.initialize(invalid)).rejects.toThrow('valid timestamp')
+      await expect(core.initialize(invalid)).rejects.toThrow(/dd_experimentation_opt_out_at.*YYYY-MM-DDTHH:mm:ss/)
       expect(core.resolveBooleanEvaluation('test-flag', false, invalid, logger).errorCode).toBe('INVALID_CONTEXT')
     }
   )
@@ -447,9 +447,9 @@ describe('future experimentation opt-out', () => {
   const options = { ...future, clientToken: 'future', env: 'test', context: preciseContext }
 
   it.each([
+    preciseContext.dd_experimentation_opt_out_at,
     '2026-10-19T08:00:00.123456789-04:00',
-    '2026-10-19T12:00:00.1234567890Z',
-    '2026-10-19T12:00:00.1234567899Z',
+    '2026-10-19T14:00:00.123456789+02:00',
   ])('accepts equivalent acknowledgement %s and round-trips portable configuration', async (cutoff) => {
     const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff) })
     const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
@@ -465,6 +465,8 @@ describe('future experimentation opt-out', () => {
   })
 
   it.each([
+    ['2026-10-19T12:00:00.1234567890Z', 'future_experiments_only'],
+    ['2026-10-19T12:00:00.1234567899Z', 'future_experiments_only'],
     ['2026-10-19T12:00:00.123456788Z', 'future_experiments_only'],
     ['2026-10-19T12:00:00.123456790Z', 'future_experiments_only'],
     [preciseContext.dd_experimentation_opt_out_at, 'immediate'],

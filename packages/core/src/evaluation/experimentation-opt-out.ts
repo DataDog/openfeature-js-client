@@ -10,13 +10,12 @@ export interface OptOutInstant {
 export type ExperimentationOptOutPolicy =
   false | { mode: 'immediate' | 'future_experiments_only'; cutoff: OptOutInstant }
 
-/** Compare complete instants without losing fractional precision in JavaScript Date. */
+/** Parse the shared canonical timestamp subset, preserving up to nanosecond precision. */
 export function parseOptOutInstant(value: unknown): OptOutInstant | undefined {
   if (typeof value !== 'string') return undefined
-  const match = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?([Zz]|([+-])(\d{2}):(\d{2}))$/.exec(
-    value
-  )
-  if (!match) return undefined
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value)
+  // JavaScript's $ anchor also matches before a final newline.
+  if (!match || match[0] !== value) return undefined
   const [, year, month, day, hour, minute, second, fraction = '', zone, sign, zoneHour = '0', zoneMinute = '0'] = match
   const date = new Date(0)
   date.setUTCFullYear(+year, +month - 1, +day)
@@ -32,8 +31,11 @@ export function parseOptOutInstant(value: unknown): OptOutInstant | undefined {
     +zoneMinute > 59
   )
     return undefined
-  const offset = zone.toUpperCase() === 'Z' ? 0 : (+zoneHour * 3600 + +zoneMinute * 60) * (sign === '-' ? -1 : 1)
-  return { seconds: date.getTime() / 1000 - offset, fraction: fraction.slice(0, 9).replace(/0+$/, '') }
+  const offset = zone === 'Z' ? 0 : (+zoneHour * 3600 + +zoneMinute * 60) * (sign === '-' ? -1 : 1)
+  date.setTime(date.getTime() - offset * 1000)
+  // The UTC acknowledgement must also fit the four-digit year format.
+  if (date.getUTCFullYear() < 0 || date.getUTCFullYear() > 9999) return undefined
+  return { seconds: date.getTime() / 1000, fraction: fraction.replace(/0+$/, '') }
 }
 
 export function compareOptOutInstants(left: OptOutInstant, right: OptOutInstant): number {
@@ -74,15 +76,13 @@ export function experimentationOptOutCacheKey(policy: ExperimentationOptOutPolic
 }
 
 export const INVALID_EXPERIMENTATION_OPT_OUT =
-  'Set dd_experimentation_opt_out_at to a valid timestamp string, or omit the attribute'
+  'Set dd_experimentation_opt_out_at to YYYY-MM-DDTHH:mm:ss[.fraction] with Z or +/-HH:mm (up to 9 fractional digits), or omit the attribute'
 
 /** Validates the customer-owned opt-out timestamp without interpreting its age. */
 export function hasExperimentationOptOut(context: Record<string, unknown>): boolean | undefined {
   // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is unavailable in supported client runtimes.
   if (!Object.prototype.hasOwnProperty.call(context, 'dd_experimentation_opt_out_at')) return false
-  const value = context.dd_experimentation_opt_out_at
-  if (typeof value !== 'string') return undefined
-  return parseOptOutInstant(value) ? true : undefined
+  return parseOptOutInstant(context.dd_experimentation_opt_out_at) ? true : undefined
 }
 
 /** Checks that a precomputed snapshot used the requested exclusion policy, including disabled mode. */
