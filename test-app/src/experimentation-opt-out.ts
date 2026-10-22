@@ -60,8 +60,9 @@ async function run() {
         nanos: 123456789,
       }
     }
+    // Receive a fresh snapshot after editing the fixture so activation timestamps are prepared again.
     provider.setConfiguration(
-      mode === 'rules' ? rules : configurationFromString(configurationToString(await fetchConfig(initial)))
+      configurationFromString(configurationToString(mode === 'rules' ? rules : await fetchConfig(initial)))
     )
     tracking = composeDatadogTrackingHooks(
       createDatadogEvaluationLoggingHook(options),

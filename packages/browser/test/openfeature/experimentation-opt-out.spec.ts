@@ -280,10 +280,11 @@ describe('immediate experimentation opt-out', () => {
     const unacknowledged = { precomputed: { context, response: response() } } as FlagsConfiguration
     cache.set(unacknowledged, context)
     // Reading uses a later transaction on the same database, after the write transaction.
-    expect(await cache.get(context, true)).toBeUndefined()
+    const immediate = experimentationOptOutPolicy(context, 'immediate')!
+    expect(await cache.get(context, immediate)).toBeUndefined()
     const config = { precomputed: { context, response: response(true) } } as FlagsConfiguration
-    cache.set(config, context, true)
-    expect(await cache.get(context, true)).toEqual(config)
+    cache.set(config, context, immediate)
+    expect(await cache.get(context, immediate)).toEqual(config)
     const provider = online(jest.fn().mockRejectedValue(new Error('offline')), 'cache-scope')
     await provider.initialize(context)
     expect(provider.resolveBooleanEvaluation('boolean', false, context, logger).value).toBe(true)
@@ -480,7 +481,7 @@ describe('future experimentation opt-out', () => {
     const policy = experimentationOptOutPolicy(preciseContext, 'future_experiments_only')!
     cache.set(configuration, preciseContext, policy)
     expect(await cache.get(preciseContext, policy)).toEqual(configuration)
-    expect(await cache.get(preciseContext, true)).toBeUndefined()
+    expect(await cache.get(preciseContext, experimentationOptOutPolicy(preciseContext, 'immediate')!)).toBeUndefined()
     expect(await cache.get(preciseContext, false)).toBeUndefined()
     const offline = jest.fn().mockRejectedValue(new Error('offline'))
     const provider = new DatadogProvider({

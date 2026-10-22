@@ -26,7 +26,7 @@ export class IndexedDBFlagsCache {
   /** Read cached config for the given context. Returns undefined on miss or any error. */
   async get(
     context: EvaluationContext,
-    optedOut: ExperimentationOptOutPolicy | boolean = false
+    optedOut: ExperimentationOptOutPolicy = false
   ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
@@ -77,11 +77,7 @@ export class IndexedDBFlagsCache {
   }
 
   /** Fire-and-forget persist. Never throws. */
-  set(
-    config: FlagsConfiguration,
-    context: EvaluationContext,
-    optedOut: ExperimentationOptOutPolicy | boolean = false
-  ): void {
+  set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
     const prefix = policyPrefix(optedOut)
@@ -101,8 +97,6 @@ export class IndexedDBFlagsCache {
   }
 }
 
-function policyPrefix(policy: ExperimentationOptOutPolicy | boolean): string {
-  if (!policy) return 'v2'
-  // Keep immediate entries compatible; context already includes their exact timestamp.
-  return policy === true || policy.mode === 'immediate' ? 'opted-out' : experimentationOptOutCacheKey(policy)
+function policyPrefix(policy: ExperimentationOptOutPolicy): string {
+  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
 }

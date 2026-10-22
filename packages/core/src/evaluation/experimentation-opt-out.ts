@@ -88,7 +88,7 @@ export function hasExperimentationOptOut(context: Record<string, unknown>): bool
 /** Checks that a precomputed snapshot used the requested exclusion policy, including disabled mode. */
 export function acknowledgesExperimentationOptOut(
   configuration: FlagsConfiguration | undefined,
-  policy: ExperimentationOptOutPolicy = { mode: 'immediate', cutoff: { seconds: 0, fraction: '' } }
+  policy: ExperimentationOptOutPolicy
 ): boolean {
   const acknowledgement = configuration?.precomputed?.response.data.attributes.evaluation_options
   if (!policy)

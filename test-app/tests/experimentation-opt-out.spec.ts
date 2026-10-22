@@ -81,7 +81,7 @@ test('online: reload uses only acknowledged opted-out assignments from IndexedDB
           const request = db.transaction(name).objectStore(name).getAllKeys()
           request.onsuccess = () => resolve(request.result)
         })
-        if (keys.some((key) => String(key).startsWith('opted-out-flags-config-'))) {
+        if (keys.some((key) => /^immediate:[^-]*-flags-config-/.test(String(key)))) {
           db.close()
           return true
         }
