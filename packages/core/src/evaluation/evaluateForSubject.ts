@@ -1,9 +1,10 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
+import { prepareJsonFlagActivations } from '../configuration/prepared-activation'
 import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
-import { type ExperimentationOptOutPolicy, excludesExperiment, parseOptOutInstant } from './experimentation-opt-out'
+import { type ExperimentationOptOutPolicy, excludesExperimentAt } from './experimentation-opt-out'
 import { matchesShard } from './matchesShard'
 import { isValidRule, matchesRule, type Rule } from './rules'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
@@ -60,17 +61,12 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 
   const now = new Date(evaluationTimestampMs)
-  if (
-    flag.allocations.some(
-      (allocation) =>
-        allocation.randomizationActivatedAt != null && !parseOptOutInstant(allocation.randomizationActivatedAt)
-    )
-  ) {
+  const prepared = prepareJsonFlagActivations(flag)
+  if (!prepared.valid) {
     return { value: defaultValue, reason: 'ERROR', errorCode: 'PARSE_ERROR' as ErrorCode }
   }
-  for (const allocation of flag.allocations) {
-    if (excludesExperiment(excludeExperiments, allocation.doLog !== false, allocation.randomizationActivatedAt))
-      continue
+  for (const { allocation, activation } of prepared.allocations) {
+    if (excludesExperimentAt(excludeExperiments, allocation.doLog !== false, activation)) continue
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,

@@ -132,6 +132,36 @@ describe('DatadogNodeServerProvider', () => {
     }
   )
 
+  it('prepares activation on receipt and validates replacement configurations before evaluation', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const initial = structuredClone(configuration)
+    const flag = initial.flags['kill-switch']
+    const readInitial = jest.fn(() => '2026-10-01T12:00:00.123456789Z')
+    Object.defineProperty(flag.allocations[0], 'randomizationActivatedAt', { get: readInitial })
+
+    provider.setConfiguration(initial)
+    expect(readInitial).toHaveBeenCalledTimes(1)
+    readInitial.mockImplementation(() => {
+      throw new Error('activation read during evaluation')
+    })
+    for (const targetingKey of ['first', 'second']) {
+      const result = await provider.resolveBooleanEvaluation('kill-switch', false, { targetingKey }, logger)
+      expect(result.errorCode).toBeUndefined()
+    }
+    expect(readInitial).toHaveBeenCalledTimes(1)
+
+    const replacement = structuredClone(configuration)
+    const readReplacement = jest.fn(() => 'invalid')
+    Object.defineProperty(replacement.flags['kill-switch'].allocations[0], 'randomizationActivatedAt', {
+      get: readReplacement,
+    })
+    provider.setConfiguration(replacement)
+    expect(readReplacement).toHaveBeenCalledTimes(1)
+    const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(readReplacement).toHaveBeenCalledTimes(1)
+  })
+
   it('uses protected consent before a provider configuration is available', async () => {
     const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
     const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)

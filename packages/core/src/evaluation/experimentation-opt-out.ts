@@ -4,8 +4,8 @@ export type ExperimentationOptOutModeValue = 'disabled' | 'immediate' | 'future_
 // Boolean arguments preserve the existing shared-core immediate API.
 export type ExperimentationOptOutOption = boolean | ExperimentationOptOutModeValue
 export interface OptOutInstant {
-  seconds: number
-  fraction: string
+  readonly seconds: number
+  readonly fraction: string
 }
 export type ExperimentationOptOutPolicy =
   false | { mode: 'immediate' | 'future_experiments_only'; cutoff: OptOutInstant }
@@ -53,17 +53,6 @@ export function experimentationOptOutPolicy(
   if (!Object.prototype.hasOwnProperty.call(context, 'dd_experimentation_opt_out_at')) return false
   const cutoff = parseOptOutInstant(context.dd_experimentation_opt_out_at)
   return cutoff ? { mode: mode === true ? 'immediate' : mode, cutoff } : undefined
-}
-
-export function excludesExperiment(
-  policy: ExperimentationOptOutPolicy | boolean,
-  doLog: boolean,
-  activation?: unknown
-): boolean {
-  if (!policy || !doLog) return false
-  if (policy === true || policy.mode === 'immediate') return true
-  const instant = parseOptOutInstant(activation)
-  return excludesExperimentAt(policy, doLog, instant)
 }
 
 export function excludesExperimentAt(
