@@ -11,6 +11,7 @@ test-app/dist
 test-app/node_modules
 test-app/*.tgz
 packages/core/test/ffe-system-test-data
+packages/core/test/ffe-flag-selection-data
 packages/node-server/index.d.ts
 packages/node-server/rules-based.d.ts
 packages/core/src/configuration/generated
