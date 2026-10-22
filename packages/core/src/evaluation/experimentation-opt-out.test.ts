@@ -14,6 +14,10 @@ describe('customer opt-out timestamp', () => {
     '2026-01-01T00:00:00.123456+01:30',
     '0000-01-01T00:00:00Z',
     '9999-12-31T23:59:59.999999999Z',
+    '2026-01-01t00:00:00Z',
+    '2026-01-01T00:00:00z',
+    '2026-01-01T00:00:00.1234567890Z',
+    '2026-01-01t00:00:00.123456789999z',
   ])('accepts %s', (value) => {
     expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBe(true)
   })
@@ -33,14 +37,11 @@ describe('customer opt-out timestamp', () => {
     '2026-01-01T00:00:60Z',
     '2026-01-01T00:00:00+24:00',
     '2026-01-01T00:00:00+00:60',
-    '2026-01-01t00:00:00Z',
-    '2026-01-01T00:00:00z',
     '2026-01-01 00:00:00Z',
     '2026-01-01T00:00:00 UTC',
     '2026-01-01T00:00:00+0000',
     '2026-01-01T00:00:00\u221205:00',
     '2026-01-01T00:00:00.Z',
-    '2026-01-01T00:00:00.1234567890Z',
     ' 2026-01-01T00:00:00Z',
     '2026-01-01T00:00:00Z ',
     '2026-01-01T00:00:00Z\n',
@@ -49,6 +50,14 @@ describe('customer opt-out timestamp', () => {
     'not-a-timestamp',
   ])('rejects timestamps outside the supported format: %j', (value) => {
     expect(hasExperimentationOptOut({ dd_experimentation_opt_out_at: value })).toBeUndefined()
+  })
+
+  it.each([
+    ['2026-10-19t12:00:00.123456789999z', '2026-10-19T12:00:00.123456789Z'],
+    ['2026-10-19t08:00:00.123456789999-04:00', '2026-10-19T12:00:00.123456789Z'],
+    ['1969-12-31t23:59:59.999999999999z', '1969-12-31T23:59:59.999999999Z'],
+  ])('normalizes %s without rounding across a nanosecond boundary', (input, expected) => {
+    expect(parseOptOutInstant(input)).toEqual(parseOptOutInstant(expected))
   })
 
   it('compares canonical offsets and fractional precision without rounding', () => {

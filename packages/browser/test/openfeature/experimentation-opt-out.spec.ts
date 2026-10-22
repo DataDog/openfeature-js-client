@@ -177,7 +177,7 @@ describe('immediate experimentation opt-out', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes).not.toHaveProperty('evaluation_options')
   })
 
-  it.each([null, true, false, 42, {}, [], '', 'garbage', '2026-01-01t00:00:00Z', '2026-01-01T00:00:00.1234567890Z'])(
+  it.each([null, true, false, 42, {}, [], '', 'garbage', '2026-01-01 00:00:00Z'])(
     'rejects invalid opt-out input %j before fetching or evaluation',
     async (value) => {
       const invalid = { ...context, dd_experimentation_opt_out_at: value }
@@ -514,6 +514,9 @@ describe('future experimentation opt-out', () => {
     preciseContext.dd_experimentation_opt_out_at,
     '2026-10-19T08:00:00.123456789-04:00',
     '2026-10-19T14:00:00.123456789+02:00',
+    '2026-10-19t12:00:00.123456789z',
+    '2026-10-19T12:00:00.1234567890Z',
+    '2026-10-19T12:00:00.1234567899Z',
   ])('accepts equivalent acknowledgement %s and round-trips portable configuration', async (cutoff) => {
     const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff) })
     const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
@@ -529,8 +532,6 @@ describe('future experimentation opt-out', () => {
   })
 
   it.each([
-    ['2026-10-19T12:00:00.1234567890Z', 'future_experiments_only'],
-    ['2026-10-19T12:00:00.1234567899Z', 'future_experiments_only'],
     ['2026-10-19T12:00:00.123456788Z', 'future_experiments_only'],
     ['2026-10-19T12:00:00.123456790Z', 'future_experiments_only'],
     [preciseContext.dd_experimentation_opt_out_at, 'immediate'],
@@ -539,6 +540,19 @@ describe('future experimentation opt-out', () => {
     const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff, mode) })
     await expect(fetchPrecomputedConfiguration({ ...options, fetch })).rejects.toThrow('acknowledge')
   })
+
+  it.each(['2026-10-19t12:00:00.123456789z', '2026-10-19t08:00:00.123456789999-04:00'])(
+    'accepts subject timestamp %s with a normalized server acknowledgement',
+    async (timestamp) => {
+      const suppliedContext = { ...preciseContext, dd_experimentation_opt_out_at: timestamp }
+      const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse() })
+      const configuration = await fetchPrecomputedConfiguration({ ...options, context: suppliedContext, fetch })
+      const core = new DatadogCoreProvider(future)
+      core.setConfiguration(configuration)
+      await core.initialize(suppliedContext)
+      expect(core.resolveBooleanEvaluation('boolean', false, suppliedContext, logger).value).toBe(true)
+    }
+  )
 
   it('isolates IndexedDB cache across immediate, future, cutoff, and subject', async () => {
     const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse() })

@@ -227,8 +227,8 @@ it('allows an unreadable activation on the selected allocation when it is not ne
   }
 })
 
-it.each(['2026-10-01 12:00:00Z', '2026-10-01T12:00:00.1234567890Z'])(
-  'requires the canonical timestamp format for received JSON activation %s',
+it.each(['2026-10-01 12:00:00Z', '2026-10-01T12:00:00 UTC'])(
+  'requires the supported timestamp format for received JSON activation %s',
   (activation) => {
     const configuration = prepareUniversalFlagConfiguration(jsonRules(activation))
     expect(
@@ -240,6 +240,17 @@ it.each(['2026-10-01 12:00:00Z', '2026-10-01T12:00:00.1234567890Z'])(
     })
   }
 )
+
+it.each([
+  ['2026-10-01t08:00:00.123456788999-04:00', true],
+  ['2026-10-01t12:00:00.123456789999z', false],
+])('normalizes JSON activation %s and the subject cutoff to nanoseconds', (activation, expected) => {
+  const configuration = prepareUniversalFlagConfiguration(jsonRules(activation))
+  const subject = { ...context, dd_experimentation_opt_out_at: '2026-10-01t12:00:00.123456789001z' }
+  const result = evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', !expected, subject, logger, mode)
+  expect(result.value).toBe(expected)
+  expect(result.errorCode).toBeUndefined()
+})
 
 it('preserves the JSON wire representation and prepares replacement flags independently', () => {
   const configuration = jsonRules('2026-10-01T12:00:00.123456788Z')
@@ -287,8 +298,9 @@ it('prepares valid and invalid protobuf replacements at decode time without chan
 
 it.each([
   ['2026-10-01T08:00:00.123456789-04:00', true],
-  ['2026-10-01T12:00:00.1234567890Z', false],
-  ['2026-10-01T12:00:00.1234567899Z', false],
+  ['2026-10-01t12:00:00.123456789z', true],
+  ['2026-10-01T12:00:00.1234567890Z', true],
+  ['2026-10-01T12:00:00.1234567899Z', true],
   ['2026-10-01T12:00:00.123456788Z', false],
   ['2026-10-01T12:00:00.123456790Z', false],
 ])('acknowledgement %s matches: %s', (timestamp, expected) => {

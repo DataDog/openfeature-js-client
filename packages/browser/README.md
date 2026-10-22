@@ -155,10 +155,11 @@ const enabled = OpenFeature.getClient().getBooleanValue('new-route-planner', fal
 
 Use `ExperimentationOptOutMode.FutureExperimentsOnly` in the example to select the second policy.
 Omit the attribute for eligible subjects. For opted-out subjects, supply a timestamp in the supported RFC3339 subset:
-`YYYY-MM-DDTHH:mm:ss` with an optional decimal fraction of 1–9 digits, followed by `Z` or a numeric `+HH:mm` or `-HH:mm` offset.
+`YYYY-MM-DDTHH:mm:ss` with an optional decimal fraction, followed by `Z` or a numeric `+HH:mm` or `-HH:mm` offset.
+Lowercase `t` and `z` are accepted. Fractional digits beyond nanoseconds are truncated without rounding.
 For example, `2026-10-19T12:00:00Z`, `2026-10-19T12:00:00.123456789Z`, or `2026-10-19T08:00:00-04:00`.
-Use uppercase `T` and `Z`, valid calendar dates, and seconds `00–59`. Both the written date and its UTC instant must have years `0000–9999`.
-Whitespace, named timezones, Unicode signs, leap seconds, and additional fractional digits are rejected.
+Use valid calendar dates and seconds `00–59`. Both the written date and its UTC instant must have years `0000–9999`.
+Whitespace, named timezones, Unicode signs, and leap seconds are rejected.
 JSON `randomizationActivatedAt` values use the same format and are validated once when configuration is received. Producers should emit UTC with `Z`.
 Invalid activation metadata returns `PARSE_ERROR` for the affected flag only when an opted-out subject uses `FutureExperimentsOnly`.
 An invalid enabled timestamp returns the application default with `INVALID_CONTEXT` and does not send an assignment request.
