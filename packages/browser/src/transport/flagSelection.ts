@@ -7,7 +7,7 @@ import {
   MAX_FLAG_SELECTION_VALUES,
 } from '@datadog/flagging-core'
 
-// From the RFC's Failure modes section, per https://datadoghq.atlassian.net/browse/FFL-3370
+// Fastly answers URLs over 8 KB with 414 URI Too Long: https://docs.fastly.com/products/network-services-resource-limits
 export const MAX_RULES_URL_BYTES = 8192
 
 const FLAG_SELECTION_IGNORED_HEADER = 'DD-Flag-Selection-Ignored'

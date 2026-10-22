@@ -654,6 +654,22 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
         expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
       })
+
+      it('does not read the ignored header when no selection was sent', async () => {
+        const headers = new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+        const getHeader = jest.spyOn(headers, 'get')
+        mockFetch.mockResolvedValue({
+          ok: true,
+          headers,
+          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        })
+
+        await createFlagsConfigurationFetcher(baseConfig)(mockContext)
+
+        expect(getHeader).not.toHaveBeenCalledWith('DD-Flag-Selection-Ignored')
+        expect(displayError).not.toHaveBeenCalled()
+        expect(addTelemetryDebug).not.toHaveBeenCalled()
+      })
     })
 
     describe('rules-based GET', () => {
@@ -794,6 +810,18 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(displayError).toHaveBeenCalledTimes(1)
         expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
         expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'too_many_values' })
+      })
+
+      it('does not read the ignored header when no selection was sent', async () => {
+        const response = rulesResponse({ 'DD-Flag-Selection-Ignored': 'too_many_values' })
+        const getHeader = jest.spyOn(response.headers, 'get')
+        const customFetch = jest.fn().mockResolvedValue(response)
+
+        await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch })
+
+        expect(getHeader).not.toHaveBeenCalledWith('DD-Flag-Selection-Ignored')
+        expect(displayError).not.toHaveBeenCalled()
+        expect(addTelemetryDebug).not.toHaveBeenCalled()
       })
 
       it('reports a dropped selection on every call', async () => {
