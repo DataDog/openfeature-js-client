@@ -33,7 +33,8 @@ export interface Allocation {
   endAt?: Date
   randomizationActivatedAt?: string
   splits: Split[]
-  doLog?: boolean
+  /** Required by the UFC JSON schema; the producer always supplies an explicit boolean. */
+  doLog: boolean
 }
 
 export interface Flag {
