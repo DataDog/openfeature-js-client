@@ -10,11 +10,17 @@ for (const scenario of ['success', 'failure'] as const) {
     const records: {
       type: string
       schema_version: number
-      payload: { event_type: string; runtime_id: string }
+      payload: {
+        event_type: string
+        runtime_id: string
+        initialization?: { outcome: string; sequence: number; final: boolean }
+        error_code?: string
+      }
     }[] = []
     await page.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
     await page.route('https://browser-intake-datad0g.com/**', async (route) => {
       expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
+      expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
       for (const line of (route.request().postData() ?? '').split('\n').filter(Boolean)) records.push(JSON.parse(line))
       await route.fulfill({ status: 202, body: '' })
     })
@@ -28,12 +34,12 @@ for (const scenario of ['success', 'failure'] as const) {
       scenario === 'success' ? 'Initialization completed' : 'Initialization failed'
     )
     await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
-    await expect.poll(() => records.length).toBe(3)
-    expect(records.map((record) => record.payload.event_type)).toEqual(
-      scenario === 'success'
-        ? ['sdk_init_started', 'configuration_received', 'provider_ready']
-        : ['sdk_init_started', 'provider_error', 'init_failed']
-    )
+    await expect.poll(() => records.length).toBe(1)
+    expect(records[0].payload).toMatchObject({
+      event_type: 'sdk_initialization',
+      initialization: { outcome: scenario === 'success' ? 'ready' : 'failed', sequence: 0, final: true },
+    })
+    expect(records[0].payload.error_code).toBe(scenario === 'success' ? undefined : 'INIT_FAILED')
     expect(new Set(records.map((record) => record.payload.runtime_id)).size).toBe(1)
     expect(records.every((record) => record.type === 'sdk_diagnostic' && record.schema_version === 1)).toBe(true)
     expect(JSON.stringify(records)).not.toContain('test-client-token')
@@ -49,6 +55,7 @@ for (const debugMode of [false, true]) {
     await page.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
     await page.route('https://browser-intake-datad0g.com/**', async (route) => {
       expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
+      expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
       for (const line of (route.request().postData() ?? '').split('\n').filter(Boolean)) {
         attemptedEvents.push(JSON.parse(line).payload.event_type)
       }
@@ -66,7 +73,7 @@ for (const debugMode of [false, true]) {
     )
     await page.clock.runFor(30_001)
     expect((await failedUpload).failure()).not.toBeNull()
-    expect(attemptedEvents).toEqual(['sdk_init_started', 'configuration_received', 'provider_ready'])
+    expect(attemptedEvents).toEqual(['sdk_initialization'])
 
     await page.getByLabel('Flag key').fill('boolean-flag')
     await page.getByRole('button', { name: 'Evaluate boolean details' }).click()
@@ -78,3 +85,56 @@ for (const debugMode of [false, true]) {
     await expect(page.locator('#status')).toContainText('Provider closed')
   })
 }
+
+test('slow initialization sends an incomplete snapshot followed by a correlated final report', async ({ page }) => {
+  const records: {
+    payload: {
+      runtime_id: string
+      initialization: {
+        outcome: string
+        started_at: number
+        sequence: number
+        final: boolean
+        reason?: string
+        duration_ms: number
+      }
+    }
+  }[] = []
+  await page.clock.install()
+  await page.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
+  await page.route('https://browser-intake-datad0g.com/**', async (route) => {
+    expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
+    expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
+    const lines = (route.request().postData() ?? '').split('\n').filter(Boolean)
+    expect(lines.length).toBeLessThanOrEqual(32)
+    for (const line of lines) {
+      expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(2048)
+      records.push(JSON.parse(line))
+    }
+    await route.fulfill({ status: 202, body: '' })
+  })
+  await page.goto('/diagnostics.html')
+  await page.getByLabel('Staging client token').fill('test-client-token')
+  await page.getByLabel('Application ID').fill('test-app')
+  await page.getByLabel('Configuration request').selectOption('slow')
+  await page.getByRole('button', { name: 'Initialize provider' }).click()
+  await page.clock.runFor(35_001)
+  await expect(page.locator('#status')).toContainText('Initialization completed')
+  await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
+  await expect.poll(() => records.length).toBe(2)
+  const [snapshot, final] = records.map((record) => record.payload)
+  expect(snapshot.initialization).toMatchObject({
+    outcome: 'incomplete',
+    sequence: 0,
+    final: false,
+    reason: 'deadline',
+  })
+  expect(snapshot.initialization.duration_ms).toBeGreaterThanOrEqual(30_000)
+  expect(final.initialization).toMatchObject({
+    outcome: 'ready',
+    sequence: 1,
+    final: true,
+    started_at: snapshot.initialization.started_at,
+  })
+  expect(final.runtime_id).toBe(snapshot.runtime_id)
+})
