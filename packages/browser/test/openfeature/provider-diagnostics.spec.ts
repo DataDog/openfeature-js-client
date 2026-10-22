@@ -6,6 +6,7 @@ import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import precomputedResponse from '../data/precomputed-v1.json'
+import { diagnosticRecords } from './diagnostic-contract'
 
 const mockSend = jest.fn()
 jest.mock('@datadog/browser-core', () => ({
@@ -28,7 +29,7 @@ const baseOptions: FlaggingInitConfiguration = {
 function eventTypes(provider: DatadogProvider): string[] {
   provider.onClose()
   return mockSend.mock.calls.flatMap(([request]) =>
-    request.data.split('\n').map((line: string) => JSON.parse(line).payload.event_type)
+    diagnosticRecords(request.data).map((record) => record.payload.initialization?.outcome ?? record.payload.event_type)
   )
 }
 
@@ -52,20 +53,20 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: success })
     await provider.initialize()
     expect(createHttpRequest).toHaveBeenCalledTimes(1)
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'configuration_received', 'provider_ready'])
+    expect(eventTypes(provider)).toEqual(['ready'])
   })
 
   it('emits real startup evidence without any flag evaluation or RUM', async () => {
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: success })
     await provider.initialize()
     await provider.onContextChange({}, { targetingKey: 'second-context' })
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'configuration_received', 'provider_ready'])
+    expect(eventTypes(provider)).toEqual(['ready'])
   })
 
   it('reports a fetch error and failed initialization when no configuration is available', async () => {
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: failure })
     await expect(provider.initialize()).rejects.toThrow()
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'provider_error', 'init_failed'])
+    expect(eventTypes(provider)).toEqual(['failed'])
     expect(JSON.stringify(mockSend.mock.calls)).not.toContain('private network failure details')
   })
 
@@ -75,12 +76,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     await provider.initialize()
     await provider.onContextChange({}, {})
     expect(provider.status).toBe(ProviderStatus.STALE)
-    expect(eventTypes(provider)).toEqual([
-      'sdk_init_started',
-      'configuration_received',
-      'provider_ready',
-      'provider_error',
-    ])
+    expect(eventTypes(provider)).toEqual(['ready', 'provider_error'])
   })
 
   it('does not treat superseded configuration requests as failures', async () => {
@@ -97,7 +93,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     const initializing = provider.initialize()
     await provider.onContextChange({}, { targetingKey: 'new' })
     await initializing
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'configuration_received', 'provider_ready'])
+    expect(eventTypes(provider)).toEqual(['ready'])
   })
 
   it('does not claim readiness when startup only recovers from persistent cache', async () => {
@@ -112,7 +108,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: failure })
     await provider.initialize()
     expect(provider.status).toBe(ProviderStatus.STALE)
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'provider_error'])
+    expect(eventTypes(provider)).toEqual(['cached_fallback'])
   })
 
   it('reports malformed configuration without a successful readiness event', async () => {
@@ -121,7 +117,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
       flagConfigurationFetch: () => Promise.resolve(new Response('{}', { status: 200 })),
     })
     await expect(provider.initialize()).rejects.toThrow('Precomputed configuration response is missing data')
-    expect(eventTypes(provider)).toEqual(['sdk_init_started', 'provider_error', 'init_failed'])
+    expect(eventTypes(provider)).toEqual(['failed'])
   })
 
   it('reports timeout once, without aborting a slow successful initialization', async () => {
@@ -135,12 +131,7 @@ describe.each([undefined, false, true])('provider diagnostics with debugMode=%s'
     await jest.advanceTimersByTimeAsync(31_000)
     finish?.(new Response(JSON.stringify(precomputedResponse), { status: 200 }))
     await initializing
-    expect(eventTypes(provider)).toEqual([
-      'sdk_init_started',
-      'init_timeout',
-      'configuration_received',
-      'provider_ready',
-    ])
+    expect(eventTypes(provider)).toEqual(['incomplete', 'ready'])
   })
 
   it('only logs evaluation details in debug mode, without changing values or uploading flag data', async () => {

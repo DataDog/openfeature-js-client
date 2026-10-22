@@ -813,6 +813,7 @@ __metadata:
     "@types/chrome": "npm:^0.2.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^25.6.0"
+    ajv: "npm:8.20.0"
     fake-indexeddb: "npm:^6.2.5"
     jest: "npm:^30.0.4"
     jest-environment-jsdom: "npm:^30.0.4"
@@ -2930,7 +2931,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ajv@npm:^8.20.0":
+"ajv@npm:8.20.0, ajv@npm:^8.20.0":
   version: 8.20.0
   resolution: "ajv@npm:8.20.0"
   dependencies:

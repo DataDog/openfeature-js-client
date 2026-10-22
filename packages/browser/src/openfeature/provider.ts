@@ -65,9 +65,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private readonly isRumIntegrationEnabled: boolean
   private readonly debugMode: boolean
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
-  private initializationTimer?: ReturnType<typeof setTimeout>
   private initializationStarted = false
-  private initializationFinished = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -141,9 +139,6 @@ export class DatadogProvider extends DatadogProviderBase {
       try {
         if (this.configuration) {
           this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.debugMode)
-          this.lifecycleTelemetry.emit('sdk_init_started')
-          // Observe slow startup without aborting or changing OpenFeature initialization.
-          this.initializationTimer = setTimeout(() => this.lifecycleTelemetry?.emit('init_timeout'), 30_000)
         }
       } catch {
         if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
@@ -153,18 +148,14 @@ export class DatadogProvider extends DatadogProviderBase {
     try {
       return await this.setContext(context)
     } catch (error) {
-      this.lifecycleTelemetry?.emit('init_failed')
+      this.lifecycleTelemetry?.settle('failed')
       if (this.debugMode)
         logDiagnostic('Initialization failed. Inspect the configuration request in browser developer tools.')
       throw error
-    } finally {
-      this.initializationFinished = true
-      clearTimeout(this.initializationTimer)
     }
   }
 
   async onClose(): Promise<void> {
-    clearTimeout(this.initializationTimer)
     try {
       this.lifecycleTelemetry?.stop()
     } catch {
@@ -228,9 +219,7 @@ export class DatadogProvider extends DatadogProviderBase {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
-          if (!fromCache && config.precomputed) {
-            this.lifecycleTelemetry?.emit('provider_ready')
-          }
+          this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -284,10 +273,9 @@ export class DatadogProvider extends DatadogProviderBase {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       if (!signal.aborted) {
         if (config.precomputed) {
-          this.lifecycleTelemetry?.emit('configuration_received')
+          this.lifecycleTelemetry?.configurationReceived()
         } else if (config.precomputedError) {
-          this.lifecycleTelemetry?.emit('provider_error')
-          if (!this.initializationFinished) this.lifecycleTelemetry?.emit('init_failed')
+          this.lifecycleTelemetry?.providerError()
           if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
         }
       }
@@ -295,7 +283,7 @@ export class DatadogProvider extends DatadogProviderBase {
       return { config, fromCache: false }
     } catch (err) {
       if (!signal.aborted) {
-        this.lifecycleTelemetry?.emit('provider_error')
+        this.lifecycleTelemetry?.providerError()
         if (this.debugMode) logDiagnostic('Configuration fetch failed. Cached configuration may still be available.')
       }
       // Try to recover with current/cached config

@@ -1,6 +1,8 @@
+import { TextEncoder } from 'node:util'
 import { createHttpRequest, Observable, type PageMayExitEvent } from '@datadog/browser-core'
 import { validateAndBuildFlaggingConfiguration } from '../../src/domain/configuration'
 import { createLifecycleTelemetry, logDiagnostic } from '../../src/openfeature/lifecycleTelemetry'
+import { diagnosticRecords } from './diagnostic-contract'
 
 const mockSend = jest.fn()
 const mockSendOnExit = jest.fn()
@@ -11,15 +13,6 @@ jest.mock('@datadog/browser-core', () => ({
   createPageMayExitObservable: () => mockExit,
 }))
 
-const types = [
-  'sdk_init_started',
-  'configuration_received',
-  'provider_ready',
-  'provider_error',
-  'init_timeout',
-  'init_failed',
-] as const
-
 function configuration() {
   const config = validateAndBuildFlaggingConfiguration({
     clientToken: 'secret-client-token',
@@ -29,8 +22,13 @@ function configuration() {
   if (!config) throw new Error('Invalid test configuration')
   return config
 }
+const records = () => mockSend.mock.calls.flatMap(([request]) => diagnosticRecords(request.data))
 
 describe('lifecycle diagnostic transport', () => {
+  beforeAll(() => {
+    // jsdom omits this browser API, used by browser-core to count non-ASCII bytes.
+    Object.defineProperty(globalThis, 'TextEncoder', { value: TextEncoder, configurable: true })
+  })
   beforeEach(() => {
     jest.useFakeTimers()
     jest.clearAllMocks()
@@ -42,134 +40,213 @@ describe('lifecycle diagnostic transport', () => {
     jest.restoreAllMocks()
   })
 
-  it('serializes six deduplicated envelopes with one runtime ID, without evaluations or credentials', () => {
+  it.each(['ready', 'failed', 'cached_fallback'] as const)('sends one canonical %s report', (outcome) => {
     const telemetry = createLifecycleTelemetry(configuration())
-    for (const type of types) {
-      telemetry.emit(type)
-      telemetry.emit(type)
-    }
+    expect(mockSend).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(100)
+    if (outcome === 'ready') telemetry.configurationReceived()
+    jest.advanceTimersByTime(10)
+    telemetry.settle(outcome)
+    telemetry.settle(outcome)
     telemetry.stop()
-    expect(mockSend).toHaveBeenCalledTimes(1)
-    const body: string = mockSend.mock.calls[0][0].data
-    const records = body.split('\n').map((line: string) => JSON.parse(line))
-    expect(records.map((record) => record.payload.event_type)).toEqual(types)
-    expect(new Set(records.map((record) => record.payload.runtime_id)).size).toBe(1)
-    expect(records.map((record) => record.payload.error_code)).toEqual([
-      undefined,
-      undefined,
-      undefined,
-      'CONFIG_FETCH_FAILED',
-      'INIT_TIMEOUT',
-      'INIT_FAILED',
-    ])
-    for (const record of records) {
-      expect(record).toEqual({
-        schema_version: 1,
-        type: 'sdk_diagnostic',
-        payload: {
-          event_type: record.payload.event_type,
-          timestamp: expect.any(Number),
-          runtime_id: expect.any(String),
-          sdk_name: 'dd-openfeature-browser',
-          sdk_version: '1.0.0-test',
-          application_id: 'app-1',
-          environment: 'staging',
-          ...(record.payload.error_code && { error_code: record.payload.error_code }),
+    expect(records()).toHaveLength(1)
+    expect(records()[0]).toEqual({
+      type: 'sdk_diagnostic',
+      schema_version: 1,
+      payload: {
+        event_type: 'sdk_initialization',
+        timestamp: Date.now(),
+        runtime_id: expect.any(String),
+        sdk_name: 'dd-openfeature-browser',
+        sdk_version: '1.0.0-test',
+        application_id: 'app-1',
+        environment: 'staging',
+        ...(outcome === 'ready' ? {} : { error_code: outcome === 'failed' ? 'INIT_FAILED' : 'CONFIG_FETCH_FAILED' }),
+        initialization: {
+          outcome,
+          started_at: Date.now() - 110,
+          duration_ms: 110,
+          sequence: 0,
+          final: true,
+          milestones:
+            outcome === 'ready'
+              ? {
+                  configuration_received: { elapsed_ms: 100 },
+                  provider_ready: { elapsed_ms: 110 },
+                }
+              : {},
         },
-      })
-      expect(new Blob([JSON.stringify(record)]).size).toBeLessThanOrEqual(2048)
-    }
-    expect(body).not.toContain('secret-client-token')
-    telemetry.emit('sdk_init_started')
+      },
+    })
+    expect(JSON.stringify(records())).not.toContain('secret-client-token')
+    telemetry.providerError()
     telemetry.stop()
     expect(mockSend).toHaveBeenCalledTimes(1)
   })
 
-  it('uses the existing flag evaluation endpoint and page-exit send path', () => {
+  it.each(['ready', 'failed', 'cached_fallback'] as const)('pairs one deadline snapshot with late %s', (outcome) => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    jest.advanceTimersByTime(100)
+    telemetry.configurationReceived()
+    jest.advanceTimersByTime(60_000)
+    telemetry.settle(outcome)
+    telemetry.stop()
+    const payloads = records().map((record) => record.payload)
+    expect(payloads).toHaveLength(2)
+    expect(payloads[0].initialization).toMatchObject({
+      outcome: 'incomplete',
+      reason: 'deadline',
+      sequence: 0,
+      final: false,
+      duration_ms: 30_000,
+    })
+    expect(payloads[1].initialization).toMatchObject({ outcome, sequence: 1, final: true, duration_ms: 60_100 })
+    expect(payloads[1].runtime_id).toBe(payloads[0].runtime_id)
+    expect(payloads[1].initialization.started_at).toBe(payloads[0].initialization.started_at)
+  })
+
+  it('queues a pending page-exit snapshot before the existing exit transport flushes', () => {
     const config = configuration()
     const telemetry = createLifecycleTelemetry(config)
     expect(createHttpRequest).toHaveBeenCalledWith([config.flagEvaluationEndpointBuilder], expect.any(Function))
-    telemetry.emit('sdk_init_started')
     mockExit.notify({ reason: 'page_hide' })
     expect(mockSendOnExit).toHaveBeenCalledTimes(1)
+    const snapshot = diagnosticRecords(mockSendOnExit.mock.calls[0][0].data)[0].payload
+    expect(snapshot.initialization).toMatchObject({
+      outcome: 'incomplete',
+      reason: 'page_exit',
+      final: false,
+      duration_ms: 0,
+    })
+    mockExit.notify({ reason: 'page_hide' })
+    expect(mockSendOnExit).toHaveBeenCalledTimes(1)
+    telemetry.configurationReceived()
+    telemetry.settle('ready')
     telemetry.stop()
+    expect(records()[0].payload.initialization).toMatchObject({ outcome: 'ready', sequence: 1 })
+    expect(records()[0].payload.runtime_id).toBe(snapshot.runtime_id)
   })
 
-  it('keeps diagnostics local when identity or environment is invalid', () => {
-    const config = configuration()
-    config.applicationId = undefined
-    config.service = 'x'.repeat(201)
-    const telemetry = createLifecycleTelemetry(config, true)
-    telemetry.emit('sdk_init_started')
+  it('reports provider close while pending once and releases the observation timer', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    telemetry.stop()
+    jest.advanceTimersByTime(60_000)
+    mockExit.notify({ reason: 'page_hide' })
+    expect(records()).toHaveLength(1)
+    expect(records()[0].payload.initialization).toMatchObject({
+      outcome: 'incomplete',
+      reason: 'provider_closed',
+      sequence: 0,
+      final: false,
+    })
+    expect(mockSendOnExit).not.toHaveBeenCalled()
+  })
+
+  it('does not emit another incomplete report on close after the deadline', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    jest.advanceTimersByTime(30_000)
+    telemetry.stop()
+    expect(records()).toHaveLength(1)
+    expect(records()[0].payload.initialization.reason).toBe('deadline')
+  })
+
+  it('bounds provider errors to one after initialization settles', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    telemetry.providerError()
+    telemetry.settle('cached_fallback')
+    telemetry.providerError()
+    telemetry.providerError()
+    telemetry.stop()
+    expect(records().map((record) => record.payload.event_type)).toEqual(['sdk_initialization', 'provider_error'])
+    expect(records()[1].payload.error_code).toBe('CONFIG_FETCH_FAILED')
+    expect(records()[1].payload.initialization).toBeUndefined()
+  })
+
+  it('keeps monotonic durations when the wall clock moves forward', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    jest.advanceTimersByTime(10)
+    telemetry.configurationReceived()
+    jest.setSystemTime(Date.now() + 60_000)
+    jest.advanceTimersByTime(10)
+    telemetry.settle('ready')
+    telemetry.stop()
+    expect(records()[0].payload.initialization.duration_ms).toBe(20)
+  })
+
+  it('does not send an invalid report after the wall clock moves before initialization', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
+    jest.setSystemTime(Date.now() - 60_000)
+    telemetry.settle('failed')
     telemetry.stop()
     expect(mockSend).not.toHaveBeenCalled()
-    expect(console.log).toHaveBeenCalledWith('[Datadog Feature Flags]', 'sdk_init_started', '')
-    mockSend.mockClear()
-    const big = createLifecycleTelemetry({
-      ...config,
-      applicationId: '漢'.repeat(128),
-      service: '\u0000'.repeat(200),
-      env: '\u0000'.repeat(200),
-    })
-    big.emit('provider_ready')
-    big.stop()
+  })
+
+  it('creates a new runtime identity for each provider instance', () => {
+    const first = createLifecycleTelemetry(configuration())
+    const second = createLifecycleTelemetry(configuration())
+    first.settle('failed')
+    second.settle('failed')
+    first.stop()
+    second.stop()
+    expect(new Set(records().map((record) => record.payload.runtime_id)).size).toBe(2)
+  })
+
+  it.each([
+    { applicationId: undefined, service: 'x'.repeat(201) },
+    { env: undefined },
+    { env: '\u0000bad' },
+    { env: ' whitespace ' },
+  ])('does not upload with invalid identity/environment: %j', (override) => {
+    const telemetry = createLifecycleTelemetry({ ...configuration(), ...override })
+    telemetry.settle('failed')
+    telemetry.stop()
     expect(mockSend).not.toHaveBeenCalled()
+    expect(console.log).not.toHaveBeenCalled()
   })
 
   it('sends exactly one identity, preferring applicationId over service', () => {
     for (const applicationId of ['app-1', undefined]) {
       mockSend.mockClear()
       const telemetry = createLifecycleTelemetry({ ...configuration(), applicationId, service: 'checkout' })
-      telemetry.emit('provider_ready')
+      telemetry.settle('failed')
       telemetry.stop()
-      const payload = JSON.parse(mockSend.mock.calls[0][0].data).payload
+      const payload = records()[0].payload
       expect(payload.application_id).toBe(applicationId)
       expect(payload.service_id).toBe(applicationId ? undefined : 'checkout')
-      expect(payload.service).toBeUndefined()
     }
   })
 
-  it('does not upload when env is absent', () => {
-    const telemetry = createLifecycleTelemetry({ ...configuration(), env: undefined }, true)
-    telemetry.emit('init_failed')
+  it('bounds actual UTF-8 bytes for multibyte metadata', () => {
+    const telemetry = createLifecycleTelemetry({
+      ...configuration(),
+      service: '漢'.repeat(200),
+      applicationId: undefined,
+      env: '漢'.repeat(200),
+    })
+    telemetry.configurationReceived()
+    telemetry.settle('ready')
     telemetry.stop()
-    expect(mockSend).not.toHaveBeenCalled()
-    expect(console.log).toHaveBeenCalled()
+    expect(records()).toHaveLength(1)
   })
 
-  it('does not recurse or throw when telemetry upload or local logging fails', () => {
-    const telemetry = createLifecycleTelemetry(configuration(), true)
+  it.each([undefined, false, true])('telemetry and upload failures are independent of debugMode=%s', (debugMode) => {
+    const telemetry = createLifecycleTelemetry(configuration(), debugMode)
+    telemetry.settle('failed')
     const onError = jest.mocked(createHttpRequest).mock.calls[0][1]
     expect(() => onError?.({} as never)).not.toThrow()
-    expect(mockSend).not.toHaveBeenCalled()
+    telemetry.stop()
+    expect(records()).toHaveLength(1)
+    if (debugMode) expect(console.log).toHaveBeenCalled()
+    else expect(console.log).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when local logging is replaced', () => {
     jest.spyOn(console, 'log').mockImplementation(() => {
       throw new Error('console unavailable')
     })
     expect(() => logDiagnostic('details', { value: true })).not.toThrow()
-    expect(() => telemetry.emit('sdk_init_started')).not.toThrow()
+    const telemetry = createLifecycleTelemetry(configuration(), true)
+    expect(() => telemetry.settle('failed')).not.toThrow()
     telemetry.stop()
-  })
-
-  it.each([undefined, false, true])('gates only console output with debugMode=%s', (debugMode) => {
-    const telemetry = createLifecycleTelemetry(configuration(), debugMode)
-    for (const type of types) telemetry.emit(type)
-    const onError = jest.mocked(createHttpRequest).mock.calls[0][1]
-    onError?.({} as never)
-    telemetry.stop()
-    expect(mockSend).toHaveBeenCalledTimes(1)
-    expect(mockSend.mock.calls[0][0].data.split('\n')).toHaveLength(6)
-    if (debugMode) {
-      expect(console.log).toHaveBeenCalledTimes(7)
-    } else {
-      expect(console.log).not.toHaveBeenCalled()
-    }
-  })
-
-  it('does not print missing-identity diagnostics without debug mode', () => {
-    const telemetry = createLifecycleTelemetry({ ...configuration(), applicationId: undefined })
-    telemetry.emit('sdk_init_started')
-    telemetry.stop()
-    expect(mockSend).not.toHaveBeenCalled()
-    expect(console.log).not.toHaveBeenCalled()
   })
 })
