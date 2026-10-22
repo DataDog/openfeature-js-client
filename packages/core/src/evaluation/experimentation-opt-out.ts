@@ -1,4 +1,6 @@
 import type { FlagsConfiguration } from '../configuration/configuration'
+import type { RandomizationActivation } from '../configuration/prepared-activation'
+import { FlagConfigurationError } from './errors'
 
 export type ExperimentationOptOutModeValue = 'disabled' | 'immediate' | 'future_experiments_only'
 // Boolean arguments preserve the existing shared-core immediate API.
@@ -10,7 +12,7 @@ export interface OptOutInstant {
 export type ExperimentationOptOutPolicy =
   false | { mode: 'immediate' | 'future_experiments_only'; cutoff: OptOutInstant }
 
-/** Compare complete instants without losing fractional precision in JavaScript Date. */
+/** Parse the supported timestamp subset, normalizing to nanosecond precision. */
 export function parseOptOutInstant(value: unknown): OptOutInstant | undefined {
   if (typeof value !== 'string') return undefined
   const match = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?([Zz]|([+-])(\d{2}):(\d{2}))$/.exec(
@@ -33,7 +35,11 @@ export function parseOptOutInstant(value: unknown): OptOutInstant | undefined {
   )
     return undefined
   const offset = zone.toUpperCase() === 'Z' ? 0 : (+zoneHour * 3600 + +zoneMinute * 60) * (sign === '-' ? -1 : 1)
-  return { seconds: date.getTime() / 1000 - offset, fraction: fraction.slice(0, 9).replace(/0+$/, '') }
+  date.setTime(date.getTime() - offset * 1000)
+  // The UTC acknowledgement must also fit the four-digit year format.
+  if (date.getUTCFullYear() < 0 || date.getUTCFullYear() > 9999) return undefined
+  // Match the mobile SDKs and edge: discard sub-nanosecond digits without rounding.
+  return { seconds: date.getTime() / 1000, fraction: fraction.slice(0, 9).replace(/0+$/, '') }
 }
 
 export function compareOptOutInstants(left: OptOutInstant, right: OptOutInstant): number {
@@ -55,18 +61,21 @@ export function experimentationOptOutPolicy(
   return cutoff ? { mode: mode === true ? 'immediate' : mode, cutoff } : undefined
 }
 
+/** Only an opted-out subject in future mode needs activation metadata. */
+export function needsActivation(policy: ExperimentationOptOutPolicy | boolean): boolean {
+  return typeof policy === 'object' && policy.mode === 'future_experiments_only'
+}
+
 export function excludesExperimentAt(
   policy: ExperimentationOptOutPolicy | boolean,
   doLog: boolean,
-  activation?: OptOutInstant
+  activation: RandomizationActivation
 ): boolean {
   if (!policy || !doLog) return false
-  return (
-    policy === true ||
-    policy.mode === 'immediate' ||
-    !activation ||
-    compareOptOutInstants(activation, policy.cutoff) >= 0
-  )
+  if (policy === true || policy.mode === 'immediate') return true
+  // Invalid metadata must never become an absent activation for a future consumer.
+  if (activation.kind === 'invalid') throw new FlagConfigurationError('Invalid randomization activation timestamp')
+  return activation.kind === 'missing' || compareOptOutInstants(activation.instant, policy.cutoff) >= 0
 }
 
 export function experimentationOptOutCacheKey(policy: ExperimentationOptOutPolicy): string {
@@ -74,15 +83,13 @@ export function experimentationOptOutCacheKey(policy: ExperimentationOptOutPolic
 }
 
 export const INVALID_EXPERIMENTATION_OPT_OUT =
-  'Set dd_experimentation_opt_out_at to a valid timestamp string, or omit the attribute'
+  'Set dd_experimentation_opt_out_at to YYYY-MM-DDTHH:mm:ss[.fraction] with Z or +/-HH:mm, or omit the attribute'
 
 /** Validates the customer-owned opt-out timestamp without interpreting its age. */
 export function hasExperimentationOptOut(context: Record<string, unknown>): boolean | undefined {
   // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is unavailable in supported client runtimes.
   if (!Object.prototype.hasOwnProperty.call(context, 'dd_experimentation_opt_out_at')) return false
-  const value = context.dd_experimentation_opt_out_at
-  if (typeof value !== 'string') return undefined
-  return parseOptOutInstant(value) ? true : undefined
+  return parseOptOutInstant(context.dd_experimentation_opt_out_at) ? true : undefined
 }
 
 /** Checks that a precomputed snapshot used the requested exclusion policy, including disabled mode. */

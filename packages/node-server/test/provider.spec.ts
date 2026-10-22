@@ -157,8 +157,15 @@ describe('DatadogNodeServerProvider', () => {
     })
     provider.setConfiguration(replacement)
     expect(readReplacement).toHaveBeenCalledTimes(1)
-    const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    const result = await provider.resolveBooleanEvaluation(
+      'kill-switch',
+      false,
+      { targetingKey: 'subject', country: 'US' },
+      logger
+    )
+    // The default disabled mode does not consume activation metadata.
+    expect(result.value).toBe(true)
+    expect(result.errorCode).toBeUndefined()
     expect(readReplacement).toHaveBeenCalledTimes(1)
   })
 

@@ -4,22 +4,25 @@ import type { Allocation, Flag, UniversalFlagConfigurationV1 } from '../evaluati
 export type RandomizationActivation =
   { kind: 'missing' } | { kind: 'valid'; instant: OptOutInstant } | { kind: 'invalid' }
 
-export type PreparedAllocations<T> =
-  | { valid: false }
-  | { valid: true; allocations: ReadonlyArray<{ allocation: T; activation: OptOutInstant | undefined }> }
+export type PreparedAllocations<T> = {
+  /** False when any activation is invalid, including on unreachable allocations. */
+  readonly valid: boolean
+  readonly allocations: ReadonlyArray<{ allocation: T; activation: RandomizationActivation }>
+}
 
 /** Validate every allocation, including unreachable ones, before evaluating any subject. */
 export function prepareAllocations<T>(
   allocations: readonly T[],
   activationFor: (allocation: T) => RandomizationActivation
 ): PreparedAllocations<T> {
+  let valid = true
   const prepared = []
   for (const allocation of allocations) {
     const activation = activationFor(allocation)
-    if (activation.kind === 'invalid') return { valid: false }
-    prepared.push({ allocation, activation: activation.kind === 'valid' ? activation.instant : undefined })
+    if (activation.kind === 'invalid') valid = false
+    prepared.push({ allocation, activation })
   }
-  return { valid: true, allocations: prepared }
+  return { valid, allocations: prepared }
 }
 
 const jsonActivations = new WeakMap<Flag, PreparedAllocations<Allocation>>()

@@ -16,7 +16,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { ErrorCode, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
@@ -301,21 +301,31 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    const context =
-      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
-        ? this.requestedEvaluationContext
-        : (this.evaluationContext ?? {})
+    const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+    const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
+    const result = evaluatePrecomputedConfiguration(
+      this.flagsConfiguration,
+      type,
+      flagKey,
+      defaultValue,
+      context,
+      this.experimentationOptOutMode
+    )
+    // A well-formed context is waiting for usable assignments, not invalid.
+    const awaitingAssignments =
+      optOutEnabled &&
+      result.errorCode === ErrorCode.INVALID_CONTEXT &&
+      experimentationOptOutPolicy(context, this.experimentationOptOutMode) !== undefined
     return bindEvaluationTelemetryResult(
-      evaluatePrecomputedConfiguration(
-        this.flagsConfiguration,
-        type,
-        flagKey,
-        defaultValue,
-        context,
-        this.experimentationOptOutMode
-      ),
+      awaitingAssignments
+        ? {
+            ...result,
+            errorCode: ErrorCode.PROVIDER_NOT_READY,
+            errorMessage: 'Assignments for the current evaluation context are not available',
+          }
+        : result,
       this.telemetryPolicy,
-      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled ? context : undefined
+      optOutEnabled ? context : undefined
     )
   }
 }

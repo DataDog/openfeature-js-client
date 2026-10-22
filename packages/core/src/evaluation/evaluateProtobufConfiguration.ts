@@ -16,7 +16,7 @@ import { encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
-import { type ExperimentationOptOutPolicy, excludesExperimentAt } from './experimentation-opt-out'
+import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
@@ -75,7 +75,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
 
     const prepared = configuration.randomizationActivations.get(flag)
-    if (!prepared?.valid) {
+    if (!prepared || (!prepared.valid && needsActivation(excludeExperiments))) {
       throw new FlagConfigurationError('Invalid randomization activation timestamp')
     }
     const conditionResults = new Map<number, boolean>()
