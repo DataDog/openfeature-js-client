@@ -2,6 +2,7 @@ import { addTelemetryDebug, display } from '@datadog/browser-core'
 import { type TimeStamp, timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { withRetry } from '../../src/transport/fetch'
 import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
 import rulesWire from '../data/rules-v1-wire.json'
@@ -511,7 +512,7 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     afterEach(() => {
-      displayError.mockRestore()
+      jest.restoreAllMocks()
     })
 
     const requestBody = (call = 0) => JSON.parse(mockFetch.mock.calls[call][1].body as string)
@@ -626,6 +627,32 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
         expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
         expectNoTelemetryValues('beta')
+      })
+
+      it('reports a selection ignored by the server once when the request is retried', async () => {
+        jest.spyOn(Math, 'random').mockReturnValue(0)
+        const ignoredHeaders = { 'DD-Flag-Selection-Ignored': 'invalid_tag' }
+        const customFetch = jest
+          .fn()
+          .mockResolvedValueOnce({ ok: false, status: 503, headers: new Headers(ignoredHeaders) })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: new Headers(ignoredHeaders),
+            json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+          })
+        const fetcher = createFlagsConfigurationFetcher({
+          ...baseConfig,
+          flagSelection: { tags: ['beta'] },
+          flagConfigurationFetch: withRetry(customFetch, 1),
+        })
+
+        await fetcher(mockContext)
+
+        expect(customFetch).toHaveBeenCalledTimes(2)
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
       })
     })
 
@@ -747,6 +774,38 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
         expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'too_many_values' })
         expectNoTelemetryValues('beta')
+      })
+
+      it('reports a selection ignored by the server once when the request is retried', async () => {
+        jest.spyOn(Math, 'random').mockReturnValue(0)
+        const ignoredHeaders = { 'DD-Flag-Selection-Ignored': 'too_many_values' }
+        const customFetch = jest
+          .fn()
+          .mockResolvedValueOnce({ ok: false, status: 503, headers: new Headers(ignoredHeaders) })
+          .mockResolvedValueOnce({ ...rulesResponse(ignoredHeaders), status: 200 })
+
+        await fetchRulesConfiguration({
+          ...baseFetchOptions,
+          fetch: withRetry(customFetch, 1),
+          flagSelection: { tags: ['beta'] },
+        })
+
+        expect(customFetch).toHaveBeenCalledTimes(2)
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'too_many_values' })
+      })
+
+      it('reports a dropped selection on every call', async () => {
+        const customFetch = jest.fn().mockResolvedValue(rulesResponse())
+        const options = { ...baseFetchOptions, fetch: customFetch, flagSelection: { tags: ['t'.repeat(201)] } }
+
+        await fetchRulesConfiguration(options)
+        await fetchRulesConfiguration(options)
+
+        expect(displayError).toHaveBeenCalledTimes(2)
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(2)
+        expect(addTelemetryDebug).toHaveBeenNthCalledWith(2, 'Flag selection dropped', { reason: 'invalid_tag' })
       })
     })
   })
