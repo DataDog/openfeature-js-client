@@ -2,6 +2,7 @@ import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog
 import { validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
 
@@ -67,7 +68,10 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
  * Init Configuration for the online Flagging provider.
  */
 export interface FlaggingInitConfiguration
-  extends FlaggingTrackingInitConfiguration, EvaluationTelemetryOptOutConfiguration {
+  extends
+    FlaggingTrackingInitConfiguration,
+    EvaluationTelemetryOptOutConfiguration,
+    ExperimentationOptOutConfiguration {
   /**
    * Initial flags configuration (precomputed flags)
    */

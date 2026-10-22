@@ -1,5 +1,10 @@
 import type { CanonicalFlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
-import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
+import {
+  buildStorageKeySuffix,
+  type ExperimentationOptOutPolicy,
+  experimentationOptOutCacheKey,
+  getMD5Hash,
+} from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
@@ -13,7 +18,6 @@ function buildConfigKey(clientToken: string, context: EvaluationContext): string
 
 export class IndexedDBFlagsCache {
   private readonly clientToken: string
-  // A snapshot is valid only for the flag selection it was fetched with; '' keeps unselected keys unchanged.
   private readonly selectionSuffix: string
 
   constructor(clientToken: string, flagSelection?: CanonicalFlagSelection) {
@@ -22,10 +26,13 @@ export class IndexedDBFlagsCache {
   }
 
   /** Read cached config for the given context. Returns undefined on miss or any error. */
-  async get(context: EvaluationContext): Promise<FlagsConfiguration | undefined> {
+  async get(
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy = false
+  ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `v2-${legacyKey}${this.selectionSuffix}`
+      const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -37,8 +44,7 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            // Legacy entries predate selections.
-            if (this.selectionSuffix) {
+            if (optedOut || this.selectionSuffix) {
               resolve(undefined)
               return
             }
@@ -73,10 +79,11 @@ export class IndexedDBFlagsCache {
   }
 
   /** Fire-and-forget persist. Never throws. */
-  set(config: FlagsConfiguration, context: EvaluationContext): void {
+  set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
-    const configKey = `v2-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+    const prefix = policyPrefix(optedOut)
+    const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
     openDB()
       .then((db) => {
         const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -90,4 +97,8 @@ export class IndexedDBFlagsCache {
         // Silently fail — persistence should never break the SDK
       })
   }
+}
+
+function policyPrefix(policy: ExperimentationOptOutPolicy): string {
+  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
 }

@@ -1,16 +1,23 @@
 import {
+  acknowledgesExperimentationOptOut,
   buildEndpointHost,
   type CanonicalFlagSelection,
   canonicalizeFlagSelection,
+  experimentationOptOutPolicy,
   type FlagSelection,
   type FlagsConfiguration,
+  INVALID_EXPERIMENTATION_OPT_OUT,
   parsePrecomputedConfigurationResponse,
   SUPPORTED_FLAGS_CAPABILITIES,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-import { ParseError } from '@openfeature/web-sdk'
+import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
+import {
+  type ExperimentationOptOutConfiguration,
+  getExperimentationOptOutMode,
+} from '../openfeature/experimentation-opt-out'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 
 const sourcePayload = {
@@ -45,7 +52,8 @@ interface ConfigurationFetchOptions {
   signal?: AbortSignal
 }
 
-export interface PrecomputedConfigurationFetchOptions extends ConfigurationFetchOptions {
+export interface PrecomputedConfigurationFetchOptions
+  extends ConfigurationFetchOptions, ExperimentationOptOutConfiguration {
   applicationId?: string
   context: EvaluationContext
 }
@@ -114,7 +122,7 @@ export function buildConfigurationHeaders(
   }
 }
 
-export function fetchPrecomputedConfiguration(
+export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
   return requestPrecomputedConfiguration(options)
@@ -124,6 +132,8 @@ async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
   flagSelection?: CanonicalFlagSelection
 ): Promise<FlagsConfiguration> {
+  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
+  if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
   const url = buildConfigurationUrl(requestOptions, 'precomputed')
   const fetchedAt = timeStampNow()
@@ -158,6 +168,7 @@ async function requestPrecomputedConfiguration(
         attributes: {
           env: envPayload,
           source: sourcePayload,
+          ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
           subject: {
             targeting_key: options.context.targetingKey || '',
             targeting_attributes: stringifiedContext,
@@ -176,6 +187,9 @@ async function requestPrecomputedConfiguration(
   if (flagSelection) reportIgnoredFlagSelection(response)
   const parsed = parsePrecomputedConfigurationResponse(await response.json())
   if ('error' in parsed) return { precomputedError: parsed.error }
+  if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
+    throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
+  }
 
   return {
     precomputed: {

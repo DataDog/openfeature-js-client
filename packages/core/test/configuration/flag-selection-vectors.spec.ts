@@ -14,7 +14,9 @@ interface SelectionVectorCase {
   sdk?: { selection: CanonicalFlagSelection; dropped?: never } | { dropped: FlagSelectionError; selection?: never }
 }
 
-const vectorsPath = path.join(__dirname, '../ffe-system-test-data/flag-selection/selection-vectors.json')
+// Keep the selection PR's fixtures separate until they merge with the main evaluator fixtures.
+// Source: https://github.com/DataDog/ffe-system-test-data/pull/50
+const vectorsPath = path.join(__dirname, '../ffe-flag-selection-data/flag-selection/selection-vectors.json')
 const { cases } = JSON.parse(fs.readFileSync(vectorsPath, 'utf8')) as { cases: SelectionVectorCase[] }
 
 describe('flag selection vectors', () => {

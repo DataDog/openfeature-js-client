@@ -147,6 +147,80 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### Experimentation opt-out
+
+Select an opt-out mode when you construct the provider. Your application owns and stores the subject's preference timestamp.
+
+```typescript
+import { DatadogProvider, ExperimentationOptOutMode } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+const provider = new DatadogProvider({
+  clientToken: '<CLIENT_TOKEN>',
+  env: 'production',
+  experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+})
+
+await OpenFeature.setProviderAndWait(provider, {
+  targetingKey: user.id,
+  ...(user.experimentationOptOutAt && {
+    dd_experimentation_opt_out_at: user.experimentationOptOutAt,
+  }),
+})
+const enabled = OpenFeature.getClient().getBooleanValue('new-route-planner', false)
+```
+
+| Mode                    | Behavior when the subject timestamp is present                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Disabled` (default)    | Ignore the attribute.                                                                                     |
+| `Immediate`             | Skip every allocation that logs experiment exposures.                                                     |
+| `FutureExperimentsOnly` | Keep only exposure allocations activated strictly before the timestamp. Skip missing activation metadata. |
+
+Use `ExperimentationOptOutMode.FutureExperimentsOnly` in the example to select the second policy.
+Omit the attribute for eligible subjects. For opted-out subjects, supply a timestamp in the supported RFC3339 subset:
+`YYYY-MM-DDTHH:mm:ss` with an optional decimal fraction, followed by `Z` or a numeric `+HH:mm` or `-HH:mm` offset.
+Lowercase `t` and `z` are accepted. Fractional digits beyond nanoseconds are truncated without rounding.
+For example, `2026-10-19T12:00:00Z`, `2026-10-19T12:00:00.123456789Z`, or `2026-10-19T08:00:00-04:00`.
+Use valid calendar dates and seconds `00–59`. Both the written date and its UTC instant must have years `0000–9999`.
+Whitespace, named timezones, Unicode signs, and leap seconds are rejected.
+JSON `randomizationActivatedAt` values use the same format and are validated once when configuration is received. Producers should emit UTC with `Z`.
+Invalid activation metadata returns `PARSE_ERROR` for the affected flag only when an opted-out subject uses `FutureExperimentsOnly`.
+An invalid enabled timestamp returns the application default with `INVALID_CONTEXT` and does not send an assignment request.
+In `Immediate` mode, any valid timestamp, including a future one, excludes the subject from exposure-logging allocations now.
+In `FutureExperimentsOnly` mode, the SDK applies the cutoff now: it keeps exposure-logging allocations activated before the timestamp and skips those activated at or after it, or with missing activation metadata.
+A future cutoff therefore keeps the subject eligible for experiments activated after now but before that cutoff. Comparisons retain nanosecond precision.
+Future mode uses allocation activation, not prior enrollment. An older allocation can still assign a subject for the first time.
+Holdouts use the same policy. Removing the attribute permits experimentation again.
+
+Excluded subjects skip allocations that log experiment exposures. Evaluation continues through ordinary feature allocations in their existing order.
+If none match, the application receives its default value. Skipped allocations do not log exposures.
+This option does not suppress evaluation telemetry. Immediate withdrawal can change an enrolled subject's experience; account for this in experiment analysis.
+
+`DatadogCoreProvider` accepts the same option. It applies exclusion locally for rules-based configurations.
+For portable Precompute configurations, pass the same option to `fetchPrecomputedConfiguration` and the provider:
+
+```typescript
+const optOut = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
+const provider = new DatadogCoreProvider(optOut)
+provider.setConfiguration(
+  await fetchPrecomputedConfiguration({
+    ...optOut,
+    clientToken: '<CLIENT_TOKEN>',
+    env: 'production',
+    context,
+  })
+)
+```
+
+Precompute delivery requires backend support. Opted-out requests send `evaluation_options.experimentation_opt_out_mode`.
+Immediate responses acknowledge `experimentation_opt_out=true`. Future responses acknowledge the named mode and exact timestamp instant.
+The provider rejects unsupported responses and cached assignments from a different subject, mode, or opt-out timestamp.
+With either enabled mode, `DatadogProvider` withholds assignments fetched for a different context, including for
+subjects without an opt-out timestamp. Until usable assignments arrive, evaluations return the application default
+with `PROVIDER_NOT_READY`, including after a failed refresh. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
+With `Disabled`, the previous assignments remain available during a context change.
+For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
+
 ### Subject-level evaluation telemetry opt-out
 
 Enable the control when creating the provider. Your application supplies its decision as a typed boolean in the evaluation context.
