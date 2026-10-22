@@ -15,7 +15,7 @@ import {
 } from './flagSelection'
 
 export async function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration> {
-  const url = buildRulesUrl(options)
+  const { url, selected } = buildRulesUrl(options)
   const fetchedAt = timeStampNow()
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const response = await fetchImplementation(url.toString(), {
@@ -33,7 +33,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  reportIgnoredFlagSelection(response)
+  if (selected) reportIgnoredFlagSelection(response)
 
   const configuration = configurationFromRulesBinary(new Uint8Array(await response.arrayBuffer()))
   if (configuration.rules) {
@@ -42,14 +42,14 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   return configuration
 }
 
-function buildRulesUrl(options: RulesConfigurationFetchOptions): URL {
+function buildRulesUrl(options: RulesConfigurationFetchOptions): { url: URL; selected: boolean } {
   const url = buildConfigurationUrl(options, 'rules')
   const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
   if (error) reportDroppedFlagSelection(error)
-  if (!selection) return url
+  if (!selection) return { url, selected: false }
 
   const urlWithSelection = appendFlagSelectionToUrl(url, selection)
-  if (urlWithSelection) return urlWithSelection
+  if (urlWithSelection) return { url: urlWithSelection, selected: true }
   reportDroppedFlagSelection('too_many_values', `the request URL is at most ${MAX_RULES_URL_BYTES} bytes`)
-  return url
+  return { url, selected: false }
 }

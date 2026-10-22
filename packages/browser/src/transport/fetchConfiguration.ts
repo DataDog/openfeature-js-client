@@ -173,7 +173,7 @@ async function requestPrecomputedConfiguration(
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  reportIgnoredFlagSelection(response)
+  if (flagSelection) reportIgnoredFlagSelection(response)
   const parsed = parsePrecomputedConfigurationResponse(await response.json())
   if ('error' in parsed) return { precomputedError: parsed.error }
 

@@ -1,4 +1,4 @@
-import { canonicalizeFlagSelection } from '../../src/configuration/flag-selection'
+import { canonicalizeFlagSelection, type FlagSelection } from '../../src/configuration/flag-selection'
 
 const UNICODE_WHITE_SPACE = [
   '\t',
@@ -128,8 +128,19 @@ describe('canonicalizeFlagSelection', () => {
       ['a tag with a lone low surrogate', { tags: ['\uDE00beta'] }],
       ['a key pattern with a lone high surrogate', { keyPatterns: ['a\uD83Db*'] }],
       ['a key pattern with a lone low surrogate', { keyPatterns: ['a*\uDE00'] }],
+      // biome-ignore lint/suspicious/noSparseArray: a hole is a malformed value
+      ['a tags list with a hole', { tags: [, 'beta'] }],
+      ['a keyPatterns list of holes', { keyPatterns: new Array(2) }],
     ])('returns malformed_selection for %s', (_, input) => {
       expect(canonicalizeFlagSelection(input)).toEqual({ error: 'malformed_selection' })
+    })
+
+    it('accepts readonly lists', () => {
+      const tags = ['beta'] as const
+      const keyPatterns = ['a*'] as const
+      expect(canonicalizeFlagSelection({ tags, keyPatterns } satisfies FlagSelection)).toEqual({
+        selection: { tags: ['beta'], keyPatterns: ['a*'] },
+      })
     })
 
     it('accepts well-formed surrogate pairs', () => {

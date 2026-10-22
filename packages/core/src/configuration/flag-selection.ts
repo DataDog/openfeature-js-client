@@ -1,24 +1,30 @@
 import { compareBytes, encodeUtf8 } from '../utf8'
 
 export interface FlagSelection {
-  tags?: string[]
-  keyPatterns?: string[]
+  tags?: readonly string[]
+  keyPatterns?: readonly string[]
 }
 
+/** @internal */
 export interface CanonicalFlagSelection {
   tags: string[]
   keyPatterns: string[]
 }
 
+/** @internal */
 export type FlagSelectionError = 'malformed_selection' | 'too_many_values' | 'invalid_key_pattern' | 'invalid_tag'
 
+/** @internal */
 export interface CanonicalizeFlagSelectionResult {
   selection?: CanonicalFlagSelection
   error?: FlagSelectionError
 }
 
+/** @internal */
 export const MAX_FLAG_SELECTION_VALUES = 31
+/** @internal */
 export const MAX_FLAG_SELECTION_TAG_BYTES = 200
+/** @internal */
 export const MAX_FLAG_SELECTION_KEY_PATTERN_BYTES = 200
 
 // The Unicode White_Space property, which Compute trims with Rust's str::trim.
@@ -31,6 +37,7 @@ const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uD
 /**
  * Canonicalizes and validates a flag selection the same way Compute and ffe-service do.
  * Returns no selection when both lists are empty after canonicalization.
+ * @internal
  */
 export function canonicalizeFlagSelection(input: unknown): CanonicalizeFlagSelectionResult {
   if (input === undefined || input === null) return {}
@@ -57,15 +64,18 @@ export function canonicalizeFlagSelection(input: unknown): CanonicalizeFlagSelec
   return { selection: { tags, keyPatterns } }
 }
 
-function isOptionalStringList(value: unknown): value is string[] | undefined | null {
-  return (
-    value === undefined ||
-    value === null ||
-    (Array.isArray(value) && value.every((v) => typeof v === 'string' && !UNPAIRED_SURROGATE.test(v)))
-  )
+function isOptionalStringList(value: unknown): value is readonly string[] | undefined | null {
+  if (value === undefined || value === null) return true
+  if (!Array.isArray(value)) return false
+  // An index loop visits holes, which every() skips.
+  for (let i = 0; i < value.length; i++) {
+    const v: unknown = value[i]
+    if (typeof v !== 'string' || UNPAIRED_SURROGATE.test(v)) return false
+  }
+  return true
 }
 
-function canonicalizeList(values: string[]): string[] {
+function canonicalizeList(values: readonly string[]): string[] {
   const unique = new Set<string>()
   for (const value of values) {
     const trimmed = value.replace(SURROUNDING_WHITE_SPACE, '')

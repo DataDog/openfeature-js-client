@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { CanonicalFlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import { buildStorageKeySuffix, getMD5Hash } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { openDB, STORE_NAME } from './indexeddb-store'
@@ -13,16 +13,19 @@ function buildConfigKey(clientToken: string, context: EvaluationContext): string
 
 export class IndexedDBFlagsCache {
   private readonly clientToken: string
+  // A snapshot is valid only for the flag selection it was fetched with; '' keeps unselected keys unchanged.
+  private readonly selectionSuffix: string
 
-  constructor(clientToken: string) {
+  constructor(clientToken: string, flagSelection?: CanonicalFlagSelection) {
     this.clientToken = clientToken
+    this.selectionSuffix = flagSelection ? `-sel-${getMD5Hash(JSON.stringify(flagSelection))}` : ''
   }
 
   /** Read cached config for the given context. Returns undefined on miss or any error. */
   async get(context: EvaluationContext): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `v2-${legacyKey}`
+      const configKey = `v2-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -32,6 +35,11 @@ export class IndexedDBFlagsCache {
           request.onsuccess = () => {
             if (request.result !== undefined) {
               resolve(request.result as FlagsConfiguration)
+              return
+            }
+            // Legacy entries predate selections.
+            if (this.selectionSuffix) {
+              resolve(undefined)
               return
             }
             // Read older plaintext entries on upgrade. Never expose encoded
@@ -68,7 +76,7 @@ export class IndexedDBFlagsCache {
   set(config: FlagsConfiguration, context: EvaluationContext): void {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
-    const configKey = `v2-${buildConfigKey(this.clientToken, context)}`
+    const configKey = `v2-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
     openDB()
       .then((db) => {
         const tx = db.transaction(STORE_NAME, 'readwrite')
