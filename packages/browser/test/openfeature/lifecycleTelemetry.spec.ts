@@ -208,7 +208,7 @@ describe('lifecycle diagnostic transport', () => {
     }
   })
 
-  it('bounds actual UTF-8 bytes for multibyte metadata', () => {
+  it('preserves multibyte metadata using the normal transport', () => {
     const telemetry = createLifecycleTelemetry({
       ...configuration(),
       service: '漢'.repeat(200),

@@ -4,6 +4,7 @@ import { createExposureCache } from '../cache/exposure-cache'
 import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
+import type { FlagEvaluationTransport } from './flagEvaluationTransport'
 import { createRumTrackingHook } from './rumIntegration'
 import type { DatadogTrackingHook, DatadogTrackingHooks } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
@@ -17,11 +18,13 @@ export function createProviderTracking({
   configuration,
   enabledByDefault,
   getTrackingContext,
+  getTransport,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
+  getTransport?: () => FlagEvaluationTransport | undefined
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
 
@@ -30,7 +33,7 @@ export function createProviderTracking({
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
-    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration)))
+    trackingHooks.push(createTrackingHookController(() => createFlagEvalEVPHook(configuration, undefined, getTransport?.())))
   }
 
   let exposureCache: AssignmentCache | undefined

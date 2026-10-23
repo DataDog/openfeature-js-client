@@ -22,6 +22,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
@@ -64,6 +65,7 @@ export class DatadogProvider extends DatadogProviderBase {
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
   private readonly debugMode: boolean
+  private flagEvaluationTransport?: FlagEvaluationTransport
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
   private initializationStarted = false
 
@@ -115,6 +117,7 @@ export class DatadogProvider extends DatadogProviderBase {
       options,
       configuration: this.configuration,
       enabledByDefault: true,
+      getTransport: () => this.flagEvaluationTransport,
       getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
     })
     this.hooks = this.tracking.hooks
@@ -138,7 +141,12 @@ export class DatadogProvider extends DatadogProviderBase {
       }
       try {
         if (this.configuration) {
-          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.debugMode)
+          this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
+          this.lifecycleTelemetry = createLifecycleTelemetry(
+            this.configuration,
+            this.debugMode,
+            this.flagEvaluationTransport
+          )
         }
       } catch {
         if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
@@ -164,7 +172,11 @@ export class DatadogProvider extends DatadogProviderBase {
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
-    await this.tracking.shutdown()
+    try {
+      await this.tracking.shutdown()
+    } finally {
+      this.flagEvaluationTransport?.stop()
+    }
     this.status = ProviderStatus.NOT_READY
   }
 

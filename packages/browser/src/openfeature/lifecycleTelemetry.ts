@@ -1,14 +1,6 @@
-import {
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  createPageMayExitObservable,
-  generateUUID,
-  Observable,
-  type PageMayExitEvent,
-} from '@datadog/browser-core'
+import { generateUUID } from '@datadog/browser-core'
 import type { FlaggingConfiguration } from '../domain/configuration'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 
 type Milestone = { elapsed_ms: number }
 type InitializationTiming = { started_at: number; duration_ms: number }
@@ -53,8 +45,12 @@ export function logDiagnostic(message: string, details?: unknown): void {
   }
 }
 
-/** One initialization attempt and at most one later fetch error, in a separate JSONL batch. */
-export function createLifecycleTelemetry(configuration: FlaggingConfiguration, debugMode = false) {
+/** One initialization attempt and at most one later fetch error, using the evaluation transport. */
+export function createLifecycleTelemetry(
+  configuration: FlaggingConfiguration,
+  debugMode = false,
+  sharedTransport?: FlagEvaluationTransport
+) {
   function log(message: string, details?: unknown): void {
     if (debugMode) logDiagnostic(message, details)
   }
@@ -67,22 +63,10 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
   let settled = false
   let providerErrorSent = false
   let stopped = false
-  const flushOnClose = new Observable<void>()
-  const pageExit = new Observable<PageMayExitEvent>()
-  const batch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], () => {
-      log('Lifecycle upload failed. Check the client token, site, network, and Content Security Policy.')
-    }),
-    flushController: createFlushController({
-      pageMayExitObservable: pageExit,
-      sessionExpireObservable: flushOnClose,
-    }),
-  })
-  // Queue the snapshot before notifying the transport to flush on page exit.
-  const pageSubscription = createPageMayExitObservable(configuration).subscribe((event) => {
+  const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
+  const batch = transport.batch
+  const pageSubscription = batch.flushController.preparePageExitFlushObservable.subscribe(() => {
     snapshot('page_exit')
-    pageExit.notify(event)
   })
 
   function elapsed() {
@@ -122,11 +106,6 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
           environment: configuration.env,
         },
       }
-      if (new Blob([JSON.stringify(event)]).size > 2048) {
-        log('Lifecycle event exceeds the diagnostic size limit.')
-        return
-      }
-      // At most two initialization records and one provider error: below intake's 32-record limit.
       batch.add(event)
     } catch {
       log('Unable to queue lifecycle diagnostics. Flag evaluation is unaffected.')
@@ -209,9 +188,8 @@ export function createLifecycleTelemetry(configuration: FlaggingConfiguration, d
       stopped = true
 
       try {
-        if (batch.flushController.messagesCount > 0) flushOnClose.notify()
+        if (!sharedTransport) transport.stop()
       } finally {
-        batch.stop()
         pageSubscription.unsubscribe()
       }
     },

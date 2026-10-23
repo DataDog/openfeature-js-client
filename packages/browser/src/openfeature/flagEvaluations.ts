@@ -1,13 +1,4 @@
-import type { Context, RawError } from '@datadog/browser-core'
-import {
-  addTelemetryDebug,
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  createPageMayExitObservable,
-  Observable,
-} from '@datadog/browser-core'
+import { addTelemetryDebug, type Context } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import {
   ErrorCode,
@@ -18,25 +9,17 @@ import {
 } from '@openfeature/web-sdk'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
 export function createFlagEvalEVPHook(
   configuration: FlaggingTrackingConfiguration,
-  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
+  sharedTransport?: FlagEvaluationTransport
 ): ManagedTrackingHook {
-  const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const sessionExpireObservable = new Observable<void>()
-  const flagEvaluationBatch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    }),
-    flushController: createFlushController({
-      pageMayExitObservable,
-      sessionExpireObservable,
-    }),
-  })
+  const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
+  const flagEvaluationBatch = transport.batch
 
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,
@@ -69,7 +52,9 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  const pageExitSubscription = pageMayExitObservable.subscribe(() => {
+  const pageExitSubscription = (sharedTransport
+    ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
+    : transport.pageMayExitObservable).subscribe(() => {
     aggregator.stop()
   })
 
@@ -77,10 +62,9 @@ export function createFlagEvalEVPHook(
     shutdown: () => {
       try {
         aggregator.stop()
-        sessionExpireObservable.notify()
       } finally {
         pageExitSubscription.unsubscribe()
-        flagEvaluationBatch.stop()
+        if (!sharedTransport) transport.stop()
       }
     },
     // Failed evaluations skip `after`; `finally` receives the result returned to the application.

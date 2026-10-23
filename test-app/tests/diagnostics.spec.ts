@@ -105,9 +105,7 @@ test('slow initialization sends only its settled report', async ({ page }) => {
     expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
     expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
     const lines = (route.request().postData() ?? '').split('\n').filter(Boolean)
-    expect(lines.length).toBeLessThanOrEqual(32)
     for (const line of lines) {
-      expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(2048)
       records.push(JSON.parse(line))
     }
     await route.fulfill({ status: 202, body: '' })
@@ -127,3 +125,47 @@ test('slow initialization sends only its settled report', async ({ page }) => {
   expect(records[0].payload.initialization.duration_ms).toBeGreaterThanOrEqual(35_000)
   expect(records[0].payload.initialization).not.toHaveProperty('sequence')
 })
+
+for (const flush of ['close', 'page exit'] as const) {
+  test(`evaluation and initialization share one JSONL request on ${flush}`, async ({ page, context }) => {
+    const batches: {
+      type?: string
+      payload?: { initialization: { outcome: string; final: boolean } }
+      flag?: { key: string }
+      evaluation_count?: number
+    }[][] = []
+    await page.clock.install()
+    await context.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
+    await context.route('https://browser-intake-datad0g.com/**', async (route) => {
+      expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
+      expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
+      batches.push((route.request().postData() ?? '').split('\n').map((line) => JSON.parse(line)))
+      await route.fulfill({ status: 202, body: '' })
+    })
+    await page.goto('/diagnostics.html')
+    await page.getByLabel('Staging client token').fill('test-client-token')
+    await page.getByLabel('Application ID').fill('test-app')
+    await page.getByLabel('Track genuine flag evaluations').check()
+    await page.getByRole('button', { name: 'Initialize provider' }).click()
+    await expect(page.locator('#status')).toContainText('Initialization completed')
+    await page.getByLabel('Flag key').fill('boolean-flag')
+    await page.getByRole('button', { name: 'Evaluate boolean details' }).click()
+    await expect(page.locator('#status')).toContainText('"value": true')
+    if (flush === 'close') {
+      await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
+    } else {
+      await page.evaluate(() => {
+        // browser-core ignores synthetic events unless explicitly marked as trusted by tests.
+        window.dispatchEvent(Object.assign(new Event('beforeunload'), { __ddIsTrusted: true }))
+      })
+    }
+    await expect.poll(() => batches.length).toBe(1)
+    expect(batches[0]).toHaveLength(2)
+    const diagnostic = batches[0].find((event) => event.type === 'sdk_diagnostic')
+    const evaluation = batches[0].find((event) => event.flag)
+    expect(diagnostic?.payload?.initialization).toMatchObject({ outcome: 'ready', final: true })
+    expect(evaluation?.flag?.key).toBe('boolean-flag')
+    expect(evaluation?.evaluation_count).toBe(1)
+    expect(evaluation).not.toHaveProperty('type')
+  })
+}
