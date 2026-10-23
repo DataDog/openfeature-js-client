@@ -107,6 +107,9 @@ export class DatadogNodeServerProvider implements Provider {
     }
 
     this.configuration = configuration
+    if (!configuration) {
+      return
+    }
 
     if (this.initController?.isInitializing()) {
       // First configuration during initialization - resolve the initialization promise

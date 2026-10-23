@@ -184,6 +184,39 @@ describe('DatadogNodeServerProvider', () => {
     expect(result.errorCode).toBe('PROVIDER_NOT_READY')
   })
 
+  it.each([undefined, null])('does not emit ready for a runtime %s update without configuration', (update) => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const readyHandler = jest.fn()
+    provider.events.addHandler(ProviderEvents.Ready, readyHandler)
+
+    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
+
+    expect(readyHandler).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, null])('does not complete initialization for a runtime %s update', async (update) => {
+    jest.useFakeTimers()
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: mockExposureChannel,
+      initializationTimeoutMs: 1,
+    })
+    const initialization = provider.initialize()
+    let initialized = false
+    void initialization.then(
+      () => {
+        initialized = true
+      },
+      () => {}
+    )
+
+    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
+    await Promise.resolve()
+    expect(initialized).toBe(false)
+
+    jest.advanceTimersByTime(1)
+    await expect(initialization).rejects.toThrow('Initialization timeout after 1ms')
+  })
+
   it('should allow hooks to be set', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
