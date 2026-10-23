@@ -90,7 +90,9 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
-    prepareUniversalFlagConfiguration(configuration)
+    // Runtime configuration sources use nullish updates to clear configuration even
+    // though the public TypeScript contract only accepts a UFC document.
+    if (configuration) prepareUniversalFlagConfiguration(configuration)
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
 

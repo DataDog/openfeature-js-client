@@ -176,6 +176,14 @@ describe('DatadogNodeServerProvider', () => {
     expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(false)
   })
 
+  it.each([undefined, null])('accepts a runtime %s configuration update', async (update) => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
+    expect(provider.getConfiguration()).toBe(update)
+    const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
+    expect(result.errorCode).toBe('PROVIDER_NOT_READY')
+  })
+
   it('should allow hooks to be set', async () => {
     const provider = new DatadogNodeServerProvider({
       exposureChannel: mockExposureChannel,
