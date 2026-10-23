@@ -31,6 +31,8 @@ import {
   type EvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
 import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
+import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -71,6 +73,10 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+  private readonly debugMode: boolean
+  private flagEvaluationTransport?: FlagEvaluationTransport
+  private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
+  private initializationStarted = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -114,6 +120,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    this.debugMode = options.debugMode === true
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.configuration = validateAndBuildFlaggingConfiguration(options)
     const getTrackingContext = () =>
@@ -127,6 +134,7 @@ export class DatadogProvider extends DatadogProviderBase {
       options,
       configuration: this.configuration,
       enabledByDefault: true,
+      getTransport: () => this.flagEvaluationTransport,
       getTrackingContext,
       telemetryPolicy: this.telemetryPolicy,
     })
@@ -142,15 +150,51 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    if (!this.initializationStarted) {
+      this.initializationStarted = true
+      if (this.debugMode) {
+        logDiagnostic(
+          'Initializing. If no remote events arrive, check the client token, site, network, and Content Security Policy.'
+        )
+      }
+      try {
+        if (this.configuration) {
+          this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
+          this.lifecycleTelemetry = createLifecycleTelemetry(
+            this.configuration,
+            this.debugMode,
+            this.flagEvaluationTransport
+          )
+        }
+      } catch {
+        if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
+      }
+    }
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context)
+    try {
+      return await this.setContext(context)
+    } catch (error) {
+      this.lifecycleTelemetry?.settle('failed')
+      if (this.debugMode)
+        logDiagnostic('Initialization failed. Inspect the configuration request in browser developer tools.')
+      throw error
+    }
   }
 
   async onClose(): Promise<void> {
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Diagnostic shutdown must not interrupt application shutdown.
+    }
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
-    await this.tracking.shutdown()
+    try {
+      await this.tracking.shutdown()
+    } finally {
+      this.flagEvaluationTransport?.stop()
+    }
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -208,6 +252,7 @@ export class DatadogProvider extends DatadogProviderBase {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -266,9 +311,19 @@ export class DatadogProvider extends DatadogProviderBase {
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       signal.throwIfAborted()
+      if (config.precomputed) {
+        this.lifecycleTelemetry?.configurationReceived()
+      } else if (config.precomputedError) {
+        this.lifecycleTelemetry?.providerError()
+        if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
+      }
       this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
+      if (!signal.aborted) {
+        this.lifecycleTelemetry?.providerError()
+        if (this.debugMode) logDiagnostic('Configuration fetch failed. Cached configuration may still be available.')
+      }
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
@@ -316,7 +371,7 @@ export class DatadogProvider extends DatadogProviderBase {
       optOutEnabled &&
       result.errorCode === ErrorCode.INVALID_CONTEXT &&
       experimentationOptOutPolicy(context, this.experimentationOptOutMode) !== undefined
-    return bindEvaluationTelemetryResult(
+    const details = bindEvaluationTelemetryResult(
       awaitingAssignments
         ? {
             ...result,
@@ -327,5 +382,7 @@ export class DatadogProvider extends DatadogProviderBase {
       this.telemetryPolicy,
       optOutEnabled ? context : undefined
     )
+    if (this.debugMode) logDiagnostic('Evaluation details', { flagKey, ...details })
+    return details
   }
 }

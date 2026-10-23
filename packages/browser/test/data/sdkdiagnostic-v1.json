@@ -1,0 +1,430 @@
+{
+  "title": "SDKDiagnosticEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "schema_version", "payload"],
+  "properties": {
+    "type": {
+      "const": "sdk_diagnostic"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "payload": {
+      "title": "SDKDiagnostic",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ReadyInitializationDiagnostic"
+        },
+        {
+          "$ref": "#/definitions/FailedInitializationDiagnostic"
+        },
+        {
+          "$ref": "#/definitions/CachedFallbackInitializationDiagnostic"
+        },
+        {
+          "$ref": "#/definitions/IncompleteInitializationDiagnostic"
+        },
+        {
+          "$ref": "#/definitions/ProviderErrorDiagnostic"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "ConfigurationReceived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elapsed_ms"],
+      "properties": {
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "tcp_connect_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "time_to_first_byte_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        }
+      }
+    },
+    "ReadyInitialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "properties": {
+        "outcome": {
+          "const": "ready"
+        },
+        "started_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8640000000000000
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "final": {
+          "const": true
+        },
+        "milestones": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["configuration_received", "provider_ready"],
+          "properties": {
+            "configuration_received": {
+              "$ref": "#/definitions/ConfigurationReceived"
+            },
+            "provider_ready": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["elapsed_ms"],
+              "properties": {
+                "elapsed_ms": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 86400000
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "FailedInitialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "properties": {
+        "outcome": {
+          "const": "failed"
+        },
+        "started_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8640000000000000
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "final": {
+          "const": true
+        },
+        "milestones": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "configuration_received": {
+              "$ref": "#/definitions/ConfigurationReceived"
+            }
+          }
+        }
+      }
+    },
+    "CachedFallbackInitialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "properties": {
+        "outcome": {
+          "const": "cached_fallback"
+        },
+        "started_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8640000000000000
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "final": {
+          "const": true
+        },
+        "milestones": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {}
+        }
+      }
+    },
+    "IncompleteInitialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones", "reason"],
+      "properties": {
+        "outcome": {
+          "const": "incomplete"
+        },
+        "started_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8640000000000000
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "final": {
+          "const": false
+        },
+        "milestones": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "configuration_received": {
+              "$ref": "#/definitions/ConfigurationReceived"
+            }
+          }
+        },
+        "reason": {
+          "enum": ["page_exit", "provider_closed"]
+        }
+      }
+    },
+    "DiagnosticTimestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8640000000000000
+    },
+    "RuntimeID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "SDKName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "SDKVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "ApplicationID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "ServiceID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Environment": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "ReadyInitializationDiagnostic": {
+      "type": "object",
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
+      "properties": {
+        "timestamp": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
+        },
+        "runtime_id": {
+          "$ref": "#/definitions/RuntimeID"
+        },
+        "sdk_name": {
+          "$ref": "#/definitions/SDKName"
+        },
+        "sdk_version": {
+          "$ref": "#/definitions/SDKVersion"
+        },
+        "application_id": {
+          "$ref": "#/definitions/ApplicationID"
+        },
+        "service_id": {
+          "$ref": "#/definitions/ServiceID"
+        },
+        "environment": {
+          "$ref": "#/definitions/Environment"
+        },
+        "event_type": {
+          "const": "sdk_initialization"
+        },
+        "initialization": {
+          "$ref": "#/definitions/ReadyInitialization"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailedInitializationDiagnostic": {
+      "type": "object",
+      "required": [
+        "timestamp",
+        "runtime_id",
+        "sdk_name",
+        "sdk_version",
+        "environment",
+        "event_type",
+        "initialization",
+        "error_code"
+      ],
+      "properties": {
+        "timestamp": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
+        },
+        "runtime_id": {
+          "$ref": "#/definitions/RuntimeID"
+        },
+        "sdk_name": {
+          "$ref": "#/definitions/SDKName"
+        },
+        "sdk_version": {
+          "$ref": "#/definitions/SDKVersion"
+        },
+        "application_id": {
+          "$ref": "#/definitions/ApplicationID"
+        },
+        "service_id": {
+          "$ref": "#/definitions/ServiceID"
+        },
+        "environment": {
+          "$ref": "#/definitions/Environment"
+        },
+        "event_type": {
+          "const": "sdk_initialization"
+        },
+        "initialization": {
+          "$ref": "#/definitions/FailedInitialization"
+        },
+        "error_code": {
+          "const": "INIT_FAILED"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CachedFallbackInitializationDiagnostic": {
+      "type": "object",
+      "required": [
+        "timestamp",
+        "runtime_id",
+        "sdk_name",
+        "sdk_version",
+        "environment",
+        "event_type",
+        "initialization",
+        "error_code"
+      ],
+      "properties": {
+        "timestamp": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
+        },
+        "runtime_id": {
+          "$ref": "#/definitions/RuntimeID"
+        },
+        "sdk_name": {
+          "$ref": "#/definitions/SDKName"
+        },
+        "sdk_version": {
+          "$ref": "#/definitions/SDKVersion"
+        },
+        "application_id": {
+          "$ref": "#/definitions/ApplicationID"
+        },
+        "service_id": {
+          "$ref": "#/definitions/ServiceID"
+        },
+        "environment": {
+          "$ref": "#/definitions/Environment"
+        },
+        "event_type": {
+          "const": "sdk_initialization"
+        },
+        "initialization": {
+          "$ref": "#/definitions/CachedFallbackInitialization"
+        },
+        "error_code": {
+          "const": "CONFIG_FETCH_FAILED"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IncompleteInitializationDiagnostic": {
+      "type": "object",
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
+      "properties": {
+        "timestamp": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
+        },
+        "runtime_id": {
+          "$ref": "#/definitions/RuntimeID"
+        },
+        "sdk_name": {
+          "$ref": "#/definitions/SDKName"
+        },
+        "sdk_version": {
+          "$ref": "#/definitions/SDKVersion"
+        },
+        "application_id": {
+          "$ref": "#/definitions/ApplicationID"
+        },
+        "service_id": {
+          "$ref": "#/definitions/ServiceID"
+        },
+        "environment": {
+          "$ref": "#/definitions/Environment"
+        },
+        "event_type": {
+          "const": "sdk_initialization"
+        },
+        "initialization": {
+          "$ref": "#/definitions/IncompleteInitialization"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProviderErrorDiagnostic": {
+      "type": "object",
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "error_code"],
+      "properties": {
+        "timestamp": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
+        },
+        "runtime_id": {
+          "$ref": "#/definitions/RuntimeID"
+        },
+        "sdk_name": {
+          "$ref": "#/definitions/SDKName"
+        },
+        "sdk_version": {
+          "$ref": "#/definitions/SDKVersion"
+        },
+        "application_id": {
+          "$ref": "#/definitions/ApplicationID"
+        },
+        "service_id": {
+          "$ref": "#/definitions/ServiceID"
+        },
+        "environment": {
+          "$ref": "#/definitions/Environment"
+        },
+        "event_type": {
+          "const": "provider_error"
+        },
+        "error_code": {
+          "const": "CONFIG_FETCH_FAILED"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

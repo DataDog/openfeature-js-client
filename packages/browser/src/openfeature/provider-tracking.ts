@@ -5,6 +5,7 @@ import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration }
 import type { EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
+import type { FlagEvaluationTransport } from './flagEvaluationTransport'
 import { createRumTrackingHook } from './rumIntegration'
 import type { DatadogTrackingHook, DatadogTrackingHooks } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
@@ -18,12 +19,14 @@ export function createProviderTracking({
   configuration,
   enabledByDefault,
   getTrackingContext,
+  getTransport,
   telemetryPolicy,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
+  getTransport?: () => FlagEvaluationTransport | undefined
   telemetryPolicy?: EvaluationTelemetryPolicy
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
@@ -34,7 +37,9 @@ export function createProviderTracking({
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
     trackingHooks.push(
-      createTrackingHookController(() => createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy))
+      createTrackingHookController(() =>
+        createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy, getTransport?.())
+      )
     )
   }
 
