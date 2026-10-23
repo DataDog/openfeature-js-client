@@ -1,9 +1,12 @@
 import {
   type AssignmentCache,
+  acknowledgesExperimentationOptOut,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
+  experimentationOptOutPolicy,
   type FlagsConfiguration,
   type FlagTypeToValue,
+  INVALID_EXPERIMENTATION_OPT_OUT,
 } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
@@ -13,7 +16,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { ErrorCode, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
@@ -22,6 +25,12 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { toProviderErrorEvent } from './error-event'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
+import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
@@ -79,6 +88,8 @@ export class DatadogProvider extends DatadogProviderBase {
   private evaluationContext: EvaluationContext | undefined
   /** Request context used for tracking until a configuration has been accepted. */
   private requestedEvaluationContext: EvaluationContext = {}
+  private readonly telemetryPolicy: EvaluationTelemetryPolicy
+  private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   status: ProviderStatus
 
@@ -110,7 +121,13 @@ export class DatadogProvider extends DatadogProviderBase {
   constructor(options: FlaggingInitConfiguration) {
     super()
     this.debugMode = options.debugMode === true
+    this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.configuration = validateAndBuildFlaggingConfiguration(options)
+    const getTrackingContext = () =>
+      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+        ? this.requestedEvaluationContext
+        : (this.evaluationContext ?? this.requestedEvaluationContext)
+    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({
@@ -118,7 +135,8 @@ export class DatadogProvider extends DatadogProviderBase {
       configuration: this.configuration,
       enabledByDefault: true,
       getTransport: () => this.flagEvaluationTransport,
-      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
+      getTrackingContext,
+      telemetryPolicy: this.telemetryPolicy,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -185,7 +203,10 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   private setContext(context: EvaluationContext): Promise<void> {
-    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    const evaluationContext = { ...effectiveContext }
+    // Apply telemetry admission before the ordinary assignment refresh completes.
+    this.telemetryPolicy.setContext(effectiveContext)
     this.requestedEvaluationContext = evaluationContext
 
     if (this.status === ProviderStatus.NOT_READY) {
@@ -275,23 +296,28 @@ export class DatadogProvider extends DatadogProviderBase {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
+    const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
+    if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+    const canUse = (config: FlagsConfiguration | undefined) =>
+      configMatchesContext(config, context) &&
+      (!optedOut || config?.precomputed?.context !== undefined) &&
+      acknowledgesExperimentationOptOut(config, optedOut)
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = configMatchesContext(this.flagsConfiguration, context)
+    const cachedConfigPromise = canUse(this.flagsConfiguration)
       ? Promise.resolve(this.flagsConfiguration)
-      : this.flagsCache?.get(context)
+      : this.flagsCache?.get(context, optedOut)
 
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
-      if (!signal.aborted) {
-        if (config.precomputed) {
-          this.lifecycleTelemetry?.configurationReceived()
-        } else if (config.precomputedError) {
-          this.lifecycleTelemetry?.providerError()
-          if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
-        }
+      signal.throwIfAborted()
+      if (config.precomputed) {
+        this.lifecycleTelemetry?.configurationReceived()
+      } else if (config.precomputedError) {
+        this.lifecycleTelemetry?.providerError()
+        if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
       }
-      this.flagsCache?.set(config, context)
+      this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
       if (!signal.aborted) {
@@ -301,7 +327,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
-        if (config) {
+        if (config && canUse(config)) {
           return { config, fromCache: true }
         }
       } catch (err) {}
@@ -330,12 +356,31 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    const details = evaluatePrecomputedConfiguration(
+    const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+    const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
+    const result = evaluatePrecomputedConfiguration(
       this.flagsConfiguration,
       type,
       flagKey,
       defaultValue,
-      this.evaluationContext ?? {}
+      context,
+      this.experimentationOptOutMode
+    )
+    // A well-formed context is waiting for usable assignments, not invalid.
+    const awaitingAssignments =
+      optOutEnabled &&
+      result.errorCode === ErrorCode.INVALID_CONTEXT &&
+      experimentationOptOutPolicy(context, this.experimentationOptOutMode) !== undefined
+    const details = bindEvaluationTelemetryResult(
+      awaitingAssignments
+        ? {
+            ...result,
+            errorCode: ErrorCode.PROVIDER_NOT_READY,
+            errorMessage: 'Assignments for the current evaluation context are not available',
+          }
+        : result,
+      this.telemetryPolicy,
+      optOutEnabled ? context : undefined
     )
     if (this.debugMode) logDiagnostic('Evaluation details', { flagKey, ...details })
     return details

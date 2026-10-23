@@ -1,5 +1,6 @@
 import { type Context, getGlobalObject } from '@datadog/browser-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import { type EvaluationTelemetryPolicy, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHook } from './tracking'
 
 export interface DDRum {
@@ -39,16 +40,19 @@ export function enrichEvaluationContextWithRumUser(context: EvaluationContext): 
   }
 }
 
-export function createRumTrackingHook(): Hook {
-  return {
-    finally: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
-        return
-      }
-      const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-      globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy): Hook {
+  return withEvaluationTelemetryPolicy(
+    {
+      finally: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
+          return
+        }
+        const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+        globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+      },
     },
-  }
+    policy
+  )
 }
 
 export function createDatadogRumTrackingHook(): DatadogTrackingHook {
