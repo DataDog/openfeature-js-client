@@ -86,6 +86,29 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Flag selection
+
+Use `flagSelection` to load only the flags that match a set of tags or key patterns:
+
+```javascript
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  flagSelection: {
+    tags: ['team:checkout'],
+    keyPatterns: ['checkout-*'],
+  },
+})
+```
+
+Tags match exactly and are case-sensitive, and a flag matches if it has any of the tags. Key patterns are whole-key
+globs where only `*` is special. A flag is selected if it matches any requested tag or any key pattern (either list).
+Each list accepts at most 31 values after dedupe; each tag and key pattern is at most 200 UTF-8 bytes after trimming.
+Leading and trailing Unicode whitespace is trimmed from every value, empty values are dropped, and duplicates are
+removed. Selections over a limit are dropped and the full config is loaded. Very large selections may be ignored by the
+server (`too_many_values`), in which case the full config loads. Flags outside the selection are not loaded; evaluating
+them returns the default value with `FLAG_NOT_FOUND`.
+
 ## Usage Examples
 
 ### Flag Evaluation

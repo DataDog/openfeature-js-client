@@ -1,6 +1,7 @@
 import {
   type AssignmentCache,
   acknowledgesExperimentationOptOut,
+  canonicalizeFlagSelection,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
   experimentationOptOutPolicy,
@@ -134,7 +135,10 @@ export class DatadogProvider extends DatadogProviderBase {
     this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
-      this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
+      this.flagsCache = new IndexedDBFlagsCache(
+        options.clientToken,
+        canonicalizeFlagSelection(options.flagSelection).selection
+      )
     }
 
     this.flagsConfiguration = options.initialFlagsConfiguration
