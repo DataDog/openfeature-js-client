@@ -57,13 +57,7 @@
     "ReadyInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcome",
-        "started_at",
-        "duration_ms",
-        "final",
-        "milestones"
-      ],
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "ready"
@@ -108,13 +102,7 @@
     "FailedInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcome",
-        "started_at",
-        "duration_ms",
-        "final",
-        "milestones"
-      ],
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "failed"
@@ -147,13 +135,7 @@
     "CachedFallbackInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcome",
-        "started_at",
-        "duration_ms",
-        "final",
-        "milestones"
-      ],
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "cached_fallback"
@@ -182,14 +164,7 @@
     "IncompleteInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "outcome",
-        "started_at",
-        "duration_ms",
-        "final",
-        "milestones",
-        "reason"
-      ],
+      "required": ["outcome", "started_at", "duration_ms", "final", "milestones", "reason"],
       "properties": {
         "outcome": {
           "const": "incomplete"
@@ -259,15 +234,7 @@
     },
     "ReadyInitializationDiagnostic": {
       "type": "object",
-      "required": [
-        "timestamp",
-        "runtime_id",
-        "sdk_name",
-        "sdk_version",
-        "environment",
-        "event_type",
-        "initialization"
-      ],
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
@@ -393,15 +360,7 @@
     },
     "IncompleteInitializationDiagnostic": {
       "type": "object",
-      "required": [
-        "timestamp",
-        "runtime_id",
-        "sdk_name",
-        "sdk_version",
-        "environment",
-        "event_type",
-        "initialization"
-      ],
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
@@ -435,15 +394,7 @@
     },
     "ProviderErrorDiagnostic": {
       "type": "object",
-      "required": [
-        "timestamp",
-        "runtime_id",
-        "sdk_name",
-        "sdk_version",
-        "environment",
-        "event_type",
-        "error_code"
-      ],
+      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "error_code"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"

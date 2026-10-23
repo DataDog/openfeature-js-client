@@ -58,9 +58,11 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  const pageExitSubscription = (sharedTransport
-    ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
-    : transport.pageMayExitObservable).subscribe(() => {
+  const pageExitSubscription = (
+    sharedTransport
+      ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
+      : transport.pageMayExitObservable
+  ).subscribe(() => {
     aggregator.stop()
   })
 
