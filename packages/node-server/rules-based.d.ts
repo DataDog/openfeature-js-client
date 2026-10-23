@@ -883,6 +883,8 @@ type PrecomputedConfigurationResponse = {
 		attributes: {
 			/** When configuration was generated. */
 			createdAt: string;
+			/** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
+			observeFullEvaluationData?: boolean;
 			/** Effective server evaluation options, retained in portable and persisted configurations. */
 			evaluation_options?: {
 				experimentation_opt_out?: boolean;

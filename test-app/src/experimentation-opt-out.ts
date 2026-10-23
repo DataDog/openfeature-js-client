@@ -53,6 +53,7 @@ async function run() {
   let tracking: DatadogTrackingHooks | undefined
   if (provider instanceof DatadogCoreProvider) {
     const rules = configurationFromString(JSON.stringify(rulesWire))
+    rules.rules!.response.observeFullEvaluationData = parameters.get('consent') === 'true'
     if (parameters.get('policy') === 'future') {
       rules.rules!.response.flags['test-flag'].allocations[0].randomizationActivatedAt = {
         $typeName: 'google.protobuf.Timestamp',

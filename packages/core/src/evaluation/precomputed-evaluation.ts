@@ -6,7 +6,13 @@ import {
   type PrecomputedConfiguration,
   type PrecomputedFlagMetadata,
 } from '../configuration'
-import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
+import {
+  encodePrecomputedFlagKey,
+  type FlagKeyObfuscation,
+  readFlagKeyObfuscation,
+} from '../configuration/flag-key-obfuscation'
+import { timeStampNow } from '../time'
+import { createEvaluationMetadata } from './evaluationMetadata'
 import {
   acknowledgesExperimentationOptOut,
   type ExperimentationOptOutOption,
@@ -29,6 +35,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      flagMetadata: createEvaluationMetadata(timeStampNow(), false),
       errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
     }
   }
@@ -40,13 +47,21 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
+      flagMetadata: createEvaluationMetadata(timeStampNow(), false),
       errorMessage:
         'Precomputed configuration must match the subject and acknowledge the requested experimentation opt-out policy',
     }
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
+  // Capture the selected configuration's consent before evaluating the flag.
+  // No usable configuration (including a context mismatch) defaults to protected mode.
+  const metadata = createEvaluationMetadata(
+    timeStampNow(),
+    selection.kind === 'precomputed' && selection.configuration.response.data.attributes.observeFullEvaluationData
+  )
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue)
+    const details = evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, selection.encoding)
+    return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
   }
 
   const { error } = selection
@@ -54,6 +69,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
+    flagMetadata: metadata,
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
   }
 }
@@ -64,7 +80,7 @@ type PrecomputedFlagsConfigurationError = {
 }
 
 type PrecomputedFlagsConfigurationSelection =
-  | { kind: 'precomputed'; configuration: PrecomputedConfiguration }
+  | { kind: 'precomputed'; configuration: PrecomputedConfiguration; encoding?: FlagKeyObfuscation }
   | { kind: 'error'; error: PrecomputedFlagsConfigurationError }
 
 function selectPrecomputedFlagsConfiguration(
@@ -79,7 +95,14 @@ function selectPrecomputedFlagsConfiguration(
   }
 
   if (configuration.precomputed && configMatchesContext(configuration, context)) {
-    return { kind: 'precomputed', configuration: configuration.precomputed }
+    // Initial configurations and persistent caches can bypass the wire parser.
+    // Reject unusable encoding before capturing configuration-wide telemetry consent.
+    const attributes = configuration.precomputed.response.data.attributes
+    const encoding = readFlagKeyObfuscation(attributes.obfuscated, attributes.obfuscation)
+    if ('error' in encoding) {
+      return { kind: 'error', error: { errorCode: 'PARSE_ERROR', errorMessage: encoding.error } }
+    }
+    return { kind: 'precomputed', configuration: configuration.precomputed, encoding: encoding.encoding }
   }
 
   const parseError = configuration.configurationError ?? configuration.precomputedError ?? configuration.rulesError
@@ -107,20 +130,11 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   precomputed: PrecomputedConfiguration,
   type: T,
   flagKey: string,
-  defaultValue: FlagTypeToValue<T>
+  defaultValue: FlagTypeToValue<T>,
+  encoding: FlagKeyObfuscation | undefined
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const attributes = precomputed.response.data.attributes
-  // Initial configurations and persistent caches can bypass the wire parser.
-  const encoding = readFlagKeyObfuscation(attributes.obfuscated, attributes.obfuscation)
-  if ('error' in encoding) {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: encoding.error,
-    }
-  }
-  const lookup = encoding.encoding ? encodePrecomputedFlagKey(flagKey, encoding.encoding) : { key: flagKey }
+  const lookup = encoding ? encodePrecomputedFlagKey(flagKey, encoding) : { key: flagKey }
   if ('error' in lookup) {
     return { value: defaultValue, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' as ErrorCode }
   }

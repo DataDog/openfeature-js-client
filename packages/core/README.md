@@ -43,6 +43,19 @@ receiving configuration. Existing low-level evaluation calls still accept raw co
 and prepare each flag once on first use. Replace changed flags instead of mutating prepared
 flags in place. Preparation does not change the serialized configuration.
 
+## Evaluation telemetry
+
+`FlagEvaluationAggregator` reads `__dd_observe_full_evaluation_data` from the evaluation result.
+Only literal `true` allows full data. Otherwise it hashes valid nonempty targeting keys with
+SHA-256 over exact UTF-8, preserves empty keys, omits invalid/missing keys, and discards evaluation
+context before aggregation. It keeps full-data and protected evaluations in separate groups.
+
+Full-data context is captured as an owned JSON copy; unserializable context is omitted while retaining
+the evaluation. The aggregator never consults a newer configuration during flush. Both modes use only
+`PROVIDER_NOT_READY`, `PROVIDER_FATAL`, `FLAG_NOT_FOUND`, `PARSE_ERROR`, `TYPE_MISMATCH`,
+`TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, or `GENERAL` for telemetry errors. Successful evaluations
+have no error field. This behavior applies to evaluation telemetry, not targeting inputs or exposures.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.

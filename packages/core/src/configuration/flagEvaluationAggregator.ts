@@ -1,6 +1,7 @@
 import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { getMD5Hash } from '../obfuscation'
 import { type TimeStamp, timeStampNow } from '../time'
+import { captureEvaluationContext, sanitizeEvaluationError } from './evaluation-privacy'
 import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
@@ -46,34 +47,35 @@ export class FlagEvaluationAggregator {
   }
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
-    const keyString = this.createAggregationKeyString(context, details, error)
+    const observeFullData = details.flagMetadata?.__dd_observe_full_evaluation_data === true
+    const capturedContext = captureEvaluationContext(context, observeFullData)
+    const sanitizedError = sanitizeEvaluationError(
+      error ?? details.errorCode ?? (details.reason === 'ERROR' ? 'GENERAL' : undefined)
+    )
+    const identity = {
+      flagKey: details.flagKey,
+      variantKey: details.variant,
+      allocationKey: details.flagMetadata?.allocationKey as string | undefined,
+      targetingRuleKey: details.flagMetadata?.targetingRuleKey as string | undefined,
+      ...capturedContext,
+      error: sanitizedError,
+    }
+    // Consent keeps protected and full-data evaluations in separate buckets even
+    // when their visible fields happen to match (for example, an empty key).
+    const keyString = `${observeFullData}:${getMD5Hash(JSON.stringify(identity))}`
     const timestamp = getEvaluationTimestamp(details)
 
     const existingData = this.aggregatedData.get(keyString)
     if (existingData) {
       existingData.count++
       existingData.lastEvaluation = timestamp
-      if (error) {
-        existingData.error = error
-      }
     } else {
-      const runtimeDefaultUsed = isRuntimeDefaultUsed(details)
-      const allocationKey = details.flagMetadata?.allocationKey as string
-      const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
-      const { targetingKey, ...targetingContext } = context
-
       this.aggregatedData.set(keyString, {
-        flagKey: details.flagKey,
-        variantKey: details.variant,
-        allocationKey,
-        targetingRuleKey,
-        targetingKey,
-        targetingContext,
+        ...identity,
         count: 1,
         firstEvaluation: timestamp,
         lastEvaluation: timestamp,
-        runtimeDefaultUsed,
-        error,
+        runtimeDefaultUsed: isRuntimeDefaultUsed(details),
       })
     }
   }
@@ -89,29 +91,6 @@ export class FlagEvaluationAggregator {
     )
     this.aggregatedData.clear()
     this.onFlush(events)
-  }
-
-  private createAggregationKeyString<T extends FlagValue>(
-    context: EvaluationContext,
-    details: EvaluationDetails<T>,
-    error?: string
-  ): string {
-    const allocationKey = details.flagMetadata?.allocationKey as string
-    const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
-    const { targetingKey, ...targetingContext } = context
-
-    // Hash the deterministic object representation
-    return getMD5Hash(
-      JSON.stringify({
-        flagKey: details.flagKey,
-        variant: details.variant || '',
-        allocationKey: allocationKey || '',
-        targetingRuleKey: targetingRuleKey || '',
-        targetingKey: targetingKey || '',
-        targetingContext,
-        error: error || '',
-      })
-    )
   }
 }
 

@@ -159,6 +159,7 @@ describe('DatadogProvider', () => {
     it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)
       expect(result).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: true,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -173,6 +174,7 @@ describe('DatadogProvider', () => {
       })
 
       expect(provider.resolveBooleanEvaluation('test-flag', true, mockContext, mockLogger)).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: true,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -189,6 +191,7 @@ describe('DatadogProvider', () => {
     it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveStringEvaluation('test-flag', 'default', mockContext, mockLogger)
       expect(result).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: 'default',
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -205,6 +208,7 @@ describe('DatadogProvider', () => {
     it('should return provider not ready before configuration is available', () => {
       const result = provider.resolveNumberEvaluation('test-flag', 42, mockContext, mockLogger)
       expect(result).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: 42,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -222,6 +226,7 @@ describe('DatadogProvider', () => {
       const defaultValue = { key: 'value' }
       const result = provider.resolveObjectEvaluation('test-flag', defaultValue, mockContext, mockLogger)
       expect(result).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -320,6 +325,8 @@ describe('DatadogProvider', () => {
         variant: 'variation-123',
         reason: 'TARGETING_MATCH',
         flagMetadata: {
+          __dd_eval_timestamp_ms: expect.any(Number),
+          __dd_observe_full_evaluation_data: false,
           allocationKey: 'allocation-123',
           doLog: true,
           variationType: 'STRING',
