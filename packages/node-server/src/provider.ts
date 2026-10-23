@@ -6,6 +6,7 @@ import {
   type DependencyExposureCandidate,
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
+  prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
@@ -89,6 +90,7 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
+    prepareUniversalFlagConfiguration(configuration)
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
 
@@ -162,6 +164,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
+      false,
       this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
@@ -182,6 +185,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
+      false,
       this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
@@ -202,6 +206,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
+      false,
       this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     )
@@ -228,6 +233,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
+      false,
       this.dependencyEvaluationHandler(context),
       (evaluations) => this.handleDependencyExposures(context, evaluations)
     ) as ResolutionDetails<T>

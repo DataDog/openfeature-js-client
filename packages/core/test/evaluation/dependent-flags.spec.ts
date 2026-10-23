@@ -46,6 +46,34 @@ describe('dependent flag evaluation', () => {
     ])
   })
 
+  it('applies experimentation opt-out to dependency evaluations', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
+    root.allocations[0].doLog = false
+    const dependencies: DependencyEvaluation[] = []
+
+    const result = evaluateRulesBasedConfiguration(
+      configuration({ prerequisite, root }),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject', dd_experimentation_opt_out_at: '2026-10-23T00:00:00Z' },
+      logger,
+      'immediate',
+      (evaluation) => dependencies.push(evaluation)
+    )
+
+    expect(result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag evaluation returned no variant',
+    })
+    expect(dependencies).toMatchObject([
+      { flagKey: 'prerequisite', details: { value: false, reason: 'ERROR', errorCode: 'GENERAL' } },
+    ])
+  })
+
   it('uses the shared dependency session for protobuf UFC', () => {
     const config = protobufDependentConfiguration(true)
     const dependencies: DependencyEvaluation[] = []
@@ -59,6 +87,7 @@ describe('dependent flag evaluation', () => {
         false,
         { targetingKey: 'subject' },
         logger,
+        false,
         (evaluation) => dependencies.push(evaluation),
         onExposures
       )
@@ -82,6 +111,7 @@ describe('dependent flag evaluation', () => {
         false,
         { targetingKey: 'subject' },
         logger,
+        false,
         (evaluation) => dependencies.push(evaluation),
         onExposures
       )
@@ -431,6 +461,7 @@ function evaluate(
     false,
     { targetingKey: 'subject', ...attributes },
     logger,
+    false,
     onDependency,
     onExposures
   )
@@ -560,6 +591,7 @@ function evaluateProtobuf(configuration: ReturnType<typeof decodeFlagsConfigurat
     false,
     { targetingKey: 'subject' },
     logger,
+    false,
     (evaluation) => dependencies.push(evaluation),
     onExposures
   )

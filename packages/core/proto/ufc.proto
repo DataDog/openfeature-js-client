@@ -101,6 +101,8 @@ message Allocation {
   // Whether an evaluation resolved by this allocation should emit an
   // exposure event (e.g. for experiments).
   bool log_exposure_event = 5;
+  // First randomization activation, independent of later allocation edits.
+  google.protobuf.Timestamp randomization_activated_at = 6;
 }
 
 // AttributeReference identifies either the targeting key or a value reached by

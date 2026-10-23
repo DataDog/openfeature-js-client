@@ -203,8 +203,15 @@ describe('evaluation-time privacy consent', () => {
     })
     const dependencies: DependencyEvaluation[] = []
 
-    const result = evaluateRulesBasedConfiguration(config, 'boolean', 'root', false, context, logger, (dependency) =>
-      dependencies.push(dependency)
+    const result = evaluateRulesBasedConfiguration(
+      config,
+      'boolean',
+      'root',
+      false,
+      context,
+      logger,
+      false,
+      (dependency) => dependencies.push(dependency)
     )
 
     expect(result).toMatchObject({ value: true, variant: 'on' })

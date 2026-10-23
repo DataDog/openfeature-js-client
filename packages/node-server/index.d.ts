@@ -419,31 +419,6 @@ interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unkno
 	 */
 	finally?(hookContext: Readonly<HookContext<T, TData>>, evaluationDetails: EvaluationDetails<T>, hookHints?: HookHints): HooksReturn;
 }
-interface ExposureEvent {
-	allocation: {
-		key: string;
-	};
-	flag: {
-		key: string;
-	};
-	variant: {
-		key: string;
-	};
-	serial_id?: number;
-	subject: {
-		id: string;
-		attributes: EvaluationContext;
-	};
-	service?: string;
-	rum?: {
-		application?: {
-			id?: string;
-		};
-		view?: {
-			url?: string;
-		};
-	};
-}
 declare enum OperatorType {
 	MATCHES = "MATCHES",
 	NOT_MATCHES = "NOT_MATCHES",
@@ -535,8 +510,10 @@ interface Allocation {
 	rules?: Rule[];
 	startAt?: Date;
 	endAt?: Date;
+	randomizationActivatedAt?: string;
 	splits: Split[];
-	doLog?: boolean;
+	/** Required by the UFC JSON schema; the producer always supplies an explicit boolean. */
+	doLog: boolean;
 }
 interface Flag {
 	key: string;
@@ -556,6 +533,31 @@ export interface UniversalFlagConfigurationV1 {
 		name: string;
 	};
 	flags: Record<string, Flag>;
+}
+interface ExposureEvent {
+	allocation: {
+		key: string;
+	};
+	flag: {
+		key: string;
+	};
+	variant: {
+		key: string;
+	};
+	serial_id?: number;
+	subject: {
+		id: string;
+		attributes: EvaluationContext;
+	};
+	service?: string;
+	rum?: {
+		application?: {
+			id?: string;
+		};
+		view?: {
+			url?: string;
+		};
+	};
 }
 type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
@@ -641,6 +643,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	private dependencyEvaluationHandler;
 	private handleDependencyEvaluation;
 	private handleDependencyExposures;
 	private handleExposure;

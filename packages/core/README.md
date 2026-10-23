@@ -30,6 +30,19 @@ enabled and disabled, including legacy CommonJS and ESM resolution. It executes 
 in Node without `BigInt`, `TextEncoder`, or `TextDecoder`; this checks fallback behavior but does
 not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
+## Preparing activation timestamps
+
+Rules configurations are snapshots. The protobuf decoder prepares randomization activation
+timestamps once, and the Node provider prepares JSON configurations in `setConfiguration`.
+Invalid activation marks only the affected flag as a parse error, regardless of opt-out mode.
+Evaluation compares the prepared seconds and fractional seconds without reparsing the timestamp;
+using a JavaScript `Date` here would lose the nanosecond precision needed at the opt-out cutoff.
+
+Direct JSON core consumers can call `prepareUniversalFlagConfiguration(configuration)` when
+receiving configuration. Existing low-level evaluation calls still accept raw configurations
+and prepare each flag once on first use. Replace changed flags instead of mutating prepared
+flags in place. Preparation does not change the serialized configuration.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.
