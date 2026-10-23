@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import type { FlagEvaluationEvent } from '@datadog/flagging-core'
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
@@ -49,10 +50,10 @@ describe('online provider tracking context', () => {
       const ready = OpenFeature.setProviderAndWait(domain, provider, context)
       const client = OpenFeature.getClient(domain)
       const expectedContext = {
-        targeting_key: rumEnabled ? 'startup-rum-user' : 'startup-user',
-        context: expect.objectContaining({
-          evaluation: { country: 'US', ...(rumEnabled && { user_email: 'rum@example.com' }) },
-        }),
+        targeting_key: `sha256_${createHash('sha256')
+          .update(rumEnabled ? 'startup-rum-user' : 'startup-user')
+          .digest('hex')}`,
+        context: expect.not.objectContaining({ evaluation: expect.anything() }),
       }
 
       try {
@@ -103,7 +104,10 @@ describe('online provider tracking context', () => {
 
       expect(evaluationEvents()).toHaveLength(2)
       for (const event of evaluationEvents()) {
-        expect(event).toMatchObject({ targeting_key: 'first-user', context: { evaluation: { country: 'US' } } })
+        expect(event).toMatchObject({
+          targeting_key: `sha256_${createHash('sha256').update('first-user').digest('hex')}`,
+          context: expect.not.objectContaining({ evaluation: expect.anything() }),
+        })
       }
     } finally {
       pending.resolve(response)
@@ -116,7 +120,10 @@ describe('online provider tracking context', () => {
     jest.advanceTimersByTime(31_000)
     expect(evaluationEvents()).toHaveLength(2)
     for (const event of evaluationEvents()) {
-      expect(event).toMatchObject({ targeting_key: 'next-user', context: { evaluation: { country: 'CA' } } })
+      expect(event).toMatchObject({
+        targeting_key: `sha256_${createHash('sha256').update('next-user').digest('hex')}`,
+        context: expect.not.objectContaining({ evaluation: expect.anything() }),
+      })
     }
   })
 

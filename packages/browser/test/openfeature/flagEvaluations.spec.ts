@@ -17,7 +17,9 @@ jest.mock('@datadog/browser-core', () => ({
     add: jest.fn(),
     stop: jest.fn(),
   })),
-  createFlushController: jest.fn(),
+  createFlushController: jest.fn(() => ({
+    preparePageExitFlushObservable: { subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })) },
+  })),
   createHttpRequest: jest.fn(),
   createIdentityEncoder: jest.fn(),
   createPageMayExitObservable: jest.fn(() => ({
