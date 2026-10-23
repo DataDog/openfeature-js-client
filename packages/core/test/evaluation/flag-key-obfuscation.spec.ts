@@ -262,6 +262,5 @@ describe('precomputed flag-key obfuscation', () => {
     expect(evaluatePrecomputedConfiguration(encoded, 'boolean', key, false, context)).toEqual(
       evaluatePrecomputedConfiguration(plain, 'boolean', key, false, context)
     )
-    jest.restoreAllMocks()
   })
 })
