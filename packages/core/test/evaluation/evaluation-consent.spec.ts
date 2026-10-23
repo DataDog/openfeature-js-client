@@ -1,5 +1,10 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
-import { evaluateRulesBasedConfiguration, type UniversalFlagConfigurationV1 } from '../../src/evaluation'
+import {
+  type DependencyEvaluation,
+  evaluateRulesBasedConfiguration,
+  type UniversalFlagConfigurationV1,
+} from '../../src/evaluation'
+import { OperatorType } from '../../src/evaluation/rules'
 
 const logger: Logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 const context = { targetingKey: 'subject' }
@@ -157,5 +162,62 @@ describe('evaluation-time privacy consent', () => {
     const result = evaluateRulesBasedConfiguration(config, 'boolean', 'flag', false, context, mutatingLogger)
     expect(result.flagMetadata?.[metadataKey]).toBe(true)
     expect(evaluate(config).flagMetadata?.[metadataKey]).toBe(false)
+  })
+
+  it('uses the evaluation-start consent snapshot for lazily created dependency sessions', () => {
+    const config = configuration(true)
+    const prerequisite = config.flags.flag
+    config.flags = {
+      root: {
+        key: 'root',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: { on: { key: 'on', value: true } },
+        allocations: [
+          {
+            key: 'targeted',
+            doLog: true,
+            rules: [
+              {
+                conditions: [
+                  {
+                    flagEvaluation: { key: 'prerequisite' },
+                    operator: OperatorType.ONE_OF,
+                    value: ['on'],
+                  },
+                ],
+              },
+            ],
+            splits: [{ variationKey: 'on', shards: [] }],
+          },
+        ],
+      },
+      prerequisite,
+    }
+    Object.defineProperty(config.flags, 'prerequisite', {
+      enumerable: true,
+      get() {
+        config.observeFullEvaluationData = false
+        return prerequisite
+      },
+    })
+    const dependencies: DependencyEvaluation[] = []
+
+    const result = evaluateRulesBasedConfiguration(
+      config,
+      'boolean',
+      'root',
+      false,
+      context,
+      logger,
+      false,
+      (dependency) => dependencies.push(dependency)
+    )
+
+    expect(result).toMatchObject({ value: true, variant: 'on' })
+    expect(result.flagMetadata?.[metadataKey]).toBe(true)
+    expect(dependencies).toHaveLength(1)
+    expect(dependencies[0].details.flagMetadata?.[metadataKey]).toBe(true)
+    expect(config.observeFullEvaluationData).toBe(false)
   })
 })

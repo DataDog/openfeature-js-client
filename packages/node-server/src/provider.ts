@@ -2,6 +2,8 @@ import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
   createExposureEvent,
+  type DependencyEvaluation,
+  type DependencyExposureCandidate,
   type ExposureEvent,
   LRUInMemoryAssignmentCache,
   prepareUniversalFlagConfiguration,
@@ -42,11 +44,20 @@ export interface DatadogNodeServerProviderOptions {
    */
   exposureChannel: Channel<ExposureEvent>
   /**
+   * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+   */
+  dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>
+  /**
    * Timeout in milliseconds for provider initialization.
    * If the configuration is not set within this time, initialization will fail.
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+}
+
+export type DependencyEvaluationEvent = {
+  context: EvaluationContext
+  details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
 }
 
 export class DatadogNodeServerProvider implements Provider {
@@ -79,7 +90,9 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1) {
-    prepareUniversalFlagConfiguration(configuration)
+    // Runtime configuration sources use nullish updates to clear configuration even
+    // though the public TypeScript contract only accepts a UFC document.
+    if (configuration) prepareUniversalFlagConfiguration(configuration)
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
 
@@ -94,6 +107,9 @@ export class DatadogNodeServerProvider implements Provider {
     }
 
     this.configuration = configuration
+    if (!configuration) {
+      return
+    }
 
     if (this.initController?.isInitializing()) {
       // First configuration during initialization - resolve the initialization promise
@@ -146,7 +162,17 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    const resolutionDetails = evaluate(this.configuration, 'boolean', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'boolean',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      false,
+      this.dependencyEvaluationHandler(context),
+      (evaluations) => this.handleDependencyExposures(context, evaluations)
+    )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -157,7 +183,17 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    const resolutionDetails = evaluate(this.configuration, 'string', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'string',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      false,
+      this.dependencyEvaluationHandler(context),
+      (evaluations) => this.handleDependencyExposures(context, evaluations)
+    )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -168,7 +204,17 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    const resolutionDetails = evaluate(this.configuration, 'number', flagKey, defaultValue, context, _logger)
+    const resolutionDetails = evaluate(
+      this.configuration,
+      'number',
+      flagKey,
+      defaultValue,
+      context,
+      _logger,
+      false,
+      this.dependencyEvaluationHandler(context),
+      (evaluations) => this.handleDependencyExposures(context, evaluations)
+    )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -191,10 +237,45 @@ export class DatadogNodeServerProvider implements Provider {
       flagKey,
       defaultValue,
       context,
-      _logger
+      _logger,
+      false,
+      this.dependencyEvaluationHandler(context),
+      (evaluations) => this.handleDependencyExposures(context, evaluations)
     ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
+  }
+
+  private dependencyEvaluationHandler(
+    context: EvaluationContext
+  ): ((evaluation: DependencyEvaluation) => void) | undefined {
+    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
+      return undefined
+    }
+    return (evaluation) => this.handleDependencyEvaluation(context, evaluation)
+  }
+
+  private handleDependencyEvaluation(context: EvaluationContext, evaluation: DependencyEvaluation): void {
+    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
+      return
+    }
+    this.options.dependencyEvaluationChannel.publish({
+      context,
+      details: {
+        ...evaluation.details,
+        flagKey: evaluation.flagKey,
+        flagMetadata: evaluation.details.flagMetadata ?? {},
+      },
+    })
+  }
+
+  private handleDependencyExposures(
+    context: EvaluationContext,
+    evaluations: readonly DependencyExposureCandidate[]
+  ): void {
+    for (const evaluation of evaluations) {
+      this.handleExposure(evaluation.flagKey, context, evaluation.details)
+    }
   }
 
   private handleExposure<T extends FlagValue>(
