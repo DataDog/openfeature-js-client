@@ -163,7 +163,7 @@ describe('DatadogNodeServerProvider', () => {
       { targetingKey: 'subject', country: 'US' },
       logger
     )
-    // Node has no opt-out mode and does not consume activation metadata.
+    // The default disabled mode does not consume activation metadata.
     expect(result.value).toBe(true)
     expect(result.errorCode).toBeUndefined()
     expect(readReplacement).toHaveBeenCalledTimes(1)

@@ -47,6 +47,35 @@ The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `Da
 
 Applications own retries, polling, storage, tracking, and fallback.
 
+## Per-subject experimentation opt-out
+
+Set the `experimentationOptOutMode` provider option to `ExperimentationOptOutMode.Immediate`.
+The default is `Disabled`. Unsupported mode values throw during provider construction.
+The provider uses the explicit option only. When using `dd-trace-js`, the tracer owns
+`DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE` and passes the resolved mode to this provider.
+
+```typescript
+import { DatadogNodeServerProvider, ExperimentationOptOutMode } from '@datadog/openfeature-node-server'
+
+const provider = new DatadogNodeServerProvider({
+  exposureChannel,
+  experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+})
+// Supply the customer's stored preference with each evaluation.
+const context = {
+  targetingKey: athlete.id,
+  ...(athlete.experimentationOptOutAt ? { dd_experimentation_opt_out_at: athlete.experimentationOptOutAt } : {}),
+}
+```
+
+Use an RFC3339 timestamp string. In immediate mode, any valid timestamp excludes the subject immediately, including a future timestamp.
+The evaluator skips exposure-logging allocations before targeting and randomization, then tries ordinary allocations in order.
+If none match, it returns the application's default value.
+An invalid attribute returns `INVALID_CONTEXT` and the application default.
+Disabled mode ignores the attribute.
+Evaluation telemetry remains independent.
+Immediate withdrawal can change an enrolled subject's experience; account for this in experiment analysis.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula
