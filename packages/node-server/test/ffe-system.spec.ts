@@ -15,6 +15,8 @@ type SystemTestCase = {
   result: {
     value: FlagValue
     reason: string
+    serialId?: number | null
+    doLog?: boolean
   }
 }
 
@@ -52,10 +54,10 @@ function getTestCases(testCaseFileName: string): SystemTestCase[] {
   ) as SystemTestCase[]
 }
 
-async function evaluateTestCase(testCase: SystemTestCase): Promise<ResolutionDetails<FlagValue>> {
-  const provider = new DatadogNodeServerProvider({ exposureChannel })
-  provider.setConfiguration(configuration)
-
+async function evaluateTestCase(
+  provider: DatadogNodeServerProvider,
+  testCase: SystemTestCase
+): Promise<ResolutionDetails<FlagValue>> {
   const context = {
     ...(testCase.targetingKey === null ? {} : { targetingKey: testCase.targetingKey }),
     ...testCase.attributes,
@@ -77,12 +79,25 @@ async function evaluateTestCase(testCase: SystemTestCase): Promise<ResolutionDet
 describe('FFE system tests through DatadogNodeServerProvider', () => {
   describe.each(getTestCaseFileNames())('should evaluate for %s', (testCaseFileName) => {
     const testCases = getTestCases(testCaseFileName)
+    let provider: DatadogNodeServerProvider
+
+    beforeAll(() => {
+      // Repeated cases must exercise the same provider in fixture order.
+      provider = new DatadogNodeServerProvider({ exposureChannel })
+      provider.setConfiguration(configuration)
+    })
 
     it.each(testCases)('with context $targetingKey and flag $flag', async (testCase) => {
-      const details = await evaluateTestCase(testCase)
+      const details = await evaluateTestCase(provider, testCase)
 
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
+      if (testCase.result.serialId !== undefined) {
+        expect(details.flagMetadata?.__dd_split_serial_id ?? null).toBe(testCase.result.serialId)
+      }
+      if (testCase.result.doLog !== undefined) {
+        expect(details.flagMetadata?.__dd_do_log).toBe(testCase.result.doLog)
+      }
     })
   })
 })

@@ -26,6 +26,17 @@ describe('Universal Flag Configuration V1', () => {
     const ufcJson = fs.readFileSync(path.join(fixtureDirectory, 'ufc-config.json'), 'utf8')
     return JSON.parse(ufcJson) as UniversalFlagConfigurationV1
   }
+  // Keep ordered repeated cases on the same prepared configuration.
+  const configuration = getUFC()
+
+  const expectMetadata = (details: ResolutionDetails<FlagValue>, expected: TestCase['result']) => {
+    if (expected.serialId !== undefined) {
+      expect(details.flagMetadata?.__dd_split_serial_id ?? null).toBe(expected.serialId)
+    }
+    if (expected.doLog !== undefined) {
+      expect(details.flagMetadata?.__dd_do_log).toBe(expected.doLog)
+    }
+  }
 
   const getTestCaseFileNames = (): string[] => {
     const fixtureFiles = fs.readdirSync(path.join(fixtureDirectory, 'evaluation-cases')).sort()
@@ -45,7 +56,6 @@ describe('Universal Flag Configuration V1', () => {
     context: EvaluationContext,
     immediate: ExperimentationOptOutOption = false
   ): ResolutionDetails<FlagValue> => {
-    const configuration = getUFC()
     if (testCase.variationType === 'BOOLEAN') {
       return evaluateRulesBasedConfiguration(
         configuration,
@@ -94,7 +104,7 @@ describe('Universal Flag Configuration V1', () => {
   }
 
   it.each(['constructor', '__proto__'])('treats inherited JSON flag key %s as missing', (flagKey) => {
-    expect(evaluateRulesBasedConfiguration(getUFC(), 'boolean', flagKey, false, {}, logger)).toMatchObject({
+    expect(evaluateRulesBasedConfiguration(configuration, 'boolean', flagKey, false, {}, logger)).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND',
@@ -119,6 +129,7 @@ describe('Universal Flag Configuration V1', () => {
       if (testCase.result.errorCode !== undefined || testCase.result.reason !== 'ERROR') {
         expect(details.errorCode).toEqual(testCase.result.errorCode)
       }
+      expectMetadata(details, testCase.result)
     })
 
     for (const [capability, mode] of [
@@ -134,6 +145,7 @@ describe('Universal Flag Configuration V1', () => {
           expect(details.value).toStrictEqual(expected.value)
           expect(details.reason).toEqual(expected.reason)
           expect(details.errorCode).toEqual(expected.errorCode)
+          expectMetadata(details, expected)
         })
       }
     }
