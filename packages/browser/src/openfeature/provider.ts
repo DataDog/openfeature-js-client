@@ -24,6 +24,7 @@ import {
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
+import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -93,6 +94,8 @@ export class DatadogProvider extends DatadogProviderBase {
 
   status: ProviderStatus
 
+  private readonly requestDiagnostics: ReturnType<typeof createRequestDiagnostics>
+
   private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
@@ -122,6 +125,7 @@ export class DatadogProvider extends DatadogProviderBase {
     super()
     this.debugMode = options.debugMode === true
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    this.requestDiagnostics = createRequestDiagnostics()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
     const getTrackingContext = () =>
       this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
@@ -172,7 +176,7 @@ export class DatadogProvider extends DatadogProviderBase {
     }
     this.exposureCacheReady = this.tracking.initialize()
     try {
-      return await this.setContext(context)
+      return await this.setContext(context, 'initialization')
     } catch (error) {
       this.lifecycleTelemetry?.settle('failed')
       if (this.debugMode)
@@ -202,7 +206,7 @@ export class DatadogProvider extends DatadogProviderBase {
     return this.setContext(context)
   }
 
-  private setContext(context: EvaluationContext): Promise<void> {
+  private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
     const evaluationContext = { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
@@ -223,6 +227,7 @@ export class DatadogProvider extends DatadogProviderBase {
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
+    this.requestDiagnostics.accept(signal, trigger)
 
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
