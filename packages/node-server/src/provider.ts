@@ -3,11 +3,13 @@ import {
   type AssignmentCache,
   createExposureEvent,
   type ExposureEvent,
+  featuresWithPrefix,
   LRUInMemoryAssignmentCache,
+  METADATA_EXPOSURE_FEATURE_PREFIX,
   prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
-import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
+import type { EvaluationContext, FlagMetadata, ServerProviderEvents } from '@openfeature/core'
 import type {
   EvaluationDetails,
   FlagValue,
@@ -214,21 +216,26 @@ export class DatadogNodeServerProvider implements Provider {
     resolutionDetails: ResolutionDetails<T>
   ): void {
     const timestamp = timeStampNow()
+    const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,
-      flagMetadata: resolutionDetails.flagMetadata ?? {},
+      flagMetadata: metadata,
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
     if (!exposureEvent) {
       return
     }
-    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
+    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent) ?? false
+    metadata.__dd_exposure_cache_hit = hasLoggedAssignment
     if (hasLoggedAssignment) {
       return
     }
     if (this.options.exposureChannel.hasSubscribers) {
-      this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
+      // Features stay off the cache entry: a features change must not turn a
+      // repeat exposure into a new one.
+      const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+      this.options.exposureChannel.publish({ ...exposureEvent, ...(features && { features }), timestamp })
       this.exposureCache?.set(exposureEvent)
     }
   }

@@ -92,6 +92,11 @@ export type PrecomputedFlagMetadata = {
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
   __dd_observe_full_evaluation_data?: boolean
+  // Stamped by the provider after a successful evaluation of an allocation that
+  // logs exposures: true when this subject's exposure was already recorded.
+  __dd_exposure_cache_hit?: boolean
+  // Present only when the selected split routes a feature to EVALUATION.
+  __dd_has_evaluation_features?: boolean
 }
 
 /**

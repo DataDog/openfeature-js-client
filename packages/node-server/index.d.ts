@@ -496,6 +496,7 @@ interface Split {
 	shards: Shard[];
 	extraLogging?: Record<string, string>;
 	serialId?: number;
+	features?: unknown;
 }
 interface Allocation {
 	key: string;
@@ -534,6 +535,7 @@ interface ExposureEvent {
 		key: string;
 	};
 	serial_id?: number;
+	features?: Record<string, string | number | boolean>;
 	subject: {
 		id: string;
 		attributes: EvaluationContext;
