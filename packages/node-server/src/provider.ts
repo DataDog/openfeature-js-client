@@ -259,8 +259,12 @@ export class DatadogNodeServerProvider implements Provider {
     if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
       return
     }
+    const eventContext = cloneForTelemetry(context)
+    if (eventContext === undefined) {
+      return
+    }
     this.options.dependencyEvaluationChannel.publish({
-      context,
+      context: eventContext,
       details: {
         ...evaluation.details,
         flagKey: evaluation.flagKey,
@@ -283,7 +287,9 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
-    const timestamp = timeStampNow()
+    if (!this.options.exposureChannel.hasSubscribers) {
+      return
+    }
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,
@@ -297,9 +303,20 @@ export class DatadogNodeServerProvider implements Provider {
     if (hasLoggedAssignment) {
       return
     }
-    if (this.options.exposureChannel.hasSubscribers) {
-      this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
-      this.exposureCache?.set(exposureEvent)
+    const publishedExposure = cloneForTelemetry(exposureEvent)
+    if (publishedExposure === undefined) {
+      return
     }
+    this.options.exposureChannel.publish({ ...publishedExposure, timestamp: timeStampNow() })
+    this.exposureCache?.set(exposureEvent)
+  }
+}
+
+function cloneForTelemetry<T>(value: T): T | undefined {
+  try {
+    return structuredClone(value)
+  } catch {
+    // Telemetry is best effort and must not affect flag evaluation semantics.
+    return undefined
   }
 }

@@ -160,6 +160,46 @@ describe('dependent flag exposures', () => {
     ).resolves.toMatchObject({ value: true, variant: 'on' })
     expect(valueReads).toBe(0)
   })
+
+  it('isolates caller and later exposure contexts from telemetry subscriber mutation', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const context = { targetingKey: 'subject', traits: { tier: 'original' } }
+    dependencyEvaluationChannel.publish.mockImplementation((published) => {
+      const event = published as DependencyEvaluationEvent
+      event.context.targetingKey = 'mutated-by-evaluation-subscriber'
+      ;(event.context.traits as Record<string, unknown>).tier = 'mutated-by-evaluation-subscriber'
+    })
+    const seenSubjects: Array<{ id: string; tier: unknown }> = []
+    exposureChannel.publish.mockImplementation((published) => {
+      const event = published as ExposureEvent
+      const traits = event.subject.attributes.traits as Record<string, unknown>
+      seenSubjects.push({ id: event.subject.id, tier: traits.tier })
+      traits.tier = 'mutated-by-exposure-subscriber'
+    })
+
+    await expect(provider.resolveBooleanEvaluation('root', false, context, logger)).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+    await expect(provider.resolveBooleanEvaluation('root', false, context, logger)).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+
+    expect(context).toEqual({ targetingKey: 'subject', traits: { tier: 'original' } })
+    expect(seenSubjects).toEqual([
+      { id: 'subject', tier: 'original' },
+      { id: 'subject', tier: 'original' },
+    ])
+  })
 })
 
 function channel<T>(): jest.Mocked<Channel<T, T>> {
