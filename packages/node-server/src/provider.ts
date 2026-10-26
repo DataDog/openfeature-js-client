@@ -14,6 +14,7 @@ import type {
   EvaluationDetails,
   FlagValue,
   Hook,
+  HookContext,
   JsonValue,
   Logger,
   Paradigm,
@@ -68,6 +69,9 @@ export class DatadogNodeServerProvider implements Provider {
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
+    // Runs in the final hook stage, where the SDK has turned any later hook error
+    // into an error result, so a failed evaluation is never published or recorded.
+    this.hooks.push(new ExposureLoggingHook(this.exposureCache, this.options.exposureChannel))
   }
 
   /**
@@ -210,12 +214,12 @@ export class DatadogNodeServerProvider implements Provider {
     return resolutionDetails
   }
 
+  /** Stamps the exposure cache verdict into flag metadata; the internal hook does the rest. */
   private handleExposure<T extends FlagValue>(
     flagKey: string,
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
-    const timestamp = timeStampNow()
     const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
@@ -226,17 +230,51 @@ export class DatadogNodeServerProvider implements Provider {
     if (!exposureEvent) {
       return
     }
-    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent) ?? false
-    metadata.__dd_exposure_cache_hit = hasLoggedAssignment
-    if (hasLoggedAssignment) {
+    metadata.__dd_exposure_cache_hit = this.exposureCache?.has(exposureEvent) ?? false
+  }
+}
+
+/**
+ * Publishes and records the exposure once the evaluation has completed without an
+ * error. A cache entry is written even when nothing subscribes to the exposure
+ * channel, so the verdict stays correct with Datadog exposure logging off.
+ */
+class ExposureLoggingHook implements Hook {
+  constructor(
+    private readonly exposureCache: AssignmentCache | undefined,
+    private readonly exposureChannel: Channel<ExposureEvent>
+  ) {}
+
+  finally(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
+    if (evaluationDetails == null || evaluationDetails.errorCode !== undefined) {
       return
     }
-    if (this.options.exposureChannel.hasSubscribers) {
-      // Features stay off the cache entry: a features change must not turn a
-      // repeat exposure into a new one.
-      const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
-      this.options.exposureChannel.publish({ ...exposureEvent, ...(features && { features }), timestamp })
+    const metadata = evaluationDetails.flagMetadata as FlagMetadata | undefined
+    if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
+      return
+    }
+    try {
+      const details: EvaluationDetails<FlagValue> = {
+        ...evaluationDetails,
+        flagKey: evaluationDetails.flagKey ?? hookContext?.flagKey ?? '',
+      }
+      const exposureEvent = createExposureEvent(hookContext?.context ?? {}, details)
+      if (!exposureEvent) {
+        return
+      }
+      if (this.exposureChannel.hasSubscribers) {
+        // Features stay off the cache entry: a features change must not turn a
+        // repeat exposure into a new one.
+        const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+        this.exposureChannel.publish({
+          ...exposureEvent,
+          ...(features && { features }),
+          timestamp: timeStampNow(),
+        })
+      }
       this.exposureCache?.set(exposureEvent)
+    } catch {
+      // Exposure reporting must never break the evaluation.
     }
   }
 }

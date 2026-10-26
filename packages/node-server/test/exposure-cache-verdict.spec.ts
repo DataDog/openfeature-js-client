@@ -1,6 +1,6 @@
 import type { Channel } from 'node:diagnostics_channel'
 import type { ExposureEvent } from '@datadog/flagging-core'
-import type { EvaluationContext, Logger } from '@openfeature/core'
+import { type EvaluationContext, type Logger, OpenFeature } from '@openfeature/server-sdk'
 import type { UniversalFlagConfigurationV1 } from '../src/configuration/ufc-v1'
 import { DatadogNodeServerProvider } from '../src/provider'
 
@@ -11,10 +11,12 @@ const logger: Logger = {
   debug: jest.fn(),
 }
 
-const mockExposureChannel = {
-  hasSubscribers: true,
-  publish: jest.fn(),
-} as unknown as jest.Mocked<Channel<ExposureEvent>>
+function exposureChannel(hasSubscribers: boolean): jest.Mocked<Channel<ExposureEvent>> {
+  return {
+    hasSubscribers,
+    publish: jest.fn(),
+  } as unknown as jest.Mocked<Channel<ExposureEvent>>
+}
 
 function baseConfiguration(): UniversalFlagConfigurationV1 {
   return {
@@ -64,121 +66,173 @@ function configurationWithSplit(overrides: (split: Record<string, unknown>) => v
   return configuration
 }
 
-function publishedEvent(index: number): ExposureEvent {
-  return mockExposureChannel.publish.mock.calls[index][0] as ExposureEvent
-}
-
-async function evaluateFlag(
-  provider: DatadogNodeServerProvider,
-  configuration: UniversalFlagConfigurationV1,
-  targetingKey: string
-) {
-  provider.setConfiguration(configuration)
-  const context: EvaluationContext = { targetingKey }
-  return provider.resolveBooleanEvaluation('holdout-flag', true, context, logger)
+function publishedEvent(channel: jest.Mocked<Channel<ExposureEvent>>, index: number): ExposureEvent {
+  return channel.publish.mock.calls[index][0] as ExposureEvent
 }
 
 describe('exposure cache verdict', () => {
+  let providerName: string
+
   beforeEach(() => {
-    mockExposureChannel.publish.mockClear()
+    providerName = `exposure-verdict-${Date.now()}-${Math.floor(Math.random() * 1e9)}`
   })
 
+  afterEach(async () => {
+    await OpenFeature.clearProviders()
+  })
+
+  async function evaluate(
+    provider: DatadogNodeServerProvider,
+    configuration: UniversalFlagConfigurationV1,
+    targetingKey: string,
+    clientName?: string
+  ) {
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    const client = OpenFeature.getClient(clientName ?? providerName)
+    const context: EvaluationContext = { targetingKey }
+    return client.getBooleanDetails('holdout-flag', true, context)
+  }
+
   it('marks the first evaluation as a new exposure and the repeat as a cache hit', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
     const configuration = baseConfiguration()
 
-    const first = await evaluateFlag(provider, configuration, 'subject-1')
+    const first = await evaluate(provider, configuration, 'subject-1')
     expect(first.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
 
-    const repeat = await evaluateFlag(provider, configuration, 'subject-1')
+    const repeat = await evaluate(provider, configuration, 'subject-1')
     expect(repeat.flagMetadata?.__dd_exposure_cache_hit).toBe(true)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
   })
 
   it('treats a serial id change as a new exposure', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
 
-    await evaluateFlag(provider, baseConfiguration(), 'subject-1')
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    await evaluate(provider, baseConfiguration(), 'subject-1')
+    expect(channel.publish).toHaveBeenCalledTimes(1)
 
     const changed = configurationWithSplit((split) => {
       split.serialId = 1002
     })
-    const second = await evaluateFlag(provider, changed, 'subject-1')
+    const second = await evaluate(provider, changed, 'subject-1')
     expect(second.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(2)
+    expect(channel.publish).toHaveBeenCalledTimes(2)
   })
 
   it('treats a variant change as a new exposure', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
 
-    await evaluateFlag(provider, baseConfiguration(), 'subject-1')
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    await evaluate(provider, baseConfiguration(), 'subject-1')
+    expect(channel.publish).toHaveBeenCalledTimes(1)
 
     const changed = configurationWithSplit((split) => {
       split.variationKey = 'treatment'
     })
-    const second = await evaluateFlag(provider, changed, 'subject-1')
+    const second = await evaluate(provider, changed, 'subject-1')
     expect(second.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(2)
-    expect(publishedEvent(1).variant.key).toBe('treatment')
+    expect(channel.publish).toHaveBeenCalledTimes(2)
+    expect(publishedEvent(channel, 1).variant.key).toBe('treatment')
   })
 
   it('records nothing and sends nothing for a failed evaluation', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
     provider.setConfiguration(baseConfiguration())
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    const client = OpenFeature.getClient(providerName)
 
-    const notFound = await provider.resolveBooleanEvaluation(
-      'missing-flag',
-      true,
-      { targetingKey: 'subject-1' },
-      logger
-    )
+    const notFound = await client.getBooleanDetails('missing-flag', true, { targetingKey: 'subject-1' })
     expect(notFound.errorCode).toBe('FLAG_NOT_FOUND')
     expect(notFound.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
-    expect(mockExposureChannel.publish).not.toHaveBeenCalled()
+    expect(channel.publish).not.toHaveBeenCalled()
 
-    const wrongType = await provider.resolveStringEvaluation(
-      'holdout-flag',
-      'default',
-      { targetingKey: 'subject-1' },
-      logger
-    )
+    const wrongType = await client.getStringDetails('holdout-flag', 'default', { targetingKey: 'subject-1' })
     expect(wrongType.errorCode).toBe('TYPE_MISMATCH')
     expect(wrongType.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
-    expect(mockExposureChannel.publish).not.toHaveBeenCalled()
+    expect(channel.publish).not.toHaveBeenCalled()
 
-    const success = await provider.resolveBooleanEvaluation('holdout-flag', true, { targetingKey: 'subject-1' }, logger)
+    const success = await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
     expect(success.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes and records nothing when a later application hook fails the evaluation', async () => {
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
+    provider.setConfiguration(baseConfiguration())
+    await OpenFeature.setProviderAndWait(providerName, provider)
+
+    const failingClient = OpenFeature.getClient(providerName)
+
+    const failed = await failingClient.getBooleanDetails(
+      'holdout-flag',
+      true,
+      { targetingKey: 'subject-1' },
+      {
+        hooks: [
+          {
+            after: () => {
+              throw new Error('application hook failed')
+            },
+          },
+        ],
+      }
+    )
+    expect(failed.errorCode).toBe('GENERAL')
+    expect(failed.value).toBe(true)
+    expect(channel.publish).not.toHaveBeenCalled()
+
+    const client = OpenFeature.getClient(providerName)
+    const retried = await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
+    expect(retried.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
   })
 
   it('stamps no verdict when the allocation does not log exposures', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
     const configuration = baseConfiguration()
     const flag = configuration.flags['holdout-flag'] as unknown as Record<string, unknown>
     const allocation = (flag.allocations as Array<Record<string, unknown>>)[0]
     allocation.doLog = false
 
-    const result = await evaluateFlag(provider, configuration, 'subject-1')
+    const result = await evaluate(provider, configuration, 'subject-1')
     expect(result.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
-    expect(mockExposureChannel.publish).not.toHaveBeenCalled()
+    expect(channel.publish).not.toHaveBeenCalled()
   })
 
   it('carries EXPOSURE features on the exposure event without affecting the verdict', async () => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
 
-    await evaluateFlag(provider, baseConfiguration(), 'subject-1')
-    const event = publishedEvent(0)
+    await evaluate(provider, baseConfiguration(), 'subject-1')
+    const event = publishedEvent(channel, 0)
     expect(event.features).toEqual({ 'exposure.only': 'exposed' })
     expect(event.features?.['holdout.key']).toBeUndefined()
 
     const changedFeatures = configurationWithSplit((split) => {
       split.features = [{ key: 'exposure.only', value: 'changed', destinations: ['EXPOSURE'] }]
     })
-    const repeat = await evaluateFlag(provider, changedFeatures, 'subject-1')
+    const repeat = await evaluate(provider, changedFeatures, 'subject-1')
     expect(repeat.flagMetadata?.__dd_exposure_cache_hit).toBe(true)
-    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
+  })
+
+  it('records the cache verdict even when nothing subscribes to the exposure channel', async () => {
+    const channel = exposureChannel(false)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
+
+    const first = await evaluate(provider, baseConfiguration(), 'subject-1')
+    expect(first.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    expect(channel.publish).not.toHaveBeenCalled()
+
+    const repeat = await evaluate(provider, baseConfiguration(), 'subject-1')
+    expect(repeat.flagMetadata?.__dd_exposure_cache_hit).toBe(true)
+    expect(channel.publish).not.toHaveBeenCalled()
   })
 })

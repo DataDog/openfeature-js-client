@@ -624,6 +624,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	/** Stamps the exposure cache verdict into flag metadata; the internal hook does the rest. */
 	private handleExposure;
 }
 
