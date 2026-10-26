@@ -1,4 +1,3 @@
-import { generateUUID } from '@datadog/browser-core'
 import type { FlaggingConfiguration } from '../domain/configuration'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 
@@ -55,7 +54,6 @@ export function createLifecycleTelemetry(
     if (debugMode) logDiagnostic(message, details)
   }
 
-  const runtimeId = generateUUID()
   const startedAt = Date.now()
   const monotonicStart = performance.now()
   let configurationReceived: Milestone | undefined
@@ -99,7 +97,6 @@ export function createLifecycleTelemetry(
         payload: {
           ...diagnostic,
           timestamp,
-          runtime_id: runtimeId,
           sdk_name: 'dd-openfeature-browser',
           sdk_version: __BUILD_ENV__SDK_VERSION__,
           ...identity,

@@ -56,7 +56,6 @@ describe('lifecycle diagnostic transport', () => {
       payload: {
         event_type: 'sdk_initialization',
         timestamp: Date.now(),
-        runtime_id: expect.any(String),
         sdk_name: 'dd-openfeature-browser',
         sdk_version: '1.0.0-test',
         application_id: 'app-1',
@@ -117,7 +116,7 @@ describe('lifecycle diagnostic transport', () => {
     telemetry.settle('ready')
     telemetry.stop()
     expect(records()[0].payload.initialization).toMatchObject({ outcome: 'ready', final: true })
-    expect(records()[0].payload.runtime_id).toBe(snapshot.runtime_id)
+    expect(records()[0].payload.initialization.started_at).toBe(snapshot.initialization.started_at)
   })
 
   it('reports provider close while pending once', () => {
@@ -173,14 +172,15 @@ describe('lifecycle diagnostic transport', () => {
     expect(mockSend).not.toHaveBeenCalled()
   })
 
-  it('creates a new runtime identity for each provider instance', () => {
+  it('keeps reports independent for each provider instance', () => {
     const first = createLifecycleTelemetry(configuration())
     const second = createLifecycleTelemetry(configuration())
     first.settle('failed')
     second.settle('failed')
     first.stop()
     second.stop()
-    expect(new Set(records().map((record) => record.payload.runtime_id)).size).toBe(2)
+    expect(records()).toHaveLength(2)
+    for (const record of records()) expect(record.payload).not.toHaveProperty('runtime_id')
   })
 
   it.each([

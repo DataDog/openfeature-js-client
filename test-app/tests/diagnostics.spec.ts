@@ -12,7 +12,6 @@ for (const scenario of ['success', 'failure'] as const) {
       schema_version: number
       payload: {
         event_type: string
-        runtime_id: string
         initialization?: { outcome: string; final: boolean }
         error_code?: string
       }
@@ -40,7 +39,7 @@ for (const scenario of ['success', 'failure'] as const) {
       initialization: { outcome: scenario === 'success' ? 'ready' : 'failed', final: true },
     })
     expect(records[0].payload.error_code).toBe(scenario === 'success' ? undefined : 'INIT_FAILED')
-    expect(new Set(records.map((record) => record.payload.runtime_id)).size).toBe(1)
+    expect(records[0].payload).not.toHaveProperty('runtime_id')
     expect(records.every((record) => record.type === 'sdk_diagnostic' && record.schema_version === 1)).toBe(true)
     expect(JSON.stringify(records)).not.toContain('test-client-token')
     expect(JSON.stringify(records)).not.toContain('evaluation_count')
@@ -89,7 +88,6 @@ for (const debugMode of [false, true]) {
 test('slow initialization sends only its settled report', async ({ page }) => {
   const records: {
     payload: {
-      runtime_id: string
       initialization: {
         outcome: string
         started_at: number

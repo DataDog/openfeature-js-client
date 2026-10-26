@@ -202,11 +202,6 @@
       "minimum": 0,
       "maximum": 8640000000000000
     },
-    "RuntimeID": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
     "SDKName": {
       "type": "string",
       "minLength": 1,
@@ -234,13 +229,10 @@
     },
     "ReadyInitializationDiagnostic": {
       "type": "object",
-      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
+      "required": ["timestamp", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
-        },
-        "runtime_id": {
-          "$ref": "#/definitions/RuntimeID"
         },
         "sdk_name": {
           "$ref": "#/definitions/SDKName"
@@ -268,22 +260,10 @@
     },
     "FailedInitializationDiagnostic": {
       "type": "object",
-      "required": [
-        "timestamp",
-        "runtime_id",
-        "sdk_name",
-        "sdk_version",
-        "environment",
-        "event_type",
-        "initialization",
-        "error_code"
-      ],
+      "required": ["timestamp", "sdk_name", "sdk_version", "environment", "event_type", "initialization", "error_code"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
-        },
-        "runtime_id": {
-          "$ref": "#/definitions/RuntimeID"
         },
         "sdk_name": {
           "$ref": "#/definitions/SDKName"
@@ -314,22 +294,10 @@
     },
     "CachedFallbackInitializationDiagnostic": {
       "type": "object",
-      "required": [
-        "timestamp",
-        "runtime_id",
-        "sdk_name",
-        "sdk_version",
-        "environment",
-        "event_type",
-        "initialization",
-        "error_code"
-      ],
+      "required": ["timestamp", "sdk_name", "sdk_version", "environment", "event_type", "initialization", "error_code"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
-        },
-        "runtime_id": {
-          "$ref": "#/definitions/RuntimeID"
         },
         "sdk_name": {
           "$ref": "#/definitions/SDKName"
@@ -360,13 +328,10 @@
     },
     "IncompleteInitializationDiagnostic": {
       "type": "object",
-      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
+      "required": ["timestamp", "sdk_name", "sdk_version", "environment", "event_type", "initialization"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
-        },
-        "runtime_id": {
-          "$ref": "#/definitions/RuntimeID"
         },
         "sdk_name": {
           "$ref": "#/definitions/SDKName"
@@ -394,13 +359,10 @@
     },
     "ProviderErrorDiagnostic": {
       "type": "object",
-      "required": ["timestamp", "runtime_id", "sdk_name", "sdk_version", "environment", "event_type", "error_code"],
+      "required": ["timestamp", "sdk_name", "sdk_version", "environment", "event_type", "error_code"],
       "properties": {
         "timestamp": {
           "$ref": "#/definitions/DiagnosticTimestamp"
-        },
-        "runtime_id": {
-          "$ref": "#/definitions/RuntimeID"
         },
         "sdk_name": {
           "$ref": "#/definitions/SDKName"
