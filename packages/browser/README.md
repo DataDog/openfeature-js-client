@@ -106,8 +106,10 @@ globs where only `*` is special. A flag is selected if it matches any requested 
 Each list accepts at most 31 values after dedupe; each tag and key pattern is at most 200 UTF-8 bytes after trimming.
 Leading and trailing Unicode whitespace is trimmed from every value, empty values are dropped, and duplicates are
 removed. Selections over a limit are dropped and the full config is loaded. Very large selections may be ignored by the
-server (`too_many_values`), in which case the full config loads. Flags outside the selection are not loaded; evaluating
-them returns the default value with `FLAG_NOT_FOUND`.
+server (`too_many_values`), in which case the full config loads. When the server applies the selection, flags outside
+it are not loaded and evaluations return your default with `FLAG_NOT_FOUND`. Older servers or disabled selection gates
+may return the full configuration without a warning. Caller-supplied `initialFlagsConfiguration` is not filtered
+locally.
 
 ## Usage Examples
 
