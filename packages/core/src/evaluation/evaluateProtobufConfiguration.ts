@@ -12,7 +12,7 @@ import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
 import type { Allocation, Condition, Flag, Split, VariationType, Version } from '../configuration/generated/ufc_pb'
 import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
-import { encodeUtf8 } from '../utf8'
+import { compareBytes, encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
@@ -481,11 +481,4 @@ function jsonValueAt(configuration: PreparedRulesResponse, index: number): FlagV
 
 function containsBytes(values: Uint8Array[], value: Uint8Array): boolean {
   return values.some((candidate) => compareBytes(candidate, value) === 0)
-}
-
-function compareBytes(left: Uint8Array, right: Uint8Array): number {
-  for (let index = 0; index < Math.min(left.length, right.length); index++) {
-    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1
-  }
-  return left.length === right.length ? 0 : left.length < right.length ? -1 : 1
 }
