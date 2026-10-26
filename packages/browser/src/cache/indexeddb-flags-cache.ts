@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { CanonicalFlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import {
   buildStorageKeySuffix,
   type ExperimentationOptOutPolicy,
@@ -18,9 +18,11 @@ function buildConfigKey(clientToken: string, context: EvaluationContext): string
 
 export class IndexedDBFlagsCache {
   private readonly clientToken: string
+  private readonly selectionSuffix: string
 
-  constructor(clientToken: string) {
+  constructor(clientToken: string, flagSelection?: CanonicalFlagSelection) {
     this.clientToken = clientToken
+    this.selectionSuffix = flagSelection ? `-sel-${getMD5Hash(JSON.stringify(flagSelection))}` : ''
   }
 
   /** Read cached config for the given context. Returns undefined on miss or any error. */
@@ -30,7 +32,7 @@ export class IndexedDBFlagsCache {
   ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `${policyPrefix(optedOut)}-${legacyKey}`
+      const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -42,7 +44,7 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (optedOut) {
+            if (optedOut || this.selectionSuffix) {
               resolve(undefined)
               return
             }
@@ -81,7 +83,7 @@ export class IndexedDBFlagsCache {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
     const prefix = policyPrefix(optedOut)
-    const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}`
+    const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
     openDB()
       .then((db) => {
         const tx = db.transaction(STORE_NAME, 'readwrite')
