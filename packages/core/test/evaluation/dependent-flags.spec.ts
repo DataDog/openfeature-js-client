@@ -413,14 +413,16 @@ describe('dependent flag evaluation', () => {
     expect(onExposures).toHaveBeenCalledWith([
       expect.objectContaining({
         flagKey: 'prerequisite',
-        details: expect.objectContaining({ value: true, variant: 'on' }),
+        details: expect.objectContaining({ variant: 'on' }),
       }),
     ])
+    expect(onExposures.mock.calls[0]?.[0][0]?.details).not.toHaveProperty('value')
   })
 
   it('isolates dependency resolution from telemetry snapshot failures', () => {
     const cyclicValue: Record<string, unknown> = {}
     cyclicValue.self = cyclicValue
+    cyclicValue.state = 'original'
     const prerequisite: Flag = {
       key: 'prerequisite',
       enabled: true,
@@ -443,6 +445,11 @@ describe('dependent flag evaluation', () => {
     expect(onExposures).toHaveBeenCalledWith([
       expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
     ])
+    expect(onExposures.mock.calls[0]?.[0][0]?.details).not.toHaveProperty('value')
+    expect(cyclicValue.state).toBe('original')
+    expect(
+      evaluateRulesBasedConfiguration(config, 'object', 'prerequisite', {}, { targetingKey: 'subject' }, logger).value
+    ).toBe(cyclicValue)
   })
 })
 

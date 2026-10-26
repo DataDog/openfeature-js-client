@@ -285,17 +285,16 @@ export class DatadogNodeServerProvider implements Provider {
   private handleExposure<T extends FlagValue>(
     flagKey: string,
     context: EvaluationContext,
-    resolutionDetails: ResolutionDetails<T>
+    resolutionDetails: Omit<ResolutionDetails<T>, 'value'> & { value?: T }
   ): void {
     if (!this.options.exposureChannel.hasSubscribers) {
       return
     }
-    const evalutationDetails: EvaluationDetails<T> = {
-      ...resolutionDetails,
-      flagKey: flagKey,
+    const exposureEvent = createExposureEvent(context, {
+      flagKey,
+      variant: resolutionDetails.variant,
       flagMetadata: resolutionDetails.flagMetadata ?? {},
-    }
-    const exposureEvent = createExposureEvent(context, evalutationDetails)
+    })
     if (!exposureEvent) {
       return
     }

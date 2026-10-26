@@ -412,7 +412,7 @@ export type DependencyEvaluation = {
 
 export type DependencyExposureCandidate = {
   flagKey: string
-  details: ResolutionDetails<FlagValue>
+  details: Omit<ResolutionDetails<FlagValue>, 'value'>
 }
 
 export type DependencyEvaluationHandler = (evaluation: DependencyEvaluation) => void
@@ -504,7 +504,8 @@ class DependencyEvaluationSession {
       const memoizedResult = { details: result, descendantDepth: frame.maxReachedDepth - depth }
       this.memo.set(flagKey, memoizedResult)
       const evaluation = { flagKey, details: result }
-      this.exposures.push(evaluation)
+      const { value: _value, ...exposureDetails } = result
+      this.exposures.push({ flagKey, details: exposureDetails })
       this.emitEvaluation(evaluation)
       return memoizedResult
     } catch (error) {
