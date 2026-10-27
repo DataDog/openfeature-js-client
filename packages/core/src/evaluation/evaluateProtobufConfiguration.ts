@@ -18,7 +18,6 @@ import { DependencyGraphError, FlagConfigurationError, InvalidContextError, Targ
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
-import type { DependencyExposureTransaction } from './rules'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
@@ -33,11 +32,10 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & DependencyExposureTransaction
+export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
 
 type ConditionOutcome = {
   matches: boolean
-  containsDependency: boolean
 }
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
@@ -90,7 +88,6 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
-      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -100,7 +97,6 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
-        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
@@ -193,39 +189,34 @@ function conditionOutcome(
   results: Map<number, ConditionOutcome>,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ConditionOutcome {
-  if (index === undefined) return { matches: true, containsDependency: false }
+  if (index === undefined) return { matches: true }
   const cached = results.get(index)
-  if (cached !== undefined && (resolveFlagEvaluation === undefined || !cached.containsDependency)) return cached
+  if (cached !== undefined) return cached
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    outcome = { matches: true, containsDependency: false }
+    outcome = { matches: true }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
-      outcome.containsDependency ||= childOutcome.containsDependency
       if (!childOutcome.matches) {
-        outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
+        outcome = childOutcome
         break
       }
     }
   } else if (condition.kind.case === 'any') {
-    outcome = { matches: false, containsDependency: false }
+    outcome = { matches: false }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
-      outcome.containsDependency ||= childOutcome.containsDependency
       if (childOutcome.matches) {
-        outcome = { matches: true, containsDependency: outcome.containsDependency }
+        outcome = { matches: true }
         break
       }
     }
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
-    outcome = {
-      matches,
-      containsDependency: condition.kind.case === 'flagEvaluationStringMembership',
-    }
+    outcome = { matches }
   }
   results.set(index, outcome)
   return outcome

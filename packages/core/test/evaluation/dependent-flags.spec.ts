@@ -9,6 +9,7 @@ import {
   SplitSchema,
   VariationType,
 } from '../../src/configuration/generated/ufc_pb'
+import { prepareRulesResponse } from '../../src/configuration/prepared-rules-response'
 import { decodeFlagsConfiguration, encodeFlagsConfiguration } from '../../src/configuration/ufc-protobuf'
 import {
   type DependencyEvaluation,
@@ -16,7 +17,9 @@ import {
   type Flag,
   type UniversalFlagConfigurationV1,
 } from '../../src/evaluation'
+import { evaluateProtobufConfiguration } from '../../src/evaluation/evaluateProtobufConfiguration'
 import { OperatorType } from '../../src/evaluation/rules'
+import { timeStampNow } from '../../src/time'
 
 describe('dependent flag evaluation', () => {
   let logger: Logger
@@ -144,6 +147,27 @@ describe('dependent flag evaluation', () => {
   it('discards a JSON rule exposure buffer when its prerequisite variant does not match', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['off'])])
+    const dependencies: DependencyEvaluation[] = []
+    const onExposures = jest.fn()
+
+    expect(
+      evaluate(
+        configuration({ prerequisite, root }),
+        'root',
+        logger,
+        (dependency) => dependencies.push(dependency),
+        {},
+        onExposures
+      )
+    ).toMatchObject({ value: false, variant: 'off', flagMetadata: { __dd_allocation_key: 'default' } })
+    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
+    expect(onExposures).toHaveBeenCalledWith([])
+  })
+
+  it('discards JSON dependency exposures when a matching allocation has no selected split', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
+    root.allocations[0].splits[0].shards = [{ salt: 'empty', totalShards: 1, ranges: [{ start: 0, end: 0 }] }]
     const dependencies: DependencyEvaluation[] = []
     const onExposures = jest.fn()
 
@@ -298,6 +322,43 @@ describe('dependent flag evaluation', () => {
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
     expect(onExposures).not.toHaveBeenCalled()
+  })
+
+  it('memoizes shared protobuf condition DAG outcomes', () => {
+    const config = protobufDependentConfiguration(true)
+    config.conditions = [
+      create(ConditionSchema, {
+        kind: {
+          case: 'flagEvaluationStringMembership',
+          value: { flagKeyStringIndex: 1, variantKeyStringIndexes: [0], negate: false },
+        },
+      }),
+      create(ConditionSchema, { kind: { case: 'all', value: { conditionIndexes: [0] } } }),
+    ]
+    for (let index = 2; index < 28; index += 1) {
+      config.conditions.push(
+        create(ConditionSchema, {
+          kind: { case: 'all', value: { conditionIndexes: [index - 2, index - 1] } },
+        })
+      )
+    }
+    config.flags.root.allocations[0].targetingConditionIndex = 27
+    const resolveFlagEvaluation = jest.fn(() => 'on')
+
+    expect(
+      evaluateProtobufConfiguration(
+        prepareRulesResponse(config),
+        'boolean',
+        'root',
+        false,
+        { targetingKey: 'subject' },
+        logger,
+        timeStampNow(),
+        false,
+        resolveFlagEvaluation
+      )
+    ).toMatchObject({ value: true, variant: 'on' })
+    expect(resolveFlagEvaluation).toHaveBeenCalledTimes(1)
   })
 
   it('encodes protobuf dependencies as condition-native values, not partition attributes', () => {
