@@ -68,7 +68,13 @@ type FlagEvaluationCondition = {
   value: string[]
 }
 
-export type ResolveFlagEvaluation = (flagEvaluation: FlagEvaluation) => string | undefined
+export type DependencyExposureTransaction = {
+  checkpoint?: () => unknown
+  rollback?: (checkpoint: unknown) => void
+}
+
+export type ResolveFlagEvaluation = ((flagEvaluation: FlagEvaluation) => string | undefined) &
+  DependencyExposureTransaction
 
 type NumericCondition = {
   operator: NumericOperator
@@ -159,7 +165,17 @@ export function matchesRule(
   subjectAttributes: EvaluationContext,
   resolveFlagEvaluation?: ResolveFlagEvaluation
 ): boolean {
-  return rule.conditions.every((condition) => evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation))
+  const checkpoint = resolveFlagEvaluation?.checkpoint?.()
+  for (const condition of rule.conditions) {
+    if (evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation)) {
+      continue
+    }
+    if (!('flagEvaluation' in condition)) {
+      resolveFlagEvaluation?.rollback?.(checkpoint)
+    }
+    return false
+  }
+  return true
 }
 
 function evaluateCondition(

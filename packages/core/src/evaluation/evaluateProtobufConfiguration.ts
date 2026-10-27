@@ -18,6 +18,7 @@ import { DependencyGraphError, FlagConfigurationError, InvalidContextError, Targ
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import type { DependencyExposureTransaction } from './rules'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
@@ -32,7 +33,13 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
+export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & DependencyExposureTransaction
+
+type ConditionOutcome = {
+  matches: boolean
+  containsDependency: boolean
+  rejection?: 'ordinary' | 'dependency'
+}
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
   configuration: PreparedRulesResponse,
@@ -81,7 +88,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (!prepared || (!prepared.valid && needsActivation(excludeExperiments))) {
       throw new FlagConfigurationError('Invalid randomization activation timestamp')
     }
-    const conditionResults = new Map<number, boolean>()
+    const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
       if (
@@ -139,6 +146,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'TARGETING_KEY_MISSING' as ErrorCode,
+        errorMessage: error.message,
         flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
@@ -171,29 +179,65 @@ function matchesCondition(
   index: number | undefined,
   configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
-  results: Map<number, boolean>,
+  results: Map<number, ConditionOutcome>,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): boolean {
-  if (index === undefined) return true
+  return conditionOutcome(index, configuration, attributes, results, resolveFlagEvaluation).matches
+}
+
+function conditionOutcome(
+  index: number | undefined,
+  configuration: PreparedRulesResponse,
+  attributes: EvaluationContext,
+  results: Map<number, ConditionOutcome>,
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+): ConditionOutcome {
+  if (index === undefined) return { matches: true, containsDependency: false }
   const cached = results.get(index)
-  if (cached !== undefined) return cached
+  if (cached !== undefined && (resolveFlagEvaluation === undefined || !cached.containsDependency)) return cached
   const condition = atIndex(configuration.conditions, index, 'condition')
-  let result: boolean
+  let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    result = condition.kind.value.conditionIndexes.every((child) => {
+    const checkpoint = resolveFlagEvaluation?.checkpoint?.()
+    outcome = { matches: true, containsDependency: false }
+    for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results, resolveFlagEvaluation)
-    })
+      const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
+      outcome.containsDependency ||= childOutcome.containsDependency
+      if (!childOutcome.matches) {
+        outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
+        if (childOutcome.rejection === 'ordinary') {
+          resolveFlagEvaluation?.rollback?.(checkpoint)
+        }
+        break
+      }
+    }
   } else if (condition.kind.case === 'any') {
-    result = condition.kind.value.conditionIndexes.some((child) => {
+    outcome = { matches: false, containsDependency: false, rejection: 'ordinary' }
+    for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results, resolveFlagEvaluation)
-    })
+      const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
+      outcome.containsDependency ||= childOutcome.containsDependency
+      if (childOutcome.matches) {
+        outcome = { matches: true, containsDependency: outcome.containsDependency }
+        break
+      }
+      if (childOutcome.rejection === 'dependency') {
+        outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
+      }
+    }
   } else {
-    result = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
+    const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
+    outcome = {
+      matches,
+      containsDependency: condition.kind.case === 'flagEvaluationStringMembership',
+      ...(matches
+        ? {}
+        : { rejection: condition.kind.case === 'flagEvaluationStringMembership' ? 'dependency' : 'ordinary' }),
+    }
   }
-  results.set(index, result)
-  return result
+  results.set(index, outcome)
+  return outcome
 }
 
 function matchesLeafCondition(

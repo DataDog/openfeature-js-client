@@ -18,7 +18,11 @@ import { prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
-import { evaluateProtobufConfiguration, protobufVariationTypeToFlagValueType } from './evaluateProtobufConfiguration'
+import {
+  evaluateProtobufConfiguration,
+  protobufVariationTypeToFlagValueType,
+  type ResolveProtobufFlagEvaluation,
+} from './evaluateProtobufConfiguration'
 import { createEvaluationMetadata, createEvaluationTimestampMetadata } from './evaluationMetadata'
 import {
   acknowledgesExperimentationOptOut,
@@ -28,7 +32,7 @@ import {
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
-import type { FlagEvaluation } from './rules'
+import type { FlagEvaluation, ResolveFlagEvaluation } from './rules'
 import { type Flag, type UniversalFlagConfigurationV1, variantTypeToFlagValueType } from './ufc-v1'
 
 const DEFAULT_MAX_DEPENDENCY_DEPTH = 10
@@ -242,6 +246,37 @@ function evaluateRules<T extends FlagValueType>(
     let commitDependencyExposures = false
     try {
       const maxDependencyDepth = getMaxDependencyDepth(config)
+      const resolveDependency = ((dependencyFlagKey: string) => {
+        dependencySession ??= new DependencyEvaluationSession(
+          flagKey,
+          maxDependencyDepth,
+          observeFullEvaluationData,
+          (key) => {
+            const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
+            if (flag === undefined) return undefined
+            return protobufDependencyFlag(flag)
+          },
+          (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
+            evaluateProtobufConfiguration(
+              prepared,
+              dependencyType,
+              key,
+              dependencyDefault,
+              context,
+              logger,
+              evaluationTimestampMs,
+              excludeExperiments,
+              resolveFlagEvaluation
+            ),
+          logger,
+          evaluationTimestampMs,
+          onDependencyEvaluation,
+          onDependencyExposures
+        )
+        return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
+      }) as ResolveProtobufFlagEvaluation
+      resolveDependency.checkpoint = () => dependencySession?.checkpoint()
+      resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
       const result = evaluateProtobufConfiguration(
         prepared,
         type,
@@ -251,35 +286,7 @@ function evaluateRules<T extends FlagValueType>(
         logger,
         evaluationTimestampMs,
         excludeExperiments,
-        (dependencyFlagKey) => {
-          dependencySession ??= new DependencyEvaluationSession(
-            flagKey,
-            maxDependencyDepth,
-            observeFullEvaluationData,
-            (key) => {
-              const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
-              if (flag === undefined) return undefined
-              return protobufDependencyFlag(flag)
-            },
-            (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
-              evaluateProtobufConfiguration(
-                prepared,
-                dependencyType,
-                key,
-                dependencyDefault,
-                context,
-                logger,
-                evaluationTimestampMs,
-                excludeExperiments,
-                resolveFlagEvaluation
-              ),
-            logger,
-            evaluationTimestampMs,
-            onDependencyEvaluation,
-            onDependencyExposures
-          )
-          return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
-        }
+        resolveDependency
       )
       commitDependencyExposures = result.reason !== 'ERROR' && result.errorCode === undefined
       return result
@@ -314,6 +321,36 @@ function evaluateRules<T extends FlagValueType>(
   let commitDependencyExposures = false
   try {
     const maxDependencyDepth = getMaxDependencyDepth(config)
+    const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
+      dependencySession ??= new DependencyEvaluationSession(
+        flagKey,
+        maxDependencyDepth,
+        observeFullEvaluationData,
+        (key) => {
+          if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
+          return jsonDependencyFlag(config.flags[key])
+        },
+        (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
+          evaluateForSubject(
+            config.flags[key],
+            dependencyType,
+            subjectKey,
+            subjectAttributes,
+            dependencyDefault,
+            logger,
+            evaluationTimestampMs,
+            excludeExperiments,
+            asFlagEvaluationResolver(resolveFlagEvaluation)
+          ) as ResolutionDetails<FlagValue>,
+        logger,
+        evaluationTimestampMs,
+        onDependencyEvaluation,
+        onDependencyExposures
+      )
+      return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
+    }) as ResolveFlagEvaluation
+    resolveDependency.checkpoint = () => dependencySession?.checkpoint()
+    resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
     const evaluated = evaluateForSubject(
       config.flags[flagKey],
       type,
@@ -323,34 +360,7 @@ function evaluateRules<T extends FlagValueType>(
       logger,
       evaluationTimestampMs,
       excludeExperiments,
-      (flagEvaluation) => {
-        dependencySession ??= new DependencyEvaluationSession(
-          flagKey,
-          maxDependencyDepth,
-          observeFullEvaluationData,
-          (key) => {
-            if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
-            return jsonDependencyFlag(config.flags[key])
-          },
-          (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
-            evaluateForSubject(
-              config.flags[key],
-              dependencyType,
-              subjectKey,
-              subjectAttributes,
-              dependencyDefault,
-              logger,
-              evaluationTimestampMs,
-              excludeExperiments,
-              (flagEvaluation) => resolveFlagEvaluation(flagEvaluation.key)
-            ) as ResolutionDetails<FlagValue>,
-          logger,
-          evaluationTimestampMs,
-          onDependencyEvaluation,
-          onDependencyExposures
-        )
-        return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
-      }
+      resolveDependency
     )
     const result: ResolutionDetails<FlagTypeToValue<T>> = {
       ...evaluated,
@@ -454,6 +464,25 @@ class DependencyEvaluationSession {
     }
   }
 
+  checkpoint(): DependencyExposureCheckpoint {
+    const frame = this.frames[this.frames.length - 1]
+    return {
+      exposureCount: this.exposures.length,
+      ...(frame === undefined ? {} : { frameExposureCount: frame.exposureTrace.length }),
+    }
+  }
+
+  rollback(checkpoint: unknown): void {
+    const resolved = isDependencyExposureCheckpoint(checkpoint)
+      ? checkpoint
+      : { exposureCount: 0, frameExposureCount: undefined }
+    this.exposures.splice(resolved.exposureCount)
+    const frame = this.frames[this.frames.length - 1]
+    if (frame !== undefined && resolved.frameExposureCount !== undefined) {
+      frame.exposureTrace.splice(resolved.frameExposureCount)
+    }
+  }
+
   private evaluate(flagKey: string, type: FlagValueType, defaultValue: FlagValue, depth: number): MemoizedDependency {
     const memoized = this.memo.get(flagKey)
     if (memoized !== undefined) {
@@ -474,12 +503,10 @@ class DependencyEvaluationSession {
     }
 
     this.active.add(flagKey)
-    const frame = { maxReachedDepth: depth }
+    const frame: DependencyEvaluationFrame = { maxReachedDepth: depth, exposureTrace: [] }
     this.frames.push(frame)
     try {
-      const evaluated = this.evaluateFlag(flagKey, type, defaultValue, (dependencyFlagKey) =>
-        this.resolveFlagEvaluation(dependencyFlagKey, depth + 1)
-      )
+      const evaluated = this.evaluateFlag(flagKey, type, defaultValue, this.resolverAtDepth(depth + 1))
       const result: ResolutionDetails<FlagValue> = {
         ...evaluated,
         flagMetadata: {
@@ -501,11 +528,11 @@ class DependencyEvaluationSession {
           'prerequisite flag evaluation returned no variant'
         )
       }
-      const memoizedResult = { details: result, descendantDepth: frame.maxReachedDepth - depth }
+      const { value: _value, ...exposureDetails } = result
+      const exposureTrace = appendDependencyExposureUnique(frame.exposureTrace, { flagKey, details: exposureDetails })
+      const memoizedResult = { details: result, descendantDepth: frame.maxReachedDepth - depth, exposureTrace }
       this.memo.set(flagKey, memoizedResult)
       const evaluation = { flagKey, details: result }
-      const { value: _value, ...exposureDetails } = result
-      this.exposures.push({ flagKey, details: exposureDetails })
       this.emitEvaluation(evaluation)
       return memoizedResult
     } catch (error) {
@@ -550,13 +577,29 @@ class DependencyEvaluationSession {
 
     const result = this.evaluate(flagKey, flag.type, flag.defaultValue, depth)
     this.recordReachedDepth(depth + result.descendantDepth)
+    this.recordExposureTrace(result.exposureTrace)
     return result.details.variant
+  }
+
+  private resolverAtDepth(depth: number): ResolveDependency {
+    const resolve = ((flagKey: string) => this.resolveFlagEvaluation(flagKey, depth)) as ResolveDependency
+    resolve.checkpoint = () => this.checkpoint()
+    resolve.rollback = (checkpoint) => this.rollback(checkpoint)
+    return resolve
   }
 
   private recordReachedDepth(depth: number): void {
     const frame = this.frames[this.frames.length - 1]
     if (frame !== undefined) {
       frame.maxReachedDepth = Math.max(frame.maxReachedDepth, depth)
+    }
+  }
+
+  private recordExposureTrace(trace: readonly DependencyExposureCandidate[]): void {
+    appendDependencyExposureTrace(this.exposures, trace)
+    const frame = this.frames[this.frames.length - 1]
+    if (frame !== undefined) {
+      appendDependencyExposureTrace(frame.exposureTrace, trace)
     }
   }
 
@@ -620,18 +663,67 @@ type DependencyFlag = {
 type MemoizedDependency = {
   details: ResolutionDetails<FlagValue>
   descendantDepth: number
+  exposureTrace: DependencyExposureCandidate[]
 }
 
 type DependencyEvaluationFrame = {
   maxReachedDepth: number
+  exposureTrace: DependencyExposureCandidate[]
+}
+
+type DependencyExposureCheckpoint = {
+  exposureCount: number
+  frameExposureCount?: number
+}
+
+type ResolveDependency = ((flagKey: string) => string | undefined) & {
+  checkpoint?: () => unknown
+  rollback?: (checkpoint: unknown) => void
 }
 
 type DependencyFlagEvaluator = (
   flagKey: string,
   type: FlagValueType,
   defaultValue: FlagValue,
-  resolveFlagEvaluation: (flagKey: string) => string | undefined
+  resolveFlagEvaluation: ResolveDependency
 ) => ResolutionDetails<FlagValue>
+
+function isDependencyExposureCheckpoint(value: unknown): value is DependencyExposureCheckpoint {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'exposureCount' in value &&
+    typeof value.exposureCount === 'number' &&
+    (!('frameExposureCount' in value) ||
+      value.frameExposureCount === undefined ||
+      typeof value.frameExposureCount === 'number')
+  )
+}
+
+function appendDependencyExposureUnique(
+  target: readonly DependencyExposureCandidate[],
+  candidate: DependencyExposureCandidate
+): DependencyExposureCandidate[] {
+  return target.some(({ flagKey }) => flagKey === candidate.flagKey) ? [...target] : [...target, candidate]
+}
+
+function appendDependencyExposureTrace(
+  target: DependencyExposureCandidate[],
+  trace: readonly DependencyExposureCandidate[]
+): void {
+  for (const candidate of trace) {
+    if (!target.some(({ flagKey }) => flagKey === candidate.flagKey)) {
+      target.push(candidate)
+    }
+  }
+}
+
+function asFlagEvaluationResolver(resolveDependency: ResolveDependency): ResolveFlagEvaluation {
+  const resolve = ((flagEvaluation: FlagEvaluation) => resolveDependency(flagEvaluation.key)) as ResolveFlagEvaluation
+  resolve.checkpoint = resolveDependency.checkpoint
+  resolve.rollback = resolveDependency.rollback
+  return resolve
+}
 
 function getMaxDependencyDepth(config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration): number {
   const configuredDepth = config.evaluatorParams?.maxDependencyDepth
