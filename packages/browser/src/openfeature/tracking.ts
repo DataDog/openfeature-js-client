@@ -2,7 +2,7 @@ import type { Hook } from '@openfeature/web-sdk'
 import type { FlaggingTrackingInitConfiguration } from '../domain/configuration'
 
 type TrackingToggleOptions =
-  'enableExposureLogging' | 'enableFlagEvaluationTracking' | 'enableRumFeatureFlagTracking' | 'rum'
+  'enableExposureLogging' | 'trackExposures' | 'enableFlagEvaluationTracking' | 'enableRumFeatureFlagTracking' | 'rum'
 
 export type DatadogTrackingHooksOptions = Omit<FlaggingTrackingInitConfiguration, TrackingToggleOptions>
 

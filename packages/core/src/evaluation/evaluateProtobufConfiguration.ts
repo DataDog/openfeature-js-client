@@ -9,7 +9,15 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import type { Allocation, Condition, Flag, Split, VariationType, Version } from '../configuration/generated/ufc_pb'
+import type {
+  Allocation,
+  Condition,
+  Feature,
+  Flag,
+  Split,
+  VariationType,
+  Version,
+} from '../configuration/generated/ufc_pb'
 import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { compareBytes, encodeUtf8 } from '../utf8'
@@ -21,6 +29,7 @@ import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
+import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 import {
   UFC_NUMERIC_COMPARATOR,
   UFC_REASON,
@@ -92,6 +101,10 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
       logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
+      const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
+        splitFeaturesMetadataInput(split.features),
+        logger
+      )
       return {
         value: value as FlagTypeToValue<T>,
         reason: resolutionReason(split),
@@ -101,6 +114,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           __dd_allocation_key: allocation.key,
           __dd_do_log: allocation.logExposureEvent,
           __dd_split_serial_id: split.serialId,
+          ...featureEntries,
+          ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
           allocationKey: allocation.key,
           variationType: variationTypeToFlagValueType(flag.variationType),
           doLog: allocation.logExposureEvent,
@@ -410,6 +425,17 @@ function variationValue(
   if (value.case === 'booleanValue') return value.value
   if (value.case === 'jsonStringIndex') return jsonValueAt(configuration, value.value)
   throw new FlagConfigurationError('Variation value is missing')
+}
+
+function splitFeaturesMetadataInput(
+  features: Feature[]
+): Array<{ key: string; value: string | number | boolean; destinations: string[] }> {
+  const result: Array<{ key: string; value: string | number | boolean; destinations: string[] }> = []
+  for (const feature of features) {
+    if (feature.value.case === undefined) continue
+    result.push({ key: feature.key, value: feature.value.value, destinations: feature.destinations })
+  }
+  return result
 }
 
 function resolutionReason(split: Split): ResolutionReason {

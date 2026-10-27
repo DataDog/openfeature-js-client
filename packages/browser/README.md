@@ -18,7 +18,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 const provider = new DatadogProvider({
   applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
-  enableExposureLogging: true,
+  trackExposures: true,
   enableFlagEvaluationTracking: true,
   site: 'datadoghq.com',
 })
@@ -45,8 +45,8 @@ const provider = new DatadogProvider({
   version: '1.0.0', // Application version
   applicationId: 'app-id', // Your application ID for RUM attribution
 
-  // Enable exposure logging
-  enableExposureLogging: true,
+  // Enable exposure logging to Datadog (default: true)
+  trackExposures: true,
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
@@ -148,6 +148,47 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+### Exposures in your own data store
+
+Use `ExposureHook` to receive every completed evaluation with the same deduplication decision the SDK uses when
+sending exposures to Datadog, so you can record exposures in your own data store:
+
+```javascript
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(), // split features, e.g. holdout.key
+    })
+  })
+)
+```
+
+- `isExposure()` is true when the evaluation succeeded and selected an allocation that logs exposures, repeats
+  included.
+- `isCacheHit()` is true when this subject was already exposed to the same flag, allocation, variant and serial ID.
+- `shouldSend()` is true for a new or changed exposure: exactly what the SDK sends to Datadog.
+- `getFeatures()` returns the read-only `HOOK` features of the selected split, such as `holdout.key` and
+  `holdout.assignment_group`, when the flag is part of a holdout.
+
+The callback runs on the evaluation thread; hand the data to a background queue instead of doing I/O in the callback.
+An exception from the callback never affects the evaluation (the first failure logs a warning, later ones log at debug
+level).
+
+The SDK's exposure cache persists across page loads. A page reload that re-evaluates the same assignment is a cache
+hit, so `shouldSend()` stays false and Datadog does not log the exposure again.
+
+Set `trackExposures: false` to stop sending exposure events to Datadog only. The hook still receives every
+evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
+and superseded by `trackExposures`; when both are set, `trackExposures` wins.
 
 ### Experimentation opt-out
 

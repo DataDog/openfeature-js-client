@@ -505,3 +505,122 @@ describe('FlagEvaluationAggregator', () => {
     expect(onFlushSpy.mock.calls[0][0]).toHaveLength(3)
   })
 })
+
+describe('evaluation features', () => {
+  let aggregator: FlagEvaluationAggregator
+  let onFlushSpy: jest.Mock
+
+  beforeEach(() => {
+    onFlushSpy = jest.fn()
+    aggregator = new FlagEvaluationAggregator(100, onFlushSpy)
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    aggregator.stop()
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  const context: EvaluationContext = { targetingKey: 'user123' }
+
+  function detailsWithFeatures(features: Record<string, string | number | boolean>): EvaluationDetails<boolean> {
+    return {
+      flagKey: 'test-flag',
+      value: true,
+      variant: 'variant-a',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        __dd_has_evaluation_features: true,
+        ...features,
+      },
+    }
+  }
+
+  it('splits count buckets by evaluation features and writes them on each event', () => {
+    aggregator.addEvaluation(context, detailsWithFeatures({ '__dd_evaluation_feature.group': 'status_quo' }))
+    aggregator.addEvaluation(context, detailsWithFeatures({ '__dd_evaluation_feature.group': 'status_quo' }))
+    aggregator.addEvaluation(context, detailsWithFeatures({ '__dd_evaluation_feature.group': 'all_shipped' }))
+
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy.mock.calls[0][0]).toHaveLength(2)
+    expect(onFlushSpy.mock.calls[0][0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          flag: { key: 'test-flag' },
+          evaluation_count: 2,
+          features: { group: 'status_quo' },
+        }),
+        expect.objectContaining({
+          flag: { key: 'test-flag' },
+          evaluation_count: 1,
+          features: { group: 'all_shipped' },
+        }),
+      ])
+    )
+  })
+
+  it('uses a canonical key-sorted form of features in the bucket key', () => {
+    const first = detailsWithFeatures({
+      '__dd_evaluation_feature.b': 2,
+      '__dd_evaluation_feature.a': 1,
+    })
+    const second = detailsWithFeatures({
+      '__dd_evaluation_feature.a': 1,
+      '__dd_evaluation_feature.b': 2,
+    })
+
+    aggregator.addEvaluation(context, first)
+    aggregator.addEvaluation(context, second)
+
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy.mock.calls[0][0]).toHaveLength(1)
+    expect(onFlushSpy.mock.calls[0][0][0].evaluation_count).toBe(2)
+    expect(onFlushSpy.mock.calls[0][0][0].features).toEqual({ a: 1, b: 2 })
+  })
+
+  it('keeps the same bucket across split serial id changes', () => {
+    const withSerialId = (serialId: number) => ({
+      ...detailsWithFeatures({ '__dd_evaluation_feature.group': 'status_quo' }),
+      flagMetadata: {
+        ...detailsWithFeatures({ '__dd_evaluation_feature.group': 'status_quo' }).flagMetadata,
+        __dd_split_serial_id: serialId,
+      },
+    })
+
+    aggregator.addEvaluation(context, withSerialId(1001))
+    aggregator.addEvaluation(context, withSerialId(1002))
+
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy.mock.calls[0][0]).toHaveLength(1)
+    expect(onFlushSpy.mock.calls[0][0][0].evaluation_count).toBe(2)
+  })
+
+  it('does not read evaluation features without the has-features marker', () => {
+    const unguarded: EvaluationDetails<boolean> = {
+      flagKey: 'test-flag',
+      value: true,
+      variant: 'variant-a',
+      reason: 'TARGETING_MATCH',
+      flagMetadata: {
+        allocationKey: 'allocation-123',
+        '__dd_evaluation_feature.group': 'status_quo',
+      },
+    }
+
+    aggregator.addEvaluation(context, unguarded)
+
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+
+    expect(onFlushSpy.mock.calls[0][0]).toHaveLength(1)
+    expect(onFlushSpy.mock.calls[0][0][0]).not.toHaveProperty('features')
+  })
+})

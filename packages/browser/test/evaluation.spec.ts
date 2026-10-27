@@ -147,6 +147,8 @@ describe('evaluate', () => {
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-124',
+        __dd_do_log: true,
         allocationKey: 'allocation-124',
         doLog: true,
         variationType: 'BOOLEAN',
@@ -161,6 +163,8 @@ describe('evaluate', () => {
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-123',
+        __dd_do_log: true,
         allocationKey: 'allocation-123',
         doLog: true,
         variationType: 'STRING',
@@ -175,6 +179,8 @@ describe('evaluate', () => {
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_allocation_key: 'allocation-127',
+        __dd_do_log: true,
         allocationKey: 'allocation-127',
         doLog: true,
         variationType: 'OBJECT',
@@ -209,6 +215,8 @@ describe('evaluate', () => {
     it('carries the serial id from the precomputed flag onto the evaluation metadata', () => {
       const result = evaluate(configurationWithSerialId(340132), 'string', 'string-flag', 'default', {})
       expect(result.flagMetadata).toEqual({
+        __dd_allocation_key: 'allocation-123',
+        __dd_do_log: true,
         allocationKey: 'allocation-123',
         variationType: 'string',
         doLog: true,
@@ -391,5 +399,87 @@ describe('evaluate', () => {
         errorMessage: 'Malformed rules data',
       })
     })
+  })
+})
+
+describe('precomputed split features', () => {
+  const configurationWithFeatures = (features: unknown): FlagsConfiguration => ({
+    precomputed: {
+      context: { targetingKey: 'user-1' },
+      response: {
+        data: {
+          attributes: {
+            createdAt: '2026-10-26T00:00:00.000Z',
+            flags: {
+              'string-flag': {
+                allocationKey: 'allocation-123',
+                variationKey: 'variation-123',
+                variationType: 'string',
+                variationValue: 'red',
+                reason: 'TARGETING_MATCH',
+                doLog: true,
+                serialId: 340132,
+                ...(features === undefined ? {} : { features }),
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const evaluateFeatures = (features: unknown) =>
+    evaluate(configurationWithFeatures(features), 'string', 'string-flag', 'default', { targetingKey: 'user-1' })
+
+  it('routes features with mixed value types through the shared helper', () => {
+    const result = evaluateFeatures([
+      { key: 'holdout.key', value: '06ad', destinations: ['HOOK'] },
+      { key: 'holdout.assignment_group', value: 'status_quo', destinations: ['HOOK', 'EXPOSURE'] },
+      { key: 'holdout.should_include_in_holdout_analysis', value: false, destinations: ['HOOK'] },
+      { key: 'holdout.ratio', value: 0.5, destinations: ['EVALUATION'] },
+    ])
+
+    expect(result.flagMetadata).toMatchObject({
+      ['__dd_feature.' + 'holdout.key']: '06ad',
+      ['__dd_feature.' + 'holdout.assignment_group']: 'status_quo',
+      ['__dd_feature.' + 'holdout.should_include_in_holdout_analysis']: false,
+      ['__dd_exposure_feature.' + 'holdout.assignment_group']: 'status_quo',
+      ['__dd_evaluation_feature.' + 'holdout.ratio']: 0.5,
+      __dd_has_evaluation_features: true,
+    })
+  })
+
+  it('never fails the flag on a malformed features field', () => {
+    expect(evaluateFeatures('not-a-list').value).toBe('red')
+    expect(evaluateFeatures([{ key: 'no-value' }]).value).toBe('red')
+    expect(evaluateFeatures([{ key: '', value: 'empty-key', destinations: ['HOOK'] }]).value).toBe('red')
+    expect(evaluateFeatures([{ key: 'ok', value: 'kept', destinations: [] }]).value).toBe('red')
+  })
+
+  it('keeps the first valid feature on a repeated key', () => {
+    const result = evaluateFeatures([
+      { key: 'holdout.key', value: 'first', destinations: ['HOOK'] },
+      { key: 'holdout.key', value: 'second', destinations: ['HOOK'] },
+    ])
+
+    expect(result.flagMetadata).toMatchObject({ ['__dd_feature.' + 'holdout.key']: 'first' })
+  })
+
+  it('ignores unknown destinations and skips features without any known one', () => {
+    const result = evaluateFeatures([
+      { key: 'a', value: 'x', destinations: ['WHAT'] },
+      { key: 'b', value: 'y', destinations: ['HOOK'] },
+    ])
+
+    const keys = Object.keys(result.flagMetadata ?? {})
+    expect(keys).toContain('__dd_feature.b')
+    expect(keys).not.toContain('__dd_feature.a')
+  })
+
+  it('adds no metadata entries when the flag has no features', () => {
+    const result = evaluateFeatures(undefined)
+
+    const keys = Object.keys(result.flagMetadata ?? {}).filter((key) => key.startsWith('__dd_'))
+    expect(keys).toEqual(['__dd_allocation_key', '__dd_do_log', '__dd_split_serial_id'])
   })
 })

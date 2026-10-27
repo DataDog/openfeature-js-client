@@ -33,6 +33,7 @@ import {
   type EvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
 import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
+import { stampExposureCacheVerdict } from './exposures'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -121,10 +122,7 @@ export class DatadogProvider extends DatadogProviderBase {
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.requestDiagnostics = createRequestDiagnostics()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
-    const getTrackingContext = () =>
-      this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
-        ? this.requestedEvaluationContext
-        : (this.evaluationContext ?? this.requestedEvaluationContext)
+    const getTrackingContext = () => this.effectiveTrackingContext()
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
@@ -290,6 +288,12 @@ export class DatadogProvider extends DatadogProviderBase {
     }
   }
 
+  private effectiveTrackingContext(): EvaluationContext {
+    return this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+      ? this.requestedEvaluationContext
+      : (this.evaluationContext ?? this.requestedEvaluationContext)
+  }
+
   private async maybeClearExposureCache(
     newFlagsConfiguration: FlagsConfiguration,
     { signal }: { signal: AbortSignal }
@@ -318,23 +322,24 @@ export class DatadogProvider extends DatadogProviderBase {
       flagKey,
       defaultValue,
       context,
-      this.experimentationOptOutMode
+      this.experimentationOptOutMode,
+      _logger
     )
     // A well-formed context is waiting for usable assignments, not invalid.
     const awaitingAssignments =
       optOutEnabled &&
       result.errorCode === ErrorCode.INVALID_CONTEXT &&
       experimentationOptOutPolicy(context, this.experimentationOptOutMode) !== undefined
-    return bindEvaluationTelemetryResult(
-      awaitingAssignments
-        ? {
-            ...result,
-            errorCode: ErrorCode.PROVIDER_NOT_READY,
-            errorMessage: 'Assignments for the current evaluation context are not available',
-          }
-        : result,
-      this.telemetryPolicy,
-      optOutEnabled ? context : undefined
-    )
+    const boundResult = awaitingAssignments
+      ? {
+          ...result,
+          errorCode: ErrorCode.PROVIDER_NOT_READY,
+          errorMessage: 'Assignments for the current evaluation context are not available',
+        }
+      : result
+    // Stamp before the SDK freezes the metadata for hooks: this is the one
+    // exposure-cache verdict shared by the Datadog path and the customer hook.
+    stampExposureCacheVerdict({ ...boundResult, flagKey }, this.effectiveTrackingContext(), this.exposureCache)
+    return bindEvaluationTelemetryResult(boundResult, this.telemetryPolicy, optOutEnabled ? context : undefined)
   }
 }

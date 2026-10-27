@@ -450,23 +450,28 @@ describe('browser flag-key obfuscation', () => {
     }
   })
 
-  it.each(['', salt])('refreshes without an exposure cache when logging is disabled, salt "%s"', async (publicSalt) => {
-    fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
-    const provider = new DatadogProvider(options)
-    const clear = jest.spyOn(IndexedDBAssignmentCache.prototype, 'clear')
-    try {
-      await provider.initialize(context)
-      fetchMock.mockResolvedValue(fetchResponse(response(publicSalt, false, '2026-09-30T00:01:00Z')))
-      await provider.onContextChange(context, context)
-      expect(provider.status).toBe(ProviderStatus.READY)
-      expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
-      expect(clear).not.toHaveBeenCalled()
-      expect(localStorage.length).toBe(0)
-    } finally {
-      clear.mockRestore()
-      await provider.onClose()
+  it.each(['', salt])(
+    'clears the exposure cache on refresh even when exposure logging is disabled, salt "%s"',
+    async (publicSalt) => {
+      fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
+      const provider = new DatadogProvider(options)
+      const clear = jest.spyOn(IndexedDBAssignmentCache.prototype, 'clear')
+      try {
+        await provider.initialize(context)
+        fetchMock.mockResolvedValue(fetchResponse(response(publicSalt, false, '2026-09-30T00:01:00Z')))
+        await provider.onContextChange(context, context)
+        expect(provider.status).toBe(ProviderStatus.READY)
+        expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
+        // The exposure cache records even when exposure logging is off, so a
+        // configuration change still resets deduplication.
+        expect(clear).toHaveBeenCalledTimes(1)
+        expect(localStorage.length).toBe(0)
+      } finally {
+        clear.mockRestore()
+        await provider.onClose()
+      }
     }
-  })
+  )
 
   it('does not serialize assignment values on repeated portable-provider evaluations', async () => {
     const configuration = await fetchPrecomputedConfiguration({ ...options, context })

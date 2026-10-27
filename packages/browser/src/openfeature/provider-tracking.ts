@@ -1,7 +1,11 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
-import type { FlaggingTrackingConfiguration, FlaggingTrackingInitConfiguration } from '../domain/configuration'
+import {
+  type FlaggingTrackingConfiguration,
+  type FlaggingTrackingInitConfiguration,
+  resolveTrackExposures,
+} from '../domain/configuration'
 import type { EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import { createExposureLoggingHook } from './exposures'
 import { createFlagEvalEVPHook } from './flagEvaluations'
@@ -38,14 +42,19 @@ export function createProviderTracking({
     )
   }
 
+  // The exposure cache and its recording hook exist whenever tracking is
+  // configured: turning exposure logging off must not break deduplication for
+  // customers recording exposures in their own data store. The toggle only
+  // stops the batch send to Datadog.
   let exposureCache: AssignmentCache | undefined
-  if ((options.enableExposureLogging ?? enabledByDefault) && configuration) {
+  if (configuration) {
     const cache = createExposureCache(options, configuration)
     exposureCache = cache
+    const sendToDatadog = resolveTrackExposures(options, enabledByDefault)
     trackingHooks.push(
       createTrackingHookController(async () => {
         await runTrackingLifecycleOperation(() => cache.init())
-        return createExposureLoggingHook(configuration, cache, getTrackingContext)
+        return createExposureLoggingHook(configuration, cache, getTrackingContext, { sendToDatadog })
       })
     )
   }

@@ -75,6 +75,8 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
+  /** Split features of the selected assignment; parsed leniently at evaluation time. */
+  features?: unknown
 }
 
 /** @internal */
