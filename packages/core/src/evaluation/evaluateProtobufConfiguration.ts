@@ -105,7 +105,10 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
-      if (!split) continue
+      if (!split) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
+        continue
+      }
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
@@ -196,6 +199,7 @@ function conditionOutcome(
   if (index === undefined) return { matches: true, containsDependency: false }
   const cached = results.get(index)
   if (cached !== undefined && (resolveFlagEvaluation === undefined || !cached.containsDependency)) return cached
+  const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
@@ -226,6 +230,11 @@ function conditionOutcome(
       matches,
       containsDependency: condition.kind.case === 'flagEvaluationStringMembership',
     }
+  }
+  if (!outcome.matches) {
+    // A false condition node is a provenance barrier. This discards dependency
+    // exposures from a failed ALL and from each failed branch visited by ANY.
+    resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
   results.set(index, outcome)
   return outcome
