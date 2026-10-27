@@ -86,6 +86,61 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Response signing (draft browser pilot)
+
+Response signing is opt-in and defaults to `off`. The draft supports `observe` for
+fail-open dogfooding and `required` for protected responses. Existing authentication,
+HTTP errors, JSON validation, and experimentation opt-out checks still apply.
+
+```typescript
+const provider = new DatadogProvider({
+  clientToken: '<client-token>',
+  env: 'production',
+  responseSigning: {
+    mode: 'observe',
+    trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
+    onVerification(outcome) {
+      // Fixed diagnostic codes only; each distinct outcome is emitted once per provider.
+      console.info(outcome)
+    },
+  },
+})
+```
+
+`DatadogProvider.responseSigningVersion === 3` identifies support at runtime.
+`trustedRootCertificates` accepts at most four standard padded base64 DER public
+root certificates fixed at initialization. This draft bundles **no production root**;
+provisioning and pinning that anchor is a release prerequisite. Never obtain trust
+anchors from an assignment response. Required mode rejects missing anchor
+configuration. Observe mode reports `missing-anchor` and accepts an otherwise valid
+response. It also accepts unsigned or invalidly signed responses without calling
+them verified. Diagnostics contain no token, context, response, or certificate data.
+
+A response carries its leaf and intermediate certificates, so rotating either under
+the unchanged trusted root requires no SDK update or prior rotation history. The
+SDK verifies the chain, exact request and response bytes, nonce, effective client
+token and semantic headers, and the original proof lifetime (at most five minutes).
+Signed requests require HTTPS and reject redirects. A custom fetch implementation
+must preserve the generated URL, body and headers and the exact returned bytes.
+Proxies must support the signing request headers and expose the proof headers in
+CORS. The v3 capability is added only when signing is enabled.
+
+Required mode uses only verified memory for the same provider and full evaluation
+context. It does not read bootstrap or persistent configurations, never retries
+unsigned, and returns defaults after proof expiry or restart until a fresh verified
+response arrives. This includes expiry while offline, without another refresh.
+Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
+its persistent namespace binds the complete token, endpoint, environment, app ID,
+headers, mode, selection and nested context. Upgrading into observe causes a
+one-time cache cold start. An unsigned observation cannot overwrite the separately
+retained verified memory fallback. If WebCrypto is unavailable, observe retains
+ordinary network and in-memory availability but cannot use its scoped persistent
+cache. Required mode fails locally.
+
+Off mode preserves ordinary transport and caching and performs no signing work.
+This pilot signs complete buffered JSON responses. It does not add signed streaming
+or change the existing unsigned streaming protocol.
+
 ### Flag selection
 
 Use `flagSelection` to load only the flags that match a set of tags or key patterns:

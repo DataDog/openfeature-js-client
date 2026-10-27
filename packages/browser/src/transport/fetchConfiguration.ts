@@ -20,6 +20,11 @@ import {
 } from '../openfeature/experimentation-opt-out'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
+import {
+  createResponseSigningController,
+  type ResponseSigningConfiguration,
+  type ResponseSigningController,
+} from './responseSigning/controller'
 
 const sourcePayload = {
   sdk_name: 'browser',
@@ -57,6 +62,7 @@ export interface PrecomputedConfigurationFetchOptions
   extends ConfigurationFetchOptions, ExperimentationOptOutConfiguration {
   applicationId?: string
   context: EvaluationContext
+  responseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -126,13 +132,16 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  return requestPrecomputedConfiguration(options)
+  return requestPrecomputedConfiguration(options, undefined, createResponseSigningController(options.responseSigning))
 }
 
 async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
-  flagSelection?: CanonicalFlagSelection
+  flagSelection?: CanonicalFlagSelection,
+  signing?: ResponseSigningController
 ): Promise<FlagsConfiguration> {
+  // Bind both the serialized request and admitted response to one snapshot, including direct API callers.
+  if (signing) options = { ...options, context: JSON.parse(JSON.stringify(options.context)) }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
@@ -158,53 +167,63 @@ async function requestPrecomputedConfiguration(
     stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
 
+  const body = serializeRequestBody(
+    {
+      data: {
+        type: 'precompute-assignments-request',
+        attributes: {
+          env: envPayload,
+          source: sourcePayload,
+          ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+          subject: {
+            targeting_key: options.context.targetingKey || '',
+            targeting_attributes: stringifiedContext,
+          },
+          ...(flagSelection && {
+            flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+          }),
+        },
+      },
+    },
+    options.signal
+  )
+  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body)
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const response = await fetchImplementation(url.toString(), {
     method: 'POST',
-    headers: defaultHeaders,
+    headers: signingRequest?.headers ?? defaultHeaders,
     signal: options.signal,
-    body: serializeRequestBody(
-      {
-        data: {
-          type: 'precompute-assignments-request',
-          attributes: {
-            env: envPayload,
-            source: sourcePayload,
-            ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-            subject: {
-              targeting_key: options.context.targetingKey || '',
-              targeting_attributes: stringifiedContext,
-            },
-            ...(flagSelection && {
-              flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
-            }),
-          },
-        },
-      },
-      options.signal
-    ),
+    body,
+    ...(signing && { redirect: 'error' as const }),
   })
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   if (flagSelection) reportIgnoredFlagSelection(response)
-  const parsed = parsePrecomputedConfigurationResponse(await response.json())
+  const signedResponse = signing ? await signing.read(response, signingRequest) : undefined
+  const parsed = parsePrecomputedConfigurationResponse(signedResponse ? signedResponse.json : await response.json())
   if ('error' in parsed) return { precomputedError: parsed.error }
   if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }
 
-  return {
+  const configuration: FlagsConfiguration = {
     precomputed: {
       ...parsed,
       context: options.context,
       fetchedAt,
     },
   }
+  signing?.admit(configuration, options.context, signedResponse?.proof, options.signal)
+  return configuration
 }
 
-export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
+export function createFlagsConfigurationFetcher(
+  initConfiguration: FlaggingInitConfiguration,
+  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning)
+) {
+  if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
   const { selection: flagSelection, error: flagSelectionError } = canonicalizeFlagSelection(
@@ -220,7 +239,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         fetch: initConfiguration.flagConfigurationFetch,
         signal,
       },
-      flagSelection
+      flagSelection,
+      signing
     )
     // Use the provider's existing context-matched cache fallback. Do not replace
     // a valid snapshot with a malformed response or unsupported encoding.

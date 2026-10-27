@@ -5,6 +5,11 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
+import {
+  createResponseSigningController,
+  type ResponseSigningConfiguration,
+  type ResponseSigningController,
+} from '../transport/responseSigning/controller'
 
 export interface EvaluationTelemetryOptOutConfiguration {
   /**
@@ -77,6 +82,9 @@ export interface FlaggingInitConfiguration
    */
   initialFlagsConfiguration?: FlagsConfiguration
 
+  /** Opt-in assignment response signing. Default: off. */
+  responseSigning?: ResponseSigningConfiguration
+
   /**
    * Custom headers to add to the request to the Datadog API.
    */
@@ -116,6 +124,7 @@ export interface FlaggingTrackingConfiguration extends Configuration {
 }
 
 export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
+  responseSigning?: ResponseSigningController
   fetchFlagsConfiguration: (
     context: EvaluationContext,
     options?: { signal?: AbortSignal }
@@ -142,11 +151,29 @@ export function validateAndBuildFlaggingConfiguration(
 ): FlaggingConfiguration | undefined {
   const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration)
   if (!trackingConfiguration) {
+    // Invalid ordinary configuration must never erase a requested required-signing policy.
+    if (initConfiguration.responseSigning?.mode === 'required')
+      throw new Error('Required response signing needs valid provider configuration')
     return
   }
 
+  const snapshot =
+    initConfiguration.responseSigning && initConfiguration.responseSigning.mode !== 'off'
+      ? { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
+      : initConfiguration
+  const responseSigning = createResponseSigningController(initConfiguration.responseSigning, {
+    clientToken: snapshot.clientToken,
+    applicationId: snapshot.applicationId,
+    env: snapshot.env,
+    site: snapshot.site,
+    flaggingProxy: snapshot.flaggingProxy,
+    customHeaders: snapshot.customHeaders,
+    overwriteRequestHeaders: snapshot.overwriteRequestHeaders,
+    flagSelection: snapshot.flagSelection,
+  })
   return {
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
+    responseSigning,
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning),
     ...trackingConfiguration,
   }
 }
