@@ -1,6 +1,6 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
 import { validateAndBuildConfiguration } from '@datadog/browser-core'
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
@@ -103,6 +103,13 @@ export interface FlaggingInitConfiguration
    * including authentication and configured custom headers. Exposure and flag-evaluation intake requests do not use it.
    */
   flagConfigurationFetch?: typeof globalThis.fetch
+
+  /**
+   * Load only the flags that match these tags or key patterns. Tags match exactly, and key patterns are whole-key
+   * globs where only `*` is special. Fixed at initialization. A selection over a limit is not sent, and the full
+   * configuration is loaded. See the README for the limits.
+   */
+  flagSelection?: FlagSelection
 }
 
 export interface FlaggingTrackingConfiguration extends Configuration {

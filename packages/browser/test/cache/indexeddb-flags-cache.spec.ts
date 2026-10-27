@@ -211,6 +211,34 @@ describe('IndexedDBFlagsCache', () => {
     })
   })
 
+  describe('flag selection isolation', () => {
+    const checkout = { tags: ['checkout'], keyPatterns: [] }
+    const search = { tags: ['search'], keyPatterns: [] }
+
+    it('uses different keys for different selections', async () => {
+      new IndexedDBFlagsCache('test-client-token', checkout).set(testConfig, context)
+      await flushAsync()
+
+      expect(await new IndexedDBFlagsCache('test-client-token', checkout).get(context)).toEqual(testConfig)
+      expect(await new IndexedDBFlagsCache('test-client-token', search).get(context)).toBeUndefined()
+      expect(await cache.get(context)).toBeUndefined()
+      expect(await readEntry(currentKey)).toBeUndefined()
+    })
+
+    it('keeps the unselected key unchanged', async () => {
+      new IndexedDBFlagsCache('test-client-token', undefined).set(testConfig, context)
+      await flushAsync()
+
+      expect(await readEntry(currentKey)).toEqual(testConfig)
+      expect(await new IndexedDBFlagsCache('test-client-token', checkout).get(context)).toBeUndefined()
+    })
+
+    it('does not read legacy entries, which predate selections', async () => {
+      await writeEntry(legacyKey, testConfig)
+      expect(await new IndexedDBFlagsCache('test-client-token', checkout).get(context)).toBeUndefined()
+    })
+  })
+
   describe('context isolation', () => {
     it('should not share data between different contexts', async () => {
       const contextA = { targetingKey: 'user-a' }

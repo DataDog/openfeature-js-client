@@ -315,6 +315,39 @@ describe('DatadogProvider IndexedDB persistence', () => {
       }
     })
   })
+
+  describe('with flagSelection', () => {
+    const context = { targetingKey: 'user-1' }
+    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+
+    it('does not recover a snapshot fetched under another selection', async () => {
+      const checkout = new DatadogProvider({ ...options, flagSelection: { tags: ['checkout'] } })
+      await checkout.initialize(context)
+      await flushAsync()
+      await checkout.onClose()
+
+      global.fetch = failingFetchMock()
+      const search = new DatadogProvider({ ...options, flagSelection: { tags: ['search'] } })
+      await search.initialize(context).catch(() => undefined)
+
+      expect(search.resolveStringEvaluation('string-flag', 'default', context, logger).value).toBe('default')
+      await search.onClose()
+    })
+
+    it('recovers a snapshot fetched under the same canonical selection', async () => {
+      const first = new DatadogProvider({ ...options, flagSelection: { tags: [' checkout', 'checkout'] } })
+      await first.initialize(context)
+      await flushAsync()
+      await first.onClose()
+
+      global.fetch = failingFetchMock()
+      const restarted = new DatadogProvider({ ...options, flagSelection: { tags: ['checkout'] } })
+      await restarted.initialize(context)
+
+      expect(restarted.resolveStringEvaluation('string-flag', 'default', context, logger).value).toBe('red')
+      await restarted.onClose()
+    })
+  })
 })
 
 function flushAsync(): Promise<void> {

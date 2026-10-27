@@ -76,24 +76,32 @@ export class DatadogNodeServerProvider implements Provider {
   }
 
   /**
-   * Used by dd-source-js
+   * Used by dd-source-js. Pass null or undefined to withdraw the configuration.
    */
-  setConfiguration(configuration: UniversalFlagConfigurationV1) {
-    prepareUniversalFlagConfiguration(configuration)
+  setConfiguration(configuration: UniversalFlagConfigurationV1 | null | undefined) {
+    if (configuration) {
+      prepareUniversalFlagConfiguration(configuration)
+    }
+    const previousConfiguration = this.configuration
     const prevCreatedAt = this.configuration?.createdAt
     const hadConfiguration = !!this.configuration
+    this.configuration = configuration ?? undefined
 
-    if (hadConfiguration && this.configuration !== configuration) {
-      this.events.emit(PROVIDER_EVENTS.ConfigurationChanged)
-      const newCreatedAt = configuration?.createdAt
-      if (prevCreatedAt !== newCreatedAt) {
+    if (!configuration) {
+      if (hadConfiguration) {
         this.exposureCache?.clear()
+        this.setError(new Error('Flag configuration is unavailable'))
       }
-      this.configuration = configuration
       return
     }
 
-    this.configuration = configuration
+    if (hadConfiguration && previousConfiguration !== configuration) {
+      if (prevCreatedAt !== configuration.createdAt) {
+        this.exposureCache?.clear()
+      }
+      this.events.emit(PROVIDER_EVENTS.ConfigurationChanged)
+      return
+    }
 
     if (this.initController?.isInitializing()) {
       // First configuration during initialization - resolve the initialization promise
@@ -138,6 +146,9 @@ export class DatadogNodeServerProvider implements Provider {
 
     await this.initController.wait()
     await this.exposureCache?.init()
+    if (!this.configuration) {
+      throw new Error('Flag configuration is unavailable')
+    }
   }
 
   async resolveBooleanEvaluation(
