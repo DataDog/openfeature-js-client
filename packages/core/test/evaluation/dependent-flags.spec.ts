@@ -225,6 +225,22 @@ describe('dependent flag evaluation', () => {
     expect(onExposures).toHaveBeenCalledWith([])
   })
 
+  it('discards a matched dependency exposure when a later condition rejects its protobuf targeting rule', () => {
+    const config = protobufDependentConfiguration(true)
+    config.conditions.push(
+      create(ConditionSchema, { kind: { case: 'any', value: { conditionIndexes: [] } } }),
+      create(ConditionSchema, { kind: { case: 'all', value: { conditionIndexes: [0, 1] } } }),
+      create(ConditionSchema, { kind: { case: 'all', value: { conditionIndexes: [] } } }),
+      create(ConditionSchema, { kind: { case: 'any', value: { conditionIndexes: [2, 3] } } })
+    )
+    config.flags.root.allocations[0].targetingConditionIndex = 4
+
+    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
+    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
+    expect(onExposures).toHaveBeenCalledWith([])
+  })
+
   it('discards protobuf provenance when a matching allocation produces no assignment', () => {
     const config = protobufDependentConfiguration(true)
     config.flags.root.allocations[0].splits = []
