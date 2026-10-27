@@ -6,6 +6,30 @@
 
 ---
 
+## @datadog/openfeature-browser@2.2.0, @datadog/openfeature-node-server@2.6.0, @datadog/flagging-core@3.3.0
+
+**Features:**
+
+- Load selected flags by tags or key patterns with the optional `flagSelection` setting. Normalize selections consistently across precomputed and rules-based requests, and isolate cached configurations by selection ([#426](https://github.com/DataDog/openfeature-js-client/pull/426)) [BROWSER] [CORE]
+- Add opt-in `Immediate` and `FutureExperimentsOnly` experimentation opt-out modes using the application's `dd_experimentation_opt_out_at` timestamp. Share allocation filtering, activation timestamp preparation, and precomputed response acknowledgement checks in core ([#423](https://github.com/DataDog/openfeature-js-client/pull/423)) [BROWSER] [CORE]
+- Add opt-in subject-level evaluation telemetry suppression through `enableEvaluationTelemetryOptOutParameter` and the boolean `dd_evaluation_telemetry_opt_out` context attribute. This suppresses new evaluation events, counts, and automatic RUM flag annotations; it does not suppress exposures or assignment requests ([#418](https://github.com/DataDog/openfeature-js-client/pull/418)) [BROWSER]
+
+**Bug Fixes:**
+
+- Handle configuration withdrawal and recovery in the Node provider. Clear stale exposure state, report unavailable configuration, and install replacement configuration before notifying listeners ([#430](https://github.com/DataDog/openfeature-js-client/pull/430)) [NODE-SERVER]
+- Include SDK source contents in published browser and core JavaScript source maps ([#422](https://github.com/DataDog/openfeature-js-client/pull/422)) [BROWSER] [CORE]
+
+**Usage Notes:**
+
+- Flag selection requires server support; older servers or disabled gates may return the full configuration. Invalid or oversized selections fall back to loading all flags. Caller-supplied initial configurations are not filtered locally. [BROWSER]
+- Experimentation opt-out is disabled by default. Precomputed delivery requires backend acknowledgement; enabled modes withhold assignments from a different context until usable replacements arrive. Future mode uses allocation activation time, not prior enrollment, and skips exposure allocations with missing activation metadata. [BROWSER] [CORE]
+- The Node provider does not expose experimentation opt-out controls in this release. [NODE-SERVER]
+
+**Internal Changes:**
+
+- Add provider instance IDs, logical fetch sequence numbers, and fetch triggers to precomputed assignment requests for request diagnostics ([a56eb89](https://github.com/DataDog/openfeature-js-client/commit/a56eb890810ffcd1d03af51290f906ec547710c8)) [BROWSER]
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.3.0`. Publish core before browser and Node.js.
+
 ## @datadog/openfeature-node-server@2.5.0
 
 **Features:**
