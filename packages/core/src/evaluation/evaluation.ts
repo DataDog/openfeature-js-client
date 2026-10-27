@@ -273,8 +273,6 @@ function evaluateRules<T extends FlagValueType>(
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
-      resolveDependency.checkpoint = () => dependencySession?.checkpoint()
-      resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
       const result = evaluateProtobufConfiguration(
         prepared,
         type,
@@ -292,11 +290,6 @@ function evaluateRules<T extends FlagValueType>(
         return dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
       }
       throw error
-    } finally {
-      // Protobuf condition DAG evaluation does not yet retain the successful
-      // short-circuit witness needed to identify contributing prerequisites.
-      // Keep buffering internally, but do not publish ambiguous exposures.
-      dependencySession?.complete(false)
     }
   }
 
@@ -432,7 +425,7 @@ class DependencyEvaluationSession {
   private readonly memo = new Map<string, MemoizedDependency>()
   private readonly active: Set<string>
   private readonly frames: DependencyEvaluationFrame[] = []
-  private readonly exposures: DependencyExposureCandidate[] = []
+  private readonly exposures: DependencyExposureCandidate[] | undefined
   private completed = false
 
   constructor(
@@ -447,6 +440,7 @@ class DependencyEvaluationSession {
     private readonly onDependencyExposures?: DependencyExposureHandler
   ) {
     this.active = new Set([rootFlagKey])
+    this.exposures = onDependencyExposures === undefined ? undefined : []
   }
 
   complete(commitExposures: boolean): void {
@@ -455,7 +449,7 @@ class DependencyEvaluationSession {
     }
     this.completed = true
 
-    if (commitExposures) {
+    if (commitExposures && this.exposures !== undefined) {
       try {
         this.onDependencyExposures?.(this.exposures)
       } catch {
@@ -464,21 +458,27 @@ class DependencyEvaluationSession {
     }
   }
 
-  checkpoint(): DependencyExposureCheckpoint {
+  checkpoint(): DependencyExposureCheckpoint | undefined {
+    if (this.exposures === undefined) {
+      return undefined
+    }
     const frame = this.frames[this.frames.length - 1]
     return {
       exposureCount: this.exposures.length,
-      ...(frame === undefined ? {} : { frameExposureCount: frame.exposureTrace.length }),
+      ...(frame?.exposureTrace === undefined ? {} : { frameExposureCount: frame.exposureTrace.length }),
     }
   }
 
   rollback(checkpoint: unknown): void {
+    if (this.exposures === undefined) {
+      return
+    }
     const resolved = isDependencyExposureCheckpoint(checkpoint)
       ? checkpoint
       : { exposureCount: 0, frameExposureCount: undefined }
     this.exposures.splice(resolved.exposureCount)
     const frame = this.frames[this.frames.length - 1]
-    if (frame !== undefined && resolved.frameExposureCount !== undefined) {
+    if (frame?.exposureTrace !== undefined && resolved.frameExposureCount !== undefined) {
       frame.exposureTrace.splice(resolved.frameExposureCount)
     }
   }
@@ -503,7 +503,10 @@ class DependencyEvaluationSession {
     }
 
     this.active.add(flagKey)
-    const frame: DependencyEvaluationFrame = { maxReachedDepth: depth, exposureTrace: [] }
+    const frame: DependencyEvaluationFrame = {
+      maxReachedDepth: depth,
+      ...(this.exposures === undefined ? {} : { exposureTrace: [] }),
+    }
     this.frames.push(frame)
     try {
       const evaluated = this.evaluateFlag(flagKey, type, defaultValue, this.resolverAtDepth(depth + 1))
@@ -528,9 +531,18 @@ class DependencyEvaluationSession {
           'prerequisite flag evaluation returned no variant'
         )
       }
-      const { value: _value, ...exposureDetails } = result
-      const exposureTrace = appendDependencyExposureUnique(frame.exposureTrace, { flagKey, details: exposureDetails })
-      const memoizedResult = { details: result, descendantDepth: frame.maxReachedDepth - depth, exposureTrace }
+      const exposureTrace =
+        frame.exposureTrace === undefined
+          ? undefined
+          : appendDependencyExposureUnique(frame.exposureTrace, {
+              flagKey,
+              details: withoutValue(result),
+            })
+      const memoizedResult: MemoizedDependency = {
+        details: result,
+        descendantDepth: frame.maxReachedDepth - depth,
+        ...(exposureTrace === undefined ? {} : { exposureTrace }),
+      }
       this.memo.set(flagKey, memoizedResult)
       const evaluation = { flagKey, details: result }
       this.emitEvaluation(evaluation)
@@ -577,14 +589,18 @@ class DependencyEvaluationSession {
 
     const result = this.evaluate(flagKey, flag.type, flag.defaultValue, depth)
     this.recordReachedDepth(depth + result.descendantDepth)
-    this.recordExposureTrace(result.exposureTrace)
+    if (result.exposureTrace !== undefined) {
+      this.recordExposureTrace(result.exposureTrace)
+    }
     return result.details.variant
   }
 
   private resolverAtDepth(depth: number): ResolveDependency {
     const resolve = ((flagKey: string) => this.resolveFlagEvaluation(flagKey, depth)) as ResolveDependency
-    resolve.checkpoint = () => this.checkpoint()
-    resolve.rollback = (checkpoint) => this.rollback(checkpoint)
+    if (this.exposures !== undefined) {
+      resolve.checkpoint = () => this.checkpoint()
+      resolve.rollback = (checkpoint) => this.rollback(checkpoint)
+    }
     return resolve
   }
 
@@ -596,9 +612,12 @@ class DependencyEvaluationSession {
   }
 
   private recordExposureTrace(trace: readonly DependencyExposureCandidate[]): void {
+    if (this.exposures === undefined) {
+      return
+    }
     appendDependencyExposureTrace(this.exposures, trace)
     const frame = this.frames[this.frames.length - 1]
-    if (frame !== undefined) {
+    if (frame?.exposureTrace !== undefined) {
       appendDependencyExposureTrace(frame.exposureTrace, trace)
     }
   }
@@ -663,12 +682,12 @@ type DependencyFlag = {
 type MemoizedDependency = {
   details: ResolutionDetails<FlagValue>
   descendantDepth: number
-  exposureTrace: DependencyExposureCandidate[]
+  exposureTrace?: DependencyExposureCandidate[]
 }
 
 type DependencyEvaluationFrame = {
   maxReachedDepth: number
-  exposureTrace: DependencyExposureCandidate[]
+  exposureTrace?: DependencyExposureCandidate[]
 }
 
 type DependencyExposureCheckpoint = {
@@ -705,6 +724,11 @@ function appendDependencyExposureUnique(
   candidate: DependencyExposureCandidate
 ): DependencyExposureCandidate[] {
   return target.some(({ flagKey }) => flagKey === candidate.flagKey) ? [...target] : [...target, candidate]
+}
+
+function withoutValue(details: ResolutionDetails<FlagValue>): Omit<ResolutionDetails<FlagValue>, 'value'> {
+  const { value: _value, ...rest } = details
+  return rest
 }
 
 function appendDependencyExposureTrace(
