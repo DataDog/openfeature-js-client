@@ -175,15 +175,18 @@ test('negotiates obfuscation, rotates salts, and restores hashed assignments fro
                   resolve([])
                   return
                 }
-                const read = db.transaction('configurations').objectStore('configurations').getAll()
+                const store = db.transaction('configurations').objectStore('configurations')
+                const keys = store.getAllKeys()
+                const read = store.getAll()
                 read.onerror = () => {
                   db.close()
                   reject(read.error)
                 }
                 read.onsuccess = () => {
-                  const salts = read.result.map(
-                    (entry) => entry.precomputed?.response.data.attributes.obfuscation?.salt
-                  )
+                  // The exposure cache shares this store under assignments-* keys.
+                  const salts = read.result
+                    .filter((_, index) => !String(keys.result[index]).startsWith('assignments-'))
+                    .map((entry) => entry.precomputed?.response.data.attributes.obfuscation?.salt)
                   db.close()
                   resolve(salts)
                 }
