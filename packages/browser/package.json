@@ -59,7 +59,9 @@
   "dependencies": {
     "@datadog/browser-core": "7.1.0",
     "@datadog/flagging-core": "3.2.0",
-    "@datadog/js-core": "0.0.3"
+    "@datadog/js-core": "0.0.3",
+    "@peculiar/asn1-schema": "2.11.1",
+    "@peculiar/asn1-x509": "2.11.1"
   },
   "peerDependencies": {
     "@openfeature/core": "^1.9.2",
