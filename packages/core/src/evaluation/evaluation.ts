@@ -243,7 +243,6 @@ function evaluateRules<T extends FlagValueType>(
   if (isProtobufConfiguration(config)) {
     const prepared = prepareRulesResponse(config)
     let dependencySession: DependencyEvaluationSession | undefined
-    let commitDependencyExposures = false
     try {
       const maxDependencyDepth = getMaxDependencyDepth(config)
       const resolveDependency = ((dependencyFlagKey: string) => {
@@ -270,8 +269,7 @@ function evaluateRules<T extends FlagValueType>(
             ),
           logger,
           evaluationTimestampMs,
-          onDependencyEvaluation,
-          onDependencyExposures
+          onDependencyEvaluation
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
@@ -288,7 +286,6 @@ function evaluateRules<T extends FlagValueType>(
         excludeExperiments,
         resolveDependency
       )
-      commitDependencyExposures = result.reason !== 'ERROR' && result.errorCode === undefined
       return result
     } catch (error) {
       if (error instanceof DependencyGraphError) {
@@ -296,7 +293,10 @@ function evaluateRules<T extends FlagValueType>(
       }
       throw error
     } finally {
-      dependencySession?.complete(commitDependencyExposures)
+      // Protobuf condition DAG evaluation does not yet retain the successful
+      // short-circuit witness needed to identify contributing prerequisites.
+      // Keep buffering internally, but do not publish ambiguous exposures.
+      dependencySession?.complete(false)
     }
   }
 
