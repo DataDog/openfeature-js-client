@@ -254,7 +254,9 @@ describe('browser flag-key obfuscation', () => {
       if (kind === 'online') {
         provider = new DatadogProvider({ ...options, enableExposureLogging: true })
       } else {
-        tracking = createDatadogExposureLoggingHook(options)
+        // The shared options disable exposure logging for the online provider;
+        // this scenario asserts the send path, so opt back in explicitly.
+        tracking = createDatadogExposureLoggingHook({ ...options, trackExposures: true })
         await tracking.initialize()
         const core = new DatadogCoreProvider()
         core.setConfiguration(await fetchPrecomputedConfiguration({ ...options, context }))

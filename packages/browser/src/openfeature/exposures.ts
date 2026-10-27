@@ -17,17 +17,27 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
-import type { FlaggingTrackingConfiguration } from '../domain/configuration'
-import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import {
+  type FlaggingTrackingConfiguration,
+  type FlaggingTrackingInitConfiguration,
+  resolveTrackExposures,
+  validateAndBuildFlaggingTrackingConfiguration,
+} from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
-import type { DatadogTrackingHook, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
+import type { DatadogTrackingHook, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
+/**
+ * The standalone exposure controller: owns the one exposure cache used by the
+ * Datadog send path, the customer exposure hook and any provider wired to it.
+ */
 export interface DatadogExposureLoggingHook extends DatadogTrackingHook {
   initialize(): Promise<void>
   shutdown(): Promise<void>
+  /** Pass to a provider constructor (for example `DatadogCoreProvider`) to share the cache. */
+  readonly exposureCache?: AssignmentCache
 }
 
 type ExposureCacheEntry = ExposureEvent & {
@@ -111,7 +121,9 @@ export function createExposureLoggingHook(
   }
 }
 
-export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOptions): DatadogExposureLoggingHook {
+export function createDatadogExposureLoggingHook(
+  options: FlaggingTrackingInitConfiguration
+): DatadogExposureLoggingHook {
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   if (!configuration) {
     return {
@@ -122,11 +134,17 @@ export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOp
   }
 
   const exposureCache = createExposureCache(options, configuration)
+  // `trackExposures` false is record-only mode: nothing is sent to Datadog, but
+  // the cache keeps recording so verdicts stay correct.
+  const sendToDatadog = resolveTrackExposures(options, true)
 
-  return createTrackingHookController(async () => {
-    await runTrackingLifecycleOperation(() => exposureCache.init())
-    return createExposureLoggingHook(configuration, exposureCache)
-  })
+  return {
+    ...createTrackingHookController(async () => {
+      await runTrackingLifecycleOperation(() => exposureCache.init())
+      return createExposureLoggingHook(configuration, exposureCache, undefined, { sendToDatadog })
+    }),
+    exposureCache,
+  }
 }
 
 function getExposureCacheEntry(

@@ -1,3 +1,4 @@
+import type { AssignmentCache } from '@datadog/flagging-core'
 import type { Hook } from '@openfeature/web-sdk'
 import type { FlaggingTrackingInitConfiguration } from '../domain/configuration'
 
@@ -10,12 +11,16 @@ export interface DatadogTrackingHooks {
   hooks: Hook[]
   initialize(): Promise<void>
   shutdown(): Promise<void>
+  /** The shared exposure cache, when an exposure controller is part of the composition. */
+  readonly exposureCache?: AssignmentCache
 }
 
 export interface DatadogTrackingHook {
   hooks: Hook[]
   initialize?(): Promise<void> | void
   shutdown?(): Promise<void> | void
+  /** The shared exposure cache owned by an exposure controller. */
+  readonly exposureCache?: AssignmentCache
 }
 
 export interface ManagedTrackingHook extends Hook {
@@ -60,6 +65,9 @@ export function composeDatadogTrackingHooks(...trackingHooks: DatadogTrackingHoo
       hooks.push(...trackingHook.hooks)
       return hooks
     }, []),
+    // Exactly one exposure cache can exist in a composition (the exposure
+    // controller); surface it so providers can share it.
+    exposureCache: trackingHooks.find((trackingHook) => trackingHook.exposureCache)?.exposureCache,
     initialize: async () => {
       await Promise.all(
         trackingHooks.map((trackingHook) => runTrackingLifecycleOperation(() => trackingHook.initialize?.()))

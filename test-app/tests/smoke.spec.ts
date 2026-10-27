@@ -376,3 +376,30 @@ for (const scenario of [
     )
   })
 }
+
+test('runs the core provider shared exposure cache workflow', async ({ page }) => {
+  const unexpectedRequests: string[] = []
+  await page.route('**/*', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin === 'http://127.0.0.1:4173') {
+      await route.continue()
+      return
+    }
+    unexpectedRequests.push(request.url())
+    await route.abort()
+  })
+
+  const result = await runSmoke<Record<string, unknown>>(page, '/core-provider-exposures.html')
+  // Record-only mode: verdicts come from the one shared cache, and no request
+  // leaves the page for the Datadog exposure intake.
+  expect(result).toEqual({
+    provider: 'datadog-core',
+    value: true,
+    variant: 'on',
+    verdicts: ['new', 'cache-hit'],
+    firstVerdict: false,
+    secondVerdict: true,
+  })
+  expect(unexpectedRequests).toEqual([])
+})

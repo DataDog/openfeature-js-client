@@ -190,6 +190,57 @@ Set `trackExposures: false` to stop sending exposure events to Datadog only. The
 evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
 and superseded by `trackExposures`; when both are set, `trackExposures` wins.
 
+#### Rules-based mode and `DatadogCoreProvider`
+
+`DatadogProvider` wires this up automatically. In rules-based mode the application composes its own tracking
+hooks, so it must share the exposure controller's cache with the provider for the verdicts to be stamped:
+
+```javascript
+import {
+  composeDatadogTrackingHooks,
+  createDatadogExposureLoggingHook,
+  DatadogCoreProvider,
+} from '@datadog/openfeature-browser/rules-based'
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+// One exposure controller owns the one exposure cache; pass it to the provider.
+const exposureTracking = createDatadogExposureLoggingHook({
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  trackExposures: false, // record-only: no exposures go to Datadog
+})
+const tracking = composeDatadogTrackingHooks(exposureTracking)
+await tracking.initialize()
+
+const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+provider.setConfiguration(rulesConfiguration)
+
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
+client.addHooks(...tracking.hooks)
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(),
+    })
+  })
+)
+```
+
+The provider and the Datadog send path share that one cache, so `shouldSend()` and the SDK's own deduplication
+always agree. `DatadogCoreProvider.initialize()` waits for the shared cache to load, so evaluations after
+`setProviderAndWait` see persisted entries; still call `tracking.initialize()` before evaluating so the recording
+hooks are active. Without the `exposureCache` option, evaluations carry no exposure verdict and the tracking
+hooks behave exactly as before.
+
 ### Experimentation opt-out
 
 Select an opt-out mode when you construct the provider. Your application owns and stores the subject's preference timestamp.
@@ -474,7 +525,11 @@ client.clearHooks()
 await tracking.shutdown()
 ```
 
-`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically. The composed result (and each exposure controller) exposes the one exposure cache as `exposureCache`; pass it to `DatadogCoreProvider`'s `exposureCache` option to stamp exposure deduplication verdicts in rules-based mode, as described in [Exposures in your own data store](#exposures-in-your-own-data-store).
+
+The exposure controller accepts the same `trackExposures` option as `DatadogProvider` (default `true`; the deprecated
+`enableExposureLogging` alias behaves identically). With `trackExposures: false` it runs record-only: nothing is
+sent to Datadog, but the shared cache keeps recording so `ExposureHook` verdicts stay correct.
 
 `tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
 

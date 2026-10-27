@@ -1,4 +1,4 @@
-import type { FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
+import type { AssignmentCache, FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
 import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError, getMD5Hash } from '@datadog/flagging-core'
 import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -22,7 +22,19 @@ import {
   type ExperimentationOptOutMode,
   getExperimentationOptOutMode,
 } from './experimentation-opt-out'
+import { stampExposureCacheVerdict } from './exposures'
 import { DatadogProviderBase } from './provider-base'
+
+export interface DatadogCoreProviderConfiguration
+  extends EvaluationTelemetryOptOutConfiguration, ExperimentationOptOutConfiguration {
+  /**
+   * Exposure cache shared with a tracking controller
+   * (`createDatadogExposureLoggingHook().exposureCache`). Enables the exposure
+   * deduplication verdict in flag metadata, used by the public `ExposureHook`.
+   * Without it, evaluations carry no exposure verdict.
+   */
+  exposureCache?: AssignmentCache
+}
 
 export class DatadogCoreProvider extends DatadogProviderBase {
   readonly metadata: ProviderMetadata = {
@@ -35,10 +47,12 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   private context: EvaluationContext | undefined
   private readonly telemetryPolicy: EvaluationTelemetryPolicy
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
+  private readonly exposureCache: AssignmentCache | undefined
 
-  constructor(options: EvaluationTelemetryOptOutConfiguration & ExperimentationOptOutConfiguration = {}) {
+  constructor(options: DatadogCoreProviderConfiguration = {}) {
     super()
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    this.exposureCache = options.exposureCache
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
   }
 
@@ -67,14 +81,18 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     this.events.emit(ProviderEvents.ConfigurationChanged)
   }
 
-  initialize(context: EvaluationContext = {}): Promise<void> {
+  async initialize(context: EvaluationContext = {}): Promise<void> {
     this.telemetryPolicy.setContext(context)
     this.context = context
 
     const error = toOpenFeatureError(
       getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutMode)
     )
-    return error ? Promise.reject(error) : Promise.resolve()
+    if (error) throw error
+    // The shared IndexedDB-backed cache loads asynchronously; cache.init() is
+    // idempotent and returns the same promise the tracking controller awaits,
+    // so evaluations cannot run before the persisted entries are loaded.
+    await this.exposureCache?.init()
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
@@ -95,13 +113,16 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return bindEvaluationTelemetryResult(
-      withCoreConfigurationId(
-        evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger, this.experimentationOptOutMode),
-        this.flagsConfigurationId
-      ),
-      this.telemetryPolicy
+    const result = withCoreConfigurationId(
+      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger, this.experimentationOptOutMode),
+      this.flagsConfigurationId
     )
+    // Stamp after the configuration id so the cache entry includes it; before
+    // the SDK freezes the metadata for hooks.
+    if (this.exposureCache) {
+      stampExposureCacheVerdict({ ...result, flagKey }, context, this.exposureCache)
+    }
+    return bindEvaluationTelemetryResult(result, this.telemetryPolicy)
   }
 
   private canEvaluateCurrentContext(): boolean {
