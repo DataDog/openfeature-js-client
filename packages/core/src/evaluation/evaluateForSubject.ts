@@ -88,8 +88,10 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
+    const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
     const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger, resolveFlagEvaluation)
     if (!matched) {
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
       continue
     }
 
@@ -134,6 +136,7 @@ export function evaluateForSubject<T extends FlagValueType>(
         subjectKey,
         allocationKey: allocation.key,
       })
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
     }
   }
 

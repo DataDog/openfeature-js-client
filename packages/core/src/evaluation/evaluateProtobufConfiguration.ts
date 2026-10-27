@@ -37,7 +37,7 @@ export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undef
 
 type ConditionOutcome = {
   matches: boolean
-  containsDependency: boolean
+  dependencyKeys: readonly string[]
 }
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
@@ -196,31 +196,40 @@ function conditionOutcome(
   results: Map<number, ConditionOutcome>,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ConditionOutcome {
-  if (index === undefined) return { matches: true, containsDependency: false }
+  if (index === undefined) return { matches: true, dependencyKeys: [] }
   const cached = results.get(index)
-  if (cached !== undefined && (resolveFlagEvaluation === undefined || !cached.containsDependency)) return cached
+  if (cached !== undefined) {
+    if (resolveFlagEvaluation?.checkpoint !== undefined) {
+      for (const dependencyKey of cached.dependencyKeys) {
+        resolveFlagEvaluation(dependencyKey)
+      }
+    }
+    return cached
+  }
   const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    outcome = { matches: true, containsDependency: false }
+    outcome = { matches: true, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
-      outcome.containsDependency ||= childOutcome.containsDependency
       if (!childOutcome.matches) {
-        outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
+        outcome = { matches: false, dependencyKeys: [] }
         break
+      }
+      outcome = {
+        matches: true,
+        dependencyKeys: mergeDependencyKeys(outcome.dependencyKeys, childOutcome.dependencyKeys),
       }
     }
   } else if (condition.kind.case === 'any') {
-    outcome = { matches: false, containsDependency: false }
+    outcome = { matches: false, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
-      outcome.containsDependency ||= childOutcome.containsDependency
       if (childOutcome.matches) {
-        outcome = { matches: true, containsDependency: outcome.containsDependency }
+        outcome = childOutcome
         break
       }
     }
@@ -228,7 +237,10 @@ function conditionOutcome(
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
     outcome = {
       matches,
-      containsDependency: condition.kind.case === 'flagEvaluationStringMembership',
+      dependencyKeys:
+        matches && condition.kind.case === 'flagEvaluationStringMembership'
+          ? [atIndex(configuration.strings, condition.kind.value.flagKeyStringIndex, 'flag key')]
+          : [],
     }
   }
   if (!outcome.matches) {
@@ -238,6 +250,20 @@ function conditionOutcome(
   }
   results.set(index, outcome)
   return outcome
+}
+
+function mergeDependencyKeys(left: readonly string[], right: readonly string[]): readonly string[] {
+  if (right.length === 0) return left
+  if (left.length === 0) return right
+  const merged = [...left]
+  const seen = new Set(left)
+  for (const key of right) {
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(key)
+    }
+  }
+  return merged
 }
 
 function matchesLeafCondition(

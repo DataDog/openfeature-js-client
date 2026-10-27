@@ -275,8 +275,10 @@ function evaluateRules<T extends FlagValueType>(
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
-      resolveDependency.checkpoint = () => dependencySession?.checkpoint()
-      resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
+      if (onDependencyExposures !== undefined) {
+        resolveDependency.checkpoint = () => dependencySession?.checkpoint()
+        resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
+      }
       const result = evaluateProtobufConfiguration(
         prepared,
         type,

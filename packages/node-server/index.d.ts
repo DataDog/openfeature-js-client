@@ -622,9 +622,9 @@ export declare class DatadogNodeServerProvider implements Provider {
 	 */
 	getConfiguration(): UniversalFlagConfigurationV1 | undefined;
 	/**
-	 * Used by dd-source-js
+	 * Used by dd-source-js. Pass null or undefined to withdraw the configuration.
 	 */
-	setConfiguration(configuration: UniversalFlagConfigurationV1): void;
+	setConfiguration(configuration: UniversalFlagConfigurationV1 | null | undefined): void;
 	/**
 	 * Used by dd-source-js
 	 */

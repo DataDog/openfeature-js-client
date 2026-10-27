@@ -13,6 +13,7 @@ import {
   type Logger,
   OpenFeature,
   ProviderEvents,
+  ServerProviderStatus,
   StandardResolutionReasons,
 } from '@openfeature/server-sdk'
 import type { UniversalFlagConfigurationV1 } from 'src/configuration/ufc-v1'
@@ -174,47 +175,6 @@ describe('DatadogNodeServerProvider', () => {
     const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
     expect(result.errorCode).toBe('PROVIDER_NOT_READY')
     expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(false)
-  })
-
-  it.each([undefined, null])('accepts a runtime %s configuration update', async (update) => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
-    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
-    expect(provider.getConfiguration()).toBe(update)
-    const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)
-    expect(result.errorCode).toBe('PROVIDER_NOT_READY')
-  })
-
-  it.each([undefined, null])('does not emit ready for a runtime %s update without configuration', (update) => {
-    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
-    const readyHandler = jest.fn()
-    provider.events.addHandler(ProviderEvents.Ready, readyHandler)
-
-    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
-
-    expect(readyHandler).not.toHaveBeenCalled()
-  })
-
-  it.each([undefined, null])('does not complete initialization for a runtime %s update', async (update) => {
-    jest.useFakeTimers()
-    const provider = new DatadogNodeServerProvider({
-      exposureChannel: mockExposureChannel,
-      initializationTimeoutMs: 1,
-    })
-    const initialization = provider.initialize()
-    let initialized = false
-    void initialization.then(
-      () => {
-        initialized = true
-      },
-      () => {}
-    )
-
-    provider.setConfiguration(update as unknown as UniversalFlagConfigurationV1)
-    await Promise.resolve()
-    expect(initialized).toBe(false)
-
-    jest.advanceTimersByTime(1)
-    await expect(initialization).rejects.toThrow('Initialization timeout after 1ms')
   })
 
   it('should allow hooks to be set', async () => {
@@ -500,6 +460,103 @@ describe('DatadogNodeServerProvider', () => {
     provider.setConfiguration({ ...configuration })
     expect(eventHandler).toHaveBeenCalledTimes(1)
   }, 1000)
+
+  it.each([undefined, null])('withdraws configuration with %p and recovers on replacement', async (withdrawn) => {
+    mockExposureChannel.publish.mockClear()
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+    const context = { targetingKey: 'withdrawal-test', country: 'US' }
+    const before = await client.getBooleanDetails('kill-switch', false, context)
+    expect(before.errorCode).toBeUndefined()
+    expect(before.value).toBe(true)
+    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+
+    const observations: unknown[] = []
+    client.addHandler(ProviderEvents.Error, () => {
+      observations.push([provider.getConfiguration(), client.providerStatus])
+    })
+    const readyHandler = jest.fn()
+    client.addHandler(ProviderEvents.Ready, readyHandler)
+    readyHandler.mockClear()
+    const changedHandler = jest.fn()
+    client.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
+
+    // Remote Configuration withdrawal can pass either null or undefined at runtime.
+    provider.setConfiguration(withdrawn)
+
+    expect(observations).toEqual([[undefined, ServerProviderStatus.ERROR]])
+    expect(changedHandler).not.toHaveBeenCalled()
+    const unavailable = await client.getBooleanDetails('kill-switch', false, context)
+    expect(unavailable.value).toBe(false)
+    expect(unavailable.reason).toBe(StandardResolutionReasons.ERROR)
+    expect(unavailable.errorCode).toBe(ErrorCode.PROVIDER_NOT_READY)
+    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(1)
+
+    provider.setConfiguration(withdrawn)
+    expect(observations).toHaveLength(1)
+    expect(readyHandler).not.toHaveBeenCalled()
+
+    provider.setConfiguration(configuration)
+    expect(client.providerStatus).toBe(ServerProviderStatus.READY)
+    expect(readyHandler).toHaveBeenCalledTimes(1)
+    const recovered = await client.getBooleanDetails('kill-switch', false, context)
+    expect(recovered.value).toBe(true)
+    expect(recovered.errorCode).toBeUndefined()
+    expect(mockExposureChannel.publish).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps initialization pending when configuration is withdrawn before arrival', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const initialized = OpenFeature.setProviderAndWait(provider)
+    const readyHandler = jest.fn()
+    const client = OpenFeature.getClient()
+    client.addHandler(ProviderEvents.Ready, readyHandler)
+
+    provider.setConfiguration(undefined)
+    expect(client.providerStatus).toBe(ServerProviderStatus.NOT_READY)
+    expect(readyHandler).not.toHaveBeenCalled()
+
+    provider.setConfiguration(configuration)
+    await initialized
+    expect(readyHandler).toHaveBeenCalledTimes(1)
+  })
+
+  it('updates configuration before configuration-change handlers evaluate flags', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+    const replacement = { ...configuration, flags: {} }
+    let observedConfiguration: unknown
+    let observedEvaluation: Promise<EvaluationDetails<boolean>> | undefined
+    const changedHandler = () => {
+      observedConfiguration = provider.getConfiguration()
+      observedEvaluation = client.getBooleanDetails('kill-switch', false, { targetingKey: 'replacement-test' })
+    }
+    client.addHandler(ProviderEvents.ConfigurationChanged, changedHandler)
+
+    provider.setConfiguration(replacement)
+    client.removeHandler(ProviderEvents.ConfigurationChanged, changedHandler)
+
+    expect(observedConfiguration).toBe(replacement)
+    expect(await observedEvaluation).toMatchObject({ value: false, errorCode: ErrorCode.FLAG_NOT_FOUND })
+  })
+
+  it('does not complete initialization as ready if the first configuration was withdrawn', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const initialized = OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+
+    provider.setConfiguration(configuration)
+    provider.setConfiguration(undefined)
+
+    await expect(initialized).rejects.toThrow('Flag configuration is unavailable')
+    expect(client.providerStatus).toBe(ServerProviderStatus.ERROR)
+    provider.setConfiguration(configuration)
+    expect(client.providerStatus).toBe(ServerProviderStatus.READY)
+  })
 
   describe('Exposures end-to-end', () => {
     beforeEach(() => {
