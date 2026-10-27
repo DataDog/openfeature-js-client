@@ -170,9 +170,7 @@ export function matchesRule(
     if (evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation)) {
       continue
     }
-    if (!('flagEvaluation' in condition)) {
-      resolveFlagEvaluation?.rollback?.(checkpoint)
-    }
+    resolveFlagEvaluation?.rollback?.(checkpoint)
     return false
   }
   return true

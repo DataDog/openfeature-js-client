@@ -1,10 +1,12 @@
 import { create } from '@bufbuild/protobuf'
 import type { Logger } from '@openfeature/core'
 import {
+  AllocationSchema,
   ConditionSchema,
   EvaluatorParamsSchema,
   FlagsConfigurationSchema,
   Reason,
+  SplitSchema,
   VariationType,
 } from '../../src/configuration/generated/ufc_pb'
 import { decodeFlagsConfiguration, encodeFlagsConfiguration } from '../../src/configuration/ufc-protobuf'
@@ -139,6 +141,66 @@ describe('dependent flag evaluation', () => {
     membership.value.negate = true
 
     expect(evaluateProtobuf(roundTrip(config), logger).result).toMatchObject({ value: true, variant: 'on' })
+  })
+
+  it('discards a JSON rule exposure buffer when its prerequisite variant does not match', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['off'])])
+    const dependencies: DependencyEvaluation[] = []
+    const onExposures = jest.fn()
+
+    expect(
+      evaluate(
+        configuration({ prerequisite, root }),
+        'root',
+        logger,
+        (dependency) => dependencies.push(dependency),
+        {},
+        onExposures
+      )
+    ).toMatchObject({ value: false, variant: 'off', flagMetadata: { __dd_allocation_key: 'default' } })
+    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
+    expect(onExposures).toHaveBeenCalledWith([])
+  })
+
+  it('discards a protobuf allocation exposure buffer when its prerequisite variant does not match', () => {
+    const config = protobufDependentConfiguration(true)
+    config.strings.push('off')
+    const membership = config.conditions[0].kind
+    if (membership.case !== 'flagEvaluationStringMembership') throw new Error('unexpected test condition')
+    membership.value.variantKeyStringIndexes = [2]
+    config.flags.root.allocations.push(
+      create(AllocationSchema, {
+        key: 'root-fallback',
+        partitionKey: [],
+        splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 2, reason: Reason.STATIC })],
+        logExposureEvent: true,
+      })
+    )
+
+    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-fallback' } })
+    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
+    expect(onExposures).toHaveBeenCalledWith([])
+  })
+
+  it('retains exposures reached within a protobuf condition when that allocation is selected', () => {
+    const config = protobufDependentConfiguration(true)
+    config.strings.push('off')
+    const membership = config.conditions[0].kind
+    if (membership.case !== 'flagEvaluationStringMembership') throw new Error('unexpected test condition')
+    membership.value.variantKeyStringIndexes = [2]
+    config.conditions.push(
+      create(ConditionSchema, { kind: { case: 'all', value: { conditionIndexes: [] } } }),
+      create(ConditionSchema, { kind: { case: 'any', value: { conditionIndexes: [0, 1] } } })
+    )
+    config.flags.root.allocations[0].targetingConditionIndex = 2
+
+    const { result, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
+    expect(onExposures).toHaveBeenCalledWith([
+      expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
+    ])
   })
 
   it('applies the protobuf maximum dependency depth override', () => {

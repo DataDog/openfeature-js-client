@@ -38,7 +38,6 @@ export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undef
 type ConditionOutcome = {
   matches: boolean
   containsDependency: boolean
-  rejection?: 'ordinary' | 'dependency'
 }
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
@@ -91,6 +90,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
+      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -100,6 +100,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
@@ -198,7 +199,6 @@ function conditionOutcome(
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    const checkpoint = resolveFlagEvaluation?.checkpoint?.()
     outcome = { matches: true, containsDependency: false }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
@@ -206,14 +206,11 @@ function conditionOutcome(
       outcome.containsDependency ||= childOutcome.containsDependency
       if (!childOutcome.matches) {
         outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
-        if (childOutcome.rejection === 'ordinary') {
-          resolveFlagEvaluation?.rollback?.(checkpoint)
-        }
         break
       }
     }
   } else if (condition.kind.case === 'any') {
-    outcome = { matches: false, containsDependency: false, rejection: 'ordinary' }
+    outcome = { matches: false, containsDependency: false }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
@@ -222,18 +219,12 @@ function conditionOutcome(
         outcome = { matches: true, containsDependency: outcome.containsDependency }
         break
       }
-      if (childOutcome.rejection === 'dependency') {
-        outcome = { ...childOutcome, containsDependency: outcome.containsDependency }
-      }
     }
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
     outcome = {
       matches,
       containsDependency: condition.kind.case === 'flagEvaluationStringMembership',
-      ...(matches
-        ? {}
-        : { rejection: condition.kind.case === 'flagEvaluationStringMembership' ? 'dependency' : 'ordinary' }),
     }
   }
   results.set(index, outcome)
