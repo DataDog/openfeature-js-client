@@ -244,11 +244,10 @@ function evaluateRules<T extends FlagValueType>(
     const prepared = prepareRulesResponse(config)
     let dependencySession: DependencyEvaluationSession | undefined
     try {
-      const maxDependencyDepth = getMaxDependencyDepth(config)
       const resolveDependency = ((dependencyFlagKey: string) => {
         dependencySession ??= new DependencyEvaluationSession(
           flagKey,
-          maxDependencyDepth,
+          getMaxDependencyDepth(config),
           observeFullEvaluationData,
           (key) => {
             const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -313,11 +312,10 @@ function evaluateRules<T extends FlagValueType>(
   let dependencySession: DependencyEvaluationSession | undefined
   let commitDependencyExposures = false
   try {
-    const maxDependencyDepth = getMaxDependencyDepth(config)
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
       dependencySession ??= new DependencyEvaluationSession(
         flagKey,
-        maxDependencyDepth,
+        getMaxDependencyDepth(config),
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -573,6 +571,17 @@ class DependencyEvaluationSession {
         flagKey,
         maxDependencyDepth: this.maxDependencyDepth,
       })
+      if (!this.memo.has(flagKey) && !this.active.has(flagKey)) {
+        this.emitEvaluation({
+          flagKey,
+          details: {
+            reason: 'ERROR',
+            errorCode: 'GENERAL' as ErrorCode,
+            errorMessage: 'maximum flag dependency depth exceeded',
+            flagMetadata: createEvaluationMetadata(this.evaluationTimestampMs, this.observeFullEvaluationData),
+          },
+        })
+      }
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'maximum flag dependency depth exceeded')
     }
     if (this.active.has(flagKey)) {

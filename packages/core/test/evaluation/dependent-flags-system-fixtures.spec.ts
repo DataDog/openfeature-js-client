@@ -160,13 +160,43 @@ function exposureEvent(flag: string, details: Omit<ResolutionDetails<FlagValue>,
 }
 
 function expectEvents(actual: ActualEvent[], expected: ExpectedEvent[], exact = false): void {
+  const remaining = [...actual]
   for (const event of expected) {
-    const count = actual.filter((candidate) =>
-      Object.entries(event).every(([key, value]) => key === '_count' || candidate[key as keyof ActualEvent] === value)
-    ).length
-    expect(count).toBe(event._count ?? 1)
+    const expectedCount = event._count ?? 1
+    let matchedCount = 0
+    for (let index = 0; index < remaining.length && matchedCount < expectedCount;) {
+      const candidate = remaining[index]
+      const matches = Object.entries(event).every(
+        ([key, value]) => key === '_count' || candidate[key as keyof ActualEvent] === value
+      )
+      if (matches) {
+        remaining.splice(index, 1)
+        matchedCount += 1
+      } else {
+        index += 1
+      }
+    }
+    expect(matchedCount).toBe(expectedCount)
   }
   if (exact) {
-    expect(actual).toHaveLength(expected.reduce((count, event) => count + (event._count ?? 1), 0))
+    expect(remaining).toHaveLength(0)
   }
 }
+
+it('consumes fixture events exclusively in matcher order', () => {
+  const actual: ActualEvent[] = [
+    { flag: 'shared', errorCode: null },
+    { flag: 'unmatched', errorCode: null },
+  ]
+
+  expect(() =>
+    expectEvents(
+      actual,
+      [
+        { flag: 'shared', _count: 1 },
+        { flag: 'shared', errorCode: null, _count: 1 },
+      ],
+      true
+    )
+  ).toThrow()
+})

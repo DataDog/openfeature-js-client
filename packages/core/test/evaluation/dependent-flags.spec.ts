@@ -235,6 +235,39 @@ describe('dependent flag evaluation', () => {
     })
   })
 
+  it('validates an invalid protobuf maximum depth only when a dependency is reached', () => {
+    const ordinary = protobufDependentConfiguration(true)
+    ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
+    ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
+
+    expect(evaluateProtobuf(ordinary, logger).result).toMatchObject({ value: true, variant: 'on' })
+
+    const dependent = protobufDependentConfiguration(true)
+    dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
+    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    })
+  })
+
+  it('rejects an empty protobuf dependency key as malformed configuration', () => {
+    const config = protobufDependentConfiguration(true)
+    config.strings[1] = ''
+
+    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+
+    expect(result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Flag evaluation key must not be empty',
+    })
+    expect(dependencies).toEqual([])
+    expect(onExposures).not.toHaveBeenCalled()
+  })
+
   it('reports an unsupported protobuf prerequisite variation type as a dependency parse error', () => {
     const config = protobufDependentConfiguration(true)
     config.flags.prerequisite.variationType = 6 as VariationType
@@ -382,6 +415,50 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
   })
 
+  it.each([256, -1, 1.5])('validates JSON maximum depth %p only when a dependency is reached', (maximumDepth) => {
+    const ordinary = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
+    expect(evaluate(ordinary, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+
+    const dependent = configuration(
+      {
+        prerequisite: booleanFlag('prerequisite', 'on'),
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+      },
+      maximumDepth
+    )
+    expect(evaluate(dependent, 'root', logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    })
+  })
+
+  it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
+    const config = configuration(
+      {
+        root: dependentBooleanFlag('root', [flagCondition('a', OperatorType.ONE_OF, ['on'])]),
+        a: dependentBooleanFlag('a', [flagCondition('b', OperatorType.ONE_OF, ['on'])]),
+        b: dependentBooleanFlag('b', [flagCondition('c', OperatorType.ONE_OF, ['on'])]),
+        c: booleanFlag('c', 'on'),
+      },
+      2
+    )
+    const dependencies: DependencyEvaluation[] = []
+
+    expect(evaluate(config, 'root', logger, (dependency) => dependencies.push(dependency))).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'maximum flag dependency depth exceeded',
+    })
+    expect(dependencies).toMatchObject([
+      { flagKey: 'c', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
+      { flagKey: 'b', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
+      { flagKey: 'a', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
+    ])
+  })
+
   it.each([
     ['first', ['a', 'b']],
     ['last', ['b', 'a']],
@@ -399,13 +476,17 @@ describe('dependent flag evaluation', () => {
       2
     )
     const onExposures = jest.fn()
+    const dependencies: DependencyEvaluation[] = []
 
-    expect(evaluate(config, 'root', logger, undefined, {}, onExposures)).toMatchObject({
+    expect(
+      evaluate(config, 'root', logger, (dependency) => dependencies.push(dependency), {}, onExposures)
+    ).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
       errorMessage: 'maximum flag dependency depth exceeded',
     })
+    expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['leaf', 'a', 'b'])
     expect(onExposures).not.toHaveBeenCalled()
   })
 
