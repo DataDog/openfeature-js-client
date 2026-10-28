@@ -90,7 +90,7 @@ test('slow initialization sends only its settled report', async ({ page }) => {
     payload: {
       initialization: {
         outcome: string
-        started_at: number
+        started_at_ms: number
         final: boolean
         reason?: string
         duration_ms: number

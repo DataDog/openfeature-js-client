@@ -2,7 +2,7 @@ import type { FlaggingConfiguration } from '../domain/configuration'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 
 type Milestone = { elapsed_ms: number }
-type InitializationTiming = { started_at: number; duration_ms: number }
+type InitializationTiming = { started_at_ms: number; duration_ms: number }
 type FinalTiming = InitializationTiming & { final: true }
 type Diagnostic =
   | {
@@ -118,7 +118,7 @@ export function createLifecycleTelemetry(
       event_type: 'sdk_initialization',
       initialization: {
         outcome: 'incomplete',
-        started_at: startedAt,
+        started_at_ms: startedAt,
         duration_ms: duration,
         final: false,
         reason,
@@ -134,7 +134,7 @@ export function createLifecycleTelemetry(
     settled = true
 
     const timing = {
-      started_at: startedAt,
+      started_at_ms: startedAt,
       duration_ms: elapsed(),
       final: true as const,
     }

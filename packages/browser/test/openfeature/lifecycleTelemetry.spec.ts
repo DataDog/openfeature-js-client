@@ -63,7 +63,7 @@ describe('lifecycle diagnostic transport', () => {
         ...(outcome === 'ready' ? {} : { error_code: outcome === 'failed' ? 'INIT_FAILED' : 'CONFIG_FETCH_FAILED' }),
         initialization: {
           outcome,
-          started_at: Date.now() - 110,
+          started_at_ms: Date.now() - 110,
           duration_ms: 110,
           final: true,
           milestones:
@@ -116,7 +116,7 @@ describe('lifecycle diagnostic transport', () => {
     telemetry.settle('ready')
     telemetry.stop()
     expect(records()[0].payload.initialization).toMatchObject({ outcome: 'ready', final: true })
-    expect(records()[0].payload.initialization.started_at).toBe(snapshot.initialization.started_at)
+    expect(records()[0].payload.initialization.started_at_ms).toBe(snapshot.initialization.started_at_ms)
   })
 
   it('reports provider close while pending once', () => {

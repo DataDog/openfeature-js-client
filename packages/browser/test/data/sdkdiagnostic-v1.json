@@ -57,15 +57,13 @@
     "ReadyInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "required": ["outcome", "started_at_ms", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "ready"
         },
-        "started_at": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 8640000000000000
+        "started_at_ms": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
         },
         "duration_ms": {
           "type": "number",
@@ -102,15 +100,13 @@
     "FailedInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "required": ["outcome", "started_at_ms", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "failed"
         },
-        "started_at": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 8640000000000000
+        "started_at_ms": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
         },
         "duration_ms": {
           "type": "number",
@@ -135,15 +131,13 @@
     "CachedFallbackInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outcome", "started_at", "duration_ms", "final", "milestones"],
+      "required": ["outcome", "started_at_ms", "duration_ms", "final", "milestones"],
       "properties": {
         "outcome": {
           "const": "cached_fallback"
         },
-        "started_at": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 8640000000000000
+        "started_at_ms": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
         },
         "duration_ms": {
           "type": "number",
@@ -164,15 +158,13 @@
     "IncompleteInitialization": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outcome", "started_at", "duration_ms", "final", "milestones", "reason"],
+      "required": ["outcome", "started_at_ms", "duration_ms", "final", "milestones", "reason"],
       "properties": {
         "outcome": {
           "const": "incomplete"
         },
-        "started_at": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 8640000000000000
+        "started_at_ms": {
+          "$ref": "#/definitions/DiagnosticTimestamp"
         },
         "duration_ms": {
           "type": "number",
@@ -199,8 +191,9 @@
     },
     "DiagnosticTimestamp": {
       "type": "integer",
-      "minimum": 0,
-      "maximum": 8640000000000000
+      "description": "Unix time in milliseconds, from 2000-01-01 through 2100-01-01.",
+      "minimum": 946684800000,
+      "maximum": 4102444800000
     },
     "SDKName": {
       "type": "string",

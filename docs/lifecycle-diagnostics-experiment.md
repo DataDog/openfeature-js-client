@@ -1,6 +1,6 @@
 # Browser lifecycle diagnostic experiment
 
-This branch adds **experimental lifecycle telemetry** to the precomputed browser provider. Telemetry is emitted whether `debugMode` is omitted, false, or true. The disabled-by-default `debugMode` option controls only local console diagnostics. This is not a production telemetry release; the backend experiment currently accepts diagnostics only for explicitly supported staging test traffic.
+This branch adds **experimental lifecycle telemetry** to the precomputed browser provider. Telemetry is emitted whether `debugMode` is omitted, false, or true. The disabled-by-default `debugMode` option controls only local console diagnostics. This proof of concept is intended for staging verification against the diagnostic backend contract.
 
 ```js
 new DatadogProvider({
@@ -14,7 +14,7 @@ new DatadogProvider({
 
 Debug mode prints local lifecycle and evaluation details, including values, to the developer console. Enable it only where that output is appropriate. Independently, the provider sends lifecycle telemetry in the same JSONL batch and transport as flag evaluations. Those records use `type: 'sdk_diagnostic'`, `schema_version: 1`, and a bounded diagnostic payload; they contain no flag key, value, context, targeting key, arbitrary error message, stack trace or organization ID. Client tokens authenticate the request, not the payload. No RUM/APM installation or initialization is required, and this works with evaluation/exposure/RUM reporting disabled. Lifecycle queue errors are printed only when debugMode is enabled; telemetry failures never enable console output on their own.
 
-The wire contract matches [dd-source PR #98932](https://github.com/ddoghq/dd-source/pull/98932): `POST /api/v2/flagevaluation`, `Content-Type: text/plain`, with one compact JSON diagnostic envelope per line. Diagnostics have their own batch and are never placed inside `flagEvaluations` or mixed with evaluation records. The tests validate serialized requests against the canonical backend JSON schema copied into `packages/browser/test/data/sdkdiagnostic-v1.json` (Git blob `fc4edae7e0acc310d1d0911455be96c8849ab4e5`). Synchronize that fixture when the backend contract changes.
+The wire contract matches [dd-source PR #98932](https://github.com/ddoghq/dd-source/pull/98932): `POST /api/v2/flagevaluation`, `Content-Type: text/plain`, with one compact JSON diagnostic envelope per line. Diagnostics and evaluations share the same JSONL batch. The backend also accepts JSON batches with `flagEvaluations` and an optional `diagnostics` array; this browser SDK uses its existing JSONL transport. The tests validate serialized requests against the canonical backend JSON schema copied into `packages/browser/test/data/sdkdiagnostic-v1.json` (Git blob `81342916fc0dbab6cdb60047fb52de46a0f5d4f2`). Synchronize that fixture when the backend contract changes.
 
 Initialization produces one `event_type: "sdk_initialization"` report:
 
@@ -25,7 +25,7 @@ Initialization produces one `event_type: "sdk_initialization"` report:
 | `cached_fallback` | true | `CONFIG_FETCH_FAILED` | empty |
 | `incomplete` | false | omitted | configuration optional, no readiness |
 
-Reports include `started_at` (Unix milliseconds), `duration_ms`, `final`, and `milestones`. Milestone `elapsed_ms` and duration use a monotonic clock. Optional TCP/first-byte timings are omitted because this provider does not measure them. Invalid timing is not uploaded. Records use the existing browser transport size limits.
+Reports include `started_at_ms` (Unix milliseconds), `duration_ms`, `final`, and `milestones`. Milestone `elapsed_ms` and duration use a monotonic clock. Optional TCP/first-byte timings are omitted because this provider does not measure them. Invalid timing is not uploaded. Records use the existing browser transport size limits.
 
 Initialization has no observation timer and no sequence field. Emit one result when initialization settles, even if it takes more than 30 seconds. On page exit or provider close before initialization settles, emit at most one `incomplete` snapshot with reason `page_exit` or `provider_closed`. Page exit is best effort and a resumed page may still finish initialization; both the incomplete snapshot and the settled result remain separate observations. No provider-instance identifier is sent, so consumers must not infer that two reports came from the same instance. An indefinitely pending attempt without a usable exit notification may produce no report.
 
