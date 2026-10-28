@@ -774,7 +774,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@datadog/flagging-core@npm:3.2.0, @datadog/flagging-core@workspace:packages/core":
+"@datadog/flagging-core@npm:3.3.0, @datadog/flagging-core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@datadog/flagging-core@workspace:packages/core"
   dependencies:
@@ -806,7 +806,7 @@ __metadata:
   resolution: "@datadog/openfeature-browser@workspace:packages/browser"
   dependencies:
     "@datadog/browser-core": "npm:7.1.0"
-    "@datadog/flagging-core": "npm:3.2.0"
+    "@datadog/flagging-core": "npm:3.3.0"
     "@datadog/js-core": "npm:0.0.3"
     "@openfeature/core": "npm:^1.9.2"
     "@openfeature/web-sdk": "npm:^1.5.0"
@@ -857,7 +857,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@datadog/openfeature-node-server@workspace:packages/node-server"
   dependencies:
-    "@datadog/flagging-core": "npm:3.2.0"
+    "@datadog/flagging-core": "npm:3.3.0"
     "@openfeature/core": "npm:1.11.0"
     "@openfeature/server-sdk": "npm:1.22.0"
     "@types/jest": "npm:^30.0.0"
@@ -4687,13 +4687,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"follow-redirects@npm:^1.16.0":
-  version: 1.16.0
-  resolution: "follow-redirects@npm:1.16.0"
+"follow-redirects@npm:^1.16.1":
+  version: 1.16.1
+  resolution: "follow-redirects@npm:1.16.1"
   peerDependenciesMeta:
     debug:
       optional: true
-  checksum: 10c0/a1e2900163e6f1b4d1ed5c221b607f41decbab65534c63fe7e287e40a5d552a6496e7d9d7d976fa4ba77b4c51c11e5e9f683f10b43011ea11e442ff128d0e181
+  checksum: 10c0/544e24ccb93b7afb5dd5a2199bd556e167b84de2af7c13b2ced08494239677359d7883bae56ae43a9ca98ac5451e75cf4834a5fadd6fa79053b9248fac5447a4
   languageName: node
   linkType: hard
 
