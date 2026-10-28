@@ -1,9 +1,16 @@
 import type { AssignmentCache, FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
-import { evaluate, type FlagsConfigurationError, getFlagsConfigurationError, getMD5Hash } from '@datadog/flagging-core'
+import {
+  completeExposureDecision,
+  evaluate,
+  type FlagsConfigurationError,
+  getFlagsConfigurationError,
+  getMD5Hash,
+} from '@datadog/flagging-core'
 import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
   EvaluationContext,
   FlagValueType,
+  Hook,
   Logger,
   ProviderMetadata,
   ResolutionDetails,
@@ -37,6 +44,17 @@ export interface DatadogCoreProviderConfiguration
 }
 
 export class DatadogCoreProvider extends DatadogProviderBase {
+  // Finalizes the shared exposure decision at provider level, so it is complete
+  // before application after hooks (which may evaluate the same flag again)
+  // and before the tracking and customer hooks read the verdict.
+  readonly hooks: Hook[] = [
+    {
+      finally: (_context, details) => {
+        completeExposureDecision(details)
+      },
+    },
+  ]
+
   readonly metadata: ProviderMetadata = {
     name: 'datadog-core',
   }

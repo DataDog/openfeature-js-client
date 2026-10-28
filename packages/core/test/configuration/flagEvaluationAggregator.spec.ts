@@ -603,6 +603,17 @@ describe('evaluation features', () => {
     expect(onFlushSpy.mock.calls[0][0][0].evaluation_count).toBe(2)
   })
 
+  it('separates evaluation buckets for __proto__ values', () => {
+    aggregator.addEvaluation(context, detailsWithFeatures({ '__dd_evaluation_feature.__proto__': 'a' }))
+    aggregator.addEvaluation(context, detailsWithFeatures({ '__dd_evaluation_feature.__proto__': 'b' }))
+    aggregator.start()
+    jest.advanceTimersByTime(100)
+    expect(onFlushSpy.mock.calls[0][0]).toHaveLength(2)
+    expect(
+      onFlushSpy.mock.calls[0][0].map((event: { features: Record<string, string> }) => event.features.__proto__)
+    ).toEqual(['a', 'b'])
+  })
+
   it('does not read evaluation features without the has-features marker', () => {
     const unguarded: EvaluationDetails<boolean> = {
       flagKey: 'test-flag',

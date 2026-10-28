@@ -2,11 +2,13 @@ import type { Context, RawError } from '@datadog/browser-core'
 import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
 import {
   type AssignmentCache,
+  completeExposureDecision,
   createExposureEvent,
   type ExposureEvent,
   type ExposureEventWithTimestamp,
   featuresWithPrefix,
   METADATA_EXPOSURE_FEATURE_PREFIX,
+  prepareExposureDecision,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type {
@@ -75,6 +77,8 @@ export function createExposureLoggingHook(
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
         return
       }
+      // Complete the provider decision before either destination consumes it.
+      const sharedDecision = completeExposureDecision(details)
       const exposureEvent = createExposureEvent(
         getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
         details
@@ -84,8 +88,8 @@ export function createExposureLoggingHook(
       }
       const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
 
-      // The provider stamps the verdict at resolve time. Fall back to the cache
-      // for results that did not come from this provider's resolver.
+      // The verdict is final once completed. Fall back to the cache when the
+      // result carried no shared decision.
       const stampedVerdict = details.flagMetadata?.__dd_exposure_cache_hit
       const hasLoggedAssignment = stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
       if (hasLoggedAssignment) {
@@ -111,7 +115,7 @@ export function createExposureLoggingHook(
           }
           exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
         }
-        exposureCache.set(exposureCacheEntry)
+        if (!sharedDecision) exposureCache.set(exposureCacheEntry)
       } catch (error) {
         addTelemetryDebug('Error adding exposure to batch', {
           'error.message': error instanceof Error ? error.message : String(error),
@@ -161,8 +165,9 @@ function getExposureCacheEntry(
 }
 
 /**
- * Stamps the one exposure-cache verdict per evaluation into flag metadata. Called
- * by the provider at resolve time, before the SDK freezes the metadata for hooks.
+ * Prepares the exposure-cache verdict before OpenFeature freezes metadata.
+ * The private decision is finalized once the evaluation completes successfully,
+ * shared by the Datadog path and the customer hook.
  */
 export function stampExposureCacheVerdict(
   details: ResolutionDetails<FlagValue> & { flagKey: string },
@@ -181,6 +186,7 @@ export function stampExposureCacheVerdict(
   if (!exposureEvent) {
     return
   }
-  metadata.__dd_exposure_cache_hit =
-    exposureCache?.has(getExposureCacheEntry(exposureEvent, detailsWithMetadata)) ?? false
+  if (exposureCache) {
+    prepareExposureDecision(metadata, exposureCache, getExposureCacheEntry(exposureEvent, detailsWithMetadata))
+  }
 }

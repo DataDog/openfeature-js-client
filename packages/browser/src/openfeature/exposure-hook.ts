@@ -1,5 +1,11 @@
-import { type FeatureValue, featuresWithPrefix, METADATA_FEATURE_PREFIX } from '@datadog/flagging-core'
+import {
+  completeExposureDecision,
+  type FeatureValue,
+  featuresWithPrefix,
+  METADATA_FEATURE_PREFIX,
+} from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
 const METADATA_DO_LOG = '__dd_do_log'
@@ -50,9 +56,11 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>) {
     this.flagKey = hookContext?.flagKey ?? details.flagKey
     this.details = details
+    // Prefer the context the provider actually evaluated (for example the
+    // RUM-enriched subject); fall back to the hook context for unbound results.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
-      this.evaluationContext = hookContext?.context
+      this.evaluationContext = getEvaluationTrackingContext(details, () => hookContext?.context)
     } catch {
       this.evaluationContext = undefined
     }
@@ -134,6 +142,9 @@ export class ExposureHook implements Hook {
   finally(hookContext: HookContext, evaluationDetails: EvaluationDetails<FlagValue>): void {
     if (evaluationDetails == null) return
     try {
+      // The callback must read the final verdict, whether or not a provider or
+      // tracking hook finalized the decision first.
+      completeExposureDecision(evaluationDetails)
       this.callback(new ExposureEvaluationImpl(hookContext, evaluationDetails))
     } catch (error) {
       if (this.warned) {

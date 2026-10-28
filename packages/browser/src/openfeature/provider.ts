@@ -337,9 +337,16 @@ export class DatadogProvider extends DatadogProviderBase {
           errorMessage: 'Assignments for the current evaluation context are not available',
         }
       : result
-    // Stamp before the SDK freezes the metadata for hooks: this is the one
-    // exposure-cache verdict shared by the Datadog path and the customer hook.
+    // Prepare the exposure decision before the SDK freezes the metadata for
+    // hooks: the one verdict shared by the Datadog path and the customer hook.
     stampExposureCacheVerdict({ ...boundResult, flagKey }, this.effectiveTrackingContext(), this.exposureCache)
-    return bindEvaluationTelemetryResult(boundResult, this.telemetryPolicy, optOutEnabled ? context : undefined)
+    // Bind the evaluated context (for example the RUM-enriched subject) to
+    // successful results so customer hooks read the same identity the exposure
+    // event reports. Error results without metadata keep their existing shape.
+    return bindEvaluationTelemetryResult(
+      boundResult,
+      this.telemetryPolicy,
+      optOutEnabled || boundResult.flagMetadata !== undefined ? context : undefined
+    )
   }
 }

@@ -298,6 +298,108 @@ describe('DatadogCoreProvider with a shared exposure cache', () => {
     expect(exposureEvents(fetchMock)).toHaveLength(1)
   })
 
+  it('deduplicates a reentrant successful evaluation', async () => {
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(rulesConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...tracking.hooks)
+    const rows: ExposureEvaluation[] = []
+    client.addHooks(new ExposureHook((e) => rows.push(e)))
+    let nested = false
+    client.addHooks({
+      after: () => {
+        if (!nested) {
+          nested = true
+          client.getBooleanDetails('holdout-flag', false)
+        }
+      },
+    })
+
+    expect(client.getBooleanDetails('holdout-flag', false).value).toBe(true)
+    jest.advanceTimersByTime(31000)
+    expect(exposureEvents(fetchMock)).toHaveLength(1)
+    expect(rows.map((row) => row.shouldSend())).toEqual([true, false])
+    await tracking.shutdown()
+  })
+
+  it.each(['tracking first', 'customer first'])(
+    'deduplicates a nested evaluation from a customer callback (hooks registered: %s)',
+    async (order) => {
+      const tracking = createDatadogExposureLoggingHook(trackingConfig)
+      await tracking.initialize()
+      const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+      provider.setConfiguration(rulesConfiguration())
+      await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+      const client = OpenFeature.getClient(DOMAIN)
+      const nestedCallback = new ExposureHook((e) => {
+        if (e.isExposure() && e.shouldSend()) client.getBooleanDetails('holdout-flag', false)
+      })
+      if (order === 'tracking first') {
+        client.addHooks(...tracking.hooks)
+        client.addHooks(nestedCallback)
+      } else {
+        client.addHooks(nestedCallback)
+        client.addHooks(...tracking.hooks)
+      }
+
+      expect(client.getBooleanDetails('holdout-flag', false).value).toBe(true)
+      jest.advanceTimersByTime(31000)
+      expect(exposureEvents(fetchMock)).toHaveLength(1)
+      await tracking.shutdown()
+    }
+  )
+
+  it('does not let a rejected evaluation consume admission', async () => {
+    const tracking = createDatadogExposureLoggingHook({ ...trackingConfig, trackExposures: false })
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(rulesConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    const client = OpenFeature.getClient(DOMAIN)
+    client.addHooks(...tracking.hooks)
+    const rows: ExposureEvaluation[] = []
+    client.addHooks(new ExposureHook((e) => rows.push(e)))
+    let afterHooks = 0
+    client.addHooks({
+      after: () => {
+        afterHooks += 1
+        if (afterHooks === 1) throw new Error('application hook failed')
+      },
+    })
+
+    const rejected = client.getBooleanDetails('holdout-flag', false)
+    expect(rejected.errorCode).toBe('GENERAL')
+    expect(exposureCalls(fetchMock)).toHaveLength(0)
+
+    const retried = client.getBooleanDetails('holdout-flag', false)
+    expect(retried.errorCode).toBeUndefined()
+    expect(retried.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    jest.advanceTimersByTime(31000)
+    expect(exposureCalls(fetchMock)).toHaveLength(0)
+    expect(rows.map((row) => row.shouldSend())).toEqual([false, true])
+    await tracking.shutdown()
+  })
+
+  it('records through the provider finalizer without registered tracking hooks', async () => {
+    // The cache is shared with the provider but no tracking hooks are
+    // registered; the provider's own finalizer must still complete the decision.
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(rulesConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    const client = OpenFeature.getClient(DOMAIN)
+
+    const first = client.getBooleanDetails('holdout-flag', false)
+    expect(first.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    const second = client.getBooleanDetails('holdout-flag', false)
+    expect(second.flagMetadata?.__dd_exposure_cache_hit).toBe(true)
+    await tracking.shutdown()
+  })
+
   it('waits for the shared cache to load before initialize completes', async () => {
     let resolveInit: () => void = () => {}
     const ready = new Promise<void>((resolve) => {

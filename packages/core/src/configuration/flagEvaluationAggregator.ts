@@ -140,7 +140,9 @@ function readEvaluationFeatures(metadata: FlagMetadata | undefined): Record<stri
 function canonicalEvaluationFeatures(metadata: FlagMetadata | undefined): Record<string, FeatureValue> | undefined {
   const features = readEvaluationFeatures(metadata)
   if (features === undefined) return undefined
-  const canonical: Record<string, FeatureValue> = {}
+  // Null prototype: a feature literally named `__proto__` must not hit the
+  // inherited setter on an ordinary object.
+  const canonical: Record<string, FeatureValue> = Object.create(null)
   for (const key of Object.keys(features).sort()) {
     canonical[key] = features[key]
   }

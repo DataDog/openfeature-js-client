@@ -2,6 +2,7 @@ import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { type ExposureEvaluation, ExposureHook } from '../../src/openfeature/exposure-hook'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 
@@ -228,6 +229,55 @@ describe('exposure cache verdict', () => {
     expect(client.getBooleanDetails('silent-flag', false).flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
     triggerBatch()
     expect(exposureCalls()).toHaveLength(0)
+  })
+
+  it('deduplicates a nested evaluation for the online provider', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.toString().includes('precompute-assignments') ? precomputedResponse() : { ok: true, status: 200 }
+      )
+    )
+    const rows: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((e) => rows.push(e)))
+    const provider = new DatadogProvider(baseProviderConfig)
+    await OpenFeature.setProviderAndWait(provider)
+    const client = OpenFeature.getClient()
+    let nested = false
+    client.addHooks({
+      after: () => {
+        if (!nested) {
+          nested = true
+          client.getBooleanDetails('holdout-flag', true)
+        }
+      },
+    })
+
+    expect(client.getBooleanDetails('holdout-flag', true).value).toBe(false)
+    triggerBatch()
+    expect(exposureEvents()).toHaveLength(1)
+    expect(rows.map((row) => row.shouldSend()).sort()).toEqual([false, true])
+  })
+
+  it('gives the customer hook the same RUM subject as Datadog', async () => {
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+      getUser: () => ({ id: 'rum-subject', plan: 'pro' }),
+      addFeatureFlagEvaluation: jest.fn(),
+    } as unknown as DDRum
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.toString().includes('precompute-assignments') ? precomputedResponse() : { ok: true, status: 200 }
+      )
+    )
+    const rows: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((e) => rows.push(e)))
+    const provider = new DatadogProvider(baseProviderConfig)
+    await OpenFeature.setProviderAndWait(provider)
+    const details = OpenFeature.getClient().getBooleanDetails('holdout-flag', true)
+    expect(details.errorCode).toBeUndefined()
+    triggerBatch()
+    expect(exposureEvents()[0].subject.id).toBe('rum-subject')
+    expect(rows[0].targetingKey).toBe('rum-subject')
+    expect(rows[0].context?.plan).toBe('pro')
   })
 
   it('warns once that enableExposureLogging is deprecated', () => {
