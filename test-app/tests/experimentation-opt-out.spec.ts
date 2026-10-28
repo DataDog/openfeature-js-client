@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 
 type EvaluationEvent = {
@@ -100,7 +101,7 @@ test('online: reload uses only acknowledged opted-out assignments from IndexedDB
 
 for (const mode of ['online', 'precomputed', 'rules']) {
   for (const disabled of [false, true]) {
-    test(`${mode}: opted-out subjects, ordinary fallback, telemetry unchanged; disabled=${disabled}`, async ({
+    test(`${mode}: opted-out subjects, ordinary fallback, full-data telemetry; disabled=${disabled}`, async ({
       page,
     }) => {
       const requests: { evaluation_options?: { experimentation_opt_out_mode?: string } }[] = []
@@ -139,6 +140,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
               data: {
                 attributes: {
                   createdAt: '2026-10-19T12:00:00Z',
+                  observeFullEvaluationData: true,
                   flags,
                   ...(optedOut && acknowledge ? { evaluation_options: { experimentation_opt_out: true } } : {}),
                 },
@@ -159,7 +161,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
         }
         return route.continue()
       })
-      await page.goto(`/experimentation-opt-out.html?mode=${mode}&disabled=${disabled}`)
+      await page.goto(`/experimentation-opt-out.html?mode=${mode}&disabled=${disabled}&consent=true`)
       await page.waitForFunction(
         () => '__OPENFEATURE_SMOKE_RESULT__' in globalThis || '__OPENFEATURE_SMOKE_ERROR__' in globalThis
       )
@@ -244,6 +246,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
           data: {
             attributes: {
               createdAt: '2026-10-20T00:00:00Z',
+              observeFullEvaluationData: true,
               ...(cutoff
                 ? {
                     evaluation_options: {
@@ -267,7 +270,7 @@ for (const mode of ['online', 'precomputed', 'rules']) {
         },
       })
     })
-    await page.goto(`/experimentation-opt-out.html?mode=${mode}&policy=future`)
+    await page.goto(`/experimentation-opt-out.html?mode=${mode}&policy=future&consent=true`)
     await page.waitForFunction(() => '__OPENFEATURE_SMOKE_RESULT__' in globalThis)
     await page.evaluate(() => window.experimentationTest.update('2026-10-01T12:00:00.123456790Z'))
     expect((await page.evaluate(() => window.experimentationTest.evaluate())).flagMetadata?.doLog).toBe(true)
@@ -345,5 +348,68 @@ for (const mode of ['online', 'precomputed', 'rules']) {
       expect((await page.evaluate(() => window.experimentationTest.evaluate())).value).toBe(false)
     }
     await page.evaluate(() => window.experimentationTest.close())
+  })
+}
+
+for (const mode of ['online', 'precomputed', 'rules']) {
+  test(`${mode}: experimentation opt-out preserves protected telemetry and evaluation counts`, async ({ page }) => {
+    const evaluations: EvaluationEvent[] = []
+    const exposures: unknown[] = []
+    await page.route('**/assignments*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            attributes: {
+              createdAt: '2026-10-19T12:00:00Z',
+              observeFullEvaluationData: false,
+              evaluation_options: { experimentation_opt_out: true },
+              flags: {
+                boolean: {
+                  allocationKey: 'fallback',
+                  variationKey: 'on',
+                  variationType: 'boolean',
+                  variationValue: true,
+                  reason: 'TARGETING_MATCH',
+                  doLog: false,
+                },
+              },
+            },
+          },
+        },
+      })
+    )
+    await page.route('**/intake/**', (route) => {
+      const events = route
+        .request()
+        .postData()!
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+      if (new URL(route.request().url()).pathname.endsWith('/flagevaluation')) evaluations.push(...events)
+      else if (new URL(route.request().url()).pathname.endsWith('/exposures')) exposures.push(...events)
+      return route.fulfill({ json: {} })
+    })
+    await page.goto(`/experimentation-opt-out.html?mode=${mode}&optedOut=true`)
+    await page.waitForFunction(
+      () => '__OPENFEATURE_SMOKE_RESULT__' in globalThis || '__OPENFEATURE_SMOKE_ERROR__' in globalThis
+    )
+    expect(await page.evaluate(() => Reflect.get(globalThis, '__OPENFEATURE_SMOKE_ERROR__'))).toBeUndefined()
+    expect(await page.evaluate(() => window.experimentationTest.evaluate())).toMatchObject({
+      value: true,
+      flagMetadata: { allocationKey: 'fallback', doLog: false },
+    })
+    await page.evaluate(() => window.experimentationTest.close())
+    await page.waitForLoadState('networkidle')
+    expect(evaluations).toEqual([
+      expect.objectContaining({
+        targeting_key: `sha256_${createHash('sha256').update('subject').digest('hex')}`,
+        evaluation_count: 1,
+        runtime_default_used: false,
+        allocation: { key: 'fallback' },
+      }),
+    ])
+    expect(evaluations[0]).not.toHaveProperty('context.evaluation')
+    expect(evaluations[0]).not.toHaveProperty('error')
+    expect(exposures).toEqual([])
   })
 }

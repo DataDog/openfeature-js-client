@@ -56,7 +56,11 @@ function hash(key: string, publicSalt = salt): string {
 }
 
 describe('precomputed flag-key obfuscation', () => {
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => jest.useFakeTimers({ now: 1790000000000 }))
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
 
   it('caches repeated lookups separately for concurrent configurations', () => {
     const configurations = [salt, 'f'.repeat(32)].map((publicSalt) =>

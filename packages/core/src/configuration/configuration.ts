@@ -51,6 +51,8 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      /** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
+      observeFullEvaluationData?: boolean
       /** Effective server evaluation options, retained in portable and persisted configurations. */
       evaluation_options?: {
         experimentation_opt_out?: boolean
@@ -86,7 +88,7 @@ export type PrecomputedFlagMetadata = {
   variationType?: FlagValueType
   doLog?: boolean
 
-  // Server-side evaluation metadata (consumed by dd-trace-js)
+  // Evaluation-time metadata (also consumed by server-side dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number

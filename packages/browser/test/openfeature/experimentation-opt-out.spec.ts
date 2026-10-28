@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   evaluate,
   evaluatePrecomputedConfiguration,
@@ -384,7 +385,11 @@ describe('experimentation opt-out tracking identity', () => {
       await provider.onClose()
       const evaluations = events('flagevaluation')
       expect(evaluations.reduce((total, event) => total + event.evaluation_count, 0)).toBe(2)
-      expect(evaluations.every((event) => event.targeting_key === 'subject-B')).toBe(true)
+      expect(
+        evaluations.every(
+          (event) => event.targeting_key === `sha256_${createHash('sha256').update('subject-B').digest('hex')}`
+        )
+      ).toBe(true)
     }
   )
 
@@ -452,7 +457,10 @@ describe('experimentation opt-out tracking identity', () => {
     await update
     await provider.onClose()
     expect(events('flagevaluation')).toEqual([
-      expect.objectContaining({ targeting_key: 'subject-A', evaluation_count: 1 }),
+      expect.objectContaining({
+        targeting_key: `sha256_${createHash('sha256').update('subject-A').digest('hex')}`,
+        evaluation_count: 1,
+      }),
     ])
     expect(events('exposures')).toEqual([
       expect.objectContaining({ subject: expect.objectContaining({ id: 'subject-A' }) }),
@@ -488,7 +496,10 @@ describe('experimentation opt-out tracking identity', () => {
     await update
     await provider.onClose()
     expect(events('flagevaluation')).toEqual([
-      expect.objectContaining({ targeting_key: 'subject-A', evaluation_count: 1 }),
+      expect.objectContaining({
+        targeting_key: `sha256_${createHash('sha256').update('subject-A').digest('hex')}`,
+        evaluation_count: 1,
+      }),
     ])
   })
 })

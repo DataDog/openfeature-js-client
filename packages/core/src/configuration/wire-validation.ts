@@ -52,8 +52,21 @@ export function parsePrecomputedConfigurationResponse(
     }
   }
 
+  // Consent is optional for older responses. Wrong types must not reject valid
+  // assignments or opt into full telemetry details.
+  const attributes = value.data.attributes
+  const response =
+    attributes.observeFullEvaluationData === undefined
+      ? value
+      : {
+          ...value,
+          data: {
+            ...value.data,
+            attributes: { ...attributes, observeFullEvaluationData: attributes.observeFullEvaluationData === true },
+          },
+        }
   return {
-    response: value as PrecomputedConfigurationResponse,
+    response: response as PrecomputedConfigurationResponse,
     ...(flagErrors.length > 0 ? { flagErrors: Object.fromEntries(flagErrors) } : {}),
   }
 }

@@ -82,6 +82,7 @@ describe('evaluate', () => {
   it('returns default for missing configuration', () => {
     const result = evaluate(undefined, 'boolean', 'boolean-flag', true, {})
     expect(result).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: true,
       reason: 'ERROR',
       errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
@@ -92,6 +93,7 @@ describe('evaluate', () => {
   it('returns default for unknown flag', () => {
     const result = evaluate(configuration, 'string', 'unknown-flag', 'default', matchingContext)
     expect(result).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
@@ -100,6 +102,7 @@ describe('evaluate', () => {
 
   it.each(['constructor', '__proto__'])('treats inherited precomputed flag key %s as missing', (flagKey) => {
     expect(evaluate(configuration, 'string', flagKey, 'default', matchingContext)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
@@ -113,6 +116,7 @@ describe('evaluate', () => {
       reason: 'STATIC',
     })
     expect(evaluate(configurationWithMalformedFlag, 'boolean', 'malformed', false, {})).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
@@ -122,6 +126,7 @@ describe('evaluate', () => {
 
   it('returns a parse error for a malformed precomputed response', () => {
     expect(evaluate(configurationWithMalformedResponse, 'boolean', 'flag', false, {})).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
@@ -132,12 +137,13 @@ describe('evaluate', () => {
   it('returns default without variant metadata for type mismatch', () => {
     const result = evaluate(configuration, 'string', 'boolean-flag', 'default', matchingContext)
     expect(result).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
     })
     expect(result).not.toHaveProperty('variant')
-    expect(result).not.toHaveProperty('flagMetadata')
+    expect(result.flagMetadata).not.toHaveProperty('allocationKey')
   })
 
   it('resolves boolean flag', () => {
@@ -147,6 +153,8 @@ describe('evaluate', () => {
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
         allocationKey: 'allocation-124',
         doLog: true,
         variationType: 'BOOLEAN',
@@ -161,6 +169,8 @@ describe('evaluate', () => {
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
         allocationKey: 'allocation-123',
         doLog: true,
         variationType: 'STRING',
@@ -175,6 +185,8 @@ describe('evaluate', () => {
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
         allocationKey: 'allocation-127',
         doLog: true,
         variationType: 'OBJECT',
@@ -209,6 +221,8 @@ describe('evaluate', () => {
     it('carries the serial id from the precomputed flag onto the evaluation metadata', () => {
       const result = evaluate(configurationWithSerialId(340132), 'string', 'string-flag', 'default', {})
       expect(result.flagMetadata).toEqual({
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
         allocationKey: 'allocation-123',
         variationType: 'string',
         doLog: true,
@@ -233,6 +247,7 @@ describe('evaluate', () => {
     const result = evaluate(configuration, 'string', 'string-flag', 'default', { targetingKey: 'other-user' })
 
     expect(result).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
@@ -346,6 +361,7 @@ describe('evaluate', () => {
       expect(
         evaluate({ precomputedError: 'Malformed precomputed data' }, 'boolean', 'test-flag', false, matrixContext)
       ).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -355,6 +371,7 @@ describe('evaluate', () => {
 
     it('returns provider not ready when both capabilities are absent', () => {
       expect(evaluate(undefined, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -368,6 +385,7 @@ describe('evaluate', () => {
       [{}, 'Flags configuration contains no usable capability'],
     ] as const)('returns a parse error for unusable configured data', (configured, errorMessage) => {
       expect(evaluate(configured, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -385,6 +403,7 @@ describe('evaluate', () => {
           { targetingKey: 'other-user' }
         )
       ).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
