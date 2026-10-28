@@ -1,5 +1,5 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
-import { evaluateForSubject } from '../../src/evaluation'
+import { evaluateForSubject, featuresWithPrefix, METADATA_FEATURE_PREFIX } from '../../src/evaluation'
 import type { Flag } from '../../src/evaluation/ufc-v1'
 
 describe('split features in flag metadata', () => {
@@ -159,5 +159,13 @@ describe('split features in flag metadata', () => {
       expect(Object.keys(result.entries)).toEqual([])
       expect(warn).toHaveBeenCalledTimes(64)
     })
+  })
+
+  it('preserves a valid __proto__ feature key', () => {
+    const result = evaluate([{ key: '__proto__', value: 'holdout', destinations: ['HOOK'] }])
+    const features = featuresWithPrefix(result.flagMetadata, METADATA_FEATURE_PREFIX)
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: the test targets this exact property.
+    expect(Object.prototype.hasOwnProperty.call(features, '__proto__')).toBe(true)
+    expect(features?.__proto__).toBe('holdout')
   })
 })

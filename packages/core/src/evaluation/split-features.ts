@@ -117,7 +117,9 @@ export function featuresWithPrefix(
   let features: Record<string, FeatureValue> | undefined
   for (const [metadataKey, value] of Object.entries(metadata)) {
     if (!metadataKey.startsWith(prefix) || !isFeatureValue(value)) continue
-    features ??= {}
+    // Null prototype: a feature literally named `__proto__` must not hit the
+    // inherited setter on an ordinary object.
+    features ??= Object.create(null) as Record<string, FeatureValue>
     features[metadataKey.slice(prefix.length)] = value
   }
   return features

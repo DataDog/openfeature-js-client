@@ -1,11 +1,13 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
+  completeExposureDecision,
   createExposureEvent,
   type ExposureEvent,
   featuresWithPrefix,
   LRUInMemoryAssignmentCache,
   METADATA_EXPOSURE_FEATURE_PREFIX,
+  prepareExposureDecision,
   prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
@@ -214,7 +216,7 @@ export class DatadogNodeServerProvider implements Provider {
     return resolutionDetails
   }
 
-  /** Stamps the exposure cache verdict into flag metadata; the internal hook does the rest. */
+  /** Prepares a verdict finalized by the provider hook after successful evaluation. */
   private handleExposure<T extends FlagValue>(
     flagKey: string,
     context: EvaluationContext,
@@ -230,7 +232,7 @@ export class DatadogNodeServerProvider implements Provider {
     if (!exposureEvent) {
       return
     }
-    metadata.__dd_exposure_cache_hit = this.exposureCache?.has(exposureEvent) ?? false
+    if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, exposureEvent)
   }
 }
 
@@ -249,6 +251,9 @@ class ExposureLoggingHook implements Hook {
     if (evaluationDetails == null || evaluationDetails.errorCode !== undefined) {
       return
     }
+    // One check-and-record after successful finalization; concurrent or nested
+    // evaluations of the same assignment cannot both be admitted.
+    const sharedDecision = completeExposureDecision(evaluationDetails)
     const metadata = evaluationDetails.flagMetadata as FlagMetadata | undefined
     if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
       return
@@ -272,7 +277,7 @@ class ExposureLoggingHook implements Hook {
           timestamp: timeStampNow(),
         })
       }
-      this.exposureCache?.set(exposureEvent)
+      if (!sharedDecision) this.exposureCache?.set(exposureEvent)
     } catch {
       // Exposure reporting must never break the evaluation.
     }

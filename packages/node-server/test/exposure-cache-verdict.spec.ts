@@ -223,6 +223,58 @@ describe('exposure cache verdict', () => {
     expect(channel.publish).toHaveBeenCalledTimes(1)
   })
 
+  it('deduplicates concurrent completed evaluations', async () => {
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
+    provider.setConfiguration(baseConfiguration())
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    const client = OpenFeature.getClient(providerName)
+
+    const results = await Promise.all([
+      client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' }),
+      client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' }),
+    ])
+    expect(results.map((result) => result.value)).toEqual([false, false])
+    expect(channel.publish).toHaveBeenCalledTimes(1)
+    expect(results.map((result) => result.flagMetadata?.__dd_exposure_cache_hit).sort()).toEqual([false, true])
+  })
+
+  it('lets only one of many overlapping evaluations consume admission when an application hook rejects the rest', async () => {
+    const channel = exposureChannel(true)
+    const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
+    provider.setConfiguration(baseConfiguration())
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    const client = OpenFeature.getClient(providerName)
+
+    let afterHooks = 0
+    const calls = Array.from({ length: 20 }, () =>
+      client.getBooleanDetails(
+        'holdout-flag',
+        true,
+        { targetingKey: 'subject-1' },
+        {
+          hooks: [
+            {
+              after: () => {
+                afterHooks += 1
+                if (afterHooks <= 10) throw new Error('application hook failed')
+              },
+            },
+          ],
+        }
+      )
+    )
+    const results = await Promise.all(calls)
+
+    const successful = results.filter((result) => result.errorCode === undefined)
+    expect(successful).toHaveLength(10)
+    expect(channel.publish).toHaveBeenCalledTimes(1)
+    expect(successful.map((result) => result.flagMetadata?.__dd_exposure_cache_hit).sort()).toEqual([
+      false,
+      ...Array.from({ length: 9 }, () => true),
+    ])
+  })
+
   it('records the cache verdict even when nothing subscribes to the exposure channel', async () => {
     const channel = exposureChannel(false)
     const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
