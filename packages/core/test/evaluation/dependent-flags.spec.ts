@@ -259,13 +259,25 @@ describe('dependent flag evaluation', () => {
     expect(onExposures).toHaveBeenCalledWith([])
   })
 
-  it('replays cached protobuf provenance when a later allocation selects the same condition', () => {
+  it('replays ordered, deduplicated protobuf provenance for a cached multi-dependency condition', () => {
     const config = protobufDependentConfiguration(true)
+    config.strings.push('second-prerequisite')
+    config.flags['second-prerequisite'] = { ...config.flags.prerequisite }
+    config.conditions.push(
+      create(ConditionSchema, {
+        kind: {
+          case: 'flagEvaluationStringMembership',
+          value: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0], negate: false },
+        },
+      }),
+      create(ConditionSchema, { kind: { case: 'all', value: { conditionIndexes: [0, 1] } } })
+    )
+    config.flags.root.allocations[0].targetingConditionIndex = 2
     config.flags.root.allocations[0].splits = []
     config.flags.root.allocations.push(
       create(AllocationSchema, {
         key: 'root-targeted-fallback',
-        targetingConditionIndex: 0,
+        targetingConditionIndex: 2,
         partitionKey: [],
         splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 2, reason: Reason.TARGETING_MATCH })],
         logExposureEvent: true,
@@ -278,10 +290,10 @@ describe('dependent flag evaluation', () => {
       variant: 'on',
       flagMetadata: { __dd_allocation_key: 'root-targeted-fallback' },
     })
-    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([
-      expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
-    ])
+    expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'second-prerequisite'])
+    expect(onExposures).toHaveBeenCalledTimes(1)
+    const exposures = onExposures.mock.calls[0][0] as { flagKey: string }[]
+    expect(exposures.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'second-prerequisite'])
   })
 
   it('applies the protobuf maximum dependency depth override', () => {
