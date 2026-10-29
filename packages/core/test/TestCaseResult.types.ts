@@ -13,6 +13,8 @@ export interface TestCase {
     value: FlagValue
     reason: string
     errorCode?: string
+    serialId?: number | null
+    doLog?: boolean
     variant?: string
     flagMetadata?: PrecomputedFlagMetadata
   }
