@@ -197,9 +197,10 @@ function conditionOutcome(
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ConditionOutcome {
   if (index === undefined) return { matches: true, dependencyKeys: [] }
+  const retainDependencyKeys = resolveFlagEvaluation?.checkpoint !== undefined
   const cached = results.get(index)
   if (cached !== undefined) {
-    if (resolveFlagEvaluation?.checkpoint !== undefined) {
+    if (retainDependencyKeys) {
       for (const dependencyKey of cached.dependencyKeys) {
         resolveFlagEvaluation(dependencyKey)
       }
@@ -218,9 +219,11 @@ function conditionOutcome(
         outcome = { matches: false, dependencyKeys: [] }
         break
       }
-      outcome = {
-        matches: true,
-        dependencyKeys: mergeDependencyKeys(outcome.dependencyKeys, childOutcome.dependencyKeys),
+      if (retainDependencyKeys) {
+        outcome = {
+          matches: true,
+          dependencyKeys: mergeDependencyKeys(outcome.dependencyKeys, childOutcome.dependencyKeys),
+        }
       }
     }
   } else if (condition.kind.case === 'any') {
@@ -238,7 +241,7 @@ function conditionOutcome(
     outcome = {
       matches,
       dependencyKeys:
-        matches && condition.kind.case === 'flagEvaluationStringMembership'
+        retainDependencyKeys && matches && condition.kind.case === 'flagEvaluationStringMembership'
           ? [atIndex(configuration.strings, condition.kind.value.flagKeyStringIndex, 'flag key')]
           : [],
     }
