@@ -279,6 +279,7 @@ function matchesLeafCondition(
   if (kind.case === 'flagEvaluationStringMembership') {
     if (resolveFlagEvaluation === undefined) throw new FlagConfigurationError('Flag evaluation is not supported')
     const flagKey = atIndex(configuration.strings, kind.value.flagKeyStringIndex, 'flag key')
+    if (flagKey.length === 0) throw new FlagConfigurationError('Flag evaluation key must not be empty')
     const variantKey = resolveFlagEvaluation(flagKey)
     if (variantKey === undefined) return false
     const included = containsInternedString(kind.value.variantKeyStringIndexes, variantKey, configuration.strings)

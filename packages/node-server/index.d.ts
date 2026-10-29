@@ -645,6 +645,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
 	private dependencyEvaluationHandler;
 	private handleDependencyEvaluation;
+	private dependencyExposureHandler;
 	private handleDependencyExposures;
 	private handleExposure;
 }

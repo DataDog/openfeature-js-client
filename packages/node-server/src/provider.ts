@@ -177,7 +177,7 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      (evaluations) => this.handleDependencyExposures(context, evaluations)
+      this.dependencyExposureHandler(context)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -198,7 +198,7 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      (evaluations) => this.handleDependencyExposures(context, evaluations)
+      this.dependencyExposureHandler(context)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -219,7 +219,7 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      (evaluations) => this.handleDependencyExposures(context, evaluations)
+      this.dependencyExposureHandler(context)
     )
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -246,7 +246,7 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      (evaluations) => this.handleDependencyExposures(context, evaluations)
+      this.dependencyExposureHandler(context)
     ) as ResolutionDetails<T>
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
@@ -277,6 +277,15 @@ export class DatadogNodeServerProvider implements Provider {
         flagMetadata: evaluation.details.flagMetadata ?? {},
       },
     })
+  }
+
+  private dependencyExposureHandler(
+    context: EvaluationContext
+  ): ((evaluations: readonly DependencyExposureCandidate[]) => void) | undefined {
+    if (!this.options.exposureChannel.hasSubscribers) {
+      return undefined
+    }
+    return (evaluations) => this.handleDependencyExposures(context, evaluations)
   }
 
   private handleDependencyExposures(
