@@ -9,7 +9,15 @@ import type {
   ResolutionReason,
 } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
-import type { Allocation, Condition, Flag, Split, VariationType, Version } from '../configuration/generated/ufc_pb'
+import type {
+  Allocation,
+  Condition,
+  Feature,
+  Flag,
+  Split,
+  VariationType,
+  Version,
+} from '../configuration/generated/ufc_pb'
 import type { PreparedRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { compareBytes, encodeUtf8 } from '../utf8'
@@ -21,6 +29,7 @@ import { getOwnProperty } from './getOwnProperty'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
+import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 import {
   UFC_NUMERIC_COMPARATOR,
   UFC_REASON,
@@ -32,7 +41,10 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
+export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & {
+  checkpoint?: () => unknown
+  rollback?: (checkpoint: unknown) => void
+}
 
 type ConditionOutcome = {
   matches: boolean
@@ -85,9 +97,10 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (!prepared || (!prepared.valid && needsActivation(excludeExperiments))) {
       throw new FlagConfigurationError('Invalid randomization activation timestamp')
     }
-    const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
+      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
+      const conditionResults = new Map<number, ConditionOutcome>()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -97,16 +110,24 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
-      if (!split) continue
+      if (!split) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
+        continue
+      }
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
       logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
+      const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
+        splitFeaturesMetadataInput(split.features),
+        logger
+      )
       return {
         value: value as FlagTypeToValue<T>,
         reason: resolutionReason(split),
@@ -116,6 +137,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           __dd_allocation_key: allocation.key,
           __dd_do_log: allocation.logExposureEvent,
           __dd_split_serial_id: split.serialId,
+          ...featureEntries,
+          ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
           allocationKey: allocation.key,
           variationType: protobufVariationTypeToFlagValueType(flag.variationType),
           doLog: allocation.logExposureEvent,
@@ -193,6 +216,7 @@ function conditionOutcome(
   const cached = results.get(index)
   if (cached !== undefined) return cached
   const condition = atIndex(configuration.conditions, index, 'condition')
+  const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
     outcome = { matches: true }
@@ -217,6 +241,9 @@ function conditionOutcome(
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
     outcome = { matches }
+  }
+  if (!outcome.matches) {
+    resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
   results.set(index, outcome)
   return outcome
@@ -452,6 +479,17 @@ function variationValue(
   if (value.case === 'booleanValue') return value.value
   if (value.case === 'jsonStringIndex') return jsonValueAt(configuration, value.value)
   throw new FlagConfigurationError('Variation value is missing')
+}
+
+function splitFeaturesMetadataInput(
+  features: Feature[]
+): Array<{ key: string; value: string | number | boolean; destinations: string[] }> {
+  const result: Array<{ key: string; value: string | number | boolean; destinations: string[] }> = []
+  for (const feature of features) {
+    if (feature.value.case === undefined) continue
+    result.push({ key: feature.key, value: feature.value.value, destinations: feature.destinations })
+  }
+  return result
 }
 
 function resolutionReason(split: Split): ResolutionReason {

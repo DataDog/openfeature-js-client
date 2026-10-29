@@ -7,6 +7,7 @@ import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { matchesShard } from './matchesShard'
 import { isValidRule, matchesRule, type ResolveFlagEvaluation, type Rule } from './rules'
+import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -113,6 +114,11 @@ export function evaluateForSubject<T extends FlagValueType>(
               ? 'DEFAULT'
               : 'STATIC'
 
+        const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
+          selectedSplit.features,
+          logger
+        )
+
         return {
           value: variant.value as FlagTypeToValue<T>,
           reason,
@@ -123,6 +129,8 @@ export function evaluateForSubject<T extends FlagValueType>(
             __dd_allocation_key: allocation.key,
             __dd_do_log: !!allocation.doLog,
             __dd_split_serial_id: selectedSplit.serialId,
+            ...featureEntries,
+            ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
             // Legacy keys (internal) - to be removed from server-side
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),

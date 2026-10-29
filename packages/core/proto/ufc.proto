@@ -309,6 +309,20 @@ message Split {
   uint32 variation_index = 2;
   optional int32 serial_id = 3;
   Reason reason = 4;
+  repeated Feature features = 5;
+}
+
+// Key-value data that SDKs deliver to each of its destinations for this split.
+message Feature {
+  string key = 1;
+  oneof value {
+    string string_value = 2;
+    double number_value = 3;
+    bool bool_value = 4;
+  }
+  // Open strings such as HOOK, EXPOSURE or EVALUATION, not an enum: SDKs ignore destinations
+  // they do not know.
+  repeated string destinations = 5;
 }
 
 // A half-open range: from <= partition coordinate < to. Time coordinates are

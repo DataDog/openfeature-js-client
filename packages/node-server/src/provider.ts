@@ -1,19 +1,24 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
+  completeExposureDecision,
   createExposureEvent,
   type DependencyEvaluation,
   type DependencyExposureCandidate,
   type ExposureEvent,
+  featuresWithPrefix,
   LRUInMemoryAssignmentCache,
+  METADATA_EXPOSURE_FEATURE_PREFIX,
+  prepareExposureDecision,
   prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
-import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
+import type { EvaluationContext, FlagMetadata, ServerProviderEvents } from '@openfeature/core'
 import type {
   EvaluationDetails,
   FlagValue,
   Hook,
+  HookContext,
   JsonValue,
   Logger,
   Paradigm,
@@ -60,6 +65,13 @@ export type DependencyEvaluationEvent = {
   details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
 }
 
+type PreparedDependencyExposure = {
+  details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
+  event: ExposureEvent
+}
+
+type DependencyExposureBatches = WeakMap<object, readonly PreparedDependencyExposure[]>
+
 export class DatadogNodeServerProvider implements Provider {
   readonly metadata: ProviderMetadata = {
     name: 'datadog-node-server',
@@ -70,6 +82,7 @@ export class DatadogNodeServerProvider implements Provider {
   private initController?: InitializationController
   readonly events: ProviderEventEmitter<ServerProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
+  private readonly dependencyExposureBatches: DependencyExposureBatches = new WeakMap()
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
 
@@ -77,6 +90,11 @@ export class DatadogNodeServerProvider implements Provider {
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
+    // Runs in the final hook stage, where the SDK has turned any later hook error
+    // into an error result, so a failed evaluation is never published or recorded.
+    this.hooks.push(
+      new ExposureLoggingHook(this.exposureCache, this.options.exposureChannel, this.dependencyExposureBatches)
+    )
   }
 
   /**
@@ -168,6 +186,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
+    const dependencyExposures: DependencyExposureCandidate[] = []
     const resolutionDetails = evaluate(
       this.configuration,
       'boolean',
@@ -177,8 +196,9 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      this.dependencyExposureHandler(context)
+      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
+    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -189,6 +209,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
+    const dependencyExposures: DependencyExposureCandidate[] = []
     const resolutionDetails = evaluate(
       this.configuration,
       'string',
@@ -198,8 +219,9 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      this.dependencyExposureHandler(context)
+      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
+    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -210,6 +232,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
+    const dependencyExposures: DependencyExposureCandidate[] = []
     const resolutionDetails = evaluate(
       this.configuration,
       'number',
@@ -219,8 +242,9 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      this.dependencyExposureHandler(context)
+      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
+    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -237,6 +261,7 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
+    const dependencyExposures: DependencyExposureCandidate[] = []
     const resolutionDetails = evaluate(
       this.configuration,
       'object',
@@ -246,8 +271,9 @@ export class DatadogNodeServerProvider implements Provider {
       _logger,
       false,
       this.dependencyEvaluationHandler(context),
-      this.dependencyExposureHandler(context)
+      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     ) as ResolutionDetails<T>
+    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
@@ -279,32 +305,42 @@ export class DatadogNodeServerProvider implements Provider {
     })
   }
 
-  private dependencyExposureHandler(
-    context: EvaluationContext
-  ): ((evaluations: readonly DependencyExposureCandidate[]) => void) | undefined {
-    if (!this.options.exposureChannel.hasSubscribers) {
-      return undefined
-    }
-    return (evaluations) => this.handleDependencyExposures(context, evaluations)
-  }
-
   private handleDependencyExposures(
     context: EvaluationContext,
+    rootDetails: ResolutionDetails<FlagValue>,
     evaluations: readonly DependencyExposureCandidate[]
   ): void {
+    const rootMetadata = rootDetails.flagMetadata
+    if (rootMetadata === undefined || evaluations.length === 0) {
+      return
+    }
+    const prepared: PreparedDependencyExposure[] = []
     for (const evaluation of evaluations) {
-      this.handleExposure(evaluation.flagKey, context, evaluation.details)
+      const metadata = (evaluation.details.flagMetadata ?? {}) as FlagMetadata
+      const details = {
+        ...evaluation.details,
+        flagKey: evaluation.flagKey,
+        flagMetadata: metadata,
+      }
+      const event = createExposureEvent(context, details)
+      if (event === undefined) {
+        continue
+      }
+      if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, event)
+      prepared.push({ details, event })
+    }
+    if (prepared.length > 0) {
+      this.dependencyExposureBatches.set(rootMetadata, prepared)
     }
   }
 
+  /** Prepares a verdict finalized by the provider hook after successful evaluation. */
   private handleExposure<T extends FlagValue>(
     flagKey: string,
     context: EvaluationContext,
     resolutionDetails: Omit<ResolutionDetails<T>, 'value'> & { value?: T }
   ): void {
-    if (!this.options.exposureChannel.hasSubscribers) {
-      return
-    }
+    const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
     const exposureEvent = createExposureEvent(context, {
       flagKey,
       variant: resolutionDetails.variant,
@@ -313,16 +349,92 @@ export class DatadogNodeServerProvider implements Provider {
     if (!exposureEvent) {
       return
     }
-    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
-    if (hasLoggedAssignment) {
+    if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, exposureEvent)
+  }
+}
+
+/**
+ * Publishes and records the exposure once the evaluation has completed without an
+ * error. A cache entry is written even when nothing subscribes to the exposure
+ * channel, so the verdict stays correct with Datadog exposure logging off.
+ */
+class ExposureLoggingHook implements Hook {
+  private readonly pending = new WeakMap<Readonly<HookContext<FlagValue>>, EvaluationDetails<FlagValue>>()
+
+  constructor(
+    private readonly exposureCache: AssignmentCache | undefined,
+    private readonly exposureChannel: Channel<ExposureEvent>,
+    private readonly dependencyExposureBatches: DependencyExposureBatches
+  ) {}
+
+  after(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
+    this.pending.set(hookContext, evaluationDetails)
+  }
+
+  error(hookContext: Readonly<HookContext<FlagValue>>): void {
+    const evaluationDetails = this.pending.get(hookContext)
+    const metadata = evaluationDetails?.flagMetadata
+    if (metadata !== undefined) {
+      this.dependencyExposureBatches.delete(metadata)
+    }
+    this.pending.delete(hookContext)
+  }
+
+  finally(hookContext: Readonly<HookContext<FlagValue>>): void {
+    // Older supported OpenFeature versions pass only hook hints to finally.
+    // Capture the successful result in after and discard it on any later error.
+    const evaluationDetails = this.pending.get(hookContext)
+    this.pending.delete(hookContext)
+    if (evaluationDetails == null || evaluationDetails.errorCode !== undefined) {
       return
     }
-    const publishedExposure = cloneForTelemetry(exposureEvent)
-    if (publishedExposure === undefined) {
+    const metadata = evaluationDetails.flagMetadata as FlagMetadata | undefined
+    if (metadata !== undefined) {
+      const dependencyExposures = this.dependencyExposureBatches.get(metadata) ?? []
+      this.dependencyExposureBatches.delete(metadata)
+      for (const dependencyExposure of dependencyExposures) {
+        this.completeExposure(dependencyExposure.details, dependencyExposure.event)
+      }
+    }
+    const details: EvaluationDetails<FlagValue> = {
+      ...evaluationDetails,
+      flagKey: evaluationDetails.flagKey ?? hookContext?.flagKey ?? '',
+    }
+    const exposureEvent = createExposureEvent(hookContext?.context ?? {}, details)
+    if (exposureEvent !== undefined) {
+      this.completeExposure(details, exposureEvent)
+    }
+  }
+
+  private completeExposure(
+    details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue },
+    exposureEvent: ExposureEvent
+  ): void {
+    // One check-and-record after successful finalization; concurrent or nested
+    // evaluations of the same assignment cannot both be admitted.
+    const sharedDecision = completeExposureDecision(details)
+    const metadata = details.flagMetadata as FlagMetadata | undefined
+    if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
       return
     }
-    this.options.exposureChannel.publish({ ...publishedExposure, timestamp: timeStampNow() })
-    this.exposureCache?.set(exposureEvent)
+    try {
+      if (this.exposureChannel.hasSubscribers) {
+        // Features stay off the cache entry: a features change must not turn a
+        // repeat exposure into a new one.
+        const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+        const publishedExposure = cloneForTelemetry({
+          ...exposureEvent,
+          ...(features && { features }),
+          timestamp: timeStampNow(),
+        })
+        if (publishedExposure !== undefined) {
+          this.exposureChannel.publish(publishedExposure)
+        }
+      }
+      if (!sharedDecision) this.exposureCache?.set(exposureEvent)
+    } catch {
+      // Exposure reporting must never break the evaluation.
+    }
   }
 }
 

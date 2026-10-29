@@ -63,7 +63,8 @@ export function evaluate<T extends FlagValueType>(
       flagKey,
       defaultValue,
       context,
-      experimentationOptOutMode
+      experimentationOptOutMode,
+      logger
     )
   }
 
@@ -243,6 +244,7 @@ function evaluateRules<T extends FlagValueType>(
   if (isProtobufConfiguration(config)) {
     const prepared = prepareRulesResponse(config)
     let dependencySession: DependencyEvaluationSession | undefined
+    let commitDependencyExposures = false
     try {
       const resolveDependency = ((dependencyFlagKey: string) => {
         dependencySession ??= new DependencyEvaluationSession(
@@ -268,10 +270,13 @@ function evaluateRules<T extends FlagValueType>(
             ),
           logger,
           evaluationTimestampMs,
-          onDependencyEvaluation
+          onDependencyEvaluation,
+          onDependencyExposures
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
+      resolveDependency.checkpoint = () => dependencySession?.checkpoint()
+      resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
       const result = evaluateProtobufConfiguration(
         prepared,
         type,
@@ -283,12 +288,15 @@ function evaluateRules<T extends FlagValueType>(
         excludeExperiments,
         resolveDependency
       )
+      commitDependencyExposures = result.reason !== 'ERROR' && result.errorCode === undefined
       return result
     } catch (error) {
       if (error instanceof DependencyGraphError) {
         return dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
       }
       throw error
+    } finally {
+      dependencySession?.complete(commitDependencyExposures)
     }
   }
 

@@ -1,43 +1,60 @@
 import type { Channel } from 'node:diagnostics_channel'
 import { type ExposureEvent, type Flag, OperatorType, type UniversalFlagConfigurationV1 } from '@datadog/flagging-core'
-import type { JsonValue, Logger } from '@openfeature/server-sdk'
+import { type JsonValue, OpenFeature } from '@openfeature/server-sdk'
 import { DatadogNodeServerProvider, type DependencyEvaluationEvent } from '../src/provider'
 
-const logger: Logger = {
-  error: jest.fn(),
-  warn: jest.fn(),
-  info: jest.fn(),
-  debug: jest.fn(),
-}
-
 describe('dependent flag exposures', () => {
+  let providerName: string
+
+  beforeEach(() => {
+    providerName = `dependent-exposures-${Date.now()}-${Math.floor(Math.random() * 1e9)}`
+  })
+
+  afterEach(async () => {
+    await OpenFeature.clearProviders()
+  })
+
+  async function clientFor(provider: DatadogNodeServerProvider) {
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    return OpenFeature.getClient(providerName)
+  }
+
   it('publishes successful dependency exposures depth-first before the root', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
     const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const leaf = booleanFlag('leaf')
+    leaf.allocations[0].splits[0].features = [
+      { key: 'dependency.feature', value: 'enabled', destinations: ['EXPOSURE'] },
+    ]
     provider.setConfiguration(
       configuration({
         root: dependentFlag('root', ['middle']),
         middle: dependentFlag('middle', ['leaf']),
-        leaf: booleanFlag('leaf'),
+        leaf,
       })
     )
+    const client = await clientFor(provider)
 
-    await expect(
-      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
-    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
     expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
       'leaf',
       'middle',
       'root',
     ])
+    expect((exposureChannel.publish.mock.calls[0][0] as ExposureEvent).features).toEqual({
+      'dependency.feature': 'enabled',
+    })
     expect(
       dependencyEvaluationChannel.publish.mock.calls.map(
         ([event]) => (event as DependencyEvaluationEvent).details.flagKey
       )
     ).toEqual(['leaf', 'middle'])
 
-    await provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
+    await client.getBooleanDetails('root', false, { targetingKey: 'subject' })
     expect(exposureChannel.publish).toHaveBeenCalledTimes(3)
     expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(4)
   })
@@ -54,18 +71,20 @@ describe('dependent flag exposures', () => {
         'leaf-b': booleanFlag('leaf-b'),
       })
     )
+    const client = await clientFor(provider)
 
     let nestedEvaluation: Promise<unknown> | undefined
     dependencyEvaluationChannel.publish.mockImplementation((published) => {
       const event = published as DependencyEvaluationEvent
       if (event.details.flagKey === 'leaf-a' && nestedEvaluation === undefined) {
-        nestedEvaluation = provider.resolveBooleanEvaluation('root-b', false, { targetingKey: 'subject-b' }, logger)
+        nestedEvaluation = client.getBooleanDetails('root-b', false, { targetingKey: 'subject-b' })
       }
     })
 
-    await expect(
-      provider.resolveBooleanEvaluation('root-a', false, { targetingKey: 'subject-a' }, logger)
-    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    await expect(client.getBooleanDetails('root-a', false, { targetingKey: 'subject-a' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
     await expect(nestedEvaluation).resolves.toMatchObject({ value: true, variant: 'on' })
 
     expect(
@@ -83,10 +102,10 @@ describe('dependent flag exposures', () => {
         return [event.subject.id, event.flag.key]
       })
     ).toEqual([
-      ['subject-b', 'leaf-b'],
-      ['subject-b', 'root-b'],
       ['subject-a', 'leaf-a'],
       ['subject-a', 'root-a'],
+      ['subject-b', 'leaf-b'],
+      ['subject-b', 'root-b'],
     ])
   })
 
@@ -101,10 +120,13 @@ describe('dependent flag exposures', () => {
         parent: dependentFlag('parent', ['missing']),
       })
     )
+    const client = await clientFor(provider)
 
-    await expect(
-      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
-    ).resolves.toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND',
+    })
     expect(
       dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
         const event = published as DependencyEvaluationEvent
@@ -125,9 +147,10 @@ describe('dependent flag exposures', () => {
         missing: booleanFlag('missing'),
       })
     )
-    await expect(
-      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
-    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
     expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
       'successful',
       'missing',
@@ -154,10 +177,12 @@ describe('dependent flag exposures', () => {
         'json-prerequisite': jsonFlag('json-prerequisite', value),
       })
     )
+    const client = await clientFor(provider)
 
-    await expect(
-      provider.resolveBooleanEvaluation('root', false, { targetingKey: 'subject' }, logger)
-    ).resolves.toMatchObject({ value: true, variant: 'on' })
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
     expect(valueReads).toBe(0)
   })
 
@@ -171,6 +196,7 @@ describe('dependent flag exposures', () => {
         leaf: booleanFlag('leaf'),
       })
     )
+    const client = await clientFor(provider)
     const context = { targetingKey: 'subject', traits: { tier: 'original' } }
     dependencyEvaluationChannel.publish.mockImplementation((published) => {
       const event = published as DependencyEvaluationEvent
@@ -185,11 +211,11 @@ describe('dependent flag exposures', () => {
       traits.tier = 'mutated-by-exposure-subscriber'
     })
 
-    await expect(provider.resolveBooleanEvaluation('root', false, context, logger)).resolves.toMatchObject({
+    await expect(client.getBooleanDetails('root', false, context)).resolves.toMatchObject({
       value: true,
       variant: 'on',
     })
-    await expect(provider.resolveBooleanEvaluation('root', false, context, logger)).resolves.toMatchObject({
+    await expect(client.getBooleanDetails('root', false, context)).resolves.toMatchObject({
       value: true,
       variant: 'on',
     })
@@ -200,11 +226,77 @@ describe('dependent flag exposures', () => {
       { id: 'subject', tier: 'original' },
     ])
   })
+
+  it('publishes and records no graph exposures when a later application hook fails', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+
+    const failed = await client.getBooleanDetails(
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      {
+        hooks: [
+          {
+            after: () => {
+              throw new Error('application hook failed')
+            },
+          },
+        ],
+      }
+    )
+    expect(failed).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
+    expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(1)
+
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+      flagMetadata: { __dd_exposure_cache_hit: false },
+    })
+    expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'leaf',
+      'root',
+    ])
+  })
+
+  it('records dependency exposure decisions when the exposure channel has no subscribers', async () => {
+    const exposureChannel = channel<ExposureEvent>(false)
+    const provider = new DatadogNodeServerProvider({ exposureChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      flagMetadata: { __dd_exposure_cache_hit: false },
+    })
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
+
+    Object.defineProperty(exposureChannel, 'hasSubscribers', { value: true })
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      flagMetadata: { __dd_exposure_cache_hit: true },
+    })
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
+  })
 })
 
-function channel<T>(): jest.Mocked<Channel<T, T>> {
+function channel<T>(hasSubscribers = true): jest.Mocked<Channel<T, T>> {
   return {
-    hasSubscribers: true,
+    hasSubscribers,
     publish: jest.fn(),
     subscribe: jest.fn(),
     unsubscribe: jest.fn(),

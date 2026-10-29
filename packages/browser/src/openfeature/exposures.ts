@@ -2,28 +2,54 @@ import type { Context, RawError } from '@datadog/browser-core'
 import { addTelemetryDebug, createPageMayExitObservable } from '@datadog/browser-core'
 import {
   type AssignmentCache,
+  completeExposureDecision,
   createExposureEvent,
   type ExposureEvent,
   type ExposureEventWithTimestamp,
+  featuresWithPrefix,
+  METADATA_EXPOSURE_FEATURE_PREFIX,
+  prepareExposureDecision,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
-import type { EvaluationContext, EvaluationDetails, FlagValue, HookContext } from '@openfeature/web-sdk'
+import type {
+  EvaluationContext,
+  EvaluationDetails,
+  FlagValue,
+  HookContext,
+  ResolutionDetails,
+} from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
-import type { FlaggingTrackingConfiguration } from '../domain/configuration'
-import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import {
+  type FlaggingTrackingConfiguration,
+  type FlaggingTrackingInitConfiguration,
+  resolveTrackExposures,
+  validateAndBuildFlaggingTrackingConfiguration,
+} from '../domain/configuration'
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
-import type { DatadogTrackingHook, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
+import { supportsExposureAdmission } from './exposure-scope'
+import type { DatadogTrackingHook, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
+/**
+ * The standalone exposure controller: owns the one exposure cache used by the
+ * Datadog send path, the customer exposure hook and any provider wired to it.
+ */
 export interface DatadogExposureLoggingHook extends DatadogTrackingHook {
   initialize(): Promise<void>
   shutdown(): Promise<void>
+  /** Pass to a provider constructor (for example `DatadogCoreProvider`) to share the cache. */
+  readonly exposureCache?: AssignmentCache
 }
 
 type ExposureCacheEntry = ExposureEvent & {
   __dd_core_configuration_id?: string
+}
+
+export interface ExposureLoggingHookOptions {
+  /** When false, no exposure event is sent to Datadog; the cache still records. */
+  sendToDatadog: boolean
 }
 
 /**
@@ -32,24 +58,29 @@ type ExposureCacheEntry = ExposureEvent & {
 export function createExposureLoggingHook(
   configuration: FlaggingTrackingConfiguration,
   exposureCache: AssignmentCache,
-  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
+  { sendToDatadog }: ExposureLoggingHookOptions = { sendToDatadog: true }
 ): ManagedTrackingHook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const exposuresBatch = startExposuresBatch(
-    configuration,
-    (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    },
-    pageMayExitObservable
-  )
+  const exposuresBatch = sendToDatadog
+    ? startExposuresBatch(
+        configuration,
+        (error: RawError) => {
+          addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
+        },
+        pageMayExitObservable
+      )
+    : undefined
 
   return {
-    shutdown: () => exposuresBatch.stop(),
+    shutdown: () => exposuresBatch?.stop(),
     finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
         return
       }
-      const timestamp = timeStampNow()
+      if (!supportsExposureAdmission(hookContext)) return
+      // Complete the provider decision before either destination consumes it.
+      const sharedDecision = completeExposureDecision(details)
       const exposureEvent = createExposureEvent(
         getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
         details
@@ -59,25 +90,34 @@ export function createExposureLoggingHook(
       }
       const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
 
-      const hasLoggedAssignment = exposureCache.has(exposureCacheEntry)
+      // The verdict is final once completed. Fall back to the cache when the
+      // result carried no shared decision.
+      const stampedVerdict = details.flagMetadata?.__dd_exposure_cache_hit
+      const hasLoggedAssignment = stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
       if (hasLoggedAssignment) {
         return
       }
 
       try {
-        const url = window?.location?.href
-        const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
-          ...exposureEvent,
-          ...(configuration.service ? { service: configuration.service } : {}),
-          rum: {
-            ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
-            ...(url && { view: { url } }),
-          },
-          timestamp,
+        if (exposuresBatch) {
+          const url = window?.location?.href
+          const timestamp = timeStampNow()
+          // Features stay off the cache entry: a features change must not turn a
+          // repeat exposure into a new one.
+          const features = featuresWithPrefix(details.flagMetadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+          const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
+            ...exposureEvent,
+            ...(features && { features }),
+            ...(configuration.service ? { service: configuration.service } : {}),
+            rum: {
+              ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+              ...(url && { view: { url } }),
+            },
+            timestamp,
+          }
+          exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
         }
-        exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
-        // Only cache if batch.add() succeeds
-        exposureCache.set(exposureCacheEntry)
+        if (!sharedDecision) exposureCache.set(exposureCacheEntry)
       } catch (error) {
         addTelemetryDebug('Error adding exposure to batch', {
           'error.message': error instanceof Error ? error.message : String(error),
@@ -87,7 +127,9 @@ export function createExposureLoggingHook(
   }
 }
 
-export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOptions): DatadogExposureLoggingHook {
+export function createDatadogExposureLoggingHook(
+  options: FlaggingTrackingInitConfiguration
+): DatadogExposureLoggingHook {
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   if (!configuration) {
     return {
@@ -98,11 +140,17 @@ export function createDatadogExposureLoggingHook(options: DatadogTrackingHooksOp
   }
 
   const exposureCache = createExposureCache(options, configuration)
+  // `trackExposures` false is record-only mode: nothing is sent to Datadog, but
+  // the cache keeps recording so verdicts stay correct.
+  const sendToDatadog = resolveTrackExposures(options, true)
 
-  return createTrackingHookController(async () => {
-    await runTrackingLifecycleOperation(() => exposureCache.init())
-    return createExposureLoggingHook(configuration, exposureCache)
-  })
+  return {
+    ...createTrackingHookController(async () => {
+      await runTrackingLifecycleOperation(() => exposureCache.init())
+      return createExposureLoggingHook(configuration, exposureCache, undefined, { sendToDatadog })
+    }),
+    exposureCache,
+  }
 }
 
 function getExposureCacheEntry(
@@ -116,4 +164,37 @@ function getExposureCacheEntry(
         ...exposureEvent,
         __dd_core_configuration_id: coreConfigurationId,
       }
+}
+
+/**
+ * Prepares the exposure-cache verdict before OpenFeature freezes metadata.
+ * The private decision is finalized once the evaluation completes successfully,
+ * shared by the Datadog path and the customer hook.
+ */
+export function stampExposureCacheVerdict(
+  details: ResolutionDetails<FlagValue> & { flagKey: string },
+  fallbackContext: EvaluationContext,
+  exposureCache: AssignmentCache | undefined
+): void {
+  const metadata = details.flagMetadata
+  if (
+    !metadata ||
+    metadata.__dd_do_log !== true ||
+    details.errorCode ||
+    details.reason === 'ERROR' ||
+    details.variant == null
+  ) {
+    return
+  }
+  const detailsWithMetadata: EvaluationDetails<FlagValue> = { ...details, flagMetadata: metadata }
+  const exposureEvent = createExposureEvent(
+    getEvaluationTrackingContext(detailsWithMetadata, () => fallbackContext),
+    detailsWithMetadata
+  )
+  if (!exposureEvent) {
+    return
+  }
+  if (exposureCache) {
+    prepareExposureDecision(metadata, exposureCache, getExposureCacheEntry(exposureEvent, detailsWithMetadata))
+  }
 }

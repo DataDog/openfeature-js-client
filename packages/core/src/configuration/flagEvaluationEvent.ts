@@ -1,4 +1,5 @@
 import type { EvaluationContextValue } from '@openfeature/core'
+import type { FeatureValue } from '../evaluation/split-features'
 import type { TimeStamp } from '../time'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
@@ -9,6 +10,7 @@ interface FlagEvaluationAggregationData {
   targetingRuleKey?: string
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
+  features?: Record<string, FeatureValue>
   count: number
   firstEvaluation: TimeStamp
   lastEvaluation: TimeStamp
@@ -49,6 +51,12 @@ export function createFlagEvaluationEvent(
 
   if (data.targetingRuleKey) {
     event.targeting_rule = { key: data.targetingRuleKey }
+  }
+
+  // Split features routed to the EVALUATION destination, written on every count
+  // row whatever the privacy consent.
+  if (data.features) {
+    event.features = data.features
   }
 
   // Add context data if targeting context exists
