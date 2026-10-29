@@ -4,6 +4,14 @@ import type { ExposureEvent } from './exposureEvent.types'
 export function createExposureEvent<T extends FlagValue>(
   context: EvaluationContext,
   details: EvaluationDetails<T>
+): ExposureEvent | undefined
+export function createExposureEvent(
+  context: EvaluationContext,
+  details: Pick<EvaluationDetails<FlagValue>, 'flagKey' | 'variant' | 'flagMetadata'>
+): ExposureEvent | undefined
+export function createExposureEvent(
+  context: EvaluationContext,
+  details: Pick<EvaluationDetails<FlagValue>, 'flagKey' | 'variant' | 'flagMetadata'>
 ): ExposureEvent | undefined {
   // Only log if doLog flag is true
   if (!details.flagMetadata?.doLog) {

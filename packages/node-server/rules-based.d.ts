@@ -191,6 +191,23 @@ type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfiguratio
 	 * @generated from field: bool observe_full_evaluation_data = 10;
 	 */
 	observeFullEvaluationData: boolean;
+	/**
+	 * Optional evaluator behavior overrides. Evaluators use their hard-coded
+	 * defaults when this message or one of its fields is absent.
+	 *
+	 * @generated from field: datadog.ffe.flagging.ufc.v1.EvaluatorParams evaluator_params = 11;
+	 */
+	evaluatorParams?: EvaluatorParams | undefined;
+};
+type EvaluatorParams = Message<"datadog.ffe.flagging.ufc.v1.EvaluatorParams"> & {
+	/**
+	 * Maximum dependency-edge depth, counted from a root flag at depth zero.
+	 * The maximum is inclusive, and zero rejects every dependency edge. Values
+	 * must not exceed 255.
+	 *
+	 * @generated from field: optional uint64 max_dependency_depth = 1;
+	 */
+	maxDependencyDepth?: bigint | undefined;
 };
 type Version = Message<"datadog.ffe.flagging.ufc.v1.Version"> & {
 	/**
@@ -439,9 +456,35 @@ type Condition = Message<"datadog.ffe.flagging.ufc.v1.Condition"> & {
 		value: Sha256StringComparisonCondition;
 		case: "sha256StringComparison";
 	} | {
+		/**
+		 * @generated from field: datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition flag_evaluation_string_membership = 11;
+		 */
+		value: FlagEvaluationStringMembershipCondition;
+		case: "flagEvaluationStringMembership";
+	} | {
 		case: undefined;
 		value?: undefined;
 	};
+};
+type FlagEvaluationStringMembershipCondition = Message<"datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition"> & {
+	/**
+	 * Index into FlagsConfiguration.strings for the flag key.
+	 *
+	 * @generated from field: uint32 flag_key_string_index = 1;
+	 */
+	flagKeyStringIndex: number;
+	/**
+	 * Indices into FlagsConfiguration.strings for expected variant keys.
+	 *
+	 * @generated from field: repeated uint32 variant_key_string_indexes = 2;
+	 */
+	variantKeyStringIndexes: number[];
+	/**
+	 * True negates membership.
+	 *
+	 * @generated from field: bool negate = 3;
+	 */
+	negate: boolean;
 };
 type ConditionOperands = Message<"datadog.ffe.flagging.ufc.v1.ConditionOperands"> & {
 	/**
@@ -669,6 +712,48 @@ type Split = Message<"datadog.ffe.flagging.ufc.v1.Split"> & {
 	 * @generated from field: datadog.ffe.flagging.ufc.v1.Reason reason = 4;
 	 */
 	reason: Reason;
+	/**
+	 * @generated from field: repeated datadog.ffe.flagging.ufc.v1.Feature features = 5;
+	 */
+	features: Feature[];
+};
+type Feature = Message<"datadog.ffe.flagging.ufc.v1.Feature"> & {
+	/**
+	 * @generated from field: string key = 1;
+	 */
+	key: string;
+	/**
+	 * @generated from oneof datadog.ffe.flagging.ufc.v1.Feature.value
+	 */
+	value: {
+		/**
+		 * @generated from field: string string_value = 2;
+		 */
+		value: string;
+		case: "stringValue";
+	} | {
+		/**
+		 * @generated from field: double number_value = 3;
+		 */
+		value: number;
+		case: "numberValue";
+	} | {
+		/**
+		 * @generated from field: bool bool_value = 4;
+		 */
+		value: boolean;
+		case: "boolValue";
+	} | {
+		case: undefined;
+		value?: undefined;
+	};
+	/**
+	 * Open strings such as HOOK, EXPOSURE or EVALUATION, not an enum: SDKs ignore destinations
+	 * they do not know.
+	 *
+	 * @generated from field: repeated string destinations = 5;
+	 */
+	destinations: string[];
 };
 type PartitionRange = Message<"datadog.ffe.flagging.ufc.v1.PartitionRange"> & {
 	/**
@@ -905,6 +990,8 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	/** Split features of the selected assignment; parsed leniently at evaluation time. */
+	features?: unknown;
 };
 export type FlagsConfigurationWire = string;
 /**

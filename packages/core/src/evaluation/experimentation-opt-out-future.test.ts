@@ -272,6 +272,20 @@ it('preserves the JSON wire representation and prepares replacement flags indepe
   )
 })
 
+it('does not invoke configuration or flag-map accessors during preparation', () => {
+  const configuration = jsonRules('2026-10-01T12:00:00.123456788Z')
+  const flagGetter = jest.fn(() => configuration.flags.flag)
+  Object.defineProperty(configuration.flags, 'accessor-flag', { enumerable: true, get: flagGetter })
+  prepareUniversalFlagConfiguration(configuration)
+  expect(flagGetter).not.toHaveBeenCalled()
+
+  const flagsGetter = jest.fn(() => configuration.flags)
+  const accessorConfiguration = { ...configuration }
+  Object.defineProperty(accessorConfiguration, 'flags', { enumerable: true, get: flagsGetter })
+  prepareUniversalFlagConfiguration(accessorConfiguration)
+  expect(flagsGetter).not.toHaveBeenCalled()
+})
+
 it('prepares valid and invalid protobuf replacements at decode time without changing the wire data', () => {
   const raw = rawProtobufRules('2026-10-01T12:00:00.123456788Z')
   const wire = encodeFlagsConfiguration(raw)
