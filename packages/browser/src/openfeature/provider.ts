@@ -33,6 +33,7 @@ import {
   type EvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
 import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
+import { registerDatadogProvider } from './exposure-scope'
 import { stampExposureCacheVerdict } from './exposures'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
@@ -124,6 +125,7 @@ export class DatadogProvider extends DatadogProviderBase {
     this.configuration = validateAndBuildFlaggingConfiguration(options)
     const getTrackingContext = () => this.effectiveTrackingContext()
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
+    registerDatadogProvider(this.metadata)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({

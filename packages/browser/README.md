@@ -190,6 +190,12 @@ Set `trackExposures: false` to stop sending exposure events to Datadog only. The
 evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
 and superseded by `trackExposures`; when both are set, `trackExposures` wins.
 
+Exposures require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`.
+Composed providers such as OpenFeature's `MultiProvider` are not supported: their child hooks finish before the
+application's hooks can reject the result. Under a composed provider, the SDK sends no exposures to Datadog, does not
+update the exposure cache and does not call `ExposureHook` callbacks, and logs one warning. Flag evaluation is not
+affected.
+
 #### Rules-based mode and `DatadogCoreProvider`
 
 `DatadogProvider` wires this up automatically. In rules-based mode the application composes its own tracking

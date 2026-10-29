@@ -28,6 +28,7 @@ import {
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
+import { supportsExposureAdmission } from './exposure-scope'
 import type { DatadogTrackingHook, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
@@ -77,6 +78,7 @@ export function createExposureLoggingHook(
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
         return
       }
+      if (!supportsExposureAdmission(hookContext)) return
       // Complete the provider decision before either destination consumes it.
       const sharedDecision = completeExposureDecision(details)
       const exposureEvent = createExposureEvent(

@@ -29,6 +29,7 @@ import {
   type ExperimentationOptOutMode,
   getExperimentationOptOutMode,
 } from './experimentation-opt-out'
+import { registerDatadogProvider, supportsExposureAdmission } from './exposure-scope'
 import { stampExposureCacheVerdict } from './exposures'
 import { DatadogProviderBase } from './provider-base'
 
@@ -49,8 +50,8 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   // and before the tracking and customer hooks read the verdict.
   readonly hooks: Hook[] = [
     {
-      finally: (_context, details) => {
-        completeExposureDecision(details)
+      finally: (context, details) => {
+        if (supportsExposureAdmission(context)) completeExposureDecision(details)
       },
     },
   ]
@@ -72,6 +73,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.exposureCache = options.exposureCache
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
+    registerDatadogProvider(this.metadata)
   }
 
   getConfiguration(): FlagsConfiguration | undefined {

@@ -13,6 +13,7 @@ import type {
   HookContext,
 } from '@openfeature/web-sdk'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
+import { supportsExposureAdmission } from './exposure-scope'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
 const METADATA_DO_LOG = '__dd_do_log'
@@ -157,6 +158,9 @@ function cloneExposureContext(context: EvaluationContext | undefined): Evaluatio
  * Datadog sends. With `trackExposures: false`, Datadog receives no exposures,
  * and `shouldSend()` gives the same results.
  *
+ * The callback is not called under composed providers such as `MultiProvider`;
+ * register the Datadog provider directly or wrapped in `DatadogDevtools`.
+ *
  * The callback runs on the evaluation thread: hand the data to a background
  * queue instead of doing I/O in the callback. An exception from the callback
  * does not affect the evaluation. The first one is logged at warn level, later
@@ -175,7 +179,7 @@ export class ExposureHook implements Hook {
 
   /** Runs in the final hook stage, so a later hook's error is seen. */
   finally(hookContext: HookContext, evaluationDetails: EvaluationDetails<FlagValue>): void {
-    if (evaluationDetails == null) return
+    if (evaluationDetails == null || !supportsExposureAdmission(hookContext)) return
     try {
       // The callback must read the final verdict, whether or not a provider or
       // tracking hook finalized the decision first.

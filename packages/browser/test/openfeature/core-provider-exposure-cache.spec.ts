@@ -1,9 +1,10 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { MultiProvider, OpenFeature, type Provider } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingTrackingInitConfiguration } from '../../src/domain/configuration'
+import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
 import { type ExposureEvaluation, ExposureHook } from '../../src/openfeature/exposure-hook'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import {
@@ -201,6 +202,52 @@ describe('DatadogCoreProvider with a shared exposure cache', () => {
         features: { 'exposure.only': 'exposed' },
       }),
     ])
+  })
+
+  it.each([
+    ['MultiProvider', (provider: Provider) => new MultiProvider([{ provider }])],
+    ['MultiProvider inside DatadogDevtools', (provider: Provider) => new DatadogDevtools(new MultiProvider([{ provider }]))],
+  ])('disables exposures under %s and keeps evaluating', async (_name, compose) => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(rulesConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, compose(provider), context)
+    const client = OpenFeature.getClient(DOMAIN)
+    const evaluations: ExposureEvaluation[] = []
+    client.addHooks(...tracking.hooks, new ExposureHook((evaluation) => evaluations.push(evaluation)))
+
+    expect(client.getBooleanDetails('holdout-flag', false).value).toBe(true)
+    expect(client.getBooleanDetails('holdout-flag', false).value).toBe(true)
+
+    jest.advanceTimersByTime(31000)
+    expect(exposureEvents(fetchMock)).toEqual([])
+    expect(evaluations).toEqual([])
+
+    // Nothing was recorded, so the first direct evaluation is a new exposure.
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    expect(client.getBooleanDetails('holdout-flag', false).flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    await tracking.shutdown()
+  })
+
+  it('keeps exposures under DatadogDevtools', async () => {
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(rulesConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, new DatadogDevtools(provider), context)
+    const client = OpenFeature.getClient(DOMAIN)
+    const evaluations: ExposureEvaluation[] = []
+    client.addHooks(...tracking.hooks, new ExposureHook((evaluation) => evaluations.push(evaluation)))
+
+    expect(client.getBooleanDetails('holdout-flag', false).flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    expect(client.getBooleanDetails('holdout-flag', false).flagMetadata?.__dd_exposure_cache_hit).toBe(true)
+    expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([true, false])
+
+    jest.advanceTimersByTime(31000)
+    expect(exposureEvents(fetchMock)).toHaveLength(1)
+    await tracking.shutdown()
   })
 
   it('treats a variant or serial id change as a new exposure', async () => {
