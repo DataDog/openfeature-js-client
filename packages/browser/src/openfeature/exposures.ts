@@ -175,7 +175,13 @@ export function stampExposureCacheVerdict(
   exposureCache: AssignmentCache | undefined
 ): void {
   const metadata = details.flagMetadata
-  if (!metadata || metadata.__dd_do_log !== true || details.errorCode || details.variant == null) {
+  if (
+    !metadata ||
+    metadata.__dd_do_log !== true ||
+    details.errorCode ||
+    details.reason === 'ERROR' ||
+    details.variant == null
+  ) {
     return
   }
   const detailsWithMetadata: EvaluationDetails<FlagValue> = { ...details, flagMetadata: metadata }

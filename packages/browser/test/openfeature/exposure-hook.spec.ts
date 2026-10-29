@@ -41,6 +41,15 @@ describe('ExposureHook', () => {
                 { key: 'evaluation.only', value: 7, destinations: ['EVALUATION'] },
               ],
             },
+            'error-reason-flag': {
+              allocationKey: 'error-allocation',
+              variationKey: 'on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'ERROR',
+              doLog: true,
+              serialId: 1002,
+            },
             'silent-flag': {
               allocationKey: 'silent-allocation',
               variationKey: 'on',
@@ -153,6 +162,44 @@ describe('ExposureHook', () => {
     expect(evaluations[0].shouldSend()).toBe(false)
     expect(evaluations[1].isExposure()).toBe(false)
     expect(evaluations[1].shouldSend()).toBe(false)
+  })
+
+  it('is not an exposure for an assignment whose reason is ERROR', async () => {
+    await startProvider()
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((evaluation) => evaluations.push(evaluation)))
+    const client = OpenFeature.getClient()
+
+    const errored = client.getBooleanDetails('error-reason-flag', false)
+    client.getBooleanDetails('holdout-flag', true)
+
+    expect(errored.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
+    expect(evaluations[0].isExposure()).toBe(false)
+    expect(evaluations[0].shouldSend()).toBe(false)
+    expect(evaluations[1].shouldSend()).toBe(true)
+  })
+
+  it('keeps customer edits to the context out of later evaluations', async () => {
+    await startProvider()
+    await OpenFeature.setContext({ targetingKey: 'hook-user', profile: { plan: 'pro' } })
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(
+      new ExposureHook((evaluation) => {
+        evaluations.push(evaluation)
+        if (evaluations.length === 1) {
+          evaluation.context!.targetingKey = 'different-user'
+          ;(evaluation.context!.profile as Record<string, string>).plan = 'free'
+        }
+      })
+    )
+    const client = OpenFeature.getClient()
+
+    client.getBooleanValue('holdout-flag', true)
+    client.getBooleanValue('holdout-flag', true)
+
+    expect(evaluations[1].targetingKey).toBe('hook-user')
+    expect(evaluations[1].context).toMatchObject({ targetingKey: 'hook-user', profile: { plan: 'pro' } })
+    expect(evaluations[1].isCacheHit()).toBe(true)
   })
 
   it('keeps the evaluation working when the callback throws, warning once then debugging', async () => {

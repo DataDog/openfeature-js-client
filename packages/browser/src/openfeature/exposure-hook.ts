@@ -4,7 +4,14 @@ import {
   featuresWithPrefix,
   METADATA_FEATURE_PREFIX,
 } from '@datadog/flagging-core'
-import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
+import type {
+  EvaluationContext,
+  EvaluationContextValue,
+  EvaluationDetails,
+  FlagValue,
+  Hook,
+  HookContext,
+} from '@openfeature/web-sdk'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
@@ -60,7 +67,7 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
     // RUM-enriched subject); fall back to the hook context for unbound results.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
-      this.evaluationContext = getEvaluationTrackingContext(details, () => hookContext?.context)
+      this.evaluationContext = cloneExposureContext(getEvaluationTrackingContext(details, () => hookContext?.context))
     } catch {
       this.evaluationContext = undefined
     }
@@ -87,6 +94,7 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   isExposure(): boolean {
     return (
       this.details.errorCode === undefined &&
+      this.details.reason !== 'ERROR' &&
       this.details.variant != null &&
       typeof this.allocation === 'string' &&
       this.details.flagMetadata?.[METADATA_DO_LOG] === true
@@ -104,6 +112,33 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   getFeatures(): Readonly<Record<string, FeatureValue>> {
     return Object.freeze(featuresWithPrefix(this.details.flagMetadata, METADATA_FEATURE_PREFIX) ?? {})
   }
+}
+
+// Keep customer edits separate from the context retained for evaluation and telemetry.
+function cloneExposureContext(context: EvaluationContext | undefined): EvaluationContext | undefined {
+  if (context === undefined) return undefined
+  const clone = (value: EvaluationContextValue): EvaluationContextValue => {
+    if (value !== null && typeof value === 'object') {
+      try {
+        return new Date(Date.prototype.getTime.call(value))
+      } catch {
+        // Non-Date objects are copied below, including cross-realm objects.
+      }
+      if (Array.isArray(value)) return value.map(clone)
+      const copy: Record<string, EvaluationContextValue> = {}
+      for (const [key, nested] of Object.entries(value)) {
+        Object.defineProperty(copy, key, {
+          value: clone(nested),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        })
+      }
+      return copy
+    }
+    return value
+  }
+  return clone(context) as EvaluationContext
 }
 
 /**
