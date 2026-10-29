@@ -419,6 +419,31 @@ interface BaseHook<T extends FlagValue = FlagValue, TData = Record<string, unkno
 	 */
 	finally?(hookContext: Readonly<HookContext<T, TData>>, evaluationDetails: EvaluationDetails<T>, hookHints?: HookHints): HooksReturn;
 }
+interface ExposureEvent {
+	allocation: {
+		key: string;
+	};
+	flag: {
+		key: string;
+	};
+	variant: {
+		key: string;
+	};
+	serial_id?: number;
+	subject: {
+		id: string;
+		attributes: EvaluationContext;
+	};
+	service?: string;
+	rum?: {
+		application?: {
+			id?: string;
+		};
+		view?: {
+			url?: string;
+		};
+	};
+}
 declare enum OperatorType {
 	MATCHES = "MATCHES",
 	NOT_MATCHES = "NOT_MATCHES",
@@ -458,6 +483,14 @@ type NotOneOfCondition = {
 	attribute: string;
 	value: string[];
 };
+type FlagEvaluation = {
+	key: string;
+};
+type FlagEvaluationCondition = {
+	operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF;
+	flagEvaluation: FlagEvaluation;
+	value: string[];
+};
 type NumericCondition = {
 	operator: NumericOperator;
 	attribute: string;
@@ -473,7 +506,7 @@ type SemVerCondition = {
 	attribute: string;
 	value: string;
 };
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | SemVerCondition;
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | FlagEvaluationCondition | NumericCondition | NullCondition | SemVerCondition;
 interface Rule {
 	conditions: Condition[];
 }
@@ -502,10 +535,8 @@ interface Allocation {
 	rules?: Rule[];
 	startAt?: Date;
 	endAt?: Date;
-	randomizationActivatedAt?: string;
 	splits: Split[];
-	/** Required by the UFC JSON schema; the producer always supplies an explicit boolean. */
-	doLog: boolean;
+	doLog?: boolean;
 }
 interface Flag {
 	key: string;
@@ -518,35 +549,13 @@ export interface UniversalFlagConfigurationV1 {
 	createdAt: string;
 	format: string;
 	observeFullEvaluationData?: boolean;
+	evaluatorParams?: {
+		maxDependencyDepth?: number;
+	};
 	environment: {
 		name: string;
 	};
 	flags: Record<string, Flag>;
-}
-interface ExposureEvent {
-	allocation: {
-		key: string;
-	};
-	flag: {
-		key: string;
-	};
-	variant: {
-		key: string;
-	};
-	serial_id?: number;
-	subject: {
-		id: string;
-		attributes: EvaluationContext;
-	};
-	service?: string;
-	rum?: {
-		application?: {
-			id?: string;
-		};
-		view?: {
-			url?: string;
-		};
-	};
 }
 type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
@@ -580,12 +589,22 @@ export interface DatadogNodeServerProviderOptions {
 	 */
 	exposureChannel: Channel<ExposureEvent>;
 	/**
+	 * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+	 */
+	dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>;
+	/**
 	 * Timeout in milliseconds for provider initialization.
 	 * If the configuration is not set within this time, initialization will fail.
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
 }
+export type DependencyEvaluationEvent = {
+	context: EvaluationContext;
+	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
+		value?: FlagValue;
+	};
+};
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
 	readonly metadata: ProviderMetadata;
@@ -601,9 +620,9 @@ export declare class DatadogNodeServerProvider implements Provider {
 	 */
 	getConfiguration(): UniversalFlagConfigurationV1 | undefined;
 	/**
-	 * Used by dd-source-js. Pass null or undefined to withdraw the configuration.
+	 * Used by dd-source-js
 	 */
-	setConfiguration(configuration: UniversalFlagConfigurationV1 | null | undefined): void;
+	setConfiguration(configuration: UniversalFlagConfigurationV1): void;
 	/**
 	 * Used by dd-source-js
 	 */
@@ -622,6 +641,9 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	private dependencyEvaluationHandler;
+	private handleDependencyEvaluation;
+	private handleDependencyExposures;
 	private handleExposure;
 }
 
