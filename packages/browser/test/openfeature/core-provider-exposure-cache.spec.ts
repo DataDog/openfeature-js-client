@@ -206,7 +206,10 @@ describe('DatadogCoreProvider with a shared exposure cache', () => {
 
   it.each([
     ['MultiProvider', (provider: Provider) => new MultiProvider([{ provider }])],
-    ['MultiProvider inside DatadogDevtools', (provider: Provider) => new DatadogDevtools(new MultiProvider([{ provider }]))],
+    [
+      'MultiProvider inside DatadogDevtools',
+      (provider: Provider) => new DatadogDevtools(new MultiProvider([{ provider }])),
+    ],
   ])('disables exposures under %s and keeps evaluating', async (_name, compose) => {
     jest.spyOn(console, 'warn').mockImplementation(() => {})
     const tracking = createDatadogExposureLoggingHook(trackingConfig)
