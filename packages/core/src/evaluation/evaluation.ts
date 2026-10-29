@@ -63,7 +63,8 @@ export function evaluate<T extends FlagValueType>(
       flagKey,
       defaultValue,
       context,
-      experimentationOptOutMode
+      experimentationOptOutMode,
+      logger
     )
   }
 

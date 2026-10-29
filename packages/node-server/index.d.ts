@@ -504,6 +504,7 @@ interface Split {
 	shards: Shard[];
 	extraLogging?: Record<string, string>;
 	serialId?: number;
+	features?: unknown;
 }
 interface Allocation {
 	key: string;
@@ -545,6 +546,7 @@ interface ExposureEvent {
 		key: string;
 	};
 	serial_id?: number;
+	features?: Record<string, string | number | boolean>;
 	subject: {
 		id: string;
 		attributes: EvaluationContext;
@@ -615,6 +617,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private initController?;
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
 	private readonly exposureCache;
+	private readonly dependencyExposureBatches;
 	private configuration?;
 	constructor(options: DatadogNodeServerProviderOptions);
 	/**
@@ -645,8 +648,8 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
 	private dependencyEvaluationHandler;
 	private handleDependencyEvaluation;
-	private dependencyExposureHandler;
 	private handleDependencyExposures;
+	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;
 }
 

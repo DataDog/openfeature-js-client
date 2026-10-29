@@ -24,6 +24,8 @@ export interface Split {
   shards: Shard[]
   extraLogging?: Record<string, string>
   serialId?: number
+  // Unparsed wire data: leniently converted to flag metadata by the evaluator.
+  features?: unknown
 }
 
 export interface Allocation {

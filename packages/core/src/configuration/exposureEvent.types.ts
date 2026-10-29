@@ -12,6 +12,9 @@ export interface ExposureEvent {
     key: string
   }
   serial_id?: number
+  // Split features routed to the EXPOSURE destination. Omitted when there are
+  // none, and never part of the exposure cache key or value.
+  features?: Record<string, string | number | boolean>
   subject: {
     id: string
     attributes: EvaluationContext
