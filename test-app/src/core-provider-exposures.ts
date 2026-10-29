@@ -43,6 +43,8 @@ async function run(): Promise<void> {
   const first = client.getBooleanDetails('browser-flag', false)
   const second = client.getBooleanDetails('browser-flag', false)
 
+  await tracking.shutdown()
+
   reportSuccess({
     provider: provider.metadata.name,
     value: first.value,

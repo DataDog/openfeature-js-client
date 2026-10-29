@@ -387,7 +387,8 @@ test('runs the core provider shared exposure cache workflow', async ({ page }) =
       return
     }
     unexpectedRequests.push(request.url())
-    await route.abort()
+    // Fulfill locally so an unexpected send fails the request assertion itself.
+    await route.fulfill({ status: 200, body: '{}' })
   })
 
   const result = await runSmoke<Record<string, unknown>>(page, '/core-provider-exposures.html')
