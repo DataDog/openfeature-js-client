@@ -41,10 +41,7 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & {
-  checkpoint?: () => unknown
-  rollback?: (checkpoint: unknown) => void
-}
+export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
 
 type ConditionOutcome = {
   matches: boolean
@@ -97,10 +94,9 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     if (!prepared || (!prepared.valid && needsActivation(excludeExperiments))) {
       throw new FlagConfigurationError('Invalid randomization activation timestamp')
     }
+    const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
-      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
-      const conditionResults = new Map<number, ConditionOutcome>()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -110,15 +106,11 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
-        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
-      if (!split) {
-        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
-        continue
-      }
+      if (!split) continue
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
@@ -216,7 +208,6 @@ function conditionOutcome(
   const cached = results.get(index)
   if (cached !== undefined) return cached
   const condition = atIndex(configuration.conditions, index, 'condition')
-  const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
     outcome = { matches: true }
@@ -241,9 +232,6 @@ function conditionOutcome(
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
     outcome = { matches }
-  }
-  if (!outcome.matches) {
-    resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
   results.set(index, outcome)
   return outcome

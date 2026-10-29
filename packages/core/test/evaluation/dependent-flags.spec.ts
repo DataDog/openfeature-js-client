@@ -98,12 +98,7 @@ describe('dependent flag evaluation', () => {
       )
     ).toMatchObject({ value: true, variant: 'on' })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: true, variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([
-      expect.objectContaining({
-        flagKey: 'prerequisite',
-        details: expect.objectContaining({ variant: 'on' }),
-      }),
-    ])
+    expect(onExposures).not.toHaveBeenCalled()
   })
 
   it('fails a protobuf graph when a reached prerequisite returns no variant', () => {
@@ -208,7 +203,7 @@ describe('dependent flag evaluation', () => {
     const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-fallback' } })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(onExposures).not.toHaveBeenCalled()
   })
 
   it('does not publish protobuf exposures without a retained successful-path witness', () => {
@@ -225,7 +220,7 @@ describe('dependent flag evaluation', () => {
 
     const { result, onExposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(onExposures).not.toHaveBeenCalled()
   })
 
   it('applies the protobuf maximum dependency depth override', () => {
