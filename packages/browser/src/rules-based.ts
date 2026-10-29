@@ -8,7 +8,7 @@ export {
   configurationToString,
   getPrecomputedContext,
 } from '@datadog/flagging-core/rules-based'
-export { DatadogCoreProvider } from './openfeature/core-provider'
+export { DatadogCoreProvider, type DatadogCoreProviderConfiguration } from './openfeature/core-provider'
 export * from './provider-entrypoint'
 export type {
   PrecomputedConfigurationFetchOptions,

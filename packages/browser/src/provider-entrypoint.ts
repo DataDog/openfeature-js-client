@@ -8,6 +8,8 @@ export {
   type ExperimentationOptOutConfiguration,
   ExperimentationOptOutMode,
 } from './openfeature/experimentation-opt-out'
+export type { ExposureEvaluation } from './openfeature/exposure-hook'
+export { ExposureHook } from './openfeature/exposure-hook'
 export type { DatadogExposureLoggingHook } from './openfeature/exposures'
 export { createDatadogExposureLoggingHook } from './openfeature/exposures'
 export { createDatadogEvaluationLoggingHook } from './openfeature/flagEvaluations'

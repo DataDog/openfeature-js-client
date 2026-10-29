@@ -1,17 +1,22 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
+  completeExposureDecision,
   createExposureEvent,
   type ExposureEvent,
+  featuresWithPrefix,
   LRUInMemoryAssignmentCache,
+  METADATA_EXPOSURE_FEATURE_PREFIX,
+  prepareExposureDecision,
   prepareUniversalFlagConfiguration,
   timeStampNow,
 } from '@datadog/flagging-core'
-import type { EvaluationContext, ServerProviderEvents } from '@openfeature/core'
+import type { EvaluationContext, FlagMetadata, ServerProviderEvents } from '@openfeature/core'
 import type {
   EvaluationDetails,
   FlagValue,
   Hook,
+  HookContext,
   JsonValue,
   Logger,
   Paradigm,
@@ -66,6 +71,9 @@ export class DatadogNodeServerProvider implements Provider {
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
+    // Runs in the final hook stage, where the SDK has turned any later hook error
+    // into an error result, so a failed evaluation is never published or recorded.
+    this.hooks.push(new ExposureLoggingHook(this.exposureCache, this.options.exposureChannel))
   }
 
   /**
@@ -208,28 +216,84 @@ export class DatadogNodeServerProvider implements Provider {
     return resolutionDetails
   }
 
+  /** Prepares a verdict finalized by the provider hook after successful evaluation. */
   private handleExposure<T extends FlagValue>(
     flagKey: string,
     context: EvaluationContext,
     resolutionDetails: ResolutionDetails<T>
   ): void {
-    const timestamp = timeStampNow()
+    const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
     const evalutationDetails: EvaluationDetails<T> = {
       ...resolutionDetails,
       flagKey: flagKey,
-      flagMetadata: resolutionDetails.flagMetadata ?? {},
+      flagMetadata: metadata,
     }
     const exposureEvent = createExposureEvent(context, evalutationDetails)
     if (!exposureEvent) {
       return
     }
-    const hasLoggedAssignment = this.exposureCache?.has(exposureEvent)
-    if (hasLoggedAssignment) {
+    if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, exposureEvent)
+  }
+}
+
+/**
+ * Publishes and records the exposure once the evaluation has completed without an
+ * error. A cache entry is written even when nothing subscribes to the exposure
+ * channel, so the verdict stays correct with Datadog exposure logging off.
+ */
+class ExposureLoggingHook implements Hook {
+  private readonly pending = new WeakMap<Readonly<HookContext<FlagValue>>, EvaluationDetails<FlagValue>>()
+
+  constructor(
+    private readonly exposureCache: AssignmentCache | undefined,
+    private readonly exposureChannel: Channel<ExposureEvent>
+  ) {}
+
+  after(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
+    this.pending.set(hookContext, evaluationDetails)
+  }
+
+  error(hookContext: Readonly<HookContext<FlagValue>>): void {
+    this.pending.delete(hookContext)
+  }
+
+  finally(hookContext: Readonly<HookContext<FlagValue>>): void {
+    // Older supported OpenFeature versions pass only hook hints to finally.
+    // Capture the successful result in after and discard it on any later error.
+    const evaluationDetails = this.pending.get(hookContext)
+    this.pending.delete(hookContext)
+    if (evaluationDetails == null || evaluationDetails.errorCode !== undefined) {
       return
     }
-    if (this.options.exposureChannel.hasSubscribers) {
-      this.options.exposureChannel.publish({ ...exposureEvent, timestamp })
-      this.exposureCache?.set(exposureEvent)
+    // One check-and-record after successful finalization; concurrent or nested
+    // evaluations of the same assignment cannot both be admitted.
+    const sharedDecision = completeExposureDecision(evaluationDetails)
+    const metadata = evaluationDetails.flagMetadata as FlagMetadata | undefined
+    if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
+      return
+    }
+    try {
+      const details: EvaluationDetails<FlagValue> = {
+        ...evaluationDetails,
+        flagKey: evaluationDetails.flagKey ?? hookContext?.flagKey ?? '',
+      }
+      const exposureEvent = createExposureEvent(hookContext?.context ?? {}, details)
+      if (!exposureEvent) {
+        return
+      }
+      if (this.exposureChannel.hasSubscribers) {
+        // Features stay off the cache entry: a features change must not turn a
+        // repeat exposure into a new one.
+        const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+        this.exposureChannel.publish({
+          ...exposureEvent,
+          ...(features && { features }),
+          timestamp: timeStampNow(),
+        })
+      }
+      if (!sharedDecision) this.exposureCache?.set(exposureEvent)
+    } catch {
+      // Exposure reporting must never break the evaluation.
     }
   }
 }

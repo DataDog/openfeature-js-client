@@ -157,6 +157,30 @@ type RulesResponseOptions = {
   membershipIndexes?: number[]
   shaHashes?: string[]
   negateStringComparison?: boolean
+  splitFeatures?: Array<{
+    key: string
+    value?: { type: 'string'; value: string } | { type: 'number'; value: number } | { type: 'boolean'; value: boolean }
+    destinations?: string[]
+  }>
+}
+
+function protobufFeature(feature: {
+  key: string
+  value?: { type: 'string'; value: string } | { type: 'number'; value: number } | { type: 'boolean'; value: boolean }
+  destinations?: string[]
+}): number[] {
+  const value = feature.value
+  return [
+    ...protobufString(1, feature.key),
+    ...(value === undefined
+      ? []
+      : value.type === 'string'
+        ? protobufString(2, value.value)
+        : value.type === 'number'
+          ? protobufDouble(3, value.value)
+          : protobufVarint(4, value.value ? 1 : 0)),
+    ...(feature.destinations ?? []).flatMap((destination) => protobufString(5, destination)),
+  ]
 }
 
 function rulesResponse(options: RulesResponseOptions = {}): string {
@@ -213,6 +237,7 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
     ...protobufVarint(2, 0),
     ...protobufVarint(3, 7),
     ...protobufVarint(4, options.splitReason ?? 1),
+    ...(options.splitFeatures ?? []).flatMap((feature) => protobufMessage(5, protobufFeature(feature))),
   ])
   const allocation = [
     ...protobufString(1, 'allocation'),
@@ -1307,5 +1332,94 @@ describe('flags configuration protobuf decoder', () => {
       expect(result.flagMetadata?.__dd_observe_full_evaluation_data).toBe(consent)
       expect(JSON.stringify(result)).not.toContain('pii-canary')
     })
+  })
+})
+
+describe('split features', () => {
+  const evaluateWithFeatures = (splitFeatures: NonNullable<RulesResponseOptions['splitFeatures']>) =>
+    evaluateBoolean({ splitFeatures }, { targetingKey: 'user', country: 'US' })
+
+  it('routes features with mixed value types to their metadata prefixes', () => {
+    const result = evaluateWithFeatures([
+      { key: 'holdout.key', value: { type: 'string', value: '06ad' }, destinations: ['HOOK'] },
+      {
+        key: 'holdout.assignment_group',
+        value: { type: 'string', value: 'status_quo' },
+        destinations: ['HOOK', 'EXPOSURE'],
+      },
+      {
+        key: 'holdout.should_include_in_holdout_analysis',
+        value: { type: 'boolean', value: false },
+        destinations: ['HOOK'],
+      },
+      { key: 'holdout.ratio', value: { type: 'number', value: 0.5 }, destinations: ['EVALUATION'] },
+    ])
+
+    expect(result.flagMetadata).toMatchObject({
+      ['__dd_feature.' + 'holdout.key']: '06ad',
+      ['__dd_feature.' + 'holdout.assignment_group']: 'status_quo',
+      ['__dd_feature.' + 'holdout.should_include_in_holdout_analysis']: false,
+      ['__dd_exposure_feature.' + 'holdout.assignment_group']: 'status_quo',
+      ['__dd_evaluation_feature.' + 'holdout.ratio']: 0.5,
+      __dd_has_evaluation_features: true,
+    })
+  })
+
+  it('adds no metadata entries without features', () => {
+    const result = evaluateWithFeatures([])
+
+    expect(result.flagMetadata).not.toHaveProperty('__dd_has_evaluation_features')
+    expect(Object.keys(result.flagMetadata ?? {}).filter((key) => key.startsWith('__dd_'))).toEqual([
+      '__dd_eval_timestamp_ms',
+      '__dd_allocation_key',
+      '__dd_do_log',
+      '__dd_split_serial_id',
+      '__dd_observe_full_evaluation_data',
+    ])
+  })
+
+  it('skips a feature with no value set', () => {
+    const result = evaluateWithFeatures([
+      { key: 'holdout.key', destinations: ['HOOK'] },
+      { key: 'holdout.other', value: { type: 'string', value: 'kept' }, destinations: ['HOOK'] },
+    ])
+
+    expect(result.flagMetadata).toMatchObject({ ['__dd_feature.' + 'holdout.other']: 'kept' })
+    expect(Object.keys(result.flagMetadata ?? {})).not.toContain('__dd_feature.holdout.key')
+  })
+
+  it('keeps the first feature on a repeated key for every destination', () => {
+    const result = evaluateWithFeatures([
+      { key: 'holdout.key', value: { type: 'string', value: 'first' }, destinations: ['HOOK', 'EXPOSURE'] },
+      { key: 'holdout.key', value: { type: 'string', value: 'second' }, destinations: ['HOOK'] },
+    ])
+
+    expect(result.flagMetadata).toMatchObject({
+      ['__dd_feature.' + 'holdout.key']: 'first',
+      ['__dd_exposure_feature.' + 'holdout.key']: 'first',
+    })
+  })
+
+  it('ignores unknown destinations and warns once per distinct value', () => {
+    const warn = jest.fn()
+    const result = evaluateRulesBasedConfiguration(
+      decodeRules({
+        splitFeatures: [
+          { key: 'a', value: { type: 'string', value: 'x' }, destinations: ['UNKNOWN_DEST', 'HOOK'] },
+          { key: 'b', value: { type: 'string', value: 'x' }, destinations: ['UNKNOWN_DEST'] },
+          { key: 'c', value: { type: 'string', value: 'x' }, destinations: ['UNKNOWN_DEST'] },
+        ],
+      }),
+      'boolean',
+      'test-flag',
+      false,
+      { targetingKey: 'user', country: 'US' },
+      { ...logger, warn }
+    )
+
+    expect(result.flagMetadata).toMatchObject({ ['__dd_feature.' + 'a']: 'x' })
+    expect(Object.keys(result.flagMetadata ?? {})).not.toContain('__dd_feature.b')
+    expect(Object.keys(result.flagMetadata ?? {})).not.toContain('__dd_feature.c')
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })

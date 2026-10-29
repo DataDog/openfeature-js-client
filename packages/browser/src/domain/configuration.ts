@@ -42,7 +42,15 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
   }
 
   /**
+   * Whether to track exposures (default: true). With this off, the SDK sends no
+   * exposure events to Datadog, but exposure recording keeps working for the
+   * customer exposure hook and the deduplication cache still records.
+   */
+  trackExposures?: boolean
+
+  /**
    * Whether to enable exposure logging via the exposures intake
+   * @deprecated Use trackExposures instead. When both are set, trackExposures wins.
    */
   enableExposureLogging?: boolean
 
@@ -120,6 +128,25 @@ export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
     context: EvaluationContext,
     options?: { signal?: AbortSignal }
   ) => Promise<FlagsConfiguration>
+}
+
+let warnedEnableExposureLoggingDeprecation = false
+
+/**
+ * Resolve the exposure tracking toggle: `trackExposures` wins over the deprecated
+ * `enableExposureLogging`, and both default to `enabledByDefault`.
+ */
+export function resolveTrackExposures(
+  initConfiguration: Partial<FlaggingTrackingInitConfiguration>,
+  enabledByDefault: boolean
+): boolean {
+  if (initConfiguration.enableExposureLogging !== undefined && !warnedEnableExposureLoggingDeprecation) {
+    warnedEnableExposureLoggingDeprecation = true
+    console.warn(
+      'enableExposureLogging is deprecated and will be removed in a future version. Use trackExposures instead.'
+    )
+  }
+  return initConfiguration.trackExposures ?? initConfiguration.enableExposureLogging ?? enabledByDefault
 }
 
 export function validateAndBuildFlaggingTrackingConfiguration(

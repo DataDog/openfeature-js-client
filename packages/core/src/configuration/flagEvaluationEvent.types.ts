@@ -1,4 +1,5 @@
 import type { EvaluationContextValue } from '@openfeature/core'
+import type { FeatureValue } from '../evaluation/split-features'
 import type { TimeStamp } from '../time'
 
 export interface FlagEvaluationEvent {
@@ -23,6 +24,8 @@ export interface FlagEvaluationEvent {
   targeting_rule?: {
     key: string
   }
+  // Split features routed to the EVALUATION destination, keyed without prefix.
+  features?: Record<string, FeatureValue>
   context?: {
     evaluation?: Record<string, EvaluationContextValue>
     dd?: {
@@ -55,4 +58,5 @@ export interface FlagEvaluationAggregationData {
   lastEvaluation: TimeStamp
   runtimeDefaultUsed: boolean
   error?: string
+  features?: Record<string, FeatureValue>
 }
