@@ -6,6 +6,29 @@
 
 ---
 
+## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
+
+**Features:**
+
+- Add split features to flag metadata. A holdout split carries `holdout.key`, `holdout.assignment_group` and `holdout.should_include_in_holdout_analysis` as `__dd_feature.*` entries. Features routed to Datadog are added to exposure events and evaluation counts ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER] [CORE]
+- Add the exposure deduplication verdict to flag metadata as `__dd_exposure_cache_hit`. The Datadog exposure send and the metadata use the same decision ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER] [CORE]
+- Add `ExposureHook`, which hands each evaluation to a callback with the exposure decision (`isExposure()`, `isCacheHit()`, `shouldSend()`) and the split's `HOOK` features (`getFeatures()`), so applications can record exposures in their own data store ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- Add `trackExposures`. Set it to `false` to stop sending exposure events to Datadog while the exposure cache and `ExposureHook` keep working ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- Add the `exposureCache` option to `DatadogCoreProvider`, so rules-based mode shares one exposure cache with the tracking hooks ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+
+**Bug Fixes:**
+
+- Send and record an exposure only after the evaluation succeeds. A later hook that rejects the result no longer leaves a sent exposure behind ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER]
+- Record exposures with the minimum supported OpenFeature server SDK (1.15.0 with core 1.3.0) ([#438](https://github.com/DataDog/openfeature-js-client/pull/438)) [NODE-SERVER]
+- Do not count an assignment whose reason is `ERROR` as an exposure ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+
+**Usage Notes:**
+
+- Behaviour change: exposures now require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`. Under a composed provider such as OpenFeature's `MultiProvider`, the SDK sends no exposures, does not update the exposure cache and does not call `ExposureHook` callbacks. It logs one warning. Flag evaluation is not affected ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- `enableExposureLogging` is deprecated. Use `trackExposures`; when both are set, `trackExposures` wins [BROWSER]
+- `ExposureHook` passes the callback a copy of the evaluated context. Changes to it do not affect later evaluations [BROWSER]
+- Split features need configuration that includes them. Older configurations add no `__dd_feature.*` entries [BROWSER] [NODE-SERVER]
+
 ## @datadog/openfeature-browser@2.2.0, @datadog/openfeature-node-server@2.6.0, @datadog/flagging-core@3.3.0
 
 **Features:**
