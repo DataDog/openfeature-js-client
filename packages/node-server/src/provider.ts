@@ -242,12 +242,26 @@ export class DatadogNodeServerProvider implements Provider {
  * channel, so the verdict stays correct with Datadog exposure logging off.
  */
 class ExposureLoggingHook implements Hook {
+  private readonly pending = new WeakMap<Readonly<HookContext<FlagValue>>, EvaluationDetails<FlagValue>>()
+
   constructor(
     private readonly exposureCache: AssignmentCache | undefined,
     private readonly exposureChannel: Channel<ExposureEvent>
   ) {}
 
-  finally(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
+  after(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
+    this.pending.set(hookContext, evaluationDetails)
+  }
+
+  error(hookContext: Readonly<HookContext<FlagValue>>): void {
+    this.pending.delete(hookContext)
+  }
+
+  finally(hookContext: Readonly<HookContext<FlagValue>>): void {
+    // Older supported OpenFeature versions pass only hook hints to finally.
+    // Capture the successful result in after and discard it on any later error.
+    const evaluationDetails = this.pending.get(hookContext)
+    this.pending.delete(hookContext)
     if (evaluationDetails == null || evaluationDetails.errorCode !== undefined) {
       return
     }
