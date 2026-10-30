@@ -569,6 +569,29 @@ Both the standalone exposure hook and `DatadogProvider` scope persistent exposur
 
 To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
 
+## SDK lifecycle telemetry
+
+`DatadogProvider` sends SDK initialization and configuration-fetch error diagnostics through the same
+`/api/v2/flagevaluation` JSONL transport as flag evaluations. No RUM initialization or flag evaluation is required.
+Diagnostics are independent of the evaluation, exposure, and RUM tracking options.
+
+An initialization report records `ready`, `failed`, `cached_fallback`, or `incomplete`, with elapsed timings.
+Pending initialization produces an incomplete observation on page exit or provider close, at most once.
+There is no initialization timeout observation. A resumed page can later report its settled result.
+After initialization settles, at most one configuration-fetch error is reported per provider instance.
+This bounds each instance to three diagnostic records. Transport batching can delay delivery, and page-exit delivery
+is best effort. No diagnostic events does not establish whether the SDK is healthy.
+
+Reports require `env` and either `applicationId` or `service`; `applicationId` takes precedence when both are provided.
+They contain SDK name/version, application or service identity, environment, timings, and bounded error codes.
+They do not contain flag values, evaluation context, targeting keys, client tokens, raw errors, or an instance identifier.
+Reports are separate observations and must not be correlated to a specific instance from their timestamps alone.
+Diagnostic queue failures do not change evaluation results.
+
+The wire schema fixture in `test/data/sdkdiagnostic-v1.json` matches the flageval worker's diagnostic contract.
+`yarn test:browser-install` tests the packaged SDK in Chromium, including mixed evaluation/diagnostic batches.
+For manual staging checks, run `yarn dev` in `test-app` after that command and open `/diagnostics.html`.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula
