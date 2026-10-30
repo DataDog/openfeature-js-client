@@ -532,7 +532,7 @@ class DependencyEvaluationSession {
           result.errorMessage ?? 'prerequisite flag evaluation failed'
         )
       }
-      if (result.variant === undefined) {
+      if (result.variant === undefined && result.reason !== 'DEFAULT') {
         throw new DependencyGraphError(
           flagKey,
           'GENERAL' as ErrorCode,
@@ -540,7 +540,7 @@ class DependencyEvaluationSession {
         )
       }
       const exposureTrace =
-        frame.exposureTrace === undefined
+        frame.exposureTrace === undefined || result.variant === undefined
           ? undefined
           : appendDependencyExposureUnique(frame.exposureTrace, {
               flagKey,

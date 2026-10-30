@@ -55,6 +55,7 @@ describe('dependent flag evaluation', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
     root.allocations[0].doLog = false
+    root.allocations[1].doLog = false
     const dependencies: DependencyEvaluation[] = []
 
     const result = evaluateRulesBasedConfiguration(
@@ -68,16 +69,40 @@ describe('dependent flag evaluation', () => {
       (evaluation) => dependencies.push(evaluation)
     )
 
-    expect(result).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'GENERAL',
-      errorMessage: 'prerequisite flag evaluation returned no variant',
-    })
-    expect(dependencies).toMatchObject([
-      { flagKey: 'prerequisite', details: { value: false, reason: 'ERROR', errorCode: 'GENERAL' } },
-    ])
+    expect(result).toMatchObject({ value: false, variant: 'off', reason: 'STATIC' })
+    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: false, reason: 'DEFAULT' } }])
+    expect(dependencies[0]?.details).not.toHaveProperty('variant')
+    expect(dependencies[0]?.details).not.toHaveProperty('errorCode')
   })
+
+  for (const operator of [OperatorType.ONE_OF, OperatorType.NOT_ONE_OF] as const) {
+    it(`treats a JSON prerequisite with no assignment as a non-matching ${operator} condition`, () => {
+      const prerequisite = booleanFlag('prerequisite', 'on')
+      prerequisite.allocations = []
+      const root = dependentBooleanFlag('root', [flagCondition('prerequisite', operator, ['on'])])
+      const dependencies: DependencyEvaluation[] = []
+      const onExposures = jest.fn()
+
+      expect(
+        evaluate(
+          configuration({ prerequisite, root }),
+          'root',
+          logger,
+          (evaluation) => dependencies.push(evaluation),
+          {},
+          onExposures
+        )
+      ).toMatchObject({
+        value: false,
+        variant: 'off',
+        reason: 'STATIC',
+      })
+      expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: false, reason: 'DEFAULT' } }])
+      expect(dependencies[0]?.details).not.toHaveProperty('variant')
+      expect(dependencies[0]?.details).not.toHaveProperty('errorCode')
+      expect(onExposures).toHaveBeenCalledWith([])
+    })
+  }
 
   it('uses the shared dependency session for protobuf UFC', () => {
     const config = protobufDependentConfiguration(true)
@@ -103,37 +128,48 @@ describe('dependent flag evaluation', () => {
     ])
   })
 
-  it('fails a protobuf graph when a reached prerequisite returns no variant', () => {
-    const config = protobufDependentConfiguration(false)
-    const dependencies: DependencyEvaluation[] = []
-    const onExposures = jest.fn()
-
-    expect(
-      evaluateRulesBasedConfiguration(
-        config,
-        'boolean',
-        'root',
-        false,
-        { targetingKey: 'subject' },
-        logger,
-        false,
-        (evaluation) => dependencies.push(evaluation),
-        onExposures
+  it.each([false, true])(
+    'treats a protobuf prerequisite with no assignment as non-matching when negate is %s',
+    (negate) => {
+      const config = protobufDependentConfiguration(false)
+      const membership = config.conditions[0].kind
+      if (membership.case !== 'flagEvaluationStringMembership') throw new Error('unexpected test condition')
+      membership.value.negate = negate
+      config.flags.root.allocations.push(
+        create(AllocationSchema, {
+          key: 'root-fallback',
+          partitionKey: [],
+          splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 2, reason: Reason.STATIC })],
+          logExposureEvent: true,
+        })
       )
-    ).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'GENERAL',
-      errorMessage: 'prerequisite flag evaluation returned no variant',
-    })
-    expect(dependencies).toMatchObject([
-      {
-        flagKey: 'prerequisite',
-        details: { reason: 'ERROR', errorCode: 'GENERAL' },
-      },
-    ])
-    expect(onExposures).not.toHaveBeenCalled()
-  })
+      const dependencies: DependencyEvaluation[] = []
+      const onExposures = jest.fn()
+
+      expect(
+        evaluateRulesBasedConfiguration(
+          roundTrip(config),
+          'boolean',
+          'root',
+          false,
+          { targetingKey: 'subject' },
+          logger,
+          false,
+          (evaluation) => dependencies.push(evaluation),
+          onExposures
+        )
+      ).toMatchObject({ value: true, variant: 'on', reason: 'STATIC' })
+      expect(dependencies).toMatchObject([
+        {
+          flagKey: 'prerequisite',
+          details: { value: false, reason: 'DEFAULT' },
+        },
+      ])
+      expect(dependencies[0]?.details).not.toHaveProperty('variant')
+      expect(dependencies[0]?.details).not.toHaveProperty('errorCode')
+      expect(onExposures).toHaveBeenCalledWith([])
+    }
+  )
 
   it('supports protobuf NOT_ONE_OF dependencies', () => {
     const config = protobufDependentConfiguration(true)
