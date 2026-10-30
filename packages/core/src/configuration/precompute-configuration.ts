@@ -72,8 +72,20 @@ export function precomputeConfiguration(
       errors.push({ flagKey, errorCode: result.errorCode })
     } else if (result.kind === 'assignment') {
       try {
-        // Detach cached JSON values and feature destinations from the source configuration.
-        flags.push([flagKey, cloneJson(result.assignment) as PrecomputedFlag])
+        const { features, ...assignment } = result.assignment
+        const copy = cloneJson(assignment) as PrecomputedFlag
+        if (Array.isArray(features)) {
+          // Optional feature metadata must not discard an otherwise valid assignment.
+          const portableFeatures = features.flatMap((feature) => {
+            try {
+              return [cloneJson(feature)]
+            } catch {
+              return []
+            }
+          })
+          if (portableFeatures.length > 0) copy.features = portableFeatures
+        }
+        flags.push([flagKey, copy])
       } catch {
         errors.push({ flagKey, errorCode: 'PARSE_ERROR' as ErrorCode })
       }

@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto'
 import { fromJson, type JsonObject } from '@bufbuild/protobuf'
 import type { EvaluationContext } from '@openfeature/core'
 import { evaluate } from '../evaluation/evaluation'
 import * as clock from '../time'
 import type { FlagsConfiguration } from './configuration'
+import { createExposureEvent } from './exposureEvent'
 import { FlagsConfigurationSchema } from './generated/ufc_pb'
 import {
   ConfigurationPrecomputeError,
@@ -108,56 +110,104 @@ describe('precomputeConfiguration', () => {
     expect(evaluate(result, 'object', 'flag', { fallback: true }, context)).toMatchObject({ value, reason: 'STATIC' })
   })
 
-  it('preserves assignments, raw split features and consent, but never source rules or ETags', () => {
-    const features = [
-      { key: 'experiment', value: 'checkout', destinations: ['HOOK', 'EXPOSURE'] },
-      { key: 'metric', value: 2, destinations: ['EVALUATION'] },
-      { key: 'future', value: true, destinations: ['FUTURE_DESTINATION'] },
-    ]
-    const input = rules(
-      {
-        flag: flag({
-          allocations: [
-            {
-              key: 'experiment-allocation',
-              logExposureEvent: true,
-              splits: [
-                {
-                  reason: 'REASON_SPLIT',
-                  serialId: 123,
-                  features: features.map(({ value, ...feature }) => ({
-                    ...feature,
-                    ...(typeof value === 'string'
-                      ? { stringValue: value }
-                      : typeof value === 'number'
-                        ? { numberValue: value }
-                        : { boolValue: value }),
-                  })),
-                },
-              ],
-            },
-          ],
-        }),
-      },
-      { observeFullEvaluationData: true }
-    )
-    input.rules!.etag = 'rules-etag'
-    const result = roundTrip(precomputeConfiguration(input, context))
-    expect(result.rules).toBeUndefined()
-    expect(result.precomputed?.etag).toBeUndefined()
-    expect(result.precomputed?.response.data.attributes).toMatchObject({
-      observeFullEvaluationData: true,
-      flags: {
-        flag: { allocationKey: 'experiment-allocation', reason: 'SPLIT', doLog: true, serialId: 123, features },
-      },
+  it.each([0, 123])(
+    'preserves serial %i, raw split features and consent, but never source rules or ETags',
+    (serialId) => {
+      const features = [
+        { key: 'experiment', value: 'checkout', destinations: ['HOOK', 'EXPOSURE'] },
+        { key: 'metric', value: 2, destinations: ['EVALUATION'] },
+        { key: 'future', value: true, destinations: ['FUTURE_DESTINATION'] },
+      ]
+      const input = rules(
+        {
+          flag: flag({
+            allocations: [
+              {
+                key: 'experiment-allocation',
+                logExposureEvent: true,
+                splits: [
+                  {
+                    reason: 'REASON_SPLIT',
+                    serialId,
+                    features: features.map(({ value, ...feature }) => ({
+                      ...feature,
+                      ...(typeof value === 'string'
+                        ? { stringValue: value }
+                        : typeof value === 'number'
+                          ? { numberValue: value }
+                          : { boolValue: value }),
+                    })),
+                  },
+                ],
+              },
+            ],
+          }),
+        },
+        { observeFullEvaluationData: true }
+      )
+      input.rules!.etag = 'rules-etag'
+      const direct = evaluate(input, 'boolean', 'flag', false, context)
+      expect(direct.flagMetadata?.__dd_split_serial_id).toBe(serialId)
+      expect(
+        createExposureEvent(context, { ...direct, flagKey: 'flag', flagMetadata: direct.flagMetadata ?? {} })?.serial_id
+      ).toBe(serialId)
+      const result = roundTrip(precomputeConfiguration(input, context))
+      expect(result.rules).toBeUndefined()
+      expect(result.precomputed?.etag).toBeUndefined()
+      expect(result.precomputed?.response.data.attributes).toMatchObject({
+        observeFullEvaluationData: true,
+        flags: {
+          flag: { allocationKey: 'experiment-allocation', reason: 'SPLIT', doLog: true, serialId, features },
+        },
+      })
+      expect(evaluate(result, 'boolean', 'flag', false, context).flagMetadata).toMatchObject({
+        __dd_split_serial_id: serialId,
+        '__dd_feature.experiment': 'checkout',
+        '__dd_exposure_feature.experiment': 'checkout',
+        '__dd_evaluation_feature.metric': 2,
+        __dd_has_evaluation_features: true,
+      })
+    }
+  )
+
+  it.each([
+    ['NaN', []],
+    ['Infinity', []],
+    ['-Infinity', []],
+    ['NaN', ['HOOK']],
+    ['Infinity', ['HOOK']],
+    ['-Infinity', ['HOOK']],
+  ])('retains assignments with nonportable feature %s for %j', (numberValue, destinations) => {
+    const input = rules({
+      flag: flag({
+        allocations: [
+          {
+            key: 'allocation',
+            splits: [
+              {
+                reason: 'REASON_STATIC',
+                features: [
+                  { key: 'invalid', numberValue, destinations },
+                  { key: 'valid', numberValue: 42, destinations: ['HOOK', 'EXPOSURE'] },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
     })
-    expect(evaluate(result, 'boolean', 'flag', false, context).flagMetadata).toMatchObject({
-      __dd_split_serial_id: 123,
-      '__dd_feature.experiment': 'checkout',
-      '__dd_exposure_feature.experiment': 'checkout',
-      '__dd_evaluation_feature.metric': 2,
-      __dd_has_evaluation_features: true,
+    expect(evaluate(input, 'boolean', 'flag', false, context)).toMatchObject({ value: true, reason: 'STATIC' })
+    const onEvaluationError = jest.fn()
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+    expect(evaluate(result, 'boolean', 'flag', false, context)).toMatchObject({
+      value: true,
+      reason: 'STATIC',
+      flagMetadata: { '__dd_feature.valid': 42, '__dd_exposure_feature.valid': 42 },
     })
+    expect(result.precomputed?.response.data.attributes.flags.flag.features).toEqual([
+      { key: 'valid', value: 42, destinations: ['HOOK', 'EXPOSURE'] },
+    ])
+    expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
   it('omits unassigned and failed flags but retains a successful DEFAULT-reason assignment', () => {
@@ -286,6 +336,42 @@ describe('precomputeConfiguration', () => {
     expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'flag', errorCode: 'TARGETING_KEY_MISSING' })
   })
 
+  it('selects different splits for distinct subjects across repeated snapshots', () => {
+    const input = rules(
+      {
+        flag: flag({
+          variations: [{ booleanValue: true }, { keyStringIndex: 1, booleanValue: false }],
+          allocations: [
+            {
+              key: 'allocation',
+              partitionKey: [{ shardMd5: { attributeIndex: 0, salt: '', totalShards: '100' } }],
+              splits: [
+                { variationIndex: 0, reason: 'REASON_SPLIT', ranges: [{ from: '0', to: '75' }] },
+                { variationIndex: 1, reason: 'REASON_SPLIT', ranges: [{ from: '75', to: '100' }] },
+              ],
+            },
+          ],
+        }),
+        static: flag(),
+      },
+      { attributes: [{ targetingKey: {} }] }
+    )
+    for (const [targetingKey, shard, value, variant] of [
+      ['a', 77, false, 'off'],
+      ['b', 70, true, 'on'],
+      ['a', 77, false, 'off'],
+    ] as const) {
+      expect(createHash('md5').update(targetingKey).digest().readUInt32BE(0) % 100).toBe(shard)
+      const subject = { targetingKey, country: 'US' }
+      const snapshot = precomputeConfiguration(input, subject)
+      for (const result of [snapshot, roundTrip(snapshot)]) {
+        expect(result.precomputed?.context).toEqual(subject)
+        expect(evaluate(result, 'boolean', 'flag', !value, subject)).toMatchObject({ value, variant, reason: 'SPLIT' })
+        expect(evaluate(result, 'boolean', 'static', false, subject).value).toBe(true)
+      }
+    }
+  })
+
   it('captures the time once for all time-partitioned flags', () => {
     const timedFlag = flag({
       allocations: [
@@ -352,7 +438,7 @@ describe('precomputeConfiguration', () => {
   it('runs sanitized diagnostics after evaluation, without leaking source values or changing neighboring assignments', () => {
     const input = rules({ bad: flag({ minimumFeatureLevel: 1 }), good: flag() })
     const onEvaluationError = jest.fn(() => {
-      input.rules!.response.flags.good.allocations.length = 0
+      input.rules!.response.flags.good.variations[0].value = { case: 'booleanValue', value: false }
     })
     const result = precomputeConfiguration(input, context, { onEvaluationError })
     expect(evaluate(result, 'boolean', 'good', false, context).value).toBe(true)
