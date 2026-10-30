@@ -1,10 +1,18 @@
-import { buildEndpointHost, type FlagsConfiguration, timeStampNow } from '@datadog/flagging-core'
+import {
+  buildEndpointHost,
+  canonicalizeFlagSelection,
+  type FlagSelection,
+  type FlagsConfiguration,
+  timeStampNow,
+} from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
 
 interface ConfigurationFetchOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
+  /** Best-effort server-side filtering. Invalid or oversized selections are omitted. */
+  flagSelection?: FlagSelection
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
   signal?: AbortSignal
@@ -72,6 +80,27 @@ function invalidOption(option: string): ConfigurationFetchError {
   return new ConfigurationFetchError('invalid_options', `Invalid configuration fetch options: ${option}`)
 }
 
+// Fastly rejects URLs over 8 KB. Keep the same limit and encoding as the browser rules fetcher.
+const MAX_RULES_URL_BYTES = 8192
+
+function applyFlagSelection(url: URL, input: FlagSelection | undefined): URL {
+  const { selection } = canonicalizeFlagSelection(input)
+  if (!selection) return url
+
+  const params = [
+    ...selection.tags.map((tag) => `selected_flag_tags=${encodeQueryValue(tag)}`),
+    ...selection.keyPatterns.map((pattern) => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
+  ]
+  const selectedUrl = new URL(url.toString())
+  selectedUrl.search = [selectedUrl.search.slice(1), ...params].filter(Boolean).join('&')
+  // Percent-encoding makes the serialized URL ASCII, so its length is its byte length.
+  return selectedUrl.toString().length > MAX_RULES_URL_BYTES ? url : selectedUrl
+}
+
+function encodeQueryValue(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.
@@ -83,6 +112,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     clientToken,
     env,
     site = 'datadoghq.com',
+    flagSelection,
     timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
@@ -121,6 +151,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
 
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
+  const requestUrl = applyFlagSelection(url, flagSelection).toString()
 
   const controller = new AbortController()
   const cancel = () => controller.abort(abortError(signal))
@@ -133,7 +164,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   let response: Response | undefined
   try {
     try {
-      response = await requestFetch(url.toString(), {
+      response = await requestFetch(requestUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/protobuf',
