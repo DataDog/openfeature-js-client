@@ -336,6 +336,36 @@ describe('precomputeConfiguration', () => {
     expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'flag', errorCode: 'TARGETING_KEY_MISSING' })
   })
 
+  it('omits a flag with an invalid shard attribute without rejecting a valid context', () => {
+    const input = rules(
+      {
+        sharded: flag({
+          allocations: [
+            {
+              key: 'allocation',
+              partitionKey: [{ shardMd5: { attributeIndex: 0, salt: 'test', totalShards: '100' } }],
+              splits: [{ reason: 'REASON_SPLIT', ranges: [{ from: '0', to: '100' }] }],
+            },
+          ],
+        }),
+        static: flag(),
+      },
+      { attributes: [{ attributePath: { segments: [{ objectKeyStringIndex: 3 }] } }] }
+    )
+    const subject = { targetingKey: 'subject' }
+    const onEvaluationError = jest.fn()
+    const result = roundTrip(precomputeConfiguration(input, subject, { onEvaluationError }))
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['static'])
+    expect(evaluate(result, 'boolean', 'static', false, subject).value).toBe(true)
+    expect(evaluate(result, 'boolean', 'sharded', false, subject)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'FLAG_NOT_FOUND',
+    })
+    expect(onEvaluationError).toHaveBeenCalledTimes(1)
+    expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'sharded', errorCode: 'INVALID_CONTEXT' })
+  })
+
   it('selects different splits for distinct subjects across repeated snapshots', () => {
     const input = rules(
       {

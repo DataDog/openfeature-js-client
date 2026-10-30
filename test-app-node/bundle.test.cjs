@@ -5,6 +5,45 @@ const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 const providerConfiguration = require('../packages/core/test/ffe-system-test-data/ufc-config.json')
 const logger = { debug() {}, info() {}, warn() {}, error() {} }
 
+test('module-condition bundle precomputes nonempty assignments without rules or a source ETag', async () => {
+  const webpack = require('webpack')
+  const path = require('node:path')
+  const { createWebpackConfigs } = require('../scripts/report-node-entrypoint-bundle-sizes')
+  const config = createWebpackConfigs(__dirname).find(({ name }) => name === 'ssr')
+  const compiler = webpack({
+    ...config,
+    name: 'precompute',
+    entry: './bundles/precompute.mjs',
+    output: { ...config.output, path: path.join(__dirname, 'dist', 'bundles', 'precompute') },
+  })
+  try {
+    await new Promise((resolve, reject) => {
+      compiler.run((error, stats) => {
+        if (error) return reject(error)
+        if (stats.hasErrors()) return reject(new Error(stats.toString({ all: false, errors: true })))
+        resolve()
+      })
+    })
+  } finally {
+    await new Promise((resolve, reject) => compiler.close((error) => (error ? reject(error) : resolve())))
+  }
+  const { precomputeBrowserConfiguration } = require('./dist/bundles/precompute/index.cjs')
+  const context = { targetingKey: 'user-1', country: 'US' }
+  const result = configurationFromString(precomputeBrowserConfiguration(JSON.stringify(fixture), context))
+  assert.deepEqual(Object.keys(result), ['precomputed'])
+  assert.deepEqual(result.precomputed.context, context)
+  assert.equal(result.precomputed.etag, undefined)
+  assert.deepEqual(result.precomputed.response.data.attributes.flags['test-flag'], {
+    allocationKey: 'allocation',
+    variationKey: 'on',
+    variationValue: true,
+    variationType: 'boolean',
+    doLog: true,
+    reason: 'TARGETING_MATCH',
+    serialId: 7,
+  })
+})
+
 for (const name of ['provider', 'provider-with-ssr']) {
   test(`${name} bundle initializes the provider and evaluates without OpenFeature`, async () => {
     const { createProvider } = require(`./dist/bundles/${name}/index.cjs`)
