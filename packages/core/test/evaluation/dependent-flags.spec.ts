@@ -296,6 +296,64 @@ describe('dependent flag evaluation', () => {
     expect(exposures.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'second-prerequisite'])
   })
 
+  it('does not replay a rolled-back leaf exposure from a cached protobuf parent', () => {
+    const config = protobufDependentConfiguration(true)
+    config.strings.push('parent', 'off')
+    config.conditions[0] = create(ConditionSchema, {
+      kind: {
+        case: 'flagEvaluationStringMembership',
+        value: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0], negate: false },
+      },
+    })
+    config.conditions.push(
+      create(ConditionSchema, {
+        kind: {
+          case: 'flagEvaluationStringMembership',
+          value: { flagKeyStringIndex: 1, variantKeyStringIndexes: [3], negate: false },
+        },
+      })
+    )
+    config.flags.parent = {
+      ...config.flags.prerequisite,
+      allocations: [
+        create(AllocationSchema, {
+          key: 'parent-rejected',
+          targetingConditionIndex: 1,
+          partitionKey: [],
+          splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 2, reason: Reason.TARGETING_MATCH })],
+          logExposureEvent: true,
+        }),
+        create(AllocationSchema, {
+          key: 'parent-default',
+          partitionKey: [],
+          splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 3, reason: Reason.STATIC })],
+          logExposureEvent: true,
+        }),
+      ],
+    }
+    config.flags.root.allocations[0].splits = []
+    config.flags.root.allocations.push(
+      create(AllocationSchema, {
+        key: 'root-targeted-fallback',
+        targetingConditionIndex: 0,
+        partitionKey: [],
+        splits: [create(SplitSchema, { ranges: [], variationIndex: 0, serialId: 4, reason: Reason.TARGETING_MATCH })],
+        logExposureEvent: true,
+      })
+    )
+
+    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    expect(result).toMatchObject({
+      value: true,
+      variant: 'on',
+      flagMetadata: { __dd_allocation_key: 'root-targeted-fallback' },
+    })
+    expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'parent'])
+    expect(onExposures).toHaveBeenCalledTimes(1)
+    const exposures = onExposures.mock.calls[0][0] as { flagKey: string }[]
+    expect(exposures.map(({ flagKey }) => flagKey)).toEqual(['parent'])
+  })
+
   it('applies the protobuf maximum dependency depth override', () => {
     const config = protobufDependentConfiguration(true)
     config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(0) })
