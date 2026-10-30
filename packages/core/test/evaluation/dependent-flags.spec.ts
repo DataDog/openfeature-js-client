@@ -100,9 +100,46 @@ describe('dependent flag evaluation', () => {
       expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: false, reason: 'DEFAULT' } }])
       expect(dependencies[0]?.details).not.toHaveProperty('variant')
       expect(dependencies[0]?.details).not.toHaveProperty('errorCode')
-      expect(onExposures).toHaveBeenCalledWith([])
+      expect(onExposures).toHaveBeenCalledTimes(1)
+      expect(onExposures.mock.calls[0]?.[0]).toEqual([])
     })
   }
+
+  it('fails the graph when a disabled JSON prerequisite returns no variant', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    prerequisite.enabled = false
+    const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
+    const dependencies: DependencyEvaluation[] = []
+    const onExposures = jest.fn()
+
+    expect(
+      evaluate(
+        configuration({ prerequisite, root }),
+        'root',
+        logger,
+        (evaluation) => dependencies.push(evaluation),
+        {},
+        onExposures
+      )
+    ).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag evaluation returned no variant',
+    })
+    expect(dependencies).toMatchObject([
+      {
+        flagKey: 'prerequisite',
+        details: {
+          value: false,
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          errorMessage: 'prerequisite flag evaluation returned no variant',
+        },
+      },
+    ])
+    expect(onExposures).not.toHaveBeenCalled()
+  })
 
   it('uses the shared dependency session for protobuf UFC', () => {
     const config = protobufDependentConfiguration(true)
@@ -167,7 +204,8 @@ describe('dependent flag evaluation', () => {
       ])
       expect(dependencies[0]?.details).not.toHaveProperty('variant')
       expect(dependencies[0]?.details).not.toHaveProperty('errorCode')
-      expect(onExposures).toHaveBeenCalledWith([])
+      expect(onExposures).toHaveBeenCalledTimes(1)
+      expect(onExposures.mock.calls[0]?.[0]).toEqual([])
     }
   )
 
