@@ -1,4 +1,4 @@
-export type { FlagsConfiguration } from '@datadog/flagging-core'
+export type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 export {
   configurationFromRulesBinary,
   configurationFromString,

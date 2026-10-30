@@ -29,6 +29,7 @@ import {
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
+  type FlagSelection,
   type FlagsConfiguration,
   fetchRulesConfiguration,
   type RulesConfigurationFetchOptions,
@@ -112,11 +113,13 @@ OpenFeature.setProvider(provider)
 void [providerName, runsOn, events, hooks, initPromise]
 
 // Standalone configuration helpers do not require OpenFeature or browser types.
-const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod' }
+const flagSelection: FlagSelection = { tags: ['checkout'], keyPatterns: ['ffe-*'] } as const
+const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod', flagSelection }
 const clientOptions: RulesConfigurationFetchOptions = {
   distributionChannel: 'client',
   clientToken: 'client-token',
   env: 'prod',
+  flagSelection,
   timeoutMs: 5000,
   signal: new AbortController().signal,
   fetch: globalThis.fetch,

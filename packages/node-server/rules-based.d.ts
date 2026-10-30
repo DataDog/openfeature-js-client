@@ -669,6 +669,48 @@ type Split = Message<"datadog.ffe.flagging.ufc.v1.Split"> & {
 	 * @generated from field: datadog.ffe.flagging.ufc.v1.Reason reason = 4;
 	 */
 	reason: Reason;
+	/**
+	 * @generated from field: repeated datadog.ffe.flagging.ufc.v1.Feature features = 5;
+	 */
+	features: Feature[];
+};
+type Feature = Message<"datadog.ffe.flagging.ufc.v1.Feature"> & {
+	/**
+	 * @generated from field: string key = 1;
+	 */
+	key: string;
+	/**
+	 * @generated from oneof datadog.ffe.flagging.ufc.v1.Feature.value
+	 */
+	value: {
+		/**
+		 * @generated from field: string string_value = 2;
+		 */
+		value: string;
+		case: "stringValue";
+	} | {
+		/**
+		 * @generated from field: double number_value = 3;
+		 */
+		value: number;
+		case: "numberValue";
+	} | {
+		/**
+		 * @generated from field: bool bool_value = 4;
+		 */
+		value: boolean;
+		case: "boolValue";
+	} | {
+		case: undefined;
+		value?: undefined;
+	};
+	/**
+	 * Open strings such as HOOK, EXPOSURE or EVALUATION, not an enum: SDKs ignore destinations
+	 * they do not know.
+	 *
+	 * @generated from field: repeated string destinations = 5;
+	 */
+	destinations: string[];
 };
 type PartitionRange = Message<"datadog.ffe.flagging.ufc.v1.PartitionRange"> & {
 	/**
@@ -905,7 +947,13 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	/** Split features of the selected assignment; parsed leniently at evaluation time. */
+	features?: unknown;
 };
+export interface FlagSelection {
+	tags?: readonly string[];
+	keyPatterns?: readonly string[];
+}
 export type FlagsConfigurationWire = string;
 /**
  * Decode a binary flags configuration response.
@@ -924,6 +972,12 @@ interface ConfigurationFetchOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
+	/**
+	 * Request flags matching any of these tags or key patterns.
+	 * Malformed or over-limit selections reject with invalid_options.
+	 * Selection is not sent if adding it would exceed the URL size limit.
+	 */
+	flagSelection?: FlagSelection;
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;
 	signal?: AbortSignal;
