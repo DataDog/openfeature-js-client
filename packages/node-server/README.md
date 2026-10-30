@@ -17,7 +17,7 @@ const clientConfiguration = await fetchRulesConfiguration({
   distributionChannel: 'client',
   clientToken,
   env: 'production',
-  flagSelection: { tags: ['checkout'], keyPatterns: ['ffe-dogfooding-*'] },
+  flagSelection: { tags: ['team:checkout'], keyPatterns: ['checkout-*'] },
 })
 const wire = configurationToString(clientConfiguration)
 // Pass wire through the framework's safe SSR data serializer, not raw inline HTML.
@@ -53,7 +53,11 @@ Applications own retries, polling, storage, tracking, and fallback.
 
 Selection reduces the configuration payload fetched from the backend, including configurations prepared for SSR. Values are trimmed, deduplicated, and sorted by UTF-8 bytes using the same canonicalizer as the browser SDK. Each list accepts up to 31 distinct nonempty values, and each value can be at most 200 UTF-8 bytes. The helper sends repeated `selected_flag_tags` and `selected_flag_key_patterns` query parameters with RFC 3986 percent-encoding.
 
-Malformed or over-limit selections are omitted in their entirety. If adding selection would make the URL exceed 8192 bytes, the helper sends the request without selection instead. The backend may also ignore selection and return the full configuration, including responses with a `DD-Flag-Selection-Ignored` header. These are successful fetches, not errors; a custom `fetch` can inspect that header when diagnostics are needed.
+Malformed or over-limit selections reject with `ConfigurationFetchError` and code `invalid_options` before any request is sent. Errors while reading or encoding selection values are also reported as sanitized `invalid_options` errors. Empty selections request the full configuration.
+
+If adding a valid selection would make the URL exceed 8192 bytes, the helper sends the request without selection instead. The backend may also ignore selection and return the full configuration, including responses with a `DD-Flag-Selection-Ignored` header. These are successful fetches, not errors; a custom `fetch` can inspect that header when diagnostics are needed.
+
+When the backend applies a selection, flags outside it are absent from the returned configuration. A browser provider initialized from that wire returns the caller's default value for those flags, with `FLAG_NOT_FOUND` in the evaluation details. Select every flag the page evaluates.
 
 **Selection is not an access-control boundary.** The helper returns the configuration supplied by the backend without filtering it locally. Continue to use the client distribution channel for anything forwarded to a browser or mobile SDK.
 

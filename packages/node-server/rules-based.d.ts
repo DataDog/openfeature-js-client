@@ -972,7 +972,11 @@ interface ConfigurationFetchOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
-	/** Best-effort server-side filtering. Invalid or oversized selections are omitted. */
+	/**
+	 * Request flags matching any of these tags or key patterns.
+	 * Malformed or over-limit selections reject with invalid_options.
+	 * Selection is not sent if adding it would exceed the URL size limit.
+	 */
 	flagSelection?: FlagSelection;
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;

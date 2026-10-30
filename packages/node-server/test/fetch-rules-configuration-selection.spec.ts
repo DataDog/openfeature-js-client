@@ -1,9 +1,16 @@
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
 import wire from '../../browser/test/data/rules-v1-wire.json'
-import { type FlagSelection, fetchRulesConfiguration } from '../src/rules-based'
+import { ConfigurationFetchError, type FlagSelection, fetchRulesConfiguration } from '../src/rules-based'
 
 const body = Buffer.from(wire.rules.response, 'base64')
 const headers = { 'Content-Type': 'application/protobuf', ETag: wire.rules.etag }
+
+function unstableSelection(nextValue: unknown): FlagSelection {
+  let reads = 0
+  const keyPatterns = ['valid']
+  Object.defineProperty(keyPatterns, 0, { get: () => (reads++ === 0 ? 'valid' : nextValue) })
+  return { keyPatterns }
+}
 
 describe.each([
   { distributionChannel: 'server', apiKey: 'server-key' },
@@ -82,30 +89,82 @@ describe.each([
   )
 
   it.each([
-    ['non-object', 'checkout'],
-    ['array', []],
-    ['non-array tags', { tags: 'checkout', keyPatterns: ['ffe-*'] }],
-    ['non-string pattern', { tags: ['checkout'], keyPatterns: [1] }],
-    ['sparse list', { tags: Array(1), keyPatterns: ['ffe-*'] }],
-    ['unpaired surrogate', { tags: ['checkout'], keyPatterns: ['\uD800'] }],
-    ['too many tags', { tags: Array.from({ length: 32 }, (_, index) => `tag-${index}`), keyPatterns: ['ffe-*'] }],
+    ['non-object', 'checkout', 'malformed_selection'],
+    ['array', [], 'malformed_selection'],
+    ['non-array tags', { tags: 'checkout', keyPatterns: ['ffe-*'] }, 'malformed_selection'],
+    ['non-string pattern', { tags: ['checkout'], keyPatterns: [1] }, 'malformed_selection'],
+    ['sparse list', { tags: Array(1), keyPatterns: ['ffe-*'] }, 'malformed_selection'],
+    ['unpaired surrogate', { tags: ['checkout'], keyPatterns: ['\uD800'] }, 'malformed_selection'],
+    [
+      'too many tags',
+      { tags: Array.from({ length: 32 }, (_, index) => `tag-${index}`), keyPatterns: ['ffe-*'] },
+      'too_many_values',
+    ],
     [
       'too many patterns',
       { tags: ['checkout'], keyPatterns: Array.from({ length: 32 }, (_, index) => `flag-${index}`) },
+      'too_many_values',
     ],
-    ['long tag', { tags: ['t'.repeat(201)], keyPatterns: ['ffe-*'] }],
-    ['long pattern', { tags: ['checkout'], keyPatterns: ['k'.repeat(201)] }],
-    ['multibyte tag', { tags: ['\u00e9'.repeat(101)], keyPatterns: ['ffe-*'] }],
-    ['multibyte pattern', { tags: ['checkout'], keyPatterns: ['\u00e9'.repeat(101)] }],
-  ])('omits the whole selection for %s and fetches once', async (_, flagSelection) => {
-    const result = await fetchRulesConfiguration({ ...options, flagSelection: flagSelection as FlagSelection })
-    expect(requestFetch).toHaveBeenCalledTimes(1)
-    expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
-    expect(result.rules).toMatchObject({
-      response: configurationFromRulesBinary(body).rules!.response,
-      etag: wire.rules.etag,
-      fetchedAt: Date.now(),
+    ['long tag', { tags: ['t'.repeat(201)], keyPatterns: ['ffe-*'] }, 'invalid_tag'],
+    ['long pattern', { tags: ['checkout'], keyPatterns: ['k'.repeat(201)] }, 'invalid_key_pattern'],
+    ['multibyte tag', { tags: ['\u00e9'.repeat(101)], keyPatterns: ['ffe-*'] }, 'invalid_tag'],
+    ['multibyte pattern', { tags: ['checkout'], keyPatterns: ['\u00e9'.repeat(101)] }, 'invalid_key_pattern'],
+  ])('rejects %s before fetching', async (_, flagSelection, reason) => {
+    const pending = fetchRulesConfiguration({ ...options, flagSelection: flagSelection as FlagSelection })
+    await expect(pending).rejects.toBeInstanceOf(ConfigurationFetchError)
+    await expect(pending).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: `Invalid configuration fetch options: flagSelection (${reason})`,
     })
+    expect(requestFetch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      name: 'throwing getter',
+      createSelection: () => ({
+        get tags(): string[] {
+          throw new Error('secret selection data')
+        },
+      }),
+    },
+    {
+      name: 'getter throwing a ConfigurationFetchError',
+      createSelection: () => ({
+        get tags(): string[] {
+          throw new ConfigurationFetchError('http', 'secret selection data', 403)
+        },
+      }),
+    },
+    {
+      name: 'revoked proxy',
+      createSelection: () => {
+        const { proxy, revoke } = Proxy.revocable({}, {})
+        revoke()
+        return proxy
+      },
+    },
+    { name: 'element changing to a non-string', createSelection: () => unstableSelection(null) },
+    { name: 'element changing to a lone surrogate', createSelection: () => unstableSelection('\uD800') },
+  ])('sanitizes a $name before fetching', async ({ createSelection }) => {
+    const pending = fetchRulesConfiguration({ ...options, flagSelection: createSelection() })
+    await expect(pending).rejects.toBeInstanceOf(ConfigurationFetchError)
+    await expect(pending).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: 'Invalid configuration fetch options: flagSelection',
+    })
+    await expect(pending).rejects.not.toHaveProperty('cause')
+    await expect(pending).rejects.toHaveProperty('status', undefined)
+    expect(requestFetch).not.toHaveBeenCalled()
+  })
+
+  it('validates selection before checking caller cancellation', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      fetchRulesConfiguration({ ...options, signal: controller.signal, flagSelection: { tags: ['t'.repeat(201)] } })
+    ).rejects.toMatchObject({ code: 'invalid_options' })
+    expect(requestFetch).not.toHaveBeenCalled()
   })
 
   it.each([

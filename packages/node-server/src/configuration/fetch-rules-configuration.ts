@@ -11,7 +11,11 @@ interface ConfigurationFetchOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
-  /** Best-effort server-side filtering. Invalid or oversized selections are omitted. */
+  /**
+   * Request flags matching any of these tags or key patterns.
+   * Malformed or over-limit selections reject with invalid_options.
+   * Selection is not sent if adding it would exceed the URL size limit.
+   */
   flagSelection?: FlagSelection
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
@@ -80,19 +84,30 @@ function invalidOption(option: string): ConfigurationFetchError {
   return new ConfigurationFetchError('invalid_options', `Invalid configuration fetch options: ${option}`)
 }
 
-// Fastly rejects URLs over 8 KB. Keep the same limit and encoding as the browser rules fetcher.
+// Fastly answers URLs over 8 KB with 414 URI Too Long: https://docs.fastly.com/products/network-services-resource-limits
+// Keep URL encoding and this limit in sync with packages/browser/src/transport/flagSelection.ts.
 const MAX_RULES_URL_BYTES = 8192
 
 function applyFlagSelection(url: URL, input: FlagSelection | undefined): URL {
-  const { selection } = canonicalizeFlagSelection(input)
-  if (!selection) return url
+  let result: ReturnType<typeof canonicalizeFlagSelection>
+  let selectedUrl = url
+  try {
+    result = canonicalizeFlagSelection(input)
+    const { selection } = result
+    if (selection) {
+      const params = [
+        ...selection.tags.map((tag) => `selected_flag_tags=${encodeQueryValue(tag)}`),
+        ...selection.keyPatterns.map((pattern) => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
+      ]
+      selectedUrl = new URL(url.toString())
+      selectedUrl.search = [selectedUrl.search.slice(1), ...params].filter(Boolean).join('&')
+    }
+  } catch {
+    // Getters, proxies, and encoding failures can expose caller data through raw errors.
+    throw invalidOption('flagSelection')
+  }
+  if (result.error) throw invalidOption(`flagSelection (${result.error})`)
 
-  const params = [
-    ...selection.tags.map((tag) => `selected_flag_tags=${encodeQueryValue(tag)}`),
-    ...selection.keyPatterns.map((pattern) => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
-  ]
-  const selectedUrl = new URL(url.toString())
-  selectedUrl.search = [selectedUrl.search.slice(1), ...params].filter(Boolean).join('&')
   // Percent-encoding makes the serialized URL ASCII, so its length is its byte length.
   return selectedUrl.toString().length > MAX_RULES_URL_BYTES ? url : selectedUrl
 }
@@ -147,11 +162,10 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   } catch {
     throw invalidOption('site')
   }
-  if (signal?.aborted) throw abortError(signal)
-
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
   const requestUrl = applyFlagSelection(url, flagSelection).toString()
+  if (signal?.aborted) throw abortError(signal)
 
   const controller = new AbortController()
   const cancel = () => controller.abort(abortError(signal))
