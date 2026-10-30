@@ -1,4 +1,4 @@
-import type { ErrorCode, EvaluationContext, FlagValueType, ResolutionDetails } from '@openfeature/core'
+import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import {
   configMatchesContext,
   type FlagsConfiguration,
@@ -14,6 +14,14 @@ import {
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
+
+const NOOP_LOGGER: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+}
 
 export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   flagsConfiguration: FlagsConfiguration | undefined,
@@ -21,7 +29,8 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
-  experimentationOptOutMode: ExperimentationOptOutOption = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false,
+  logger: Logger = NOOP_LOGGER
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
@@ -46,7 +55,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue)
+    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, logger)
   }
 
   const { error } = selection
@@ -107,7 +116,8 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   precomputed: PrecomputedConfiguration,
   type: T,
   flagKey: string,
-  defaultValue: FlagTypeToValue<T>
+  defaultValue: FlagTypeToValue<T>,
+  logger: Logger
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const attributes = precomputed.response.data.attributes
   // Initial configurations and persistent caches can bypass the wire parser.
@@ -151,14 +161,19 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(flag.features, logger)
   return {
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
     flagMetadata: {
+      __dd_allocation_key: flag.allocationKey,
+      __dd_do_log: flag.doLog,
+      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
       allocationKey: flag.allocationKey,
       variationType: flag.variationType,
       doLog: flag.doLog,
-      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
+      ...featureEntries,
+      ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
     } as PrecomputedFlagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>

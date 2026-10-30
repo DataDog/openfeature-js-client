@@ -20,6 +20,7 @@ export default defineConfig({
         trackingEvaluation: fileURLToPath(new URL('./tracking-evaluation.html', import.meta.url)),
         trackingRum: fileURLToPath(new URL('./tracking-rum.html', import.meta.url)),
         trackingAll: fileURLToPath(new URL('./tracking-all.html', import.meta.url)),
+        coreProviderExposures: fileURLToPath(new URL('./core-provider-exposures.html', import.meta.url)),
       },
     },
   },

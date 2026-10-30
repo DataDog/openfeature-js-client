@@ -9,6 +9,7 @@ import type {
 } from '@openfeature/web-sdk'
 import { TypeMismatchError } from '@openfeature/web-sdk'
 import { inheritEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
+import { registerTransparentProvider } from './exposure-scope'
 
 const OVERRIDES_KEY = 'dd.dd_flag.overrides'
 const DEVTOOLS_MARKER_KEY = 'dd.dd_flag.devtools'
@@ -65,6 +66,7 @@ export class DatadogDevtools implements Provider {
 
   constructor(private readonly inner: Provider) {
     inheritEvaluationTelemetryPolicy(this.metadata, inner.metadata)
+    registerTransparentProvider(this.metadata, inner.metadata)
   }
 
   get hooks() {
