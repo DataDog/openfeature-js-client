@@ -1,6 +1,6 @@
 import { type Channel, channel } from 'node:diagnostics_channel'
 import type { ExposureEvent } from '@datadog/flagging-core'
-import type { EvaluationContext, Logger } from '@openfeature/server-sdk'
+import { type EvaluationContext, type Logger, OpenFeature } from '@openfeature/server-sdk'
 import { DatadogNodeServerProvider, ExperimentationOptOutMode } from '../src'
 import type { UniversalFlagConfigurationV1 } from '../src/configuration/ufc-v1'
 
@@ -159,26 +159,24 @@ describe('immediate experimentation opt-out', () => {
         experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
       })
       provider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait('opt-out-transitions', provider)
+      const client = OpenFeature.getClient('opt-out-transitions')
       const eligible = { targetingKey: 'athlete' }
       const optedOut = { ...eligible, dd_experimentation_opt_out_at: '2026-01-01T00:00:00Z' }
       for (const context of [eligible, eligible, optedOut, optedOut, eligible]) {
-        const result = await provider.resolveBooleanEvaluation('feature', true, context, logger)
+        const result = await client.getBooleanDetails('feature', true, context)
         expect(result.value).toBe(!('dd_experimentation_opt_out_at' in context))
       }
       expect(exposures).toHaveLength(1)
-      const invalid = await provider.resolveBooleanEvaluation(
-        'feature',
-        false,
-        {
-          targetingKey: 'athlete',
-          dd_experimentation_opt_out_at: null,
-        } as unknown as EvaluationContext,
-        logger
-      )
+      const invalid = await client.getBooleanDetails('feature', false, {
+        targetingKey: 'athlete',
+        dd_experimentation_opt_out_at: null,
+      } as unknown as EvaluationContext)
       expect(invalid).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'INVALID_CONTEXT' })
       expect(exposures).toHaveLength(1)
     } finally {
       exposureChannel.unsubscribe(subscriber)
+      await OpenFeature.clearProviders()
     }
   })
 })
