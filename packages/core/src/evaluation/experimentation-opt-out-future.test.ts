@@ -1,9 +1,11 @@
 import { fromJson } from '@bufbuild/protobuf'
 import { FlagsConfigurationSchema } from '../configuration/generated/ufc_pb'
+import * as preparedActivation from '../configuration/prepared-activation'
 import { prepareJsonFlagActivations, prepareUniversalFlagConfiguration } from '../configuration/prepared-activation'
 import { prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { decodeFlagsConfiguration, encodeFlagsConfiguration } from '../configuration/ufc-protobuf'
 import { evaluateRulesBasedConfiguration } from './evaluation'
+import * as optOut from './experimentation-opt-out'
 import {
   acknowledgesExperimentationOptOut,
   compareOptOutInstants,
@@ -321,4 +323,49 @@ it.each([
   expect(acknowledgesExperimentationOptOut(configuration, policy)).toBe(expected)
   const acknowledged = parseOptOutInstant(timestamp)
   expect(!!acknowledged && compareOptOutInstants(parseOptOutInstant(cutoff)!, acknowledged) === 0).toBe(expected)
+})
+
+describe.each([false, true])('JSON inactive opt-out (prepared: %s)', (prepared) => {
+  afterEach(() => jest.restoreAllMocks())
+
+  it.each([
+    [undefined, context],
+    [false, context],
+    ['disabled', { targetingKey: 'subject', dd_experimentation_opt_out_at: 'invalid' }],
+    ['immediate', { targetingKey: 'subject' }],
+    ['future_experiments_only', { targetingKey: 'subject' }],
+  ] as const)('skips activation preparation and exclusion checks for %s', (optOutMode, subject) => {
+    const configuration = jsonRules('invalid')
+    if (prepared) prepareUniversalFlagConfiguration(configuration)
+    const preparation = jest.spyOn(preparedActivation, 'prepareJsonFlagActivations')
+    const exclusion = jest.spyOn(optOut, 'excludesExperimentAt')
+    for (let index = 0; index < 2; index++) {
+      const result = evaluateRulesBasedConfiguration(
+        configuration,
+        'boolean',
+        'flag',
+        false,
+        subject,
+        logger,
+        optOutMode
+      )
+      expect(result).toMatchObject({
+        value: true,
+        reason: 'STATIC',
+        flagMetadata: { allocationKey: 'experiment', doLog: true },
+      })
+      expect(result.errorCode).toBeUndefined()
+    }
+    expect(preparation).not.toHaveBeenCalled()
+    expect(exclusion).not.toHaveBeenCalled()
+  })
+
+  it('still calls the exclusion boundary for an active policy', () => {
+    const configuration = jsonRules()
+    if (prepared) prepareUniversalFlagConfiguration(configuration)
+    const exclusion = jest.spyOn(optOut, 'excludesExperimentAt')
+    const result = evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', true, context, logger, 'immediate')
+    expect(result).toMatchObject({ value: false, reason: 'STATIC' })
+    expect(exclusion).toHaveBeenCalledTimes(2)
+  })
 })

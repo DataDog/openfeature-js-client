@@ -50,7 +50,7 @@ Applications own retries, polling, storage, tracking, and fallback.
 ## Per-subject experimentation opt-out
 
 Set the `experimentationOptOutMode` provider option to `ExperimentationOptOutMode.Immediate`.
-The default is `Disabled`. Unsupported mode values throw during provider construction.
+The supported modes are `Disabled` (the default) and `Immediate`. `FutureExperimentsOnly` is not supported by this provider. Unsupported mode values throw during provider construction.
 The provider uses the explicit option only. When using `dd-trace-js`, the tracer owns
 `DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE` and passes the resolved mode to this provider.
 
@@ -68,7 +68,9 @@ const context = {
 }
 ```
 
-Use an RFC3339 timestamp string. In immediate mode, any valid timestamp excludes the subject immediately, including a future timestamp.
+Use the shared timestamp subset: `YYYY-MM-DDTHH:mm:ss`, optionally followed by a decimal fraction, then `Z` or a numeric `±HH:mm` offset. Lowercase `t` and `z` are accepted. Fractions beyond nine digits are truncated without rounding. Calendar fields must be valid, seconds must be `00`–`59`, and both the written and normalized UTC year must be `0000`–`9999`. Whitespace, named time zones, compact offsets, Unicode signs, and leap seconds are rejected.
+
+In immediate mode, any valid timestamp excludes the subject immediately, including a future timestamp.
 The evaluator skips exposure-logging allocations before targeting and randomization, then tries ordinary allocations in order.
 If none match, it returns the application's default value.
 An invalid attribute returns `INVALID_CONTEXT` and the application default.

@@ -107,21 +107,44 @@ describe('immediate experimentation opt-out', () => {
     }
   })
 
-  it.each(['2026-02-29T00:00:00Z', '2026-01-01T00:00:00'])(
-    'uses shared timestamp validation for %s',
+  it.each([
+    '2026-02-29T00:00:00Z',
+    '2026-01-01T00:00:00',
+    '2026-01-01T00:00:60Z',
+    '2026-01-01 00:00:00Z',
+    '0000-01-01T00:00:00+01:00',
+    '9999-12-31T23:59:59-01:00',
+  ])('uses shared timestamp validation for %s', async (timestamp) => {
+    const provider = new DatadogNodeServerProvider({
+      exposureChannel: channel('opt-out-invalid-timestamp') as Channel<ExposureEvent>,
+      experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+    })
+    provider.setConfiguration(configuration)
+    const result = await provider.resolveBooleanEvaluation(
+      'feature',
+      false,
+      { targetingKey: 'athlete', dd_experimentation_opt_out_at: timestamp },
+      logger
+    )
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'INVALID_CONTEXT' })
+  })
+
+  it.each(['2026-01-01t00:00:00z', '2026-01-01T00:00:00.123456789999+01:00'])(
+    'accepts the shared timestamp subset %s',
     async (timestamp) => {
       const provider = new DatadogNodeServerProvider({
-        exposureChannel: channel('opt-out-invalid-timestamp') as Channel<ExposureEvent>,
+        exposureChannel: channel('opt-out-valid-timestamp') as Channel<ExposureEvent>,
         experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
       })
       provider.setConfiguration(configuration)
       const result = await provider.resolveBooleanEvaluation(
         'feature',
-        false,
+        true,
         { targetingKey: 'athlete', dd_experimentation_opt_out_at: timestamp },
         logger
       )
-      expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'INVALID_CONTEXT' })
+      expect(result).toMatchObject({ value: false, reason: 'STATIC' })
+      expect(result.errorCode).toBeUndefined()
     }
   )
 
