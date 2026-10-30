@@ -239,7 +239,7 @@ describe('configuration wire', () => {
     ['BOOLEAN', 'true'],
     ['STRING', false],
     ['NUMBER', Number.NaN],
-    ['OBJECT', null],
+    ['OBJECT', undefined],
   ])('isolates a malformed precomputed %s flag', (variationType, variationValue) => {
     const validFlag = {
       allocationKey: 'allocation',
