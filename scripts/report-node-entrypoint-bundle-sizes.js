@@ -9,6 +9,8 @@ const scenarios = [
   { name: 'provider', label: 'Node provider only', expectProtobuf: false },
   { name: 'ssr', label: 'SSR helpers only (fetch client rules + serialize)', expectProtobuf: true },
   { name: 'provider-with-ssr', label: 'Node provider + SSR helpers', expectProtobuf: true },
+  { name: 'precompute', label: 'Precompute only (parsed rules)', expectProtobuf: false },
+  { name: 'provider-with-precompute', label: 'Node provider + precompute', expectProtobuf: false },
 ]
 
 function createWebpackConfigs(testAppDirectory) {
@@ -72,6 +74,7 @@ function formatBytes(bytes) {
 function renderMarkdown(measurements) {
   const provider = measurements.find(({ name }) => name === 'provider')
   const combined = measurements.find(({ name }) => name === 'provider-with-ssr')
+  const withPrecompute = measurements.find(({ name }) => name === 'provider-with-precompute')
   return [
     '### OpenFeature Node Server Bundle Sizes',
     '',
@@ -86,9 +89,11 @@ function renderMarkdown(measurements) {
     '',
     `Adding SSR helpers to the provider adds ${formatBytes(combined.rawBytes - provider.rawBytes)} raw / ${formatBytes(combined.gzipBytes - provider.gzipBytes)} gzip in this build. This includes fetching, parsing, and serialization, not just the decoder. SSR helpers fetch rules for the browser, not for configuring that provider (which uses its existing JSON API).`,
     '',
-    'These are bundler sizes, not npm install sizes, unbundled Node require/import costs, payload sizes, or latency. Gzip compares compressed artifacts. The browser scenarios include OpenFeature and a different harness, so their sizes are not directly comparable.',
+    `Adding precomputation to the provider adds ${formatBytes(withPrecompute.rawBytes - provider.rawBytes)} raw / ${formatBytes(withPrecompute.gzipBytes - provider.gzipBytes)} gzip in this build. Both precompute scenarios import precomputeConfiguration from /rules-based and receive already-parsed rules from the test harness; they do not fetch, parse, or serialize configuration.`,
     '',
-    'Dependency checks passed: no Protobuf runtime or generated schema modules in the provider-only bundle; present in both SSR bundles (checked using Webpack module statistics).',
+    'These are bundler sizes, not npm install sizes, unbundled Node require/import costs, payload sizes, or latency. Gzip compares compressed artifacts. Deltas compare scenarios in this build, not changes against the base branch. The browser scenarios include OpenFeature and a different harness, so their sizes are not directly comparable.',
+    '',
+    'Dependency checks passed: no Protobuf runtime or generated schema modules in the provider-only or either precompute bundle; present in both SSR bundles (checked using Webpack module statistics).',
   ].join('\n')
 }
 

@@ -13,6 +13,7 @@ const {
 } = require('../report-node-entrypoint-bundle-sizes')
 
 const protobufModule = { name: './node_modules/@bufbuild/protobuf/dist/esm/from-binary.js' }
+const scenarioNames = ['provider', 'ssr', 'provider-with-ssr', 'precompute', 'provider-with-precompute']
 
 test('finds Protobuf runtime and schema modules, including concatenated modules and Windows paths', () => {
   assert.equal(hasProtobufModules([protobufModule]), true)
@@ -35,7 +36,7 @@ test('bundles independent Node ESM scenarios from installed packages without wor
   const configs = createWebpackConfigs(testAppDirectory)
   assert.deepEqual(
     configs.map(({ name }) => name),
-    ['provider', 'ssr', 'provider-with-ssr']
+    scenarioNames
   )
   for (const config of configs) {
     assert.equal(config.context, testAppDirectory)
@@ -61,12 +62,18 @@ function writeBundles(t) {
     `provider with datadog.ffe.flagging.ufc.v1 type check ${filler('p', 4)}`,
     `SSR helpers ${filler('s', 1)}`,
     `provider + SSR helpers ${filler('c', 7)}`,
+    `precompute ${filler('e', 2)}`,
+    `provider + precompute ${filler('b', 5)}`,
   ]
   const builds = []
-  for (const [index, name] of ['provider', 'ssr', 'provider-with-ssr'].entries()) {
+  for (const [index, name] of scenarioNames.entries()) {
     mkdirSync(path.join(directory, name))
     writeFileSync(path.join(directory, name, 'index.cjs'), contents[index])
-    builds.push({ name, modules: name === 'provider' ? [] : [protobufModule], assets: [{ name: 'index.cjs' }] })
+    builds.push({
+      name,
+      modules: name.includes('ssr') ? [protobufModule] : [],
+      assets: [{ name: 'index.cjs' }],
+    })
   }
   return { directory, contents, builds }
 }
@@ -80,26 +87,45 @@ test('reports actual raw/gzip sizes, same-build opt-in cost, and measurement lim
   }
   assert.deepEqual(
     measurements.map(({ hasProtobuf }) => hasProtobuf),
-    [false, true, true]
+    [false, true, true, false, false]
   )
   const report = renderMarkdown(measurements)
   assert.match(report, /Node provider only \| .* \| no \|/)
   assert.match(report, /SSR helpers only .* \| yes \|/)
   assert.match(report, /Node provider \+ SSR helpers \| .* \| yes \|/)
-  const rawDelta = ((measurements[2].rawBytes - measurements[0].rawBytes) / 1024).toFixed(1)
-  const gzipDelta = ((measurements[2].gzipBytes - measurements[0].gzipBytes) / 1024).toFixed(1)
-  assert.ok(Number(rawDelta) > 0)
-  assert.ok(Number(gzipDelta) > 0)
-  assert.ok(report.includes(`adds ${rawDelta} KiB raw / ${gzipDelta} KiB gzip`), report)
+  assert.match(report, /Precompute only \(parsed rules\) \| .* \| no \|/)
+  assert.match(report, /Node provider \+ precompute \| .* \| no \|/)
+  const provider = measurements.find(({ name }) => name === 'provider')
+  for (const [name, label] of [
+    ['provider-with-ssr', 'SSR helpers'],
+    ['provider-with-precompute', 'precomputation'],
+  ]) {
+    const combined = measurements.find((measurement) => measurement.name === name)
+    const rawDelta = ((combined.rawBytes - provider.rawBytes) / 1024).toFixed(1)
+    const gzipDelta = ((combined.gzipBytes - provider.gzipBytes) / 1024).toFixed(1)
+    assert.ok(Number(rawDelta) > 0)
+    assert.ok(Number(gzipDelta) > 0)
+    assert.ok(
+      report.includes(`Adding ${label} to the provider adds ${rawDelta} KiB raw / ${gzipDelta} KiB gzip`),
+      report
+    )
+  }
   assert.match(report, /not just the decoder/)
   assert.match(report, /not npm install sizes/)
+  assert.match(report, /not changes against the base branch/)
   assert.match(report, /not for configuring that provider/)
+  assert.match(report, /receive already-parsed rules from the test harness/)
+  assert.match(report, /do not fetch, parse, or serialize configuration/)
+  assert.match(
+    report,
+    /no Protobuf runtime or generated schema modules in the provider-only or either precompute bundle/
+  )
 })
 
-for (const name of ['provider', 'ssr', 'provider-with-ssr']) {
+for (const name of scenarioNames) {
   test(`rejects unexpected Protobuf dependency state in ${name}`, (t) => {
     const { directory, builds } = writeBundles(t)
-    builds.find((build) => build.name === name).modules = name === 'provider' ? [protobufModule] : []
+    builds.find((build) => build.name === name).modules = name.includes('ssr') ? [] : [protobufModule]
     assert.throws(() => measureBundles(directory, builds), /Unexpected Protobuf modules/)
   })
 }
