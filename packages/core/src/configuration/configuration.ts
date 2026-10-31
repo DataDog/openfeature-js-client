@@ -51,6 +51,9 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      format?: 'PRECOMPUTED'
+      environment?: { name: string }
+      observeFullEvaluationData?: boolean
       /** Effective server evaluation options, retained in portable and persisted configurations. */
       evaluation_options?: {
         experimentation_opt_out?: boolean

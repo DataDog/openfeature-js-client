@@ -4,10 +4,12 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import {
   ConfigurationFetchError,
+  ConfigurationPrecomputeError,
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
   fetchRulesConfiguration,
+  precomputeConfiguration,
 } from '@datadog/openfeature-node-server/rules-based'
 
 const require = createRequire(import.meta.url)
@@ -30,6 +32,7 @@ for (const mode of ['require', 'import']) {
           assert.equal(typeof root.DatadogNodeServerProvider, 'function')
           assert.equal('fetchRulesConfiguration' in root, false)
           assert.equal('configurationFromString' in root, false)
+          assert.equal('precomputeConfiguration' in root, false)
           const protobufModules = () => Object.keys(require.cache).filter((file) =>
             /@bufbuild[/\\\\]protobuf|configuration[/\\\\](generated|protobuf-text-encoding|rules-wire|ufc-protobuf)/.test(file)
           )
@@ -37,6 +40,12 @@ for (const mode of ['require', 'import']) {
           const helpers = await load('@datadog/openfeature-node-server/rules-based')
           assert.equal(typeof helpers.fetchRulesConfiguration, 'function')
           assert.equal(typeof helpers.configurationFromString, 'function')
+          const emptyRules = helpers.configurationFromRulesBinary(new Uint8Array())
+          const snapshot = helpers.precomputeConfiguration(emptyRules, { targetingKey: 'subject' })
+          const restored = helpers.configurationFromString(helpers.configurationToString(snapshot))
+          assert.deepEqual(Object.keys(restored), ['precomputed'])
+          assert.deepEqual(restored.precomputed.response.data.attributes.flags, {})
+          assert.deepEqual(restored.precomputed.context, { targetingKey: 'subject' })
           assert.ok(protobufModules().length > 0)
         `,
       ],
@@ -51,8 +60,10 @@ test('native ESM and CommonJS expose identical standalone helpers without OpenFe
     ConfigurationFetchError,
     configurationFromRulesBinary,
     configurationFromString,
+    ConfigurationPrecomputeError,
     configurationToString,
     fetchRulesConfiguration,
+    precomputeConfiguration,
   })) {
     assert.equal(typeof value, 'function')
     assert.equal(value, cjs[name])

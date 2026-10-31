@@ -84,9 +84,7 @@ function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
     return typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)
   }
   if (type === 'OBJECT' || type === 'JSON' || type === 'object') {
-    return (
-      typeof value.variationValue === 'object' && value.variationValue !== null && isJsonValue(value.variationValue)
-    )
+    return isJsonValue(value.variationValue)
   }
   return false
 }

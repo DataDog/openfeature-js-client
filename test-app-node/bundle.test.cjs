@@ -1,11 +1,32 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
-const { configurationFromString } = require('@datadog/openfeature-node-server/rules-based')
+const { configurationFromString, configurationToString } = require('@datadog/openfeature-node-server/rules-based')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 const providerConfiguration = require('../packages/core/test/ffe-system-test-data/ufc-config.json')
 const logger = { debug() {}, info() {}, warn() {}, error() {} }
 
-for (const name of ['provider', 'provider-with-ssr']) {
+for (const name of ['precompute', 'provider-with-precompute']) {
+  test(`${name} bundle precomputes nonempty assignments without rules or a source ETag`, () => {
+    const { precomputeConfiguration } = require(`./dist/bundles/${name}/index.cjs`)
+    const context = { targetingKey: 'user-1', country: 'US' }
+    const configuration = configurationFromString(JSON.stringify(fixture))
+    const result = configurationFromString(configurationToString(precomputeConfiguration(configuration, context)))
+    assert.deepEqual(Object.keys(result), ['precomputed'])
+    assert.deepEqual(result.precomputed.context, context)
+    assert.equal(result.precomputed.etag, undefined)
+    assert.deepEqual(result.precomputed.response.data.attributes.flags['test-flag'], {
+      allocationKey: 'allocation',
+      variationKey: 'on',
+      variationValue: true,
+      variationType: 'boolean',
+      doLog: true,
+      reason: 'TARGETING_MATCH',
+      serialId: 7,
+    })
+  })
+}
+
+for (const name of ['provider', 'provider-with-ssr', 'provider-with-precompute']) {
   test(`${name} bundle initializes the provider and evaluates without OpenFeature`, async () => {
     const { createProvider } = require(`./dist/bundles/${name}/index.cjs`)
     const provider = createProvider(providerConfiguration)

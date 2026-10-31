@@ -47,6 +47,43 @@ The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `Da
 
 Applications own retries, polling, storage, tracking, and fallback.
 
+### Local Precomputation
+
+`precomputeConfiguration(configuration, context, options?)` evaluates parsed rules locally for one context and returns a precomputed-only `FlagsConfiguration`. It reuses the shared evaluator without initializing a provider or tracer, fetching, polling, or emitting tracking events. Parsing, fetching, and serialization remain separate building blocks.
+
+```typescript
+import {
+  configurationToString,
+  fetchRulesConfiguration,
+  precomputeConfiguration,
+} from '@datadog/openfeature-node-server/rules-based'
+
+const rules = await fetchRulesConfiguration({
+  distributionChannel: 'client',
+  clientToken,
+  env: 'production',
+})
+const context = { targetingKey: user.id, country: user.country }
+const precomputed = precomputeConfiguration(rules, context, {
+  onEvaluationError: ({ flagKey, errorCode }) => {
+    console.warn('Flag omitted from precomputed configuration', { flagKey, errorCode })
+  },
+})
+const wire = configurationToString(precomputed)
+// Send wire through the framework's safe SSR serializer and use the same context in the browser.
+```
+
+You can also pass rules parsed with `configurationFromString()` or `configurationFromRulesBinary()`. The existing browser initialization example above accepts the resulting wire. A configuration containing both capabilities is evaluated using its rules, not its existing precomputed assignments.
+
+- The helper captures one evaluation time and a detached JSON-compatible context. Recompute when rules or context change; a precomputed-only provider cannot reevaluate rules for a different subject. Dates, undefined values, nonfinite numbers, custom class instances, and cycles are not portable context values and are rejected.
+- Only actual assignments are included. Flags with no matching assignment or an individual evaluation error are omitted, without inventing code defaults. The receiving JS provider returns the application's default with `FLAG_NOT_FOUND` for an omitted flag; the original error/reason is not preserved. This is Datadog's assignment-only format, not an OFREP bulk response.
+- `onEvaluationError` receives the flag key and error code for each evaluation failure after the entire snapshot has been computed. It receives no context, values, or raw error messages; no-assignment outcomes do not invoke it. Exceptions thrown by the callback propagate.
+- Missing or malformed rules, invalid contexts, and invalid options throw `ConfigurationPrecomputeError` with `invalid_configuration`, `invalid_context`, or `invalid_options`, respectively. A valid configuration with no flags produces an empty, context-bound snapshot.
+- Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
+- The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
+
+**Precomputation is not an access-control boundary.** For client-directed SSR output, use client-distributed rules or an explicitly reviewed client-safe policy. Do not expose server-only flags or private context attributes merely because the rules were removed. Select a context that is safe to send to that client.
+
 ## Per-subject experimentation opt-out
 
 Set the `experimentationOptOutMode` provider option to `ExperimentationOptOutMode.Immediate`.

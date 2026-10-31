@@ -8,7 +8,7 @@ import type {
   ResolutionDetails,
   ResolutionReason,
 } from '@openfeature/core'
-import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
+import type { FlagTypeToValue, PrecomputedFlag, PrecomputedFlagMetadata } from '../configuration'
 import type {
   Allocation,
   Condition,
@@ -51,15 +51,70 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   evaluationTimestampMs: TimeStamp = timeStampNow(),
   excludeExperiments: ExperimentationOptOutPolicy | boolean = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const result = resolveProtobufAssignment(
+    configuration,
+    flagKey,
+    context,
+    logger,
+    evaluationTimestampMs,
+    excludeExperiments,
+    type
+  )
+  if (result.kind !== 'assignment') {
+    return {
+      value: defaultValue,
+      reason: result.kind === 'error' ? 'ERROR' : 'DEFAULT',
+      ...(result.kind === 'error'
+        ? {
+            errorCode: result.errorCode,
+            ...(result.errorMessage === undefined ? {} : { errorMessage: result.errorMessage }),
+          }
+        : {}),
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+    }
+  }
+  const { assignment } = result
+  const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(assignment.features, logger)
+  return {
+    value: assignment.variationValue as FlagTypeToValue<T>,
+    reason: assignment.reason,
+    variant: assignment.variationKey,
+    flagMetadata: {
+      ...createEvaluationTimestampMetadata(evaluationTimestampMs),
+      __dd_allocation_key: assignment.allocationKey,
+      __dd_do_log: assignment.doLog,
+      __dd_split_serial_id: assignment.serialId,
+      ...featureEntries,
+      ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+      allocationKey: assignment.allocationKey,
+      variationType: assignment.variationType,
+      doLog: assignment.doLog,
+    } as PrecomputedFlagMetadata,
+  }
+}
+
+type RulesAssignmentResult =
+  | { kind: 'assignment'; assignment: PrecomputedFlag }
+  | { kind: 'unassigned' }
+  | { kind: 'error'; errorCode: ErrorCode; errorMessage?: string }
+
+/** Resolve an assignment without substituting an application's code default. */
+export function resolveProtobufAssignment(
+  configuration: PreparedRulesResponse,
+  flagKey: string,
+  context: EvaluationContext,
+  logger: Logger,
+  evaluationTimestampMs: TimeStamp,
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
+  expectedType?: FlagValueType
+): RulesAssignmentResult {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
     logger.debug('returning default value because flag is not found', { flagKey, targetingKey })
     return {
-      value: defaultValue,
-      reason: 'ERROR',
+      kind: 'error',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -68,18 +123,16 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       throw new FlagConfigurationError('Flag requires an unsupported feature level')
     }
     const flagValueType = variationTypeToFlagValueType(flag.variationType)
-    if (type !== flagValueType) {
+    if (expectedType !== undefined && expectedType !== flagValueType) {
       logger.debug('variant value type mismatch, returning default value', {
         flagKey,
         targetingKey,
-        expectedType: type,
+        expectedType,
         variantType: flag.variationType,
       })
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'TYPE_MISMATCH' as ErrorCode,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
 
@@ -101,25 +154,18 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
       logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
-      const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
-        splitFeaturesMetadataInput(split.features),
-        logger
-      )
       return {
-        value: value as FlagTypeToValue<T>,
-        reason: resolutionReason(split),
-        variant: variationKey,
-        flagMetadata: {
-          ...createEvaluationTimestampMetadata(evaluationTimestampMs),
-          __dd_allocation_key: allocation.key,
-          __dd_do_log: allocation.logExposureEvent,
-          __dd_split_serial_id: split.serialId,
-          ...featureEntries,
-          ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+        kind: 'assignment',
+        assignment: {
+          variationValue: value,
+          variationKey,
+          reason: resolutionReason(split),
           allocationKey: allocation.key,
-          variationType: variationTypeToFlagValueType(flag.variationType),
+          variationType: flagValueType,
           doLog: allocation.logExposureEvent,
-        } as PrecomputedFlagMetadata,
+          ...(split.serialId === undefined ? {} : { serialId: split.serialId }),
+          ...(split.features.length === 0 ? {} : { features: splitFeaturesMetadataInput(split.features) }),
+        },
       }
     }
   } catch (error) {
@@ -130,44 +176,32 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
         error: error.message,
       })
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'PARSE_ERROR' as ErrorCode,
         errorMessage: error.message,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     if (error instanceof TargetingKeyMissingError) {
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'TARGETING_KEY_MISSING' as ErrorCode,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     if (error instanceof InvalidContextError) {
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'INVALID_CONTEXT' as ErrorCode,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     logger.error('Error evaluating flag', { error })
     return {
-      value: defaultValue,
-      reason: 'ERROR',
+      kind: 'error',
       errorCode: 'GENERAL' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
   logger.debug('returning default assignment because no allocation matched', { flagKey, targetingKey })
-  return {
-    value: defaultValue,
-    reason: 'DEFAULT',
-    flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-  }
+  return { kind: 'unassigned' }
 }
 
 function matchesCondition(

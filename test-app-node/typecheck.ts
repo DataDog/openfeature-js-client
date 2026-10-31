@@ -26,11 +26,16 @@ import {
 } from '@datadog/openfeature-node-server'
 import {
   type ConfigurationFetchErrorCode,
+  ConfigurationPrecomputeError,
+  type ConfigurationPrecomputeErrorCode,
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
   type FlagsConfiguration,
   fetchRulesConfiguration,
+  type PrecomputeConfigurationOptions,
+  type PrecomputeEvaluationError,
+  precomputeConfiguration,
   type RulesConfigurationFetchOptions,
 } from '@datadog/openfeature-node-server/rules-based'
 
@@ -127,6 +132,22 @@ void fetchRulesConfiguration(clientOptions)
 const decoded: FlagsConfiguration = configurationFromRulesBinary(new Uint8Array())
 const serialized: string = configurationToString(decoded)
 const restored: FlagsConfiguration = configurationFromString(serialized)
+const precomputeOptions: PrecomputeConfigurationOptions = {
+  experimentationOptOutMode: 'future_experiments_only',
+  onEvaluationError(error: PrecomputeEvaluationError) {
+    const key: string = error.flagKey
+    const code: string = error.errorCode
+    void [key, code]
+  },
+}
+const snapshot: FlagsConfiguration = precomputeConfiguration(decoded, { targetingKey: 'subject' }, precomputeOptions)
+const precomputeError: ConfigurationPrecomputeErrorCode = new ConfigurationPrecomputeError('invalid_context').code
+void [snapshot, precomputeError]
+
+// @ts-expect-error: Precomputation takes a parsed configuration, not the serialized wire.
+precomputeConfiguration(serialized, {})
+// @ts-expect-error: A target context is required.
+precomputeConfiguration(decoded)
 
 // @ts-expect-error: Client distribution channel must be explicit; credentials never select the channel.
 const missingDistributionChannel: RulesConfigurationFetchOptions = { clientToken: 'token', env: 'prod' }
