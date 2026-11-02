@@ -141,9 +141,9 @@ describe('Universal Flag Configuration V1', () => {
   it('loads the immediate opt-out capability cases', () => {
     const cases = getTestCaseFileNames().flatMap(getTestCases)
     const immediateCases = cases.filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)
-    expect(immediateCases.length).toBe(26)
+    expect(immediateCases.length).toBe(28)
     expect(cases.filter((testCase) => testCase.capabilities?.experimentationOptOutFutureExperimentsOnly)).toHaveLength(
-      42
+      44
     )
     expect(new Set(immediateCases.map((testCase) => testCase.variationType))).toEqual(
       new Set(['BOOLEAN', 'STRING', 'INTEGER', 'NUMERIC', 'JSON'])
