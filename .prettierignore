@@ -17,5 +17,5 @@ packages/node-server/rules-based.d.ts
 packages/core/src/configuration/generated
 
 # Shared response-signing fixtures retain their independently pinned bytes.
-packages/browser/test/transport/responseSigning/corpus.json
+packages/browser/test/ffe-response-signing-data
 packages/browser/test/transport/responseSigning/key-usage-supplement.json

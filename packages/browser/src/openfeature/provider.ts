@@ -64,7 +64,7 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider extends DatadogProviderBase {
   /** Runtime feature detection for applications adopting the response-signing draft. */
-  static readonly responseSigningVersion = 3
+  static readonly responseSigningVersion = 1
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }

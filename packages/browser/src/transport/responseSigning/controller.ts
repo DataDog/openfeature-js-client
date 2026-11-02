@@ -60,7 +60,7 @@ export function createResponseSigningController(
   const notify = options?.onVerification
   const reported = new Set<string>()
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()
-  const serializedScope = JSON.stringify({ version: 3, mode, roots, scope })
+  const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
   function report(reason?: VerificationFailure) {
     const key = reason ?? 'verified'
@@ -84,7 +84,7 @@ export function createResponseSigningController(
     /** Hash the full immutable provider scope only when cache is used; never expose tokens in storage keys. */
     cacheNamespace(): Promise<string | undefined> {
       namespace ??= sha256(utf8(serializedScope)).then(
-        (digest) => `response-signing-v3-${hex(digest)}`,
+        (digest) => `response-signing-v1-${hex(digest)}`,
         () => undefined
       )
       return namespace
@@ -108,7 +108,7 @@ export function createResponseSigningController(
           if (semantic.has(lower) && seen.has(lower)) throw new ResponseVerificationError('unsupported-request')
           seen.add(lower)
         }
-        normalized.set(SIGNING_VERSION_HEADER, '3')
+        normalized.set(SIGNING_VERSION_HEADER, '1')
         normalized.set(SIGNING_NONCE_HEADER, hex(cryptoProvider().getRandomValues(new Uint8Array(16))))
         const capabilities =
           normalized

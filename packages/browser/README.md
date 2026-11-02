@@ -86,7 +86,7 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
-### Response signing (draft browser pilot)
+### Response signing (draft public v1)
 
 Response signing is opt-in and defaults to `off`. The draft supports `observe` for
 fail-open dogfooding and `required` for protected responses. Existing authentication,
@@ -107,7 +107,7 @@ const provider = new DatadogProvider({
 })
 ```
 
-`DatadogProvider.responseSigningVersion === 3` identifies support at runtime.
+`DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
 `trustedRootCertificates` accepts at most four standard padded base64 DER public
 root certificates fixed at initialization. This draft bundles **no production root**;
 provisioning and pinning that anchor is a release prerequisite. Never obtain trust
@@ -123,7 +123,10 @@ token and semantic headers, and the original proof lifetime (at most five minute
 Signed requests require HTTPS and reject redirects. A custom fetch implementation
 must preserve the generated URL, body and headers and the exact returned bytes.
 Proxies must support the signing request headers and expose the proof headers in
-CORS. The v3 capability is added only when signing is enabled.
+CORS. The `response-signing-v1` capability and signature version `1` are added only
+when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
+and draft v3 formats are not supported compatibility targets. This protocol number
+is independent of X.509 v3 certificate encoding.
 
 Required mode uses only verified memory for the same provider and full evaluation
 context. It does not read bootstrap or persistent configurations, never retries
@@ -138,7 +141,8 @@ ordinary network and in-memory availability but cannot use its scoped persistent
 cache. Required mode fails locally.
 
 Off mode preserves ordinary transport and caching and performs no signing work.
-This pilot signs complete buffered JSON responses. It does not add signed streaming
+This draft signs complete buffered JSON responses in the same assignment request;
+it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
 or change the existing unsigned streaming protocol.
 
 ### Flag selection

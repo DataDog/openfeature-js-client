@@ -12,7 +12,7 @@ import {
   SIGNING_NONCE_HEADER,
   SIGNING_VERSION_HEADER,
 } from '../../../src/transport/responseSigning/verification'
-import corpus from './corpus.json'
+import corpus from '../../ffe-response-signing-data/response-signing/v1/corpus.json'
 
 const vector = corpus.cases[0]
 const roots = [corpus.anchor_der_base64]
@@ -172,6 +172,12 @@ test.each(['observe', 'required'] as const)(
     expect(url).toContain('marker=a%2Fb&dd_env=production')
     expect(new Headers(init.headers).get('dd-client-token')).toBe('effective-token')
     expect(new Headers(init.headers).get(SIGNING_NONCE_HEADER)).toMatch(/^[0-9a-f]{32}$/)
+    expect(new Headers(init.headers).get(SIGNING_VERSION_HEADER)).toBe('1')
+    expect(new Headers(init.headers).get('x-dd-feature-flags-capabilities')?.split(',')).toContain(
+      'response-signing-v1'
+    )
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(DatadogProvider.responseSigningVersion).toBe(1)
     expect(init.redirect).toBe('error')
     expect(outcomes).toHaveBeenCalledWith({ status: 'verified' })
   }
@@ -254,6 +260,17 @@ test('unverified observe refresh cannot replace the separate verified memory fal
   global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
   await subject.onContextChange(context, context)
   expect(evaluation(subject)).toBe(true)
+})
+test('public v1 persistence is isolated from prototype signing cache namespaces', async () => {
+  const signing = createResponseSigningController({ mode: 'observe', trustedRootCertificates: roots })!
+  const namespace = await signing.cacheNamespace()
+  expect(namespace).toMatch(/^response-signing-v1-[0-9a-f]{64}$/)
+  const prototypeScope = JSON.stringify({ version: 3, mode: 'observe', roots, scope: {} })
+  const prototypeHash = Buffer.from(await webcrypto.subtle.digest('SHA-256', Buffer.from(prototypeScope))).toString(
+    'hex'
+  )
+  expect(namespace).not.toBe(`response-signing-v3-${prototypeHash}`)
+  expect(namespace).not.toBe(`response-signing-v1-${prototypeHash}`)
 })
 test('observe preserves unverified persistence only for the same complete scope', async () => {
   global.fetch = jest.fn().mockResolvedValue(unsigned())
