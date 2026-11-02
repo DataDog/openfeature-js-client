@@ -1,6 +1,12 @@
 import type { FlaggingConfiguration } from '../domain/configuration'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 
+// Keep these limits aligned with the backend schema in test/data/sdkdiagnostic-v1.json.
+const MAX_APPLICATION_ID_LENGTH = 128
+const MAX_SERVICE_ID_LENGTH = 200
+const MAX_ENVIRONMENT_LENGTH = 200
+const MAX_INITIALIZATION_DURATION_MS = 86_400_000
+
 type Milestone = { elapsed_ms: number }
 type InitializationTiming = { started_at_ms: number; duration_ms: number }
 type FinalTiming = InitializationTiming & { final: true }
@@ -59,18 +65,18 @@ export function createLifecycleTelemetry(
 
   function emit(diagnostic: Diagnostic) {
     try {
-      const identity = bounded(configuration.applicationId, 128)
+      const identity = bounded(configuration.applicationId, MAX_APPLICATION_ID_LENGTH)
         ? { application_id: configuration.applicationId }
-        : bounded(configuration.service, 200)
+        : bounded(configuration.service, MAX_SERVICE_ID_LENGTH)
           ? { service_id: configuration.service }
           : undefined
-      if (!identity || !bounded(configuration.env, 200)) {
+      if (!identity || !bounded(configuration.env, MAX_ENVIRONMENT_LENGTH)) {
         return
       }
       const timestamp = Date.now()
       if (
         'initialization' in diagnostic &&
-        (timestamp < startedAt || diagnostic.initialization.duration_ms > 86_400_000)
+        (timestamp < startedAt || diagnostic.initialization.duration_ms > MAX_INITIALIZATION_DURATION_MS)
       ) {
         return
       }
