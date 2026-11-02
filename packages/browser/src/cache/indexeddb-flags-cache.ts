@@ -6,6 +6,7 @@ import {
   getMD5Hash,
 } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { configurationDebugFields, type DebugLogger, NO_DEBUG } from '../debug'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
@@ -20,7 +21,11 @@ export class IndexedDBFlagsCache {
   private readonly clientToken: string
   private readonly selectionSuffix: string
 
-  constructor(clientToken: string, flagSelection?: CanonicalFlagSelection) {
+  constructor(
+    clientToken: string,
+    flagSelection?: CanonicalFlagSelection,
+    private readonly debug: DebugLogger = NO_DEBUG
+  ) {
     this.clientToken = clientToken
     this.selectionSuffix = flagSelection ? `-sel-${getMD5Hash(JSON.stringify(flagSelection))}` : ''
   }
@@ -30,6 +35,8 @@ export class IndexedDBFlagsCache {
     context: EvaluationContext,
     optedOut: ExperimentationOptOutPolicy = false
   ): Promise<FlagsConfiguration | undefined> {
+    const started = performance.now()
+    this.debug.event('cache.read_started', () => ({ cache: 'assignments', backend: 'indexeddb', context, optedOut }))
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
       const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
@@ -66,6 +73,14 @@ export class IndexedDBFlagsCache {
           }
           request.onerror = () => reject(request.error)
         })
+        this.debug.event('cache.read_completed', () => ({
+          cache: 'assignments',
+          backend: 'indexeddb',
+          context,
+          outcome: !config ? 'miss' : config.precomputed ? 'hit' : 'invalid',
+          durationMs: performance.now() - started,
+          ...configurationDebugFields(config),
+        }))
         if (!config || typeof config !== 'object') {
           return undefined
         }
@@ -73,29 +88,55 @@ export class IndexedDBFlagsCache {
       } finally {
         db.close()
       }
-    } catch {
+    } catch (error) {
+      this.debug.event('cache.read_failed', () => ({
+        cache: 'assignments',
+        context,
+        error,
+        action: 'continue_without_persistent_cache',
+      }))
       return undefined
     }
   }
 
   /** Fire-and-forget persist. Never throws. */
   set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
-    // One namespace for new writes keeps plaintext rollback and encoded
-    // refreshes in the same slot without changing what older SDKs can read.
-    const prefix = policyPrefix(optedOut)
-    const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
-    openDB()
-      .then((db) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite')
-        const store = tx.objectStore(STORE_NAME)
-        store.put(config, configKey)
-        tx.oncomplete = () => db.close()
-        tx.onerror = () => db.close()
-        tx.onabort = () => db.close()
-      })
-      .catch(() => {
-        // Silently fail — persistence should never break the SDK
-      })
+    this.debug.event('cache.write_started', () => ({ cache: 'assignments', context, optedOut }))
+    try {
+      // One namespace for new writes keeps plaintext rollback and encoded
+      // refreshes in the same slot without changing what older SDKs can read.
+      const prefix = policyPrefix(optedOut)
+      const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+      openDB()
+        .then((db) => {
+          const tx = db.transaction(STORE_NAME, 'readwrite')
+          const store = tx.objectStore(STORE_NAME)
+          store.put(config, configKey)
+          tx.oncomplete = () => {
+            this.debug.event('cache.write_completed', () => ({ cache: 'assignments', context }))
+            db.close()
+          }
+          tx.onerror = tx.onabort = () => {
+            this.debug.event('cache.write_failed', () => ({
+              cache: 'assignments',
+              context,
+              error: tx.error,
+              action: 'retain_memory',
+            }))
+            db.close()
+          }
+        })
+        .catch((error) => {
+          this.debug.event('cache.write_failed', () => ({
+            cache: 'assignments',
+            context,
+            error,
+            action: 'retain_memory',
+          }))
+        })
+    } catch (error) {
+      this.debug.event('cache.write_failed', () => ({ cache: 'assignments', context, error, action: 'retain_memory' }))
+    }
   }
 }
 

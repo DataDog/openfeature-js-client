@@ -1,13 +1,5 @@
 import type { Context, RawError } from '@datadog/browser-core'
-import {
-  addTelemetryDebug,
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  createPageMayExitObservable,
-  Observable,
-} from '@datadog/browser-core'
+import { addTelemetryDebug, createPageMayExitObservable, Observable } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import {
   ErrorCode,
@@ -16,8 +8,10 @@ import {
   type FlagValue,
   type HookContext,
 } from '@openfeature/web-sdk'
+import { NO_DEBUG } from '../debug'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import { createTrackedBatch } from '../transport/debugBatch'
 import {
   type EvaluationTelemetryPolicy,
   getEvaluationTrackingContext,
@@ -33,20 +27,23 @@ export function createFlagEvalEVPHook(
 ): ManagedTrackingHook {
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const sessionExpireObservable = new Observable<void>()
-  const flagEvaluationBatch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
+  const debug = configuration.debug?.child({ channel: 'evaluation' }) ?? NO_DEBUG
+  const flagEvaluationBatch = createTrackedBatch(
+    configuration.flagEvaluationEndpointBuilder,
+    (error: RawError) => {
+      debug.event('upload.error', () => ({ error }))
       addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    }),
-    flushController: createFlushController({
-      pageMayExitObservable,
-      sessionExpireObservable,
-    }),
-  })
+    },
+    pageMayExitObservable,
+    sessionExpireObservable,
+    debug
+  )
+  debug.event('evaluation.aggregation_started', () => ({ intervalMs: configuration.flagEvaluationTrackingInterval }))
 
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,
     (events: FlagEvaluationEvent[]) => {
+      debug.event('evaluation.aggregation_flushed', () => ({ events, count: events.length }))
       events.forEach((event) => {
         try {
           const url = window?.location?.href
@@ -65,6 +62,7 @@ export function createFlagEvalEVPHook(
           }
           flagEvaluationBatch.add(eventWithMetadata as unknown as Context)
         } catch (error) {
+          debug.event('batch.enqueue_failed', () => ({ error, event }))
           addTelemetryDebug('Error adding flag evaluation to batch', {
             'error.message': error instanceof Error ? error.message : String(error),
           })
@@ -99,25 +97,25 @@ export function createFlagEvalEVPHook(
             details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
               ? details.errorCode
               : ErrorCode.GENERAL
-          aggregator.addEvaluation(
-            getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
-            details,
-            errorCode
-          )
+          const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+          aggregator.addEvaluation(context, details, errorCode)
+          debug.event('evaluation.aggregated', () => ({ context, details, errorCode, countDelta: 1 }))
         } catch (error) {
+          debug.event('evaluation.aggregation_failed', () => ({ error, details }))
           addTelemetryDebug('Error adding evaluation to aggregator', {
             'error.message': error instanceof Error ? error.message : String(error),
           })
         }
       },
     },
-    policy
+    policy,
+    debug
   )
 }
 
 export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   return configuration
-    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration))
+    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration), configuration.debug)
     : composeDatadogTrackingHooks()
 }

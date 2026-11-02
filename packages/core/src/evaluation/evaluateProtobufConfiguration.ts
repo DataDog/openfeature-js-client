@@ -89,12 +89,29 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     }
     const conditionResults = new Map<number, boolean>()
     for (const { allocation, activation } of prepared.allocations) {
-      if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
-      if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults)) {
+      if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) {
+        logger.debug('allocation excluded by experimentation policy', {
+          allocationKey: allocation.key,
+          excludeExperiments,
+          activation,
+        })
         continue
       }
-      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
-      const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
+      if (!matchesCondition(allocation.targetingConditionIndex, configuration, context, conditionResults, logger)) {
+        continue
+      }
+      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs, logger)
+      const split = allocation.splits.find((candidate) => {
+        const matched = matchesSplit(candidate, partitionKey)
+        logger.debug('split evaluated', {
+          allocationKey: allocation.key,
+          candidate,
+          partitionKey,
+          matched,
+          evaluationTimestampMs,
+        })
+        return matched
+      })
       if (!split) continue
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
@@ -174,7 +191,8 @@ function matchesCondition(
   index: number | undefined,
   configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
-  results: Map<number, boolean>
+  results: Map<number, boolean>,
+  logger: Logger
 ): boolean {
   if (index === undefined) return true
   const cached = results.get(index)
@@ -184,16 +202,17 @@ function matchesCondition(
   if (condition.kind.case === 'all') {
     result = condition.kind.value.conditionIndexes.every((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results)
+      return matchesCondition(child, configuration, attributes, results, logger)
     })
   } else if (condition.kind.case === 'any') {
     result = condition.kind.value.conditionIndexes.some((child) => {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      return matchesCondition(child, configuration, attributes, results)
+      return matchesCondition(child, configuration, attributes, results, logger)
     })
   } else {
-    result = matchesLeafCondition(condition, configuration, attributes)
+    result = matchesLeafCondition(condition, configuration, attributes, logger)
   }
+  logger.debug('condition evaluated', { index, condition, matched: result })
   results.set(index, result)
   return result
 }
@@ -201,13 +220,19 @@ function matchesCondition(
 function matchesLeafCondition(
   condition: Condition,
   configuration: PreparedRulesResponse,
-  context: EvaluationContext
+  context: EvaluationContext,
+  logger: Logger
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
     throw new FlagConfigurationError('Unsupported condition')
   }
   const value = attributeValueAt(configuration, kind.value.attributeIndex, context)
+  logger.debug('condition operand', {
+    condition,
+    value,
+    attribute: configuration.attributes[kind.value.attributeIndex],
+  })
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -215,6 +240,7 @@ function matchesLeafCondition(
     const expected = kind.value.comparand
     if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
+    logger.debug('numeric condition coercion', { rawValue: value, actual, expected })
     if (actual === undefined) return false
     const comparator = kind.value.comparator as number
     if (comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
@@ -329,7 +355,8 @@ function computePartitionKey(
   allocation: Allocation,
   configuration: PreparedRulesResponse,
   context: EvaluationContext,
-  evaluationTimestampMs: TimeStamp
+  evaluationTimestampMs: TimeStamp,
+  logger: Logger
 ): number[] {
   const partitionKey: number[] = []
   for (const partition of allocation.partitionKey) {
@@ -346,7 +373,15 @@ function computePartitionKey(
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
       const partitionValue = coerceToString(value)
       if (partitionValue === undefined) throw new InvalidContextError()
-      partitionKey.push(new MD5Sharder().getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
+      const bucket = new MD5Sharder().getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound)
+      logger.debug('bucket evaluated', {
+        rawValue: value,
+        partitionValue,
+        salt: partition.kind.value.salt,
+        totalShards: upperBound,
+        bucket,
+      })
+      partitionKey.push(bucket)
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }

@@ -6,6 +6,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
+import { type DebugLogger, NO_DEBUG } from '../debug'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 
 const attribute = 'dd_evaluation_telemetry_opt_out'
@@ -98,7 +99,11 @@ function getPolicies(metadata: ProviderMetadata | undefined, visited = new Set<o
   return children
 }
 
-export function withEvaluationTelemetryPolicy<T extends Hook>(hook: T, boundPolicy?: EvaluationTelemetryPolicy): T {
+export function withEvaluationTelemetryPolicy<T extends Hook>(
+  hook: T,
+  boundPolicy?: EvaluationTelemetryPolicy,
+  debug: DebugLogger = NO_DEBUG
+): T {
   const admissions = new WeakMap<HookContext, Map<EvaluationTelemetryPolicy, boolean>>()
   return {
     ...hook,
@@ -122,6 +127,12 @@ export function withEvaluationTelemetryPolicy<T extends Hook>(hook: T, boundPoli
         (policy) => atStart?.get(policy) !== false && policy.allowsTelemetry(context.context)
       )
       // A customer hook can change consent during evaluation. Do not restore admission mid-call.
+      debug.event('tracking.policy', () => ({
+        allowed,
+        context: context.context,
+        details,
+        reason: allowed ? 'admitted' : 'evaluation_telemetry_opt_out',
+      }))
       if (allowed) return hook.finally?.(context, details, hints)
     },
   }

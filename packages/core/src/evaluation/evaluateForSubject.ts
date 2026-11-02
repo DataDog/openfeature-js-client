@@ -71,8 +71,14 @@ export function evaluateForSubject<T extends FlagValueType>(
     if (
       prepared &&
       excludesExperimentAt(excludeExperiments, allocation.doLog !== false, prepared.allocations[index].activation)
-    )
+    ) {
+      logger.debug('allocation excluded by experimentation policy', {
+        allocationKey: allocation.key,
+        excludeExperiments,
+        activation: prepared.allocations[index].activation,
+      })
       continue
+    }
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,
@@ -271,7 +277,7 @@ export function containsMatchingRule(
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  return rules.some((rule) => matchesRule(rule, subjectAttributes))
+  return rules.some((rule) => matchesRule(rule, subjectAttributes, logger))
 }
 
 function selectSplitUsingSharding(
@@ -296,7 +302,7 @@ function selectSplitUsingSharding(
       if (subjectKey == null) {
         throw new TargetingKeyMissingError()
       }
-      const shardMatches = matchesShard(shard, subjectKey)
+      const shardMatches = matchesShard(shard, subjectKey, undefined, logger)
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,

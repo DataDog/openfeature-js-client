@@ -19,6 +19,7 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
+import { NO_DEBUG } from '../debug'
 import {
   type FlaggingTrackingConfiguration,
   type FlaggingTrackingInitConfiguration,
@@ -61,6 +62,8 @@ export function createExposureLoggingHook(
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
   { sendToDatadog }: ExposureLoggingHookOptions = { sendToDatadog: true }
 ): ManagedTrackingHook {
+  const debug = configuration.debug?.child({ channel: 'exposure' }) ?? NO_DEBUG
+  debug.event('exposure.configured', () => ({ sendToDatadog, deduplication: true }))
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const exposuresBatch = sendToDatadog
     ? startExposuresBatch(
@@ -76,9 +79,17 @@ export function createExposureLoggingHook(
     shutdown: () => exposuresBatch?.stop(),
     finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
+        debug.event('exposure.decision', () => ({
+          details,
+          outcome: 'skipped',
+          reason: 'evaluation_error_or_no_variant',
+        }))
         return
       }
-      if (!supportsExposureAdmission(hookContext)) return
+      if (!supportsExposureAdmission(hookContext)) {
+        debug.event('exposure.decision', () => ({ details, outcome: 'skipped', reason: 'unrecognized_provider' }))
+        return
+      }
       // Complete the provider decision before either destination consumes it.
       const sharedDecision = completeExposureDecision(details)
       const exposureEvent = createExposureEvent(
@@ -86,6 +97,15 @@ export function createExposureLoggingHook(
         details
       )
       if (!exposureEvent) {
+        debug.event('exposure.decision', () => ({
+          details,
+          outcome: 'skipped',
+          reason: !details.flagMetadata?.doLog
+            ? 'do_log_false'
+            : !details.flagMetadata?.allocationKey
+              ? 'missing_allocation'
+              : 'missing_variant',
+        }))
         return
       }
       const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
@@ -94,6 +114,13 @@ export function createExposureLoggingHook(
       // result carried no shared decision.
       const stampedVerdict = details.flagMetadata?.__dd_exposure_cache_hit
       const hasLoggedAssignment = stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
+      debug.event('exposure.decision', () => ({
+        details,
+        exposureCacheEntry,
+        stampedVerdict,
+        outcome: hasLoggedAssignment ? 'duplicate' : sendToDatadog ? 'eligible' : 'record_only',
+        sendToDatadog,
+      }))
       if (hasLoggedAssignment) {
         return
       }
@@ -119,6 +146,7 @@ export function createExposureLoggingHook(
         }
         if (!sharedDecision) exposureCache.set(exposureCacheEntry)
       } catch (error) {
+        debug.event('exposure.record_failed', () => ({ error, exposureEvent }))
         addTelemetryDebug('Error adding exposure to batch', {
           'error.message': error instanceof Error ? error.message : String(error),
         })
@@ -146,9 +174,9 @@ export function createDatadogExposureLoggingHook(
 
   return {
     ...createTrackingHookController(async () => {
-      await runTrackingLifecycleOperation(() => exposureCache.init())
+      await runTrackingLifecycleOperation(() => exposureCache.init(), configuration.debug)
       return createExposureLoggingHook(configuration, exposureCache, undefined, { sendToDatadog })
-    }),
+    }, configuration.debug),
     exposureCache,
   }
 }

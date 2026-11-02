@@ -1,4 +1,5 @@
 import { type AssignmentCacheEntry, assignmentCacheKeyToString } from '@datadog/flagging-core'
+import { type DebugLogger, NO_DEBUG } from '../debug'
 import { MAX_EXPOSURE_CACHE_ENTRIES } from './constants'
 import { withStore } from './indexeddb-store'
 import SimpleAssignmentCache from './simple-assignment-cache'
@@ -18,8 +19,8 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   private storedGeneration = 0
   private pendingKeys = new Set<string>()
 
-  constructor(storageKeySuffix: string) {
-    super()
+  constructor(storageKeySuffix: string, debug: DebugLogger = NO_DEBUG) {
+    super(debug)
     this.storageKey = `assignments-${storageKeySuffix}`
   }
 
@@ -27,7 +28,13 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
     if (!this.initialization) {
       const generation = this.generation
       this.initialization = this.enqueue(async () => {
-        const stored = readStored(await withStore('readonly', (store) => store.get(this.storageKey)))
+        const raw = await withStore('readonly', (store) => store.get(this.storageKey))
+        const stored = readStored(raw)
+        this.debug.event('exposure.cache_loaded', () => ({
+          raw,
+          stored,
+          discardedByReset: generation !== this.generation,
+        }))
         // A clear during loading must not restore the previous configuration's exposures.
         if (generation !== this.generation) return
         this.storedGeneration = stored.generation
@@ -69,7 +76,12 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
-    this.operations = this.operations.then(operation).catch(() => {
+    this.operations = this.operations.then(operation).catch((error) => {
+      this.debug.event('exposure.persistence_failed', () => ({
+        error,
+        action: 'memory_fallback',
+        scope: this.storageKey,
+      }))
       // Storage failures must not stop evaluation or later persistence attempts.
     })
     return this.operations
@@ -82,7 +94,14 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
     void Promise.resolve().then(() => {
       void this.enqueue(async () => {
         // A queued write from before clear must not consume post-clear entries.
-        if (generation !== this.generation) return
+        if (generation !== this.generation) {
+          this.debug.event('exposure.write_discarded', () => ({
+            reason: 'reset',
+            generation,
+            currentGeneration: this.generation,
+          }))
+          return
+        }
         this.persistScheduled = false
         const pendingKeys = this.pendingKeys
         this.pendingKeys = new Set()
@@ -90,7 +109,14 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
         const storedGeneration = this.storedGeneration
         try {
           const stored = await this.update((current) => {
-            if (current.generation !== storedGeneration) return current
+            if (current.generation !== storedGeneration) {
+              this.debug.event('exposure.write_discarded', () => ({
+                reason: 'cross_tab_reset',
+                storedGeneration,
+                currentGeneration: current.generation,
+              }))
+              return current
+            }
             // Merge only this batch's changes, never the instance's loaded snapshot.
             const merged = new Map(current.entries)
             for (const [key, value] of entries) {
@@ -113,7 +139,8 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
             super.clear()
             this.setEntries(stored.entries)
           }
-        } catch {
+        } catch (error) {
+          this.debug.event('exposure.persistence_failed', () => ({ error, action: 'retry_on_later_write' }))
           if (generation === this.generation) {
             // Retry failed entries on a later write, retaining only keys still in memory.
             // Read their current values then, so retries cannot overwrite newer assignments.
@@ -143,6 +170,11 @@ export class IndexedDBAssignmentCache extends SimpleAssignmentCache {
       }
       return request
     })
+    this.debug.event('exposure.persistence_completed', () => ({
+      scope: this.storageKey,
+      generation: updated.generation,
+      count: updated.entries.length,
+    }))
     return updated
   }
 }

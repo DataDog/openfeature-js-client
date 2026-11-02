@@ -16,6 +16,7 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
+import { configurationDebugFields, type DebugConfiguration, registerDebugLogger } from '../debug'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
@@ -34,7 +35,7 @@ import { stampExposureCacheVerdict } from './exposures'
 import { DatadogProviderBase } from './provider-base'
 
 export interface DatadogCoreProviderConfiguration
-  extends EvaluationTelemetryOptOutConfiguration, ExperimentationOptOutConfiguration {
+  extends EvaluationTelemetryOptOutConfiguration, ExperimentationOptOutConfiguration, DebugConfiguration {
   /**
    * Exposure cache shared with a tracking controller
    * (`createDatadogExposureLoggingHook().exposureCache`). Enables the exposure
@@ -69,8 +70,20 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   private readonly exposureCache: AssignmentCache | undefined
 
   constructor(options: DatadogCoreProviderConfiguration = {}) {
-    super()
-    this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    super(options)
+    registerDebugLogger(this.metadata, this.debug)
+    this.debug.event('init.configuration', () => ({
+      mode: 'application_managed',
+      automaticFetch: false,
+      automaticTracking: false,
+      options,
+    }))
+    this.experimentationOptOutMode = getExperimentationOptOutMode(options, this.debug)
+    if (this.debug.enabled)
+      this.hooks.push({
+        before: (context) => this.debug.event('evaluation.requested', () => ({ context })),
+        finally: (context, details) => this.debug.event('evaluation.returned', () => ({ context, details })),
+      })
     this.exposureCache = options.exposureCache
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
     registerDatadogProvider(this.metadata)
@@ -84,6 +97,12 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     const hadEvaluatableConfiguration = this.canEvaluateCurrentContext()
     this.flagsConfiguration = configuration
     this.flagsConfigurationId = this.computeConfigurationId(configuration)
+    this.debug.event('configuration.installed', () => ({
+      ...configurationDebugFields(configuration),
+      configurationId: this.flagsConfigurationId,
+      source: 'application',
+      context: this.context,
+    }))
 
     if (this.context === undefined) return
 
@@ -101,27 +120,55 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     this.events.emit(ProviderEvents.ConfigurationChanged)
   }
 
+  protected debugEvaluationFields(): Record<string, unknown> {
+    return {
+      ...configurationDebugFields(this.flagsConfiguration),
+      configurationId: this.flagsConfigurationId,
+      context: this.context,
+      source: 'application_managed',
+    }
+  }
+
+  async onClose(): Promise<void> {
+    this.debug.event('shutdown.completed', () => ({
+      owner: 'application',
+      configurationRetained: true,
+      trackingShutdown: 'application_managed',
+    }))
+  }
+
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    this.debug.event('init.started', () => ({ context }))
     this.telemetryPolicy.setContext(context)
     this.context = context
 
     const error = toOpenFeatureError(
       getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutMode)
     )
-    if (error) throw error
+    if (error) {
+      this.debug.event('init.failed', () => ({ error, context }))
+      throw error
+    }
     // The shared IndexedDB-backed cache loads asynchronously; cache.init() is
     // idempotent and returns the same promise the tracking controller awaits,
     // so evaluations cannot run before the persisted entries are loaded.
     await this.exposureCache?.init()
+    this.debug.event('init.completed', () => this.debugEvaluationFields())
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
+    this.debug.event('context.accepted', () => ({
+      oldContext: _oldContext,
+      newContext,
+      assignmentContext: this.flagsConfiguration?.precomputed?.context,
+    }))
     this.telemetryPolicy.setContext(newContext)
     this.context = newContext
     const error = toOpenFeatureError(
       getFlagsConfigurationError(this.flagsConfiguration, this.context, this.experimentationOptOutMode)
     )
     if (error) {
+      this.debug.event('context.rejected', () => ({ error, newContext }))
       throw error
     }
   }

@@ -20,6 +20,7 @@ import type {
 import { ErrorCode, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
+import { bindDebugSignal, configurationDebugFields, registerDebugLogger } from '../debug'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -119,10 +120,11 @@ export class DatadogProvider extends DatadogProviderBase {
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
-    super()
-    this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    super(options)
+    registerDebugLogger(this.metadata, this.debug)
+    this.experimentationOptOutMode = getExperimentationOptOutMode(options, this.debug)
     this.requestDiagnostics = createRequestDiagnostics()
-    this.configuration = validateAndBuildFlaggingConfiguration(options)
+    this.configuration = validateAndBuildFlaggingConfiguration(options, this.debug)
     const getTrackingContext = () => this.effectiveTrackingContext()
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
     registerDatadogProvider(this.metadata)
@@ -134,6 +136,7 @@ export class DatadogProvider extends DatadogProviderBase {
       enabledByDefault: true,
       getTrackingContext,
       telemetryPolicy: this.telemetryPolicy,
+      debug: this.debug,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -141,25 +144,67 @@ export class DatadogProvider extends DatadogProviderBase {
     if (hasIndexedDB()) {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
-        canonicalizeFlagSelection(options.flagSelection).selection
+        canonicalizeFlagSelection(options.flagSelection).selection,
+        this.debug
       )
     }
 
     this.flagsConfiguration = options.initialFlagsConfiguration
+    this.configurationSource = options.initialFlagsConfiguration ? 'initial_configuration' : 'none'
     this.status = ProviderStatus.NOT_READY
+    this.debug.event('cache.configured', () => ({
+      cache: 'assignments',
+      backend: this.flagsCache ? 'indexeddb' : 'memory',
+      initialConfiguration: options.initialFlagsConfiguration,
+    }))
+  }
+
+  private contextRevision = 0
+  private configurationRevision = 0
+  private configurationSource = 'none'
+  private closed = false
+
+  protected debugEvaluationFields(): Record<string, unknown> {
+    return {
+      ...configurationDebugFields(this.flagsConfiguration),
+      contextRevision: this.contextRevision,
+      configurationRevision: this.configurationRevision,
+      source: this.configurationSource,
+      state: this.status,
+      effectiveContext: this.evaluationContext,
+      pendingContext: this.requestedEvaluationContext,
+      closed: this.closed,
+    }
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    this.closed = false
+    this.debug.event('init.started', () => ({ context, state: this.status }))
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context, 'initialization')
+    try {
+      await this.setContext(context, 'initialization')
+      this.debug.event('init.completed', () => this.debugEvaluationFields())
+    } catch (error) {
+      this.debug.event('init.failed', () => ({ error, ...this.debugEvaluationFields() }))
+      throw error
+    }
   }
 
   async onClose(): Promise<void> {
+    this.closed = true
+    this.debug.event('shutdown.started', () => ({ state: this.status, contextRevision: this.contextRevision }))
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
     await this.tracking.shutdown()
     this.status = ProviderStatus.NOT_READY
+    this.debug.event('shutdown.completed', () => ({
+      state: this.status,
+      assignmentsRetained: true,
+      persistentCacheRetained: true,
+      request: 'aborted',
+      transportDrain: 'best_effort',
+    }))
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -167,7 +212,18 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
-    const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+    const revision = ++this.contextRevision
+    const debug = this.debug.child({ contextRevision: revision, requestId: revision })
+    const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context, debug) : context
+    debug.event('context.accepted', () => ({
+      rawContext: context,
+      effectiveContext,
+      previousRequestedContext: this.requestedEvaluationContext,
+      assignmentContext: this.evaluationContext,
+      trigger,
+      closed: this.closed,
+      targetingKeyPresent: !!effectiveContext.targetingKey,
+    }))
     const evaluationContext = { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)
@@ -176,6 +232,7 @@ export class DatadogProvider extends DatadogProviderBase {
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
+      debug.event('provider.state_changed', () => ({ previousState: this.status, state: ProviderStatus.RECONCILING }))
       this.status = ProviderStatus.RECONCILING
       this.events.emit(ProviderEvents.Reconciling)
     }
@@ -188,6 +245,18 @@ export class DatadogProvider extends DatadogProviderBase {
 
     const signal = this.contextUpdateAbortController.signal
     this.requestDiagnostics.accept(signal, trigger)
+    bindDebugSignal(signal, debug)
+    if (debug.enabled)
+      signal.addEventListener(
+        'abort',
+        () =>
+          debug.event('fetch.cancelled', () => ({
+            reason: signal.reason,
+            action: 'abort_signal',
+            customTransportMayContinue: true,
+          })),
+        { once: true }
+      )
 
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
@@ -199,12 +268,19 @@ export class DatadogProvider extends DatadogProviderBase {
         this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
-          () => result
+          (error) => {
+            debug.event('cache.reset_failed', () => ({ cache: 'exposures', error, action: 'use_configuration' }))
+            return result
+          }
         )
       )
       .then(
-        ({ config, fromCache }) => {
+        ({ config, fromCache, source }) => {
           if (signal.aborted) {
+            debug.event('configuration.discarded', () => ({
+              reason: this.closed ? 'closed' : 'superseded',
+              currentRevision: this.contextRevision,
+            }))
             // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           }
@@ -214,9 +290,24 @@ export class DatadogProvider extends DatadogProviderBase {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          this.configurationRevision++
+          this.configurationSource = source
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
+          const previousState = this.status
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          debug.event('configuration.installed', () => ({
+            ...configurationDebugFields(config),
+            source,
+            configurationRevision: this.configurationRevision,
+            fromCache,
+          }))
+          debug.event('provider.state_changed', () => ({
+            previousState,
+            state: this.status,
+            source,
+            configurationRevision: this.configurationRevision,
+          }))
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -234,10 +325,24 @@ export class DatadogProvider extends DatadogProviderBase {
         },
         (error) => {
           if (signal.aborted) {
+            debug.event('configuration.discarded', () => ({
+              reason: this.closed ? 'closed' : 'superseded',
+              currentRevision: this.contextRevision,
+            }))
             // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            debug.event('configuration.failed', () => ({
+              error,
+              action: 'retain_previous_configuration',
+              ...this.debugEvaluationFields(),
+            }))
+            debug.event('provider.state_changed', () => ({
+              previousState: this.status,
+              state: ProviderStatus.ERROR,
+              error,
+            }))
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -256,7 +361,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private async retrieveFlagsConfiguration(
     context: EvaluationContext,
     { signal }: { signal: AbortSignal }
-  ): Promise<{ config: FlagsConfiguration; fromCache: boolean }> {
+  ): Promise<{ config: FlagsConfiguration; fromCache: boolean; source: string }> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
@@ -268,7 +373,15 @@ export class DatadogProvider extends DatadogProviderBase {
       acknowledgesExperimentationOptOut(config, optedOut)
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = canUse(this.flagsConfiguration)
+    const memoryEligible = canUse(this.flagsConfiguration)
+    const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
+    this.debug.event('cache.eligibility', () => ({
+      requestedContext: context,
+      ...configurationDebugFields(this.flagsConfiguration),
+      eligible: memoryEligible,
+      optedOut,
+    }))
+    const cachedConfigPromise = memoryEligible
       ? Promise.resolve(this.flagsConfiguration)
       : this.flagsCache?.get(context, optedOut)
 
@@ -276,15 +389,23 @@ export class DatadogProvider extends DatadogProviderBase {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       signal.throwIfAborted()
       this.flagsCache?.set(config, context, optedOut)
-      return { config, fromCache: false }
+      return { config, fromCache: false, source: 'network' }
     } catch (err) {
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
         if (config && canUse(config)) {
-          return { config, fromCache: true }
+          this.debug.event('cache.fallback', () => ({
+            error: err,
+            requestedContext: context,
+            ...configurationDebugFields(config),
+            source: memoryEligible ? memorySource : 'indexeddb',
+          }))
+          return { config, fromCache: true, source: memoryEligible ? memorySource : 'indexeddb' }
         }
-      } catch (err) {}
+      } catch (cacheError) {
+        this.debug.event('cache.fallback_failed', () => ({ cacheError }))
+      }
 
       throw err
     }
@@ -305,6 +426,12 @@ export class DatadogProvider extends DatadogProviderBase {
     const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
     const newCreatedAt = newFlagsConfiguration.precomputed?.response.data.attributes.createdAt
     if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
+      this.debug.event('cache.reset', () => ({
+        cache: 'exposures',
+        reason: 'configuration_timestamp_changed',
+        prevCreatedAt,
+        newCreatedAt,
+      }))
       await waitWithAbort(signal, this.exposureCache?.clear())
     }
   }

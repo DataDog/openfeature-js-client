@@ -1,12 +1,8 @@
 import type { PageMayExitEvent, RawError } from '@datadog/browser-core'
-import {
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  Observable,
-} from '@datadog/browser-core'
+import { Observable } from '@datadog/browser-core'
+import { NO_DEBUG } from '../debug'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
+import { createTrackedBatch } from './debugBatch'
 
 export function startExposuresBatch(
   configuration: FlaggingTrackingConfiguration,
@@ -14,14 +10,13 @@ export function startExposuresBatch(
   pageMayExitObservable: Observable<PageMayExitEvent>
 ) {
   const sessionExpireObservable = new Observable<void>()
-  const batch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.exposuresEndpointBuilder], reportError),
-    flushController: createFlushController({
-      pageMayExitObservable,
-      sessionExpireObservable,
-    }),
-  })
+  const batch = createTrackedBatch(
+    configuration.exposuresEndpointBuilder,
+    reportError,
+    pageMayExitObservable,
+    sessionExpireObservable,
+    configuration.debug?.child({ channel: 'exposure' }) ?? NO_DEBUG
+  )
 
   return {
     ...batch,
