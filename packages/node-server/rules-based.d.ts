@@ -974,10 +974,13 @@ interface ConfigurationFetchOptions {
 	site?: string;
 	/**
 	 * Request flags matching any of these tags or key patterns.
-	 * Malformed or over-limit selections reject with invalid_options.
-	 * Selection is not sent if adding it would exceed the URL size limit.
+	 * Best-effort: an invalid or over-limit selection is not sent.
 	 */
 	flagSelection?: FlagSelection;
+	/** Reports dropped or server-ignored selections. Defaults to console. */
+	logger?: {
+		error(message: string): void;
+	};
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;
 	signal?: AbortSignal;

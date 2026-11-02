@@ -8,7 +8,7 @@ import {
 
 export async function loadConfiguration(options: RulesConfigurationFetchOptions): Promise<string> {
   const flagSelection: FlagSelection = { keyPatterns: ['ffe-*'] } as const
-  return configurationToString(await fetchRulesConfiguration({ ...options, flagSelection }))
+  return configurationToString(await fetchRulesConfiguration({ ...options, flagSelection, logger: console }))
 }
 
 // @ts-expect-error: Configuration helpers are only exported from the rules-based entrypoint.

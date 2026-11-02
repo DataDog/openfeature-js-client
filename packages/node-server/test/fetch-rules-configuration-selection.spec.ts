@@ -22,6 +22,7 @@ describe.each([
 
   beforeEach(() => {
     jest.useFakeTimers()
+    jest.spyOn(console, 'error').mockImplementation(() => {})
     requestFetch.mockReset().mockImplementation(async () => new Response(Uint8Array.from(body), { headers }))
   })
 
@@ -51,6 +52,7 @@ describe.each([
         '&selected_flag_key_patterns=checkout&selected_flag_key_patterns=ffe-%2A'
     )
     expect(requestFetch.mock.calls[1][0]).toBe(requestFetch.mock.calls[0][0])
+    expect(console.error).not.toHaveBeenCalled()
     expect(requestFetch.mock.calls[0][1]).toMatchObject({
       method: 'GET',
       redirect: 'manual',
@@ -85,6 +87,7 @@ describe.each([
       await fetchRulesConfiguration({ ...options, flagSelection: flagSelection as FlagSelection })
       expect(requestFetch).toHaveBeenCalledTimes(1)
       expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
+      expect(console.error).not.toHaveBeenCalled()
     }
   )
 
@@ -109,14 +112,15 @@ describe.each([
     ['long pattern', { tags: ['checkout'], keyPatterns: ['k'.repeat(201)] }, 'invalid_key_pattern'],
     ['multibyte tag', { tags: ['\u00e9'.repeat(101)], keyPatterns: ['ffe-*'] }, 'invalid_tag'],
     ['multibyte pattern', { tags: ['checkout'], keyPatterns: ['\u00e9'.repeat(101)] }, 'invalid_key_pattern'],
-  ])('rejects %s before fetching', async (_, flagSelection, reason) => {
-    const pending = fetchRulesConfiguration({ ...options, flagSelection: flagSelection as FlagSelection })
-    await expect(pending).rejects.toBeInstanceOf(ConfigurationFetchError)
-    await expect(pending).rejects.toMatchObject({
-      code: 'invalid_options',
-      message: `Invalid configuration fetch options: flagSelection (${reason})`,
-    })
-    expect(requestFetch).not.toHaveBeenCalled()
+  ])('drops %s and reports why before fetching the full configuration', async (_, flagSelection, reason) => {
+    const result = await fetchRulesConfiguration({ ...options, flagSelection: flagSelection as FlagSelection })
+    expect(result.rules?.response).toEqual(configurationFromRulesBinary(body).rules!.response)
+    expect(requestFetch).toHaveBeenCalledTimes(1)
+    expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
+    expect(console.error).toHaveBeenCalledTimes(1)
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringMatching(`^flagSelection was not sent \\(${reason}: .+\\). Loading the full flag configuration\\.$`)
+    )
   })
 
   it.each([
@@ -146,24 +150,24 @@ describe.each([
     },
     { name: 'element changing to a non-string', createSelection: () => unstableSelection(null) },
     { name: 'element changing to a lone surrogate', createSelection: () => unstableSelection('\uD800') },
-  ])('sanitizes a $name before fetching', async ({ createSelection }) => {
-    const pending = fetchRulesConfiguration({ ...options, flagSelection: createSelection() })
-    await expect(pending).rejects.toBeInstanceOf(ConfigurationFetchError)
-    await expect(pending).rejects.toMatchObject({
-      code: 'invalid_options',
-      message: 'Invalid configuration fetch options: flagSelection',
-    })
-    await expect(pending).rejects.not.toHaveProperty('cause')
-    await expect(pending).rejects.toHaveProperty('status', undefined)
-    expect(requestFetch).not.toHaveBeenCalled()
+  ])('drops a $name without leaking caller data', async ({ createSelection }) => {
+    await expect(fetchRulesConfiguration({ ...options, flagSelection: createSelection() })).resolves.toHaveProperty(
+      'rules'
+    )
+    expect(requestFetch).toHaveBeenCalledTimes(1)
+    expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
+    expect(console.error).toHaveBeenCalledTimes(1)
+    expect(console.error).toHaveBeenCalledWith(
+      'flagSelection was not sent (malformed_selection: flagSelection must be an object with optional tags and keyPatterns string arrays). Loading the full flag configuration.'
+    )
   })
 
-  it('validates selection before checking caller cancellation', async () => {
+  it('still honors caller cancellation after dropping a selection', async () => {
     const controller = new AbortController()
     controller.abort()
     await expect(
       fetchRulesConfiguration({ ...options, signal: controller.signal, flagSelection: { tags: ['t'.repeat(201)] } })
-    ).rejects.toMatchObject({ code: 'invalid_options' })
+    ).rejects.toMatchObject({ code: 'cancelled' })
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
@@ -205,8 +209,13 @@ describe.each([
       expect(Buffer.byteLength(url.toString())).toBe(8192)
       expect(url.searchParams.getAll('selected_flag_tags')).toHaveLength(tags.length)
       expect(url.searchParams.getAll('selected_flag_key_patterns')).toHaveLength(keyPatterns.length)
+      expect(console.error).not.toHaveBeenCalled()
     } else {
       expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
+      expect(console.error).toHaveBeenCalledTimes(1)
+      expect(console.error).toHaveBeenCalledWith(
+        'flagSelection was not sent (too_many_values: the request URL is at most 8192 bytes). Loading the full flag configuration.'
+      )
     }
   })
 
@@ -215,19 +224,111 @@ describe.each([
     await fetchRulesConfiguration({ ...options, flagSelection: { keyPatterns } })
     expect(requestFetch).toHaveBeenCalledTimes(1)
     expect(requestFetch.mock.calls[0][0]).toBe(baseUrl)
+    expect(console.error).toHaveBeenCalledTimes(1)
+    expect(console.error).toHaveBeenCalledWith(
+      'flagSelection was not sent (too_many_values: the request URL is at most 8192 bytes). Loading the full flag configuration.'
+    )
   })
 
-  it.each([undefined, 'invalid_key_pattern'])('accepts unfiltered responses with ignored reason %j', async (reason) => {
-    const responseHeaders = new Headers(headers)
-    if (reason) responseHeaders.set('DD-Flag-Selection-Ignored', reason)
-    requestFetch.mockResolvedValue(new Response(Uint8Array.from(body), { headers: responseHeaders }))
-    const result = await fetchRulesConfiguration({ ...options, flagSelection: { keyPatterns: ['non-matching-*'] } })
-    expect(requestFetch).toHaveBeenCalledTimes(1)
-    expect(requestFetch.mock.calls[0][0]).toBe(`${baseUrl}&selected_flag_key_patterns=non-matching-%2A`)
-    expect(result.rules).toMatchObject({
-      response: configurationFromRulesBinary(body).rules!.response,
-      etag: wire.rules.etag,
-      fetchedAt: Date.now(),
+  it.each([undefined, '', 'invalid_key_pattern', 'tag_load_failed', 'future_reason'])(
+    'accepts unfiltered responses with ignored reason %j',
+    async (reason) => {
+      const responseHeaders = new Headers(headers)
+      if (reason !== undefined) responseHeaders.set('DD-Flag-Selection-Ignored', reason)
+      requestFetch.mockResolvedValue(new Response(Uint8Array.from(body), { headers: responseHeaders }))
+      const result = await fetchRulesConfiguration({ ...options, flagSelection: { keyPatterns: ['non-matching-*'] } })
+      expect(requestFetch).toHaveBeenCalledTimes(1)
+      expect(requestFetch.mock.calls[0][0]).toBe(`${baseUrl}&selected_flag_key_patterns=non-matching-%2A`)
+      expect(result.rules).toMatchObject({
+        response: configurationFromRulesBinary(body).rules!.response,
+        etag: wire.rules.etag,
+        fetchedAt: Date.now(),
+      })
+      if (reason) {
+        expect(console.error).toHaveBeenCalledTimes(1)
+        expect(console.error).toHaveBeenCalledWith(
+          `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
+        )
+      } else {
+        expect(console.error).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it.each([undefined, {}, { tags: ['t'.repeat(201)] }])(
+    'does not read the ignored header when selection %j was not sent',
+    async (flagSelection) => {
+      const response = new Response(Uint8Array.from(body), { headers })
+      const getHeader = jest.spyOn(response.headers, 'get')
+      requestFetch.mockResolvedValue(response)
+      await fetchRulesConfiguration({ ...options, flagSelection })
+      expect(getHeader).not.toHaveBeenCalledWith('DD-Flag-Selection-Ignored')
+    }
+  )
+
+  it('does not read the ignored header on a failed response', async () => {
+    const response = new Response(null, { status: 403 })
+    const getHeader = jest.spyOn(response.headers, 'get')
+    requestFetch.mockResolvedValue(response)
+    await expect(fetchRulesConfiguration({ ...options, flagSelection: { tags: ['web'] } })).rejects.toMatchObject({
+      code: 'http',
+      status: 403,
     })
+    expect(getHeader).not.toHaveBeenCalledWith('DD-Flag-Selection-Ignored')
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('reports an ignored selection before parsing the response', async () => {
+    requestFetch.mockResolvedValue(
+      new Response('', { headers: { ...headers, 'DD-Flag-Selection-Ignored': 'tag_load_failed' } })
+    )
+    await expect(fetchRulesConfiguration({ ...options, flagSelection: { tags: ['web'] } })).rejects.toMatchObject({
+      code: 'invalid_response',
+    })
+    expect(console.error).toHaveBeenCalledTimes(1)
+    expect(console.error).toHaveBeenCalledWith(
+      'flagSelection was ignored by the server (tag_load_failed). Loaded the full flag configuration.'
+    )
+  })
+
+  it('uses a custom logger once per fetch, without logging credentials or selection values', async () => {
+    const logger = { error: jest.fn() }
+    for (let i = 0; i < 2; i++) {
+      await fetchRulesConfiguration({ ...options, logger, flagSelection: { tags: ['secret'.repeat(40)] } })
+    }
+    expect(logger.error).toHaveBeenCalledTimes(2)
+    expect(logger.error).toHaveBeenCalledWith(
+      'flagSelection was not sent (invalid_tag: each tag is at most 200 UTF-8 bytes). Loading the full flag configuration.'
+    )
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it.each(['dropped', 'ignored'])('tolerates a logger throwing for a %s selection', async (kind) => {
+    const logger = {
+      error: jest.fn(() => {
+        throw new Error('logger failed')
+      }),
+    }
+    const flagSelection = { tags: [kind === 'dropped' ? 't'.repeat(201) : 'web'] }
+    requestFetch.mockImplementation(
+      async () =>
+        new Response(Uint8Array.from(body), {
+          headers: { ...headers, 'DD-Flag-Selection-Ignored': 'tag_load_failed' },
+        })
+    )
+    await expect(fetchRulesConfiguration({ ...options, logger, flagSelection })).resolves.toHaveProperty('rules')
+    expect(logger.error).toHaveBeenCalledTimes(1)
+    requestFetch.mockResolvedValue(new Response(null, { status: 403 }))
+    await expect(fetchRulesConfiguration({ ...options, logger, flagSelection })).rejects.toMatchObject({
+      code: 'http',
+      status: 403,
+    })
+  })
+
+  it.each([null, {}, { error: 'not a function' }])('rejects an invalid logger %j', async (logger) => {
+    await expect(fetchRulesConfiguration({ ...options, logger: logger as unknown as Console })).rejects.toMatchObject({
+      code: 'invalid_options',
+    })
+    expect(requestFetch).not.toHaveBeenCalled()
   })
 })

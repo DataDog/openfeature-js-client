@@ -2,7 +2,11 @@ import {
   buildEndpointHost,
   canonicalizeFlagSelection,
   type FlagSelection,
+  type FlagSelectionError,
   type FlagsConfiguration,
+  MAX_FLAG_SELECTION_KEY_PATTERN_BYTES,
+  MAX_FLAG_SELECTION_TAG_BYTES,
+  MAX_FLAG_SELECTION_VALUES,
   timeStampNow,
 } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
@@ -13,10 +17,11 @@ interface ConfigurationFetchOptions {
   site?: string
   /**
    * Request flags matching any of these tags or key patterns.
-   * Malformed or over-limit selections reject with invalid_options.
-   * Selection is not sent if adding it would exceed the URL size limit.
+   * Best-effort: an invalid or over-limit selection is not sent.
    */
   flagSelection?: FlagSelection
+  /** Reports dropped or server-ignored selections. Defaults to console. */
+  logger?: { error(message: string): void }
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
   signal?: AbortSignal
@@ -88,28 +93,53 @@ function invalidOption(option: string): ConfigurationFetchError {
 // Keep URL encoding and this limit in sync with packages/browser/src/transport/flagSelection.ts.
 const MAX_RULES_URL_BYTES = 8192
 
-function applyFlagSelection(url: URL, input: FlagSelection | undefined): URL {
-  let result: ReturnType<typeof canonicalizeFlagSelection>
-  let selectedUrl = url
+const SELECTION_LIMIT_DESCRIPTIONS: Record<FlagSelectionError, string> = {
+  malformed_selection: 'flagSelection must be an object with optional tags and keyPatterns string arrays',
+  too_many_values: `each list accepts at most ${MAX_FLAG_SELECTION_VALUES} values`,
+  invalid_key_pattern: `each key pattern is at most ${MAX_FLAG_SELECTION_KEY_PATTERN_BYTES} UTF-8 bytes`,
+  invalid_tag: `each tag is at most ${MAX_FLAG_SELECTION_TAG_BYTES} UTF-8 bytes`,
+}
+
+function reportSelectionError(logger: NonNullable<ConfigurationFetchOptions['logger']>, message: string): void {
   try {
-    result = canonicalizeFlagSelection(input)
-    const { selection } = result
-    if (selection) {
-      const params = [
-        ...selection.tags.map((tag) => `selected_flag_tags=${encodeQueryValue(tag)}`),
-        ...selection.keyPatterns.map((pattern) => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
-      ]
-      selectedUrl = new URL(url.toString())
-      selectedUrl.search = [selectedUrl.search.slice(1), ...params].filter(Boolean).join('&')
+    logger.error(message)
+  } catch {
+    // Diagnostics must not prevent configuration loading or replace a fetch error.
+  }
+}
+
+function applyFlagSelection(
+  url: URL,
+  input: FlagSelection | undefined,
+  logger: NonNullable<ConfigurationFetchOptions['logger']>
+): { url: URL; selected: boolean } {
+  const drop = (reason: FlagSelectionError, limit = SELECTION_LIMIT_DESCRIPTIONS[reason]) => {
+    reportSelectionError(
+      logger,
+      `flagSelection was not sent (${reason}: ${limit}). Loading the full flag configuration.`
+    )
+    return { url, selected: false }
+  }
+  try {
+    const { selection, error } = canonicalizeFlagSelection(input)
+    if (error) return drop(error)
+    if (!selection) return { url, selected: false }
+    const params = [
+      ...selection.tags.map((tag) => `selected_flag_tags=${encodeQueryValue(tag)}`),
+      ...selection.keyPatterns.map((pattern) => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
+    ]
+    const selectedUrl = new URL(url.toString())
+    selectedUrl.search = [selectedUrl.search.slice(1), ...params].filter(Boolean).join('&')
+
+    // Percent-encoding makes the serialized URL ASCII, so its length is its byte length.
+    if (selectedUrl.toString().length > MAX_RULES_URL_BYTES) {
+      return drop('too_many_values', `the request URL is at most ${MAX_RULES_URL_BYTES} bytes`)
     }
+    return { url: selectedUrl, selected: true }
   } catch {
     // Getters, proxies, and encoding failures can expose caller data through raw errors.
-    throw invalidOption('flagSelection')
+    return drop('malformed_selection')
   }
-  if (result.error) throw invalidOption(`flagSelection (${result.error})`)
-
-  // Percent-encoding makes the serialized URL ASCII, so its length is its byte length.
-  return selectedUrl.toString().length > MAX_RULES_URL_BYTES ? url : selectedUrl
 }
 
 function encodeQueryValue(value: string): string {
@@ -128,6 +158,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     env,
     site = 'datadoghq.com',
     flagSelection,
+    logger = console,
     timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
@@ -147,6 +178,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   if (typeof env !== 'string' || !env.trim()) throw invalidOption('env')
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) throw invalidOption('timeoutMs')
   if (typeof requestFetch !== 'function') throw invalidOption('fetch')
+  if (!logger || typeof logger.error !== 'function') throw invalidOption('logger')
   if (
     signal !== undefined &&
     (signal === null ||
@@ -164,7 +196,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   }
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
-  const requestUrl = applyFlagSelection(url, flagSelection).toString()
+  const { url: requestUrl, selected } = applyFlagSelection(url, flagSelection, logger)
   if (signal?.aborted) throw abortError(signal)
 
   const controller = new AbortController()
@@ -178,7 +210,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   let response: Response | undefined
   try {
     try {
-      response = await requestFetch(requestUrl, {
+      response = await requestFetch(requestUrl.toString(), {
         method: 'GET',
         headers: {
           Accept: 'application/protobuf',
@@ -196,6 +228,15 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     controller.signal.throwIfAborted()
     if (response.status !== 200) {
       throw new ConfigurationFetchError('http', `Configuration fetch returned HTTP ${response.status}`, response.status)
+    }
+    if (selected) {
+      const reason = response.headers.get('DD-Flag-Selection-Ignored')
+      if (reason) {
+        reportSelectionError(
+          logger,
+          `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
+        )
+      }
     }
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
     if (contentType !== 'application/protobuf') {

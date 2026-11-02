@@ -116,6 +116,7 @@ void [providerName, runsOn, events, hooks, initPromise]
 const flagSelection: FlagSelection = { tags: ['checkout'], keyPatterns: ['ffe-*'] } as const
 const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod', flagSelection }
 const clientOptions: RulesConfigurationFetchOptions = {
+  logger: { error: (message: string) => console.error(message) },
   distributionChannel: 'client',
   clientToken: 'client-token',
   env: 'prod',
