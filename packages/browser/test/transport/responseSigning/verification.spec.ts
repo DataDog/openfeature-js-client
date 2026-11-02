@@ -1,7 +1,7 @@
 /** @jest-environment node */
 /**
- * Coordinator-pinned synthetic corpus, response-signing-v3-1.
- * Authority: reviewed FFE LEAN KB implementation profile (model status: not_modeled).
+ * Shared synthetic corpus, response-signing-v3-1.
+ * Source: pinned ffe-response-signing-data submodule.
  * corpus.json SHA256 cc444ec8a2890430fa8dd8aee6cbde5a92d388ee55938596aac67891cfc099b6.
  * 43 response cases: 6 accepts, 37 rejects. Two server-only private-key cases are excluded by profile.
  */
@@ -16,7 +16,8 @@ import {
   verifyResponse,
 } from '../../../src/transport/responseSigning/verification'
 
-const raw = readFileSync(join(__dirname, 'corpus.json'))
+const fixtureDirectory = join(__dirname, '../../ffe-response-signing-data/response-signing/v3')
+const raw = readFileSync(join(fixtureDirectory, 'corpus.json'))
 const corpus = JSON.parse(raw.toString()) as {
   anchor_der_base64: string
   cases: Array<{
@@ -70,6 +71,30 @@ test.each(corpus.cases)('$id', async (vector) => {
   } else {
     await expect(verifyResponse(request, response, [corpus.anchor_der_base64], vector.now)).rejects.toThrow()
   }
+})
+
+const nestedDerRaw = readFileSync(join(fixtureDirectory, 'nested-der.json'))
+const nestedDer = JSON.parse(nestedDerRaw.toString()) as typeof corpus
+test('the shared nested-DER regression inputs are unchanged', () => {
+  expect(createHash('sha256').update(nestedDerRaw).digest('hex')).toBe(
+    'cc5ce38da1d42ec389d3b0a811d04439f8e523baf4544222a6eb38a37fefa26a'
+  )
+  expect(nestedDer.cases).toHaveLength(2)
+})
+test.each(nestedDer.cases)('shared certificate regression: $id', async (vector) => {
+  const request = {
+    ...vector.request,
+    headers: new Headers(vector.request.headers),
+    body: decodeBase64(vector.request.body_base64, 1024 * 1024),
+  }
+  const response = {
+    ...vector.response,
+    headers: new Headers(vector.response.headers),
+    body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
+  }
+  const result = verifyResponse(request, response, [nestedDer.anchor_der_base64], vector.now)
+  if (vector.expected_accept) await expect(result).resolves.toHaveProperty('expiresAt')
+  else await expect(result).rejects.toThrow('invalid-certificate')
 })
 
 // Buffer.slice is a view, unlike Uint8Array.slice. Crypto must receive exactly the logical bytes.
