@@ -62,12 +62,17 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 
   const now = new Date(evaluationTimestampMs)
-  const prepared = prepareJsonFlagActivations(flag)
-  if (!prepared.valid && needsActivation(excludeExperiments)) {
+  const prepared = excludeExperiments ? prepareJsonFlagActivations(flag) : undefined
+  if (prepared && !prepared.valid && needsActivation(excludeExperiments)) {
     return { value: defaultValue, reason: 'ERROR', errorCode: 'PARSE_ERROR' as ErrorCode }
   }
-  for (const { allocation, activation } of prepared.allocations) {
-    if (excludesExperimentAt(excludeExperiments, allocation.doLog !== false, activation)) continue
+  for (let index = 0; index < flag.allocations.length; index++) {
+    const allocation = flag.allocations[index]
+    if (
+      prepared &&
+      excludesExperimentAt(excludeExperiments, allocation.doLog !== false, prepared.allocations[index].activation)
+    )
+      continue
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,
