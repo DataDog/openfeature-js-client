@@ -10,7 +10,7 @@ import {
 
 export const SIGNING_VERSION_HEADER = 'x-datadog-feature-flags-signature-version'
 export const SIGNING_NONCE_HEADER = 'x-datadog-feature-flags-request-nonce'
-export const SIGNING_CAPABILITY = 'response-signing-v3'
+export const SIGNING_CAPABILITY = 'response-signing-v1'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
 export const MAX_SIGNED_REQUEST = 1024 * 1024
@@ -372,7 +372,7 @@ export function validateSigningRequest(request: SigningRequest): URL {
     'unsupported-request'
   )
   requireCondition(
-    request.headers.get(SIGNING_VERSION_HEADER) === '3' &&
+    request.headers.get(SIGNING_VERSION_HEADER) === '1' &&
       /^[0-9a-f]{32}$/.test(request.headers.get(SIGNING_NONCE_HEADER) || ''),
     'unsupported-request'
   )
@@ -427,7 +427,7 @@ export async function buildSigningTranscript(
   const url = validateSigningRequest(request)
   const nonce = Uint8Array.from(request.headers.get(SIGNING_NONCE_HEADER)!.match(/../g)!, (pair) => parseInt(pair, 16))
   const parts = [
-    utf8('datadog.feature-flags.precomputed-assignments.v3\0'),
+    utf8('datadog.feature-flags.precomputed-assignments.v1\0'),
     lp(request.method),
     lp('https'),
     lp(url.host.toLowerCase()),
@@ -467,7 +467,7 @@ export async function verifyResponse(
   validateSigningRequest(request)
   requireCondition(trustedRoots.length > 0, 'missing-anchor')
   requireCondition(response.body.length <= MAX_SIGNED_RESPONSE, 'response-too-large')
-  requireCondition(response.status === 200 && proof(response.headers, 'signature-version') === '3')
+  requireCondition(response.status === 200 && proof(response.headers, 'signature-version') === '1')
   const leafDer = decodeBase64(proof(response.headers, 'signing-certificate'), MAX_CERTIFICATE)
   const intermediateDer = decodeBase64(proof(response.headers, 'signing-intermediate'), MAX_CERTIFICATE)
   const certificateId = proof(response.headers, 'certificate-id')
