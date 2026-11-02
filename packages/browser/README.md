@@ -578,8 +578,9 @@ Diagnostics are independent of the evaluation, exposure, and RUM tracking option
 An initialization report records `ready`, `failed`, `cached_fallback`, or `incomplete`, with elapsed timings.
 Pending initialization produces an incomplete observation on page exit or provider close, at most once.
 There is no initialization timeout observation. A resumed page can later report its settled result.
-After initialization settles, at most one configuration-fetch error is reported per provider instance.
-This bounds each instance to three diagnostic records. Transport batching can delay delivery, and page-exit delivery
+After initialization settles, at most one configuration-fetch error is reported before the provider closes.
+Initializing a closed provider starts a new diagnostic lifecycle, including new timings and error limits.
+Each initialize-to-close lifecycle produces at most three diagnostic records. Transport batching can delay delivery, and page-exit delivery
 is best effort. No diagnostic events does not establish whether the SDK is healthy.
 
 Reports require `env` and either `applicationId` or `service`; `applicationId` takes precedence when both are provided.

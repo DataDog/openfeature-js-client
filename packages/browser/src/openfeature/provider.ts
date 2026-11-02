@@ -168,11 +168,12 @@ export class DatadogProvider extends DatadogProviderBase {
         // Diagnostic transport setup must not prevent flag evaluation.
       }
     }
+    const telemetry = this.lifecycleTelemetry
     this.exposureCacheReady = this.tracking.initialize()
     try {
       return await this.setContext(context, 'initialization')
     } catch (error) {
-      this.lifecycleTelemetry?.settle('failed')
+      telemetry?.settle('failed')
       throw error
     }
   }
@@ -191,6 +192,8 @@ export class DatadogProvider extends DatadogProviderBase {
     } finally {
       await runTrackingLifecycleOperation(() => this.flagEvaluationTransport?.stop())
       this.flagEvaluationTransport = undefined
+      this.lifecycleTelemetry = undefined
+      this.initializationStarted = false
     }
     this.status = ProviderStatus.NOT_READY
   }

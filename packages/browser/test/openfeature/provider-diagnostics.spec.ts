@@ -85,11 +85,82 @@ describe('provider diagnostics', () => {
             .filter((event: { flag?: unknown }) => event.flag)
         )
         expect(evaluations).toHaveLength(run)
+        const diagnostics = mockSend.mock.calls.flatMap(([request]) =>
+          request.data
+            .split('\n')
+            .flatMap((line: string) => (JSON.parse(line).type === 'sdk_diagnostic' ? diagnosticRecords(line) : []))
+        )
+        expect(diagnostics.map((record) => record.payload.initialization?.outcome)).toEqual(Array(run).fill('ready'))
         expect(jest.getTimerCount()).toBe(0)
       }
     } finally {
       await OpenFeature.clearProviders()
     }
+  })
+
+  it.each(['failed', 'cached_fallback'])('reports %s when a closed provider is initialized again', async (outcome) => {
+    const fetch = jest.fn().mockImplementationOnce(success).mockImplementation(failure)
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    await provider.initialize()
+    await provider.onClose()
+    await jest.advanceTimersByTimeAsync(10)
+    const restartedAt = Date.now()
+
+    if (outcome === 'failed') {
+      await expect(provider.initialize({ targetingKey: 'new' })).rejects.toThrow()
+    } else {
+      await provider.initialize()
+    }
+    expect(await eventTypes(provider)).toEqual(['ready', outcome])
+    const diagnostics = mockSend.mock.calls.flatMap(([request]) => diagnosticRecords(request.data))
+    expect(diagnostics[1].payload.initialization.started_at_ms).toBe(restartedAt)
+  })
+
+  it('allows one fetch-error report in each initialize-to-close lifecycle', async () => {
+    const fetch = jest.fn()
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    for (let run = 1; run <= 2; run++) {
+      fetch.mockImplementationOnce(success).mockImplementation(failure)
+      await provider.initialize()
+      await provider.onContextChange({}, {})
+      await provider.onContextChange({}, {})
+      expect(await eventTypes(provider)).toEqual(Array(run).fill(['ready', 'provider_error']).flat())
+    }
+  })
+
+  it.each(['success', 'failure'])('ignores a late %s from an initialization closed before restart', async (result) => {
+    let finishFirst!: (response: Response) => void
+    let failFirst!: (error: Error) => void
+    let finishSecond!: (response: Response) => void
+    const fetch = jest
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve, reject) => {
+            finishFirst = resolve
+            failFirst = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finishSecond = resolve
+          })
+      )
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    const first = provider.initialize()
+    await provider.onClose()
+    const second = provider.initialize()
+    if (result === 'success') finishFirst(await success())
+    else failFirst(new Error('old request failed'))
+    await jest.advanceTimersByTimeAsync(30_000)
+    const diagnostics = mockSend.mock.calls.flatMap(([request]) => diagnosticRecords(request.data))
+    expect(diagnostics.map((record) => record.payload.initialization?.outcome)).toEqual(['incomplete'])
+
+    finishSecond(await success())
+    await Promise.all([first, second])
+    expect(await eventTypes(provider)).toEqual(['incomplete', 'ready'])
+    expect(jest.getTimerCount()).toBe(0)
   })
 
   it('emits real startup evidence without any flag evaluation or RUM', async () => {
