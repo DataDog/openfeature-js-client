@@ -27,7 +27,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/server-sdk'
-import { evaluate } from './configuration/evaluation'
+import { evaluateWithTrace } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { type ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { InitializationController } from './initialization-controller'
@@ -191,8 +191,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
-    const dependencyExposures: DependencyExposureCandidate[] = []
-    const resolutionDetails = evaluate(
+    const trace = evaluateWithTrace(
       this.configuration,
       'boolean',
       flagKey,
@@ -200,12 +199,12 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      this.dependencyEvaluationHandler(context),
-      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
+      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
     )
-    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
-    this.handleExposure(flagKey, context, resolutionDetails)
-    return resolutionDetails
+    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
+    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.handleExposure(flagKey, context, trace.details)
+    return trace.details
   }
 
   async resolveStringEvaluation(
@@ -214,8 +213,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
-    const dependencyExposures: DependencyExposureCandidate[] = []
-    const resolutionDetails = evaluate(
+    const trace = evaluateWithTrace(
       this.configuration,
       'string',
       flagKey,
@@ -223,12 +221,12 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      this.dependencyEvaluationHandler(context),
-      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
+      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
     )
-    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
-    this.handleExposure(flagKey, context, resolutionDetails)
-    return resolutionDetails
+    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
+    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.handleExposure(flagKey, context, trace.details)
+    return trace.details
   }
 
   async resolveNumberEvaluation(
@@ -237,8 +235,7 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     _logger: Logger
   ): Promise<ResolutionDetails<number>> {
-    const dependencyExposures: DependencyExposureCandidate[] = []
-    const resolutionDetails = evaluate(
+    const trace = evaluateWithTrace(
       this.configuration,
       'number',
       flagKey,
@@ -246,12 +243,12 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      this.dependencyEvaluationHandler(context),
-      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
+      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
     )
-    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
-    this.handleExposure(flagKey, context, resolutionDetails)
-    return resolutionDetails
+    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
+    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.handleExposure(flagKey, context, trace.details)
+    return trace.details
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -266,8 +263,7 @@ export class DatadogNodeServerProvider implements Provider {
     // type-sound way because there's no runtime information passed to
     // learn what type the user expects. So it's up to the user to
     // make sure they pass the appropriate type.
-    const dependencyExposures: DependencyExposureCandidate[] = []
-    const resolutionDetails = evaluate(
+    const trace = evaluateWithTrace(
       this.configuration,
       'object',
       flagKey,
@@ -275,39 +271,37 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      this.dependencyEvaluationHandler(context),
-      (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
-    ) as ResolutionDetails<T>
-    this.handleDependencyExposures(context, resolutionDetails, dependencyExposures)
+      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
+    )
+    const resolutionDetails = trace.details as ResolutionDetails<T>
+    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
+    this.handleDependencyExposures(context, resolutionDetails, trace.dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
 
-  private dependencyEvaluationHandler(
-    context: EvaluationContext
-  ): ((evaluation: DependencyEvaluation) => void) | undefined {
-    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
-      return undefined
-    }
-    return (evaluation) => this.handleDependencyEvaluation(context, evaluation)
-  }
-
-  private handleDependencyEvaluation(context: EvaluationContext, evaluation: DependencyEvaluation): void {
+  private handleDependencyEvaluations(context: EvaluationContext, evaluations: readonly DependencyEvaluation[]): void {
     if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
       return
     }
-    const eventContext = cloneForTelemetry(context)
-    if (eventContext === undefined) {
-      return
+    for (const evaluation of evaluations) {
+      try {
+        const eventContext = cloneForTelemetry(context)
+        if (eventContext === undefined) {
+          continue
+        }
+        this.options.dependencyEvaluationChannel.publish({
+          context: eventContext,
+          details: {
+            ...evaluation.details,
+            flagKey: evaluation.flagKey,
+            flagMetadata: evaluation.details.flagMetadata ?? {},
+          },
+        })
+      } catch {
+        // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
+      }
     }
-    this.options.dependencyEvaluationChannel.publish({
-      context: eventContext,
-      details: {
-        ...evaluation.details,
-        flagKey: evaluation.flagKey,
-        flagMetadata: evaluation.details.flagMetadata ?? {},
-      },
-    })
   }
 
   private handleDependencyExposures(

@@ -653,8 +653,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
-	private dependencyEvaluationHandler;
-	private handleDependencyEvaluation;
+	private handleDependencyEvaluations;
 	private handleDependencyExposures;
 	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;

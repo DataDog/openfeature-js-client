@@ -2,9 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { EvaluationContext, FlagValue, JsonValue, Logger, ResolutionDetails } from '@openfeature/core'
 import {
-  type DependencyEvaluation,
-  type DependencyExposureCandidate,
-  evaluateRulesBasedConfiguration,
+  type EvaluationTrace,
+  evaluateRulesBasedConfigurationWithTrace,
   type UniversalFlagConfigurationV1,
   type VariantType,
 } from '../../src/evaluation'
@@ -50,15 +49,12 @@ const logger: Logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), deb
 
 describe('dependent-flag shared system fixtures', () => {
   it.each(cases)('$description', (testCase) => {
-    const dependencyEvaluations: DependencyEvaluation[] = []
-    let dependencyExposures: readonly DependencyExposureCandidate[] = []
     const context: EvaluationContext = {
       ...(testCase.targetingKey === null ? {} : { targetingKey: testCase.targetingKey }),
       ...testCase.attributes,
     }
-    const result = evaluate(testCase, context, dependencyEvaluations, (exposures) => {
-      dependencyExposures = exposures
-    })
+    const trace = evaluate(testCase, context)
+    const { details: result, dependencyEvaluations, dependencyExposures } = trace
 
     expect(result.value).toStrictEqual(testCase.result.value)
     expect(result.reason).toBe(testCase.result.reason)
@@ -86,62 +82,44 @@ describe('dependent-flag shared system fixtures', () => {
   })
 })
 
-function evaluate(
-  testCase: DependentFlagCase,
-  context: EvaluationContext,
-  evaluations: DependencyEvaluation[],
-  onExposures: (exposures: readonly DependencyExposureCandidate[]) => void
-): ResolutionDetails<FlagValue> {
-  const onEvaluation = (evaluation: DependencyEvaluation) => evaluations.push(evaluation)
+function evaluate(testCase: DependentFlagCase, context: EvaluationContext): EvaluationTrace {
   switch (testCase.variationType) {
     case 'BOOLEAN':
-      return evaluateRulesBasedConfiguration(
+      return evaluateRulesBasedConfigurationWithTrace(
         configuration,
         'boolean',
         testCase.flag,
         testCase.defaultValue as boolean,
         context,
-        logger,
-        false,
-        onEvaluation,
-        onExposures
+        logger
       )
     case 'STRING':
-      return evaluateRulesBasedConfiguration(
+      return evaluateRulesBasedConfigurationWithTrace(
         configuration,
         'string',
         testCase.flag,
         testCase.defaultValue as string,
         context,
-        logger,
-        false,
-        onEvaluation,
-        onExposures
+        logger
       )
     case 'INTEGER':
     case 'NUMERIC':
-      return evaluateRulesBasedConfiguration(
+      return evaluateRulesBasedConfigurationWithTrace(
         configuration,
         'number',
         testCase.flag,
         testCase.defaultValue as number,
         context,
-        logger,
-        false,
-        onEvaluation,
-        onExposures
+        logger
       )
     case 'JSON':
-      return evaluateRulesBasedConfiguration(
+      return evaluateRulesBasedConfigurationWithTrace(
         configuration,
         'object',
         testCase.flag,
         testCase.defaultValue as JsonValue,
         context,
-        logger,
-        false,
-        onEvaluation,
-        onExposures
+        logger
       )
   }
 }

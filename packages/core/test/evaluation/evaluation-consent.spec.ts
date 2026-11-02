@@ -1,7 +1,7 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
 import {
-  type DependencyEvaluation,
   evaluateRulesBasedConfiguration,
+  evaluateRulesBasedConfigurationWithTrace,
   type UniversalFlagConfigurationV1,
 } from '../../src/evaluation'
 import { OperatorType } from '../../src/evaluation/rules'
@@ -200,23 +200,13 @@ describe('evaluation-time privacy consent', () => {
         return root
       },
     })
-    const dependencies: DependencyEvaluation[] = []
+    const trace = evaluateRulesBasedConfigurationWithTrace(config, 'boolean', 'root', false, context, logger)
 
-    const result = evaluateRulesBasedConfiguration(
-      config,
-      'boolean',
-      'root',
-      false,
-      context,
-      logger,
-      false,
-      (dependency) => dependencies.push(dependency)
-    )
-
+    const result = trace.details
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(result.flagMetadata?.[metadataKey]).toBe(true)
-    expect(dependencies).toHaveLength(1)
-    expect(dependencies[0].details.flagMetadata?.[metadataKey]).toBe(true)
+    expect(trace.dependencyEvaluations).toHaveLength(1)
+    expect(trace.dependencyEvaluations[0].details.flagMetadata?.[metadataKey]).toBe(true)
     expect(config.observeFullEvaluationData).toBe(false)
   })
 })

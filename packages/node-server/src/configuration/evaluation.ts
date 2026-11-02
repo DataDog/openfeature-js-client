@@ -1,1 +1,1 @@
-export { evaluateRulesBasedConfiguration as evaluate } from '@datadog/flagging-core'
+export { evaluateRulesBasedConfigurationWithTrace as evaluateWithTrace } from '@datadog/flagging-core'
