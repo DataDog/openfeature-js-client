@@ -248,7 +248,7 @@ function evaluateRules<T extends FlagValueType>(
       const resolveDependency = ((dependencyFlagKey: string) => {
         dependencySession ??= new DependencyEvaluationSession(
           flagKey,
-          getMaxDependencyDepth(config),
+          getMaxDependencyDepth(config, flagKey),
           observeFullEvaluationData,
           (key) => {
             const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -316,7 +316,7 @@ function evaluateRules<T extends FlagValueType>(
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
       dependencySession ??= new DependencyEvaluationSession(
         flagKey,
-        getMaxDependencyDepth(config),
+        getMaxDependencyDepth(config, flagKey),
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -482,11 +482,11 @@ class DependencyEvaluationSession {
     }
   }
 
-  private evaluate(flagKey: string, type: FlagValueType, defaultValue: FlagValue, depth: number): MemoizedDependency {
+  private evaluate(flagKey: string, flag: DependencyFlag, depth: number): MemoizedDependency {
     const memoized = this.memo.get(flagKey)
     if (memoized !== undefined) {
       if (depth + memoized.descendantDepth > this.maxDependencyDepth) {
-        this.logger.warn('maximum flag dependency depth exceeded', {
+        this.logger.debug('maximum flag dependency depth exceeded', {
           flagKey,
           maxDependencyDepth: this.maxDependencyDepth,
         })
@@ -495,11 +495,7 @@ class DependencyEvaluationSession {
       return memoized
     }
 
-    const flag = this.getFlag(flagKey)
-    if (flag === undefined) {
-      this.emitMissingFlagEvaluation(flagKey)
-      throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
-    }
+    const { type, defaultValue } = flag
 
     this.active.add(flagKey)
     const frame: DependencyEvaluationFrame = {
@@ -568,7 +564,7 @@ class DependencyEvaluationSession {
   resolveFlagEvaluation(flagEvaluation: FlagEvaluation | string, depth: number): string | undefined {
     const flagKey = typeof flagEvaluation === 'string' ? flagEvaluation : flagEvaluation.key
     if (depth > this.maxDependencyDepth) {
-      this.logger.warn('maximum flag dependency depth exceeded', {
+      this.logger.debug('maximum flag dependency depth exceeded', {
         flagKey,
         maxDependencyDepth: this.maxDependencyDepth,
       })
@@ -586,18 +582,18 @@ class DependencyEvaluationSession {
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'maximum flag dependency depth exceeded')
     }
     if (this.active.has(flagKey)) {
-      this.logger.warn('flag dependency cycle detected', { flagKey })
+      this.logger.debug('flag dependency cycle detected', { flagKey })
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'flag dependency cycle detected')
     }
 
     const flag = this.getFlag(flagKey)
     if (flag === undefined) {
-      this.logger.warn('prerequisite flag is missing', { flagKey })
+      this.logger.debug('prerequisite flag is missing', { flagKey })
       this.emitMissingFlagEvaluation(flagKey)
       throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
     }
 
-    const result = this.evaluate(flagKey, flag.type, flag.defaultValue, depth)
+    const result = this.evaluate(flagKey, flag, depth)
     this.recordReachedDepth(depth + result.descendantDepth)
     if (result.exposureTrace !== undefined) {
       this.recordExposureTrace(result.exposureTrace)
@@ -759,7 +755,10 @@ function asFlagEvaluationResolver(resolveDependency: ResolveDependency): Resolve
   return resolve
 }
 
-function getMaxDependencyDepth(config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration): number {
+function getMaxDependencyDepth(
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
+  rootFlagKey: string
+): number {
   const configuredDepth = config.evaluatorParams?.maxDependencyDepth
   if (configuredDepth === undefined) {
     return DEFAULT_MAX_DEPENDENCY_DEPTH
@@ -769,7 +768,7 @@ function getMaxDependencyDepth(config: UniversalFlagConfigurationV1 | ProtobufFl
     return numericDepth
   }
   throw new DependencyGraphError(
-    '',
+    rootFlagKey,
     'PARSE_ERROR' as ErrorCode,
     'maxDependencyDepth must be an integer from 0 through 255'
   )
@@ -800,28 +799,11 @@ function protobufDependencyFlag(flag: ProtobufFlagsConfiguration['flags'][string
 
 function jsonDependencyFlag(flag: unknown): DependencyFlag {
   try {
-    const typedFlag = flag as Flag
-    return {
-      type: variantTypeToFlagValueType(typedFlag.variationType),
-      defaultValue: defaultValueForFlag(typedFlag),
-    }
+    const type = variantTypeToFlagValueType((flag as Flag).variationType)
+    return { type, defaultValue: defaultValueForType(type) }
   } catch {
     // The evaluator owns descriptor validation and will report PARSE_ERROR with dependency telemetry.
     return { type: 'boolean', defaultValue: false }
-  }
-}
-
-function defaultValueForFlag(flag: Flag): FlagValue {
-  switch (flag.variationType) {
-    case 'BOOLEAN':
-      return false
-    case 'INTEGER':
-    case 'NUMERIC':
-      return 0
-    case 'STRING':
-      return ''
-    case 'JSON':
-      return {}
   }
 }
 

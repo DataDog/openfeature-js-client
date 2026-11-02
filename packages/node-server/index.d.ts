@@ -561,6 +561,10 @@ interface ExposureEvent {
 		};
 	};
 }
+export declare enum ExperimentationOptOutMode {
+	Disabled = "disabled",
+	Immediate = "immediate"
+}
 type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
 	/**
@@ -602,6 +606,8 @@ export interface DatadogNodeServerProviderOptions {
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
+	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
+	experimentationOptOutMode?: ExperimentationOptOutMode;
 }
 export type DependencyEvaluationEvent = {
 	context: EvaluationContext;
@@ -619,6 +625,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private readonly exposureCache;
 	private readonly dependencyExposureBatches;
 	private configuration?;
+	private readonly experimentationOptOutMode;
 	constructor(options: DatadogNodeServerProviderOptions);
 	/**
 	 * Used by dd-source-js

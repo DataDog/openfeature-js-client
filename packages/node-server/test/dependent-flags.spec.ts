@@ -59,6 +59,28 @@ describe('dependent flag exposures', () => {
     expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(4)
   })
 
+  it('publishes exposures when the evaluation context cannot be cloned', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+    // Untyped JavaScript callers can supply values outside EvaluationContextValue.
+    const context = { targetingKey: 'subject', callback: (() => true) as unknown as string }
+
+    await client.getBooleanDetails('root', false, context)
+    await client.getBooleanDetails('root', false, context)
+
+    expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'leaf',
+      'root',
+    ])
+  })
+
   it('keeps re-entrant root evaluation sessions isolated', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()

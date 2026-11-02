@@ -167,38 +167,37 @@ describe('evaluation-time privacy consent', () => {
   it('uses the evaluation-start consent snapshot for lazily created dependency sessions', () => {
     const config = configuration(true)
     const prerequisite = config.flags.flag
-    config.flags = {
-      root: {
-        key: 'root',
-        enabled: true,
-        variationType: 'BOOLEAN',
-        variations: { on: { key: 'on', value: true } },
-        allocations: [
-          {
-            key: 'targeted',
-            doLog: true,
-            rules: [
-              {
-                conditions: [
-                  {
-                    flagEvaluation: { key: 'prerequisite' },
-                    operator: OperatorType.ONE_OF,
-                    value: ['on'],
-                  },
-                ],
-              },
-            ],
-            splits: [{ variationKey: 'on', shards: [] }],
-          },
-        ],
-      },
-      prerequisite,
+    const root = {
+      key: 'root',
+      enabled: true,
+      variationType: 'BOOLEAN' as const,
+      variations: { on: { key: 'on', value: true } },
+      allocations: [
+        {
+          key: 'targeted',
+          doLog: true,
+          rules: [
+            {
+              conditions: [
+                {
+                  flagEvaluation: { key: 'prerequisite' },
+                  operator: OperatorType.ONE_OF,
+                  value: ['on'],
+                },
+              ],
+            },
+          ],
+          splits: [{ variationKey: 'on', shards: [] }],
+        },
+      ],
     }
-    Object.defineProperty(config.flags, 'prerequisite', {
+    config.flags = { prerequisite }
+    // The root is read before its first dependency condition creates the lazy session.
+    Object.defineProperty(config.flags, 'root', {
       enumerable: true,
       get() {
         config.observeFullEvaluationData = false
-        return prerequisite
+        return root
       },
     })
     const dependencies: DependencyEvaluation[] = []

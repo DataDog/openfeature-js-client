@@ -51,6 +51,25 @@ describe('dependent flag evaluation', () => {
     ])
   })
 
+  it('reads a prerequisite only for descriptor resolution and evaluation', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    const config = configuration({
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    let reads = 0
+    Object.defineProperty(config.flags, 'prerequisite', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return prerequisite
+      },
+    })
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(2)
+  })
+
   it('applies experimentation opt-out to dependency evaluations', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
@@ -250,6 +269,10 @@ describe('dependent flag evaluation', () => {
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(logger.warn).toHaveBeenLastCalledWith(
+      'flag dependency graph evaluation failed',
+      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
+    )
   })
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
@@ -301,6 +324,8 @@ describe('dependent flag evaluation', () => {
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
     expect(onExposures).not.toHaveBeenCalled()
+    expect(logger.debug).toHaveBeenCalledWith('prerequisite flag is missing', { flagKey: 'missing' })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it('detects a protobuf dependency cycle', () => {
@@ -327,6 +352,8 @@ describe('dependent flag evaluation', () => {
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
     expect(onExposures).not.toHaveBeenCalled()
+    expect(logger.debug).toHaveBeenCalledWith('flag dependency cycle detected', { flagKey: 'root' })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it('memoizes protobuf dependencies and rolls back exposures after a later missing sibling', () => {
@@ -432,6 +459,10 @@ describe('dependent flag evaluation', () => {
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(logger.warn).toHaveBeenLastCalledWith(
+      'flag dependency graph evaluation failed',
+      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
+    )
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
@@ -457,6 +488,11 @@ describe('dependent flag evaluation', () => {
       { flagKey: 'b', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
       { flagKey: 'a', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
+    expect(logger.debug).toHaveBeenCalledWith('maximum flag dependency depth exceeded', {
+      flagKey: 'c',
+      maxDependencyDepth: 2,
+    })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -488,6 +524,11 @@ describe('dependent flag evaluation', () => {
     })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['leaf', 'a', 'b'])
     expect(onExposures).not.toHaveBeenCalled()
+    expect(logger.debug).toHaveBeenCalledWith(
+      'maximum flag dependency depth exceeded',
+      expect.objectContaining({ maxDependencyDepth: 2 })
+    )
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it.each([

@@ -29,6 +29,7 @@ import type {
 } from '@openfeature/server-sdk'
 import { evaluate } from './configuration/evaluation'
 import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
+import { type ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { InitializationController } from './initialization-controller'
 import { NodeProviderEventEmitter } from './provider-event-emitter'
 
@@ -58,6 +59,8 @@ export interface DatadogNodeServerProviderOptions {
    * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
    */
   initializationTimeoutMs?: number
+  /** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
+  experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
 export type DependencyEvaluationEvent = {
@@ -85,8 +88,10 @@ export class DatadogNodeServerProvider implements Provider {
   private readonly dependencyExposureBatches: DependencyExposureBatches = new WeakMap()
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
+  private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
+    this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
@@ -194,7 +199,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      false,
+      this.experimentationOptOutMode,
       this.dependencyEvaluationHandler(context),
       (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
@@ -217,7 +222,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      false,
+      this.experimentationOptOutMode,
       this.dependencyEvaluationHandler(context),
       (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
@@ -240,7 +245,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      false,
+      this.experimentationOptOutMode,
       this.dependencyEvaluationHandler(context),
       (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     )
@@ -269,7 +274,7 @@ export class DatadogNodeServerProvider implements Provider {
       defaultValue,
       context,
       _logger,
-      false,
+      this.experimentationOptOutMode,
       this.dependencyEvaluationHandler(context),
       (evaluations: readonly DependencyExposureCandidate[]) => dependencyExposures.push(...evaluations)
     ) as ResolutionDetails<T>
@@ -422,14 +427,14 @@ class ExposureLoggingHook implements Hook {
         // Features stay off the cache entry: a features change must not turn a
         // repeat exposure into a new one.
         const features = featuresWithPrefix(metadata, METADATA_EXPOSURE_FEATURE_PREFIX)
-        const publishedExposure = cloneForTelemetry({
+        const exposure = {
           ...exposureEvent,
           ...(features && { features }),
           timestamp: timeStampNow(),
-        })
-        if (publishedExposure !== undefined) {
-          this.exposureChannel.publish(publishedExposure)
         }
+        // Cache admission does not depend on publication, so a failed defensive
+        // snapshot must not suppress the only exposure for this assignment.
+        this.exposureChannel.publish(cloneForTelemetry(exposure) ?? exposure)
       }
       if (!sharedDecision) this.exposureCache?.set(exposureEvent)
     } catch {
