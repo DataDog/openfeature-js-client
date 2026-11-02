@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { ExposureEvent } from '@datadog/flagging-core'
 import type { EvaluationContext, FlagValue, JsonValue, Logger, ResolutionDetails } from '@openfeature/core'
 import type { UniversalFlagConfigurationV1, VariantType } from '../src/configuration/ufc-v1'
+import { ExperimentationOptOutMode } from '../src/experimentation-opt-out'
 import { DatadogNodeServerProvider } from '../src/provider'
 
 type SystemTestCase = {
@@ -12,11 +13,11 @@ type SystemTestCase = {
   defaultValue: FlagValue
   targetingKey: string | null
   attributes: Record<string, unknown>
-  result: {
-    value: FlagValue
-    reason: string
-  }
+  result: ExpectedResult
+  capabilities?: { experimentationOptOutImmediate?: ExpectedResult }
 }
+
+type ExpectedResult = { value: FlagValue; reason: string; errorCode?: string }
 
 const fixtureDirectory = path.join(__dirname, '../../core/test/ffe-system-test-data')
 const configuration = JSON.parse(
@@ -52,8 +53,11 @@ function getTestCases(testCaseFileName: string): SystemTestCase[] {
   ) as SystemTestCase[]
 }
 
-async function evaluateTestCase(testCase: SystemTestCase): Promise<ResolutionDetails<FlagValue>> {
-  const provider = new DatadogNodeServerProvider({ exposureChannel })
+async function evaluateTestCase(
+  testCase: SystemTestCase,
+  experimentationOptOutMode?: ExperimentationOptOutMode
+): Promise<ResolutionDetails<FlagValue>> {
+  const provider = new DatadogNodeServerProvider({ exposureChannel, experimentationOptOutMode })
   provider.setConfiguration(configuration)
 
   const context = {
@@ -84,5 +88,26 @@ describe('FFE system tests through DatadogNodeServerProvider', () => {
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
     })
+  })
+})
+
+describe('FFE immediate opt-out system tests through DatadogNodeServerProvider', () => {
+  const cases = getTestCaseFileNames()
+    .flatMap(getTestCases)
+    .filter((testCase) => testCase.capabilities?.experimentationOptOutImmediate)
+
+  it('loads all 28 shared immediate capability cases', () => {
+    expect(cases).toHaveLength(28)
+    expect(new Set(cases.map((testCase) => testCase.variationType))).toEqual(
+      new Set(['BOOLEAN', 'STRING', 'INTEGER', 'NUMERIC', 'JSON'])
+    )
+  })
+
+  it.each(cases)('with context $targetingKey, flag $flag and attributes $attributes', async (testCase) => {
+    const expected = testCase.capabilities!.experimentationOptOutImmediate!
+    const details = await evaluateTestCase(testCase, ExperimentationOptOutMode.Immediate)
+    expect(details.value).toEqual(expected.value)
+    expect(details.reason).toEqual(expected.reason)
+    expect(details.errorCode).toEqual(expected.errorCode)
   })
 })
