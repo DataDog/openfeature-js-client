@@ -132,6 +132,33 @@ describe('provider diagnostics', () => {
     expect(await eventTypes(provider)).toEqual(['ready'])
   })
 
+  it('preserves the error report when a request is superseded during cache fallback', async () => {
+    jest.spyOn(cacheHelpers, 'hasIndexedDB').mockReturnValue(true)
+    const fetch = jest
+      .fn()
+      .mockImplementationOnce(success)
+      .mockImplementationOnce(failure)
+      .mockImplementationOnce(success)
+      .mockImplementation(failure)
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    await provider.initialize()
+
+    // This context has no in-memory configuration. Keep its persistent cache lookup pending.
+    jest.mocked(IndexedDBFlagsCache.prototype.get).mockReturnValueOnce(new Promise(() => {}))
+    const superseded = provider.onContextChange({}, { targetingKey: 'superseded' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(IndexedDBFlagsCache.prototype.get).toHaveBeenLastCalledWith({ targetingKey: 'superseded' }, false)
+    await provider.onContextChange({}, { targetingKey: 'current' })
+    await superseded
+    await jest.advanceTimersByTimeAsync(30_000)
+    expect(mockSend.mock.calls.flatMap(([request]) => diagnosticRecords(request.data))).toHaveLength(1)
+
+    // A later genuine failure must still report, even when the current configuration is usable.
+    await provider.onContextChange({}, { targetingKey: 'current' })
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    expect(await eventTypes(provider)).toEqual(['ready', 'provider_error'])
+  })
+
   it('does not claim readiness when startup only recovers from persistent cache', async () => {
     jest.spyOn(cacheHelpers, 'hasIndexedDB').mockReturnValue(true)
     const warmup = new DatadogProvider({ ...options, flagConfigurationFetch: success })

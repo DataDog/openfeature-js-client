@@ -317,17 +317,16 @@ export class DatadogProvider extends DatadogProviderBase {
       this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
-      if (!signal.aborted) {
-        this.lifecycleTelemetry?.providerError()
-      }
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
         if (config && canUse(config)) {
+          if (!signal.aborted) this.lifecycleTelemetry?.providerError()
           return { config, fromCache: true }
         }
       } catch (err) {}
 
+      if (!signal.aborted) this.lifecycleTelemetry?.providerError()
       throw err
     }
   }
