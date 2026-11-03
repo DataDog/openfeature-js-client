@@ -480,27 +480,31 @@ function cloneTelemetryValue(value: unknown, seen: WeakSet<object>): unknown | t
   if (typeof value !== 'object' || seen.has(value)) return unsupportedTelemetryValue
 
   seen.add(value)
-  if (Array.isArray(value)) {
-    const clone: unknown[] = []
-    for (const entry of value) {
+  try {
+    if (Array.isArray(value)) {
+      const clone: unknown[] = []
+      for (const entry of value) {
+        const clonedEntry = cloneTelemetryValue(entry, seen)
+        if (clonedEntry !== unsupportedTelemetryValue) clone.push(clonedEntry)
+      }
+      return clone
+    }
+
+    const clone: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) {
+      let entry: unknown
+      try {
+        entry = (value as Record<string, unknown>)[key]
+      } catch {
+        continue
+      }
       const clonedEntry = cloneTelemetryValue(entry, seen)
-      if (clonedEntry !== unsupportedTelemetryValue) clone.push(clonedEntry)
+      if (clonedEntry !== unsupportedTelemetryValue) {
+        Object.defineProperty(clone, key, { value: clonedEntry, enumerable: true, configurable: true, writable: true })
+      }
     }
     return clone
+  } finally {
+    seen.delete(value)
   }
-
-  const clone: Record<string, unknown> = {}
-  for (const key of Object.keys(value)) {
-    let entry: unknown
-    try {
-      entry = (value as Record<string, unknown>)[key]
-    } catch {
-      continue
-    }
-    const clonedEntry = cloneTelemetryValue(entry, seen)
-    if (clonedEntry !== unsupportedTelemetryValue) {
-      Object.defineProperty(clone, key, { value: clonedEntry, enumerable: true, configurable: true, writable: true })
-    }
-  }
-  return clone
 }

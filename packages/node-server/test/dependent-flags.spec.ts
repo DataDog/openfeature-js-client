@@ -215,9 +215,12 @@ describe('dependent flag exposures', () => {
     )
     const client = await clientFor(provider)
     // Untyped JavaScript callers can supply values outside EvaluationContextValue.
+    const sharedProfile = { tier: 'gold' }
     const context = {
       targetingKey: 'subject',
-      profile: { tier: 'gold' },
+      profile: sharedProfile,
+      backupProfile: sharedProfile,
+      repeatedProfiles: [sharedProfile, sharedProfile],
       callback: (() => true) as unknown as string,
     }
 
@@ -229,9 +232,19 @@ describe('dependent flag exposures', () => {
       'root',
     ])
     expect(context.profile).toEqual({ tier: 'gold' })
-    expect(
-      exposureChannel.publish.mock.calls.map(([published]) => (published as ExposureEvent).subject.attributes.profile)
-    ).toEqual([{ tier: 'mutated by subscriber' }, { tier: 'gold' }])
+    const [leafExposure, rootExposure] = exposureChannel.publish.mock.calls.map(
+      ([published]) => published as ExposureEvent
+    )
+    expect(leafExposure.subject.attributes).toMatchObject({
+      profile: { tier: 'mutated by subscriber' },
+      backupProfile: { tier: 'gold' },
+      repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+    })
+    expect(rootExposure.subject.attributes).toMatchObject({
+      profile: { tier: 'gold' },
+      backupProfile: { tier: 'gold' },
+      repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+    })
     expect(
       exposureChannel.publish.mock.calls.every(
         ([published]) => !('callback' in (published as ExposureEvent).subject.attributes)
