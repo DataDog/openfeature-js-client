@@ -1,7 +1,13 @@
 import type { Channel } from 'node:diagnostics_channel'
 import { type ExposureEvent, type Flag, OperatorType, type UniversalFlagConfigurationV1 } from '@datadog/flagging-core'
+import type { EvaluationContext, EvaluationDetails, FlagValue } from '@openfeature/core'
 import { type JsonValue, OpenFeature } from '@openfeature/server-sdk'
-import { DatadogNodeServerProvider, type DependencyEvaluationEvent } from '../src/provider'
+import { DatadogNodeServerProvider, DependencyTelemetrySidecar } from '../src/provider'
+
+type DependencyEvaluationEvent = {
+  context: EvaluationContext
+  details: EvaluationDetails<FlagValue>
+}
 
 describe('dependent flag exposures', () => {
   let providerName: string
@@ -19,10 +25,42 @@ describe('dependent flag exposures', () => {
     return OpenFeature.getClient(providerName)
   }
 
+  function providerWithDependencyEvaluations(
+    exposureChannel: Channel<ExposureEvent>,
+    dependencyEvaluationChannel: Channel<DependencyEvaluationEvent>
+  ): DatadogNodeServerProvider {
+    const sidecar = new DependencyTelemetrySidecar()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyTelemetrySidecar: sidecar })
+    const publishDependencyEvaluations = (
+      hookContext: { context: EvaluationContext },
+      evaluationDetails: EvaluationDetails<FlagValue>
+    ) => {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata)) {
+        try {
+          dependencyEvaluationChannel.publish({
+            context: structuredClone(hookContext.context),
+            details: {
+              ...evaluation.details,
+              flagKey: evaluation.flagKey,
+              flagMetadata: evaluation.details.flagMetadata ?? {},
+            },
+          })
+        } catch {
+          // Test hook mirrors the integration writer's best-effort per-record boundary.
+        }
+      }
+    }
+    provider.hooks?.push({
+      after: publishDependencyEvaluations,
+      finally: publishDependencyEvaluations,
+    })
+    return provider
+  }
+
   it('publishes successful dependency exposures depth-first before the root', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
-    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
     const leaf = booleanFlag('leaf')
     leaf.allocations[0].splits[0].features = [
       { key: 'dependency.feature', value: 'enabled', destinations: ['EXPOSURE'] },
@@ -59,10 +97,132 @@ describe('dependent flag exposures', () => {
     expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(4)
   })
 
+  it('publishes the completed dependency batch before the root OpenFeature hook', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+    const root = dependentFlag('root', ['leaf'])
+    let rootValueRead = false
+    Object.defineProperty(root.variations.on, 'value', {
+      enumerable: true,
+      get: () => {
+        rootValueRead = true
+        return true
+      },
+    })
+    provider.setConfiguration(configuration({ root, leaf: booleanFlag('leaf') }))
+    const client = await clientFor(provider)
+    const events: string[] = []
+    dependencyEvaluationChannel.publish.mockImplementation((published) => {
+      expect(rootValueRead).toBe(true)
+      events.push(`dependency:${(published as DependencyEvaluationEvent).details.flagKey}`)
+    })
+
+    await client.getBooleanDetails(
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      {
+        hooks: [
+          {
+            after: () => {
+              events.push('root-hook')
+            },
+          },
+        ],
+      }
+    )
+
+    expect(events).toEqual(['dependency:leaf', 'root-hook'])
+  })
+
+  it('keeps publishing a returned dependency batch when a subscriber throws', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['first', 'second']),
+        first: booleanFlag('first'),
+        second: booleanFlag('second'),
+      })
+    )
+    const client = await clientFor(provider)
+    dependencyEvaluationChannel.publish.mockImplementationOnce(() => {
+      throw new Error('telemetry unavailable')
+    })
+
+    await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+    expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(2)
+    expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'first',
+      'second',
+      'root',
+    ])
+  })
+
+  it('keeps concurrent root evaluation batches isolated', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+    provider.setConfiguration(
+      configuration({
+        'root-a': dependentFlag('root-a', ['leaf-a']),
+        'leaf-a': booleanFlag('leaf-a'),
+        'root-b': dependentFlag('root-b', ['leaf-b']),
+        'leaf-b': booleanFlag('leaf-b'),
+      })
+    )
+    const client = await clientFor(provider)
+
+    await Promise.all([
+      client.getBooleanDetails('root-a', false, { targetingKey: 'subject-a' }),
+      client.getBooleanDetails('root-b', false, { targetingKey: 'subject-b' }),
+    ])
+
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
+        const event = published as DependencyEvaluationEvent
+        return [event.context.targetingKey, event.details.flagKey]
+      })
+    ).toEqual(
+      expect.arrayContaining([
+        ['subject-a', 'leaf-a'],
+        ['subject-b', 'leaf-b'],
+      ])
+    )
+    expect(dependencyEvaluationChannel.publish).toHaveBeenCalledTimes(2)
+  })
+
+  it('publishes exposures when the evaluation context cannot be cloned', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const provider = new DatadogNodeServerProvider({ exposureChannel })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+    // Untyped JavaScript callers can supply values outside EvaluationContextValue.
+    const context = { targetingKey: 'subject', callback: (() => true) as unknown as string }
+
+    await client.getBooleanDetails('root', false, context)
+    await client.getBooleanDetails('root', false, context)
+
+    expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'leaf',
+      'root',
+    ])
+  })
+
   it('keeps re-entrant root evaluation sessions isolated', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
-    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
     provider.setConfiguration(
       configuration({
         'root-a': dependentFlag('root-a', ['leaf-a']),
@@ -112,7 +272,7 @@ describe('dependent flag exposures', () => {
   it('rolls back provider exposures and deduplication when a nested dependency fails', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
-    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
     provider.setConfiguration(
       configuration({
         root: dependentFlag('root', ['successful', 'parent']),
@@ -159,6 +319,30 @@ describe('dependent flag exposures', () => {
     ])
   })
 
+  it('fails closed without reaching a fallback when a prerequisite has no assignment', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+    const prerequisite = booleanFlag('prerequisite')
+    prerequisite.allocations = []
+    provider.setConfiguration(configuration({ root: dependentFlag('root', ['prerequisite']), prerequisite }))
+    const client = await clientFor(provider)
+
+    await expect(client.getBooleanDetails('root', true, { targetingKey: 'subject' })).resolves.toMatchObject({
+      value: true,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag evaluation returned no variant',
+    })
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
+        const event = published as DependencyEvaluationEvent
+        return [event.details.flagKey, event.details.reason, event.details.errorCode]
+      })
+    ).toEqual([['prerequisite', 'ERROR', 'GENERAL']])
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
+  })
+
   it('does not snapshot dependency values without evaluation subscribers', async () => {
     let valueReads = 0
     const value: Record<string, JsonValue> = {}
@@ -189,7 +373,7 @@ describe('dependent flag exposures', () => {
   it('isolates caller and later exposure contexts from telemetry subscriber mutation', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
-    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
     provider.setConfiguration(
       configuration({
         root: dependentFlag('root', ['leaf']),
@@ -230,7 +414,7 @@ describe('dependent flag exposures', () => {
   it('publishes and records no graph exposures when a later application hook fails', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
-    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyEvaluationChannel })
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
     provider.setConfiguration(
       configuration({
         root: dependentFlag('root', ['leaf']),

@@ -14,6 +14,7 @@ import { decodeFlagsConfiguration, encodeFlagsConfiguration } from '../../src/co
 import {
   type DependencyEvaluation,
   evaluateRulesBasedConfiguration,
+  evaluateRulesBasedConfigurationWithTrace,
   type Flag,
   type UniversalFlagConfigurationV1,
 } from '../../src/evaluation'
@@ -51,88 +52,170 @@ describe('dependent flag evaluation', () => {
     ])
   })
 
+  it('reads a prerequisite only for descriptor resolution and evaluation', () => {
+    const prerequisite = booleanFlag('prerequisite', 'on')
+    const config = configuration({
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    let reads = 0
+    Object.defineProperty(config.flags, 'prerequisite', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return prerequisite
+      },
+    })
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(2)
+  })
+
   it('applies experimentation opt-out to dependency evaluations', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
     root.allocations[0].doLog = false
-    const dependencies: DependencyEvaluation[] = []
-
-    const result = evaluateRulesBasedConfiguration(
+    const trace = evaluateRulesBasedConfigurationWithTrace(
       configuration({ prerequisite, root }),
       'boolean',
       'root',
       false,
       { targetingKey: 'subject', dd_experimentation_opt_out_at: '2026-10-23T00:00:00Z' },
       logger,
-      'immediate',
-      (evaluation) => dependencies.push(evaluation)
+      'immediate'
     )
 
-    expect(result).toMatchObject({
+    expect(trace.details).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
       errorMessage: 'prerequisite flag evaluation returned no variant',
     })
-    expect(dependencies).toMatchObject([
+    expect(trace.dependencyEvaluations).toMatchObject([
       { flagKey: 'prerequisite', details: { value: false, reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
   })
 
   it('uses the shared dependency session for protobuf UFC', () => {
     const config = protobufDependentConfiguration(true)
-    const dependencies: DependencyEvaluation[] = []
-    const onExposures = jest.fn()
-
-    expect(
-      evaluateRulesBasedConfiguration(
-        config,
-        'boolean',
-        'root',
-        false,
-        { targetingKey: 'subject' },
-        logger,
-        false,
-        (evaluation) => dependencies.push(evaluation),
-        onExposures
-      )
-    ).toMatchObject({ value: true, variant: 'on' })
-    expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: true, variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      config,
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+    expect(trace.details).toMatchObject({ value: true, variant: 'on' })
+    expect(trace.dependencyEvaluations).toMatchObject([
+      { flagKey: 'prerequisite', details: { value: true, variant: 'on' } },
+    ])
+    expect(trace.dependencyExposures).toEqual([
       expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
     ])
   })
 
+  it('returns equivalent JSON and protobuf dependency evaluation batches', () => {
+    const jsonTrace = evaluateRulesBasedConfigurationWithTrace(
+      configuration({
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+        prerequisite: booleanFlag('prerequisite', 'on'),
+      }),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+    const protobufTrace = evaluateRulesBasedConfigurationWithTrace(
+      protobufDependentConfiguration(true),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+
+    const comparable = (trace: typeof jsonTrace) =>
+      trace.dependencyEvaluations.map(({ flagKey, details }) => ({
+        flagKey,
+        value: details.value,
+        variant: details.variant,
+        reason: details.reason,
+        errorCode: details.errorCode,
+      }))
+    expect(comparable(jsonTrace)).toEqual(comparable(protobufTrace))
+  })
+
+  it('returns a memoized prerequisite once per root evaluation', () => {
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      configuration({
+        root: dependentBooleanFlag('root', [
+          flagCondition('prerequisite', OperatorType.ONE_OF, ['on']),
+          flagCondition('prerequisite', OperatorType.ONE_OF, ['on']),
+        ]),
+        prerequisite: booleanFlag('prerequisite', 'on'),
+      }),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+
+    expect(trace.details).toMatchObject({ value: true, variant: 'on' })
+    expect(trace.dependencyEvaluations.map(({ flagKey }) => flagKey)).toEqual(['prerequisite'])
+  })
+
+  it('preserves the completed dependency batch when root evaluation throws', () => {
+    const throwingLogger: Logger = {
+      ...logger,
+      debug: (message, details) => {
+        if (message === 'evaluated a flag' && (details as { flagKey?: unknown } | undefined)?.flagKey === 'root') {
+          throw new Error('root reporting failed')
+        }
+      },
+    }
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      configuration({
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+        prerequisite: booleanFlag('prerequisite', 'on'),
+      }),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      throwingLogger
+    )
+
+    expect(trace.details).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(trace.dependencyEvaluations.map(({ flagKey }) => flagKey)).toEqual(['prerequisite'])
+    expect(trace.dependencyExposures).toEqual([])
+  })
+
   it('fails a protobuf graph when a reached prerequisite returns no variant', () => {
     const config = protobufDependentConfiguration(false)
-    const dependencies: DependencyEvaluation[] = []
-    const onExposures = jest.fn()
-
-    expect(
-      evaluateRulesBasedConfiguration(
-        config,
-        'boolean',
-        'root',
-        false,
-        { targetingKey: 'subject' },
-        logger,
-        false,
-        (evaluation) => dependencies.push(evaluation),
-        onExposures
-      )
-    ).toMatchObject({
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      config,
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+    expect(trace.details).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
       errorMessage: 'prerequisite flag evaluation returned no variant',
     })
-    expect(dependencies).toMatchObject([
+    expect(trace.dependencyEvaluations).toMatchObject([
       {
         flagKey: 'prerequisite',
         details: { reason: 'ERROR', errorCode: 'GENERAL' },
       },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(trace.dependencyExposures).toEqual([])
   })
 
   it('supports protobuf NOT_ONE_OF dependencies', () => {
@@ -202,10 +285,10 @@ describe('dependent flag evaluation', () => {
       })
     )
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-fallback' } })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(exposures).toEqual([])
   })
 
   it('discards provenance from a failed protobuf ANY branch when a later branch is selected', () => {
@@ -220,9 +303,9 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.root.allocations[0].targetingConditionIndex = 2
 
-    const { result, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(exposures).toEqual([])
   })
 
   it('discards a matched dependency exposure when a later condition rejects its protobuf targeting rule', () => {
@@ -235,10 +318,10 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.root.allocations[0].targetingConditionIndex = 4
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(exposures).toEqual([])
   })
 
   it('discards protobuf provenance when a matching allocation produces no assignment', () => {
@@ -253,10 +336,10 @@ describe('dependent flag evaluation', () => {
       })
     )
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-fallback' } })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).toHaveBeenCalledWith([])
+    expect(exposures).toEqual([])
   })
 
   it('replays ordered, deduplicated protobuf provenance for a cached multi-dependency condition', () => {
@@ -284,15 +367,13 @@ describe('dependent flag evaluation', () => {
       })
     )
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({
       value: true,
       variant: 'on',
       flagMetadata: { __dd_allocation_key: 'root-targeted-fallback' },
     })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'second-prerequisite'])
-    expect(onExposures).toHaveBeenCalledTimes(1)
-    const exposures = onExposures.mock.calls[0][0] as { flagKey: string }[]
     expect(exposures.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'second-prerequisite'])
   })
 
@@ -342,15 +423,13 @@ describe('dependent flag evaluation', () => {
       })
     )
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({
       value: true,
       variant: 'on',
       flagMetadata: { __dd_allocation_key: 'root-targeted-fallback' },
     })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'parent'])
-    expect(onExposures).toHaveBeenCalledTimes(1)
-    const exposures = onExposures.mock.calls[0][0] as { flagKey: string }[]
     expect(exposures.map(({ flagKey }) => flagKey)).toEqual(['parent'])
   })
 
@@ -381,13 +460,17 @@ describe('dependent flag evaluation', () => {
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(logger.warn).toHaveBeenLastCalledWith(
+      'flag dependency graph evaluation failed',
+      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
+    )
   })
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
     const config = protobufDependentConfiguration(true)
     config.strings[1] = ''
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
     expect(result).toMatchObject({
       value: false,
@@ -396,20 +479,20 @@ describe('dependent flag evaluation', () => {
       errorMessage: 'Flag evaluation key must not be empty',
     })
     expect(dependencies).toEqual([])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('reports an unsupported protobuf prerequisite variation type as a dependency parse error', () => {
     const config = protobufDependentConfiguration(true)
     config.flags.prerequisite.variationType = 6 as VariationType
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('propagates a nested missing protobuf dependency and records its ancestor', () => {
@@ -425,13 +508,15 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies).toMatchObject([
       { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
+    expect(logger.debug).toHaveBeenCalledWith('prerequisite flag is missing', { flagKey: 'missing' })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it('detects a protobuf dependency cycle', () => {
@@ -447,7 +532,7 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({
       value: false,
       reason: 'ERROR',
@@ -457,7 +542,9 @@ describe('dependent flag evaluation', () => {
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
+    expect(logger.debug).toHaveBeenCalledWith('flag dependency cycle detected', { flagKey: 'root' })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it('memoizes protobuf dependencies and rolls back exposures after a later missing sibling', () => {
@@ -482,10 +569,10 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.root.allocations[0].targetingConditionIndex = 3
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('memoizes shared protobuf condition DAG outcomes', () => {
@@ -545,10 +632,10 @@ describe('dependent flag evaluation', () => {
     }
     config.flags.root.allocations[0].targetingConditionIndex = 27
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(dependencies).toHaveLength(1)
-    expect(onExposures).toHaveBeenCalledWith([
+    expect(exposures).toEqual([
       expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
     ])
   })
@@ -591,6 +678,10 @@ describe('dependent flag evaluation', () => {
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(logger.warn).toHaveBeenLastCalledWith(
+      'flag dependency graph evaluation failed',
+      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
+    )
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
@@ -616,6 +707,11 @@ describe('dependent flag evaluation', () => {
       { flagKey: 'b', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
       { flagKey: 'a', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
+    expect(logger.debug).toHaveBeenCalledWith('maximum flag dependency depth exceeded', {
+      flagKey: 'c',
+      maxDependencyDepth: 2,
+    })
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -647,6 +743,11 @@ describe('dependent flag evaluation', () => {
     })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['leaf', 'a', 'b'])
     expect(onExposures).not.toHaveBeenCalled()
+    expect(logger.debug).toHaveBeenCalledWith(
+      'maximum flag dependency depth exceeded',
+      expect.objectContaining({ maxDependencyDepth: 2 })
+    )
+    expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -699,7 +800,7 @@ describe('dependent flag evaluation', () => {
     expect(onExposures).not.toHaveBeenCalled()
   })
 
-  it('emits dependency evaluations before parent and sibling evaluation continues', () => {
+  it('returns dependency evaluations only after the root evaluation completes', () => {
     const events: string[] = []
     const timingLogger: Logger = {
       ...logger,
@@ -725,12 +826,12 @@ describe('dependent flag evaluation', () => {
     })
     expect(events).toEqual([
       'evaluated:leaf',
-      'telemetry:leaf',
       'evaluated:parent',
-      'telemetry:parent',
       'evaluated:sibling',
-      'telemetry:sibling',
       'evaluated:root',
+      'telemetry:leaf',
+      'telemetry:parent',
+      'telemetry:sibling',
     ])
   })
 
@@ -820,16 +921,32 @@ function evaluate(
   attributes: Record<string, unknown> = {},
   onExposures?: (evaluations: readonly DependencyEvaluation[]) => void
 ) {
-  return evaluateRulesBasedConfiguration(
+  const trace = evaluateRulesBasedConfigurationWithTrace(
     config,
     'boolean',
     flagKey,
     false,
     { targetingKey: 'subject', ...attributes },
-    logger,
-    false,
-    onDependency,
-    onExposures
+    logger
+  )
+  for (const dependency of trace.dependencyEvaluations) {
+    try {
+      onDependency?.(dependency)
+    } catch {
+      // Test adapter mirrors the provider's best-effort publication boundary.
+    }
+  }
+  if (trace.details.reason !== 'ERROR' && containsDependency(config.flags[flagKey])) {
+    onExposures?.(trace.dependencyExposures)
+  }
+  return trace.details
+}
+
+function containsDependency(flag: Flag | undefined): boolean {
+  return (
+    flag?.allocations.some((allocation) =>
+      allocation.rules?.some((rule) => rule.conditions.some((condition) => 'flagEvaluation' in condition))
+    ) === true
   )
 }
 
@@ -948,18 +1065,17 @@ function roundTrip(configuration: Parameters<typeof encodeFlagsConfiguration>[0]
 }
 
 function evaluateProtobuf(configuration: ReturnType<typeof decodeFlagsConfiguration>, logger: Logger) {
-  const dependencies: DependencyEvaluation[] = []
-  const onExposures = jest.fn()
-  const result = evaluateRulesBasedConfiguration(
+  const trace = evaluateRulesBasedConfigurationWithTrace(
     configuration,
     'boolean',
     'root',
     false,
     { targetingKey: 'subject' },
-    logger,
-    false,
-    (evaluation) => dependencies.push(evaluation),
-    onExposures
+    logger
   )
-  return { result, dependencies, onExposures }
+  return {
+    result: trace.details,
+    dependencies: trace.dependencyEvaluations,
+    exposures: trace.dependencyExposures,
+  }
 }

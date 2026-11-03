@@ -51,9 +51,7 @@ export function evaluate<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger = NOOP_LOGGER,
-  experimentationOptOutMode: ExperimentationOptOutOption = false,
-  onDependencyEvaluation?: DependencyEvaluationHandler,
-  onDependencyExposures?: DependencyExposureHandler
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutMode)
   if (selection.kind === 'precomputed') {
@@ -76,9 +74,7 @@ export function evaluate<T extends FlagValueType>(
       defaultValue,
       context,
       logger,
-      experimentationOptOutMode,
-      onDependencyEvaluation,
-      onDependencyExposures
+      experimentationOptOutMode
     )
   }
 
@@ -178,10 +174,42 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  experimentationOptOutMode: ExperimentationOptOutOption = false,
-  onDependencyEvaluation?: DependencyEvaluationHandler,
-  onDependencyExposures?: DependencyExposureHandler
+  experimentationOptOutMode: ExperimentationOptOutOption = false
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  return evaluateRulesBasedConfigurationWithTrace(
+    config,
+    type,
+    flagKey,
+    defaultValue,
+    context,
+    logger,
+    experimentationOptOutMode,
+    { collectDependencyEvaluations: false, collectDependencyExposures: false }
+  ).details
+}
+
+export type EvaluationTrace<T extends FlagValue = FlagValue> = {
+  details: ResolutionDetails<T>
+  dependencyEvaluations: readonly DependencyEvaluation[]
+  dependencyExposures: readonly DependencyExposureCandidate[]
+}
+
+export type EvaluationTraceOptions = {
+  collectDependencyEvaluations?: boolean
+  collectDependencyExposures?: boolean
+}
+
+/** @internal Returns the completed dependency trace for provider integrations. */
+export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType>(
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration | undefined,
+  type: T,
+  flagKey: string,
+  defaultValue: FlagTypeToValue<T>,
+  context: EvaluationContext,
+  logger: Logger,
+  experimentationOptOutMode: ExperimentationOptOutOption = false,
+  options: EvaluationTraceOptions = {}
+): EvaluationTrace<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
   // Snapshot consent once at the start of this evaluation. The provider can receive a new
   // configuration later, but hooks must see the consent from the configuration that produced this result.
@@ -190,16 +218,20 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   const excludeExperiments = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (excludeExperiments === undefined) {
     return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'INVALID_CONTEXT' as ErrorCode,
-      errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
-      flagMetadata: metadata,
+      details: {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'INVALID_CONTEXT' as ErrorCode,
+        errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
+        flagMetadata: metadata,
+      },
+      dependencyEvaluations: [],
+      dependencyExposures: [],
     }
   }
-  let details: ResolutionDetails<FlagTypeToValue<T>>
+  let trace: EvaluationTrace<FlagTypeToValue<T>>
   try {
-    details = evaluateRules(
+    trace = evaluateRules(
       config,
       type,
       flagKey,
@@ -209,14 +241,21 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
       evaluationTimestampMs,
       excludeExperiments,
       observeFullEvaluationData,
-      onDependencyEvaluation,
-      onDependencyExposures
+      options.collectDependencyEvaluations !== false,
+      options.collectDependencyExposures !== false
     )
   } catch (error) {
     logger.error('Error evaluating flag', { error })
-    details = { value: defaultValue, reason: 'ERROR', errorCode: 'GENERAL' as ErrorCode }
+    trace = {
+      details: { value: defaultValue, reason: 'ERROR', errorCode: 'GENERAL' as ErrorCode },
+      dependencyEvaluations: [],
+      dependencyExposures: [],
+    }
   }
-  return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
+  return {
+    ...trace,
+    details: { ...trace.details, flagMetadata: { ...trace.details.flagMetadata, ...metadata } },
+  }
 }
 
 function evaluateRules<T extends FlagValueType>(
@@ -229,27 +268,31 @@ function evaluateRules<T extends FlagValueType>(
   evaluationTimestampMs: TimeStamp,
   excludeExperiments: ExperimentationOptOutPolicy,
   observeFullEvaluationData: boolean,
-  onDependencyEvaluation?: DependencyEvaluationHandler,
-  onDependencyExposures?: DependencyExposureHandler
-): ResolutionDetails<FlagTypeToValue<T>> {
+  collectDependencyEvaluations: boolean,
+  collectDependencyExposures: boolean
+): EvaluationTrace<FlagTypeToValue<T>> {
   if (!config) {
     return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      details: {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      },
+      dependencyEvaluations: [],
+      dependencyExposures: [],
     }
   }
 
   if (isProtobufConfiguration(config)) {
     const prepared = prepareRulesResponse(config)
     let dependencySession: DependencyEvaluationSession | undefined
-    let commitDependencyExposures = false
+    let details: ResolutionDetails<FlagTypeToValue<T>>
     try {
       const resolveDependency = ((dependencyFlagKey: string) => {
         dependencySession ??= new DependencyEvaluationSession(
           flagKey,
-          getMaxDependencyDepth(config),
+          getMaxDependencyDepth(config, flagKey),
           observeFullEvaluationData,
           (key) => {
             const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -270,16 +313,16 @@ function evaluateRules<T extends FlagValueType>(
             ),
           logger,
           evaluationTimestampMs,
-          onDependencyEvaluation,
-          onDependencyExposures
+          collectDependencyExposures,
+          collectDependencyEvaluations
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
-      if (onDependencyExposures !== undefined) {
+      if (collectDependencyExposures) {
         resolveDependency.checkpoint = () => dependencySession?.checkpoint()
         resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
       }
-      const result = evaluateProtobufConfiguration(
+      details = evaluateProtobufConfiguration(
         prepared,
         type,
         flagKey,
@@ -290,16 +333,26 @@ function evaluateRules<T extends FlagValueType>(
         excludeExperiments,
         resolveDependency
       )
-      commitDependencyExposures = result.reason !== 'ERROR' && result.errorCode === undefined
-      return result
     } catch (error) {
       if (error instanceof DependencyGraphError) {
-        return dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
+        details = dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
+      } else {
+        logger.error('Error evaluating flag', { error })
+        details = {
+          value: defaultValue,
+          reason: 'ERROR',
+          errorCode: 'GENERAL' as ErrorCode,
+          flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+        }
       }
-      throw error
-    } finally {
-      dependencySession?.complete(commitDependencyExposures)
     }
+    return (
+      dependencySession?.complete(details.reason !== 'ERROR' && details.errorCode === undefined, details) ?? {
+        details,
+        dependencyEvaluations: [],
+        dependencyExposures: [],
+      }
+    )
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context
@@ -312,20 +365,24 @@ function evaluateRules<T extends FlagValueType>(
   if (!Object.prototype.hasOwnProperty.call(config.flags, flagKey)) {
     logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
     return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      details: {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      },
+      dependencyEvaluations: [],
+      dependencyExposures: [],
     }
   }
 
   let dependencySession: DependencyEvaluationSession | undefined
-  let commitDependencyExposures = false
+  let details: ResolutionDetails<FlagTypeToValue<T>>
   try {
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
       dependencySession ??= new DependencyEvaluationSession(
         flagKey,
-        getMaxDependencyDepth(config),
+        getMaxDependencyDepth(config, flagKey),
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -345,8 +402,8 @@ function evaluateRules<T extends FlagValueType>(
           ) as ResolutionDetails<FlagValue>,
         logger,
         evaluationTimestampMs,
-        onDependencyEvaluation,
-        onDependencyExposures
+        collectDependencyExposures,
+        collectDependencyEvaluations
       )
       return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
     }) as ResolveFlagEvaluation
@@ -363,37 +420,40 @@ function evaluateRules<T extends FlagValueType>(
       excludeExperiments,
       resolveDependency
     )
-    const result: ResolutionDetails<FlagTypeToValue<T>> = {
+    details = {
       ...evaluated,
       flagMetadata: {
         ...evaluated.flagMetadata,
         ...createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData),
       },
     }
-    commitDependencyExposures = result.reason !== 'ERROR' && result.errorCode === undefined
-    return result
   } catch (error) {
     if (error instanceof TargetingKeyMissingError) {
-      return {
+      details = {
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'TARGETING_KEY_MISSING' as ErrorCode,
         flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
+    } else if (error instanceof DependencyGraphError) {
+      details = dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
+    } else {
+      logger.error('Error evaluating flag', { error })
+      details = {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'GENERAL' as ErrorCode,
+        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+      }
     }
-    if (error instanceof DependencyGraphError) {
-      return dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
-    }
-    logger.error('Error evaluating flag', { error })
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: 'GENERAL' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-    }
-  } finally {
-    dependencySession?.complete(commitDependencyExposures)
   }
+  return (
+    dependencySession?.complete(details.reason !== 'ERROR' && details.errorCode === undefined, details) ?? {
+      details,
+      dependencyEvaluations: [],
+      dependencyExposures: [],
+    }
+  )
 }
 
 function dependencyGraphFailure<T extends FlagValue>(
@@ -426,15 +486,12 @@ export type DependencyExposureCandidate = {
   details: Omit<ResolutionDetails<FlagValue>, 'value'>
 }
 
-export type DependencyEvaluationHandler = (evaluation: DependencyEvaluation) => void
-export type DependencyExposureHandler = (evaluations: readonly DependencyExposureCandidate[]) => void
-
 class DependencyEvaluationSession {
   private readonly memo = new Map<string, MemoizedDependency>()
   private readonly active: Set<string>
   private readonly frames: DependencyEvaluationFrame[] = []
+  private readonly evaluations: DependencyEvaluation[] = []
   private readonly exposures: DependencyExposureCandidate[] | undefined
-  private completed = false
 
   constructor(
     rootFlagKey: string,
@@ -444,25 +501,18 @@ class DependencyEvaluationSession {
     private readonly evaluateFlag: DependencyFlagEvaluator,
     private readonly logger: Logger,
     private readonly evaluationTimestampMs: TimeStamp,
-    private readonly onDependencyEvaluation?: DependencyEvaluationHandler,
-    private readonly onDependencyExposures?: DependencyExposureHandler
+    collectDependencyExposures: boolean,
+    private readonly collectDependencyEvaluations: boolean
   ) {
     this.active = new Set([rootFlagKey])
-    this.exposures = onDependencyExposures === undefined ? undefined : []
+    this.exposures = collectDependencyExposures ? [] : undefined
   }
 
-  complete(commitExposures: boolean): void {
-    if (this.completed) {
-      return
-    }
-    this.completed = true
-
-    if (commitExposures && this.exposures !== undefined) {
-      try {
-        this.onDependencyExposures?.(this.exposures)
-      } catch {
-        // Exposure telemetry is best effort and must not affect flag evaluation semantics.
-      }
+  complete<T extends FlagValue>(commitExposures: boolean, details: ResolutionDetails<T>): EvaluationTrace<T> {
+    return {
+      details,
+      dependencyEvaluations: this.evaluations,
+      dependencyExposures: commitExposures && this.exposures !== undefined ? this.exposures : [],
     }
   }
 
@@ -491,11 +541,11 @@ class DependencyEvaluationSession {
     }
   }
 
-  private evaluate(flagKey: string, type: FlagValueType, defaultValue: FlagValue, depth: number): MemoizedDependency {
+  private evaluate(flagKey: string, flag: DependencyFlag, depth: number): MemoizedDependency {
     const memoized = this.memo.get(flagKey)
     if (memoized !== undefined) {
       if (depth + memoized.descendantDepth > this.maxDependencyDepth) {
-        this.logger.warn('maximum flag dependency depth exceeded', {
+        this.logger.debug('maximum flag dependency depth exceeded', {
           flagKey,
           maxDependencyDepth: this.maxDependencyDepth,
         })
@@ -504,11 +554,7 @@ class DependencyEvaluationSession {
       return memoized
     }
 
-    const flag = this.getFlag(flagKey)
-    if (flag === undefined) {
-      this.emitMissingFlagEvaluation(flagKey)
-      throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
-    }
+    const { type, defaultValue } = flag
 
     this.active.add(flagKey)
     const frame: DependencyEvaluationFrame = {
@@ -553,11 +599,11 @@ class DependencyEvaluationSession {
       }
       this.memo.set(flagKey, memoizedResult)
       const evaluation = { flagKey, details: result }
-      this.emitEvaluation(evaluation)
+      this.recordEvaluation(evaluation)
       return memoizedResult
     } catch (error) {
       const graphError = this.toDependencyGraphError(flagKey, error)
-      this.emitEvaluation({
+      this.recordEvaluation({
         flagKey,
         details: {
           value: defaultValue,
@@ -577,12 +623,12 @@ class DependencyEvaluationSession {
   resolveFlagEvaluation(flagEvaluation: FlagEvaluation | string, depth: number): string | undefined {
     const flagKey = typeof flagEvaluation === 'string' ? flagEvaluation : flagEvaluation.key
     if (depth > this.maxDependencyDepth) {
-      this.logger.warn('maximum flag dependency depth exceeded', {
+      this.logger.debug('maximum flag dependency depth exceeded', {
         flagKey,
         maxDependencyDepth: this.maxDependencyDepth,
       })
       if (!this.memo.has(flagKey) && !this.active.has(flagKey)) {
-        this.emitEvaluation({
+        this.recordEvaluation({
           flagKey,
           details: {
             reason: 'ERROR',
@@ -595,18 +641,18 @@ class DependencyEvaluationSession {
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'maximum flag dependency depth exceeded')
     }
     if (this.active.has(flagKey)) {
-      this.logger.warn('flag dependency cycle detected', { flagKey })
+      this.logger.debug('flag dependency cycle detected', { flagKey })
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'flag dependency cycle detected')
     }
 
     const flag = this.getFlag(flagKey)
     if (flag === undefined) {
-      this.logger.warn('prerequisite flag is missing', { flagKey })
-      this.emitMissingFlagEvaluation(flagKey)
+      this.logger.debug('prerequisite flag is missing', { flagKey })
+      this.recordMissingFlagEvaluation(flagKey)
       throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
     }
 
-    const result = this.evaluate(flagKey, flag.type, flag.defaultValue, depth)
+    const result = this.evaluate(flagKey, flag, depth)
     this.recordReachedDepth(depth + result.descendantDepth)
     if (result.exposureTrace !== undefined) {
       this.recordExposureTrace(result.exposureTrace)
@@ -641,8 +687,8 @@ class DependencyEvaluationSession {
     }
   }
 
-  private emitEvaluation(evaluation: DependencyEvaluation): void {
-    if (this.onDependencyEvaluation === undefined) {
+  private recordEvaluation(evaluation: DependencyEvaluation): void {
+    if (!this.collectDependencyEvaluations || this.evaluations.some(({ flagKey }) => flagKey === evaluation.flagKey)) {
       return
     }
     try {
@@ -653,14 +699,14 @@ class DependencyEvaluationSession {
           ? {}
           : { flagMetadata: { ...evaluation.details.flagMetadata } }),
       }
-      this.onDependencyEvaluation({ flagKey: evaluation.flagKey, details })
+      this.evaluations.push({ flagKey: evaluation.flagKey, details })
     } catch {
-      // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
+      // A value that cannot be detached is omitted without affecting evaluation semantics.
     }
   }
 
-  private emitMissingFlagEvaluation(flagKey: string): void {
-    this.emitEvaluation({
+  private recordMissingFlagEvaluation(flagKey: string): void {
+    this.recordEvaluation({
       flagKey,
       details: {
         reason: 'ERROR',
@@ -768,7 +814,10 @@ function asFlagEvaluationResolver(resolveDependency: ResolveDependency): Resolve
   return resolve
 }
 
-function getMaxDependencyDepth(config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration): number {
+function getMaxDependencyDepth(
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
+  rootFlagKey: string
+): number {
   const configuredDepth = config.evaluatorParams?.maxDependencyDepth
   if (configuredDepth === undefined) {
     return DEFAULT_MAX_DEPENDENCY_DEPTH
@@ -778,7 +827,7 @@ function getMaxDependencyDepth(config: UniversalFlagConfigurationV1 | ProtobufFl
     return numericDepth
   }
   throw new DependencyGraphError(
-    '',
+    rootFlagKey,
     'PARSE_ERROR' as ErrorCode,
     'maxDependencyDepth must be an integer from 0 through 255'
   )
@@ -809,28 +858,11 @@ function protobufDependencyFlag(flag: ProtobufFlagsConfiguration['flags'][string
 
 function jsonDependencyFlag(flag: unknown): DependencyFlag {
   try {
-    const typedFlag = flag as Flag
-    return {
-      type: variantTypeToFlagValueType(typedFlag.variationType),
-      defaultValue: defaultValueForFlag(typedFlag),
-    }
+    const type = variantTypeToFlagValueType((flag as Flag).variationType)
+    return { type, defaultValue: defaultValueForType(type) }
   } catch {
     // The evaluator owns descriptor validation and will report PARSE_ERROR with dependency telemetry.
     return { type: 'boolean', defaultValue: false }
-  }
-}
-
-function defaultValueForFlag(flag: Flag): FlagValue {
-  switch (flag.variationType) {
-    case 'BOOLEAN':
-      return false
-    case 'INTEGER':
-    case 'NUMERIC':
-      return 0
-    case 'STRING':
-      return ''
-    case 'JSON':
-      return {}
   }
 }
 

@@ -561,6 +561,16 @@ interface ExposureEvent {
 		};
 	};
 }
+type DependencyEvaluation = {
+	flagKey: string;
+	details: Omit<ResolutionDetails<FlagValue>, "value"> & {
+		value?: FlagValue;
+	};
+};
+export declare enum ExperimentationOptOutMode {
+	Disabled = "disabled",
+	Immediate = "immediate"
+}
 type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
 	/**
@@ -593,22 +603,43 @@ export interface DatadogNodeServerProviderOptions {
 	 */
 	exposureChannel: Channel<ExposureEvent>;
 	/**
-	 * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+	 * Internal sidecar consumed by the integration's root evaluation hook.
+	 * @internal
 	 */
-	dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>;
+	dependencyTelemetrySidecar?: DependencyTelemetrySidecar;
 	/**
 	 * Timeout in milliseconds for provider initialization.
 	 * If the configuration is not set within this time, initialization will fail.
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
+	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
+	experimentationOptOutMode?: ExperimentationOptOutMode;
 }
-export type DependencyEvaluationEvent = {
-	context: EvaluationContext;
+type PreparedDependencyExposure = {
 	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
 		value?: FlagValue;
 	};
+	event: ExposureEvent;
 };
+type PreparedDependencyTelemetry = {
+	dependencyEvaluations: readonly DependencyEvaluation[];
+	dependencyExposures: readonly PreparedDependencyExposure[];
+};
+/**
+ * Associates a completed dependency trace with the root result's metadata object.
+ * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
+ * @internal
+ */
+export declare class DependencyTelemetrySidecar {
+	readonly collectDependencyEvaluations: boolean;
+	private readonly batches;
+	constructor(collectDependencyEvaluations?: boolean);
+	stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void;
+	takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[];
+	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
+	discard(metadata: object | undefined): void;
+}
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
 	readonly metadata: ProviderMetadata;
@@ -617,8 +648,9 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private initController?;
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
 	private readonly exposureCache;
-	private readonly dependencyExposureBatches;
+	private readonly dependencyTelemetrySidecar;
 	private configuration?;
+	private readonly experimentationOptOutMode;
 	constructor(options: DatadogNodeServerProviderOptions);
 	/**
 	 * Used by dd-source-js
@@ -646,9 +678,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
-	private dependencyEvaluationHandler;
-	private handleDependencyEvaluation;
-	private handleDependencyExposures;
+	private stageDependencyTelemetry;
 	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;
 }
