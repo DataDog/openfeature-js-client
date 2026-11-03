@@ -477,6 +477,7 @@ function cloneTelemetryValue(value: unknown, seen: WeakSet<object>): unknown | t
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
     return value
   }
+  if (value instanceof Date) return new Date(value.getTime())
   if (typeof value !== 'object' || seen.has(value)) return unsupportedTelemetryValue
 
   seen.add(value)

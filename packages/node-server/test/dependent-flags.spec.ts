@@ -204,6 +204,8 @@ describe('dependent flag exposures', () => {
       if (event.flag.key === 'leaf') {
         const profile = event.subject.attributes.profile as { tier: string }
         profile.tier = 'mutated by subscriber'
+        const evaluatedAt = event.subject.attributes.evaluatedAt as Date
+        evaluatedAt.setUTCFullYear(2030)
       }
     })
     const provider = new DatadogNodeServerProvider({ exposureChannel })
@@ -216,11 +218,14 @@ describe('dependent flag exposures', () => {
     const client = await clientFor(provider)
     // Untyped JavaScript callers can supply values outside EvaluationContextValue.
     const sharedProfile = { tier: 'gold' }
+    const evaluatedAt = new Date('2026-10-07T12:00:00Z')
     const context = {
       targetingKey: 'subject',
       profile: sharedProfile,
       backupProfile: sharedProfile,
       repeatedProfiles: [sharedProfile, sharedProfile],
+      evaluatedAt,
+      backupDate: evaluatedAt,
       callback: (() => true) as unknown as string,
     }
 
@@ -239,12 +244,17 @@ describe('dependent flag exposures', () => {
       profile: { tier: 'mutated by subscriber' },
       backupProfile: { tier: 'gold' },
       repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+      evaluatedAt: new Date('2030-10-07T12:00:00Z'),
+      backupDate: new Date('2026-10-07T12:00:00Z'),
     })
     expect(rootExposure.subject.attributes).toMatchObject({
       profile: { tier: 'gold' },
       backupProfile: { tier: 'gold' },
       repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+      evaluatedAt: new Date('2026-10-07T12:00:00Z'),
+      backupDate: new Date('2026-10-07T12:00:00Z'),
     })
+    expect(evaluatedAt).toEqual(new Date('2026-10-07T12:00:00Z'))
     expect(
       exposureChannel.publish.mock.calls.every(
         ([published]) => !('callback' in (published as ExposureEvent).subject.attributes)
