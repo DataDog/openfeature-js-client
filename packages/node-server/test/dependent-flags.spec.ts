@@ -262,6 +262,50 @@ describe('dependent flag exposures', () => {
     ).toBe(true)
   })
 
+  it.each([
+    { dependencyDoLog: false, rootDoLog: false },
+    { dependencyDoLog: false, rootDoLog: true },
+    { dependencyDoLog: true, rootDoLog: false },
+    { dependencyDoLog: true, rootDoLog: true },
+  ])(
+    'keeps assignment and dependency evaluations when cyclic exposure attributes cannot be cached ($dependencyDoLog, $rootDoLog)',
+    async ({ dependencyDoLog, rootDoLog }) => {
+      const exposureChannel = channel<ExposureEvent>()
+      const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+      const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+      const root = dependentFlag('root', ['leaf'])
+      const leaf = booleanFlag('leaf')
+      root.allocations[0].doLog = rootDoLog
+      leaf.allocations[0].doLog = dependencyDoLog
+      provider.setConfiguration(configuration({ root, leaf }))
+      const client = await clientFor(provider)
+      const traits: Record<string, unknown> = {}
+      traits.self = traits
+
+      await expect(
+        client.getBooleanDetails('root', false, {
+          targetingKey: 'subject',
+          traits: traits as never,
+        })
+      ).resolves.toMatchObject({ value: true, variant: 'on' })
+      expect(
+        dependencyEvaluationChannel.publish.mock.calls.map(
+          ([event]) => (event as DependencyEvaluationEvent).details.flagKey
+        )
+      ).toEqual(['leaf'])
+      expect(exposureChannel.publish).not.toHaveBeenCalled()
+
+      await expect(client.getBooleanDetails('root', false, { targetingKey: 'safe-subject' })).resolves.toMatchObject({
+        value: true,
+        variant: 'on',
+      })
+      expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+        ...(dependencyDoLog ? ['leaf'] : []),
+        ...(rootDoLog ? ['root'] : []),
+      ])
+    }
+  )
+
   it('keeps re-entrant root evaluation sessions isolated', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()

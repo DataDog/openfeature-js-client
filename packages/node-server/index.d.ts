@@ -684,6 +684,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private stageDependencyTelemetry;
 	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;
+	private prepareExposure;
 }
 
 export {};

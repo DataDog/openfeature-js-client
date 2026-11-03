@@ -372,18 +372,13 @@ export class DatadogNodeServerProvider implements Provider {
     }
     const prepared: PreparedDependencyExposure[] = []
     for (const evaluation of exposureCandidates) {
-      const metadata = (evaluation.details.flagMetadata ?? {}) as FlagMetadata
       const details = {
         ...evaluation.details,
         flagKey: evaluation.flagKey,
-        flagMetadata: metadata,
+        flagMetadata: (evaluation.details.flagMetadata ?? {}) as FlagMetadata,
       }
-      const event = createExposureEvent(context, details)
-      if (event === undefined) {
-        continue
-      }
-      if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, event)
-      prepared.push({ details, event })
+      const exposure = this.prepareExposure(context, details)
+      if (exposure !== undefined) prepared.push(exposure)
     }
     this.dependencyTelemetrySidecar.stage(rootMetadata, context, {
       dependencyEvaluations,
@@ -397,16 +392,26 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: Omit<ResolutionDetails<T>, 'value'> & { value?: T }
   ): void {
-    const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
-    const exposureEvent = createExposureEvent(context, {
+    this.prepareExposure(context, {
       flagKey,
       variant: resolutionDetails.variant,
-      flagMetadata: resolutionDetails.flagMetadata ?? {},
+      flagMetadata: (resolutionDetails.flagMetadata ?? {}) as FlagMetadata,
     })
-    if (!exposureEvent) {
+  }
+
+  private prepareExposure(
+    context: EvaluationContext,
+    details: PreparedDependencyExposure['details']
+  ): PreparedDependencyExposure | undefined {
+    try {
+      const event = createExposureEvent(context, details)
+      if (event === undefined) return
+      if (this.exposureCache) prepareExposureDecision(details.flagMetadata, this.exposureCache, event)
+      return { details, event }
+    } catch {
+      // Exposure preparation is best effort and must not affect assignment or evaluation telemetry.
       return
     }
-    if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, exposureEvent)
   }
 }
 
