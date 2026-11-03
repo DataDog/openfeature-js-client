@@ -74,34 +74,39 @@ type PreparedDependencyTelemetry = {
   dependencyExposures: readonly PreparedDependencyExposure[]
 }
 
+type StagedDependencyTelemetry = PreparedDependencyTelemetry & {
+  rootMetadata: object
+  rootContext: object
+}
+
 /**
- * Associates a completed dependency trace with the root result's metadata object.
+ * Associates a completed dependency trace with the root result's metadata and evaluation context.
  * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
  * @internal
  */
 export class DependencyTelemetrySidecar {
-  private readonly batches = new WeakMap<object, PreparedDependencyTelemetry>()
+  private readonly batchesByMetadata = new WeakMap<object, StagedDependencyTelemetry>()
+  private readonly batchesByContext = new WeakMap<object, StagedDependencyTelemetry>()
 
   constructor(readonly collectDependencyEvaluations = true) {}
 
-  stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void {
+  stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void {
     if (telemetry.dependencyEvaluations.length > 0 || telemetry.dependencyExposures.length > 0) {
-      this.batches.set(rootMetadata, telemetry)
+      const batch = { ...telemetry, rootMetadata, rootContext }
+      this.batchesByMetadata.set(rootMetadata, batch)
+      this.batchesByContext.set(rootContext, batch)
     }
   }
 
-  takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[] {
-    if (metadata === undefined) {
-      return []
-    }
-    const batch = this.batches.get(metadata)
+  takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[] {
+    const batch = this.getBatch(metadata, context)
     if (batch === undefined) {
       return []
     }
     const evaluations = batch.dependencyEvaluations
     batch.dependencyEvaluations = []
     if (batch.dependencyExposures.length === 0) {
-      this.batches.delete(metadata)
+      this.deleteBatch(batch)
     }
     return evaluations
   }
@@ -110,14 +115,45 @@ export class DependencyTelemetrySidecar {
     if (metadata === undefined) {
       return []
     }
-    const exposures = this.batches.get(metadata)?.dependencyExposures ?? []
-    this.batches.delete(metadata)
+    const batch = this.batchesByMetadata.get(metadata)
+    if (batch === undefined) {
+      return []
+    }
+    const exposures = batch.dependencyExposures
+    batch.dependencyExposures = []
+    if (batch.dependencyEvaluations.length === 0) {
+      this.deleteBatch(batch)
+    }
     return exposures
   }
 
-  discard(metadata: object | undefined): void {
-    if (metadata !== undefined) {
-      this.batches.delete(metadata)
+  discardDependencyExposures(metadata: object | undefined): void {
+    if (metadata === undefined) {
+      return
+    }
+    const batch = this.batchesByMetadata.get(metadata)
+    if (batch === undefined) {
+      return
+    }
+    batch.dependencyExposures = []
+    if (batch.dependencyEvaluations.length === 0) {
+      this.deleteBatch(batch)
+    }
+  }
+
+  private getBatch(metadata: object | undefined, context: object | undefined): StagedDependencyTelemetry | undefined {
+    return (
+      (metadata === undefined ? undefined : this.batchesByMetadata.get(metadata)) ??
+      (context === undefined ? undefined : this.batchesByContext.get(context))
+    )
+  }
+
+  private deleteBatch(batch: StagedDependencyTelemetry): void {
+    if (this.batchesByMetadata.get(batch.rootMetadata) === batch) {
+      this.batchesByMetadata.delete(batch.rootMetadata)
+    }
+    if (this.batchesByContext.get(batch.rootContext) === batch) {
+      this.batchesByContext.delete(batch.rootContext)
     }
   }
 }
@@ -349,7 +385,7 @@ export class DatadogNodeServerProvider implements Provider {
       if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, event)
       prepared.push({ details, event })
     }
-    this.dependencyTelemetrySidecar.stage(rootMetadata, {
+    this.dependencyTelemetrySidecar.stage(rootMetadata, context, {
       dependencyEvaluations,
       dependencyExposures: prepared,
     })
@@ -395,7 +431,9 @@ class ExposureLoggingHook implements Hook {
   error(hookContext: Readonly<HookContext<FlagValue>>): void {
     const evaluationDetails = this.pending.get(hookContext)
     const metadata = evaluationDetails?.flagMetadata
-    this.dependencyTelemetrySidecar.discard(metadata)
+    // A later hook failure rolls back transactional exposures, but dependency
+    // evaluation telemetry remains observable from the root finally lifecycle.
+    this.dependencyTelemetrySidecar.discardDependencyExposures(metadata)
     this.pending.delete(hookContext)
   }
 

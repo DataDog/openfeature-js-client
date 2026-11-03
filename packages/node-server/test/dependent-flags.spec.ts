@@ -35,7 +35,7 @@ describe('dependent flag exposures', () => {
       hookContext: { context: EvaluationContext },
       evaluationDetails: EvaluationDetails<FlagValue>
     ) => {
-      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata)) {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
         try {
           dependencyEvaluationChannel.publish({
             context: structuredClone(hookContext.context),
@@ -493,6 +493,62 @@ describe('dependent flag exposures', () => {
       'leaf',
       'root',
     ])
+  })
+
+  it('preserves dependency evaluations when a hook fails before a later telemetry hook', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const sidecar = new DependencyTelemetrySidecar()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyTelemetrySidecar: sidecar })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+    const publishDependencyEvaluations = (
+      hookContext: { context: EvaluationContext },
+      evaluationDetails: EvaluationDetails<FlagValue>
+    ) => {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
+        dependencyEvaluationChannel.publish({
+          context: hookContext.context,
+          details: {
+            ...evaluation.details,
+            flagKey: evaluation.flagKey,
+            flagMetadata: evaluation.details.flagMetadata ?? {},
+          },
+        })
+      }
+    }
+    client.addHooks({
+      after: publishDependencyEvaluations,
+      finally: publishDependencyEvaluations,
+    })
+
+    const failed = await client.getBooleanDetails(
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      {
+        hooks: [
+          {
+            after: () => {
+              throw new Error('application hook failed before telemetry')
+            },
+          },
+        ],
+      }
+    )
+
+    expect(failed).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(
+        ([event]) => (event as DependencyEvaluationEvent).details.flagKey
+      )
+    ).toEqual(['leaf'])
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
   })
 
   it('records dependency exposure decisions when the exposure channel has no subscribers', async () => {
