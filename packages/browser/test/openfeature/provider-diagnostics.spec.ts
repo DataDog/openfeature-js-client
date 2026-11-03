@@ -2,6 +2,7 @@ import { createHttpRequest } from '@datadog/browser-core'
 import type { Logger } from '@openfeature/web-sdk'
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
 import * as cacheHelpers from '../../src/cache/helpers'
+import { IndexedDBAssignmentCache } from '../../src/cache/indexeddb-assignment-cache'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogProvider } from '../../src/openfeature/provider'
@@ -228,6 +229,60 @@ describe('provider diagnostics', () => {
     await provider.onContextChange({}, { targetingKey: 'current' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(await eventTypes(provider)).toEqual(['ready', 'provider_error'])
+  })
+
+  it('preserves the error report when an update is superseded during exposure-cache cleanup', async () => {
+    jest.spyOn(cacheHelpers, 'hasIndexedDB').mockReturnValue(true)
+    const fetch = jest
+      .fn()
+      .mockImplementationOnce(success)
+      .mockImplementationOnce(failure)
+      .mockImplementationOnce(success)
+      .mockImplementation(failure)
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    await provider.initialize()
+    const cached = jest.mocked(IndexedDBFlagsCache.prototype.set).mock.calls[0][0]
+    const fallback = {
+      ...cached,
+      precomputed: {
+        ...cached.precomputed!,
+        context: { targetingKey: 'superseded' },
+        response: {
+          ...cached.precomputed!.response,
+          data: {
+            ...cached.precomputed!.response.data,
+            attributes: {
+              ...cached.precomputed!.response.data.attributes,
+              createdAt: cached.precomputed!.response.data.attributes.createdAt + 1,
+            },
+          },
+        },
+      },
+    }
+    jest.mocked(IndexedDBFlagsCache.prototype.get).mockResolvedValueOnce(fallback)
+    let finishClear!: () => void
+    const clear = jest.spyOn(IndexedDBAssignmentCache.prototype, 'clear').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishClear = resolve
+        })
+    )
+    const superseded = provider.onContextChange({}, { targetingKey: 'superseded' })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(clear).toHaveBeenCalledTimes(1)
+    await provider.onContextChange({}, { targetingKey: 'current' })
+    await superseded
+    expect(provider.status).toBe(ProviderStatus.READY)
+    finishClear()
+    await jest.advanceTimersByTimeAsync(30_000)
+    const prematureErrors = mockSend.mock.calls
+      .flatMap(([request]) => diagnosticRecords(request.data))
+      .filter((record) => record.payload.event_type === 'provider_error').length
+    mockSend.mockClear()
+    await provider.onContextChange({}, { targetingKey: 'current' })
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    const nextErrors = (await eventTypes(provider)).filter((type) => type === 'provider_error').length
+    expect({ prematureErrors, nextErrors }).toEqual({ prematureErrors: 0, nextErrors: 1 })
   })
 
   it('does not claim readiness when startup only recovers from persistent cache', async () => {

@@ -253,6 +253,8 @@ export class DatadogProvider extends DatadogProviderBase {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          // Report fallback errors only after the update survives cache reconciliation.
+          if (fromCache) this.lifecycleTelemetry?.providerError()
           this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
@@ -324,7 +326,6 @@ export class DatadogProvider extends DatadogProviderBase {
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
         if (config && canUse(config)) {
-          if (!signal.aborted) this.lifecycleTelemetry?.providerError()
           return { config, fromCache: true }
         }
       } catch (err) {}
