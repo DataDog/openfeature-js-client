@@ -445,9 +445,10 @@ class ExposureLoggingHook implements Hook {
           ...(features && { features }),
           timestamp: timeStampNow(),
         }
-        // Cache admission does not depend on publication, so a failed defensive
-        // snapshot must not suppress the only exposure for this assignment.
-        this.exposureChannel.publish(cloneForTelemetry(exposure) ?? exposure)
+        // Never publish caller-owned objects. If structured cloning rejects an
+        // unsupported value, fall back to a detached JSON-safe snapshot.
+        const telemetryExposure = cloneForTelemetry(exposure)
+        if (telemetryExposure !== undefined) this.exposureChannel.publish(telemetryExposure)
       }
       if (!sharedDecision) this.exposureCache?.set(exposureEvent)
     } catch {
@@ -460,7 +461,46 @@ function cloneForTelemetry<T>(value: T): T | undefined {
   try {
     return structuredClone(value)
   } catch {
-    // Telemetry is best effort and must not affect flag evaluation semantics.
-    return undefined
+    try {
+      const fallback = cloneTelemetryValue(value, new WeakSet())
+      return fallback === unsupportedTelemetryValue ? undefined : (fallback as T)
+    } catch {
+      // Telemetry is best effort and must not affect flag evaluation semantics.
+      return undefined
+    }
   }
+}
+
+const unsupportedTelemetryValue = Symbol('unsupported telemetry value')
+
+function cloneTelemetryValue(value: unknown, seen: WeakSet<object>): unknown | typeof unsupportedTelemetryValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
+    return value
+  }
+  if (typeof value !== 'object' || seen.has(value)) return unsupportedTelemetryValue
+
+  seen.add(value)
+  if (Array.isArray(value)) {
+    const clone: unknown[] = []
+    for (const entry of value) {
+      const clonedEntry = cloneTelemetryValue(entry, seen)
+      if (clonedEntry !== unsupportedTelemetryValue) clone.push(clonedEntry)
+    }
+    return clone
+  }
+
+  const clone: Record<string, unknown> = {}
+  for (const key of Object.keys(value)) {
+    let entry: unknown
+    try {
+      entry = (value as Record<string, unknown>)[key]
+    } catch {
+      continue
+    }
+    const clonedEntry = cloneTelemetryValue(entry, seen)
+    if (clonedEntry !== unsupportedTelemetryValue) {
+      Object.defineProperty(clone, key, { value: clonedEntry, enumerable: true, configurable: true, writable: true })
+    }
+  }
+  return clone
 }

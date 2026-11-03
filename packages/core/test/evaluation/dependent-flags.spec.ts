@@ -283,10 +283,10 @@ describe('dependent flag evaluation', () => {
       })
     )
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-fallback' } })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { variant: 'on' } }])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('does not publish protobuf exposures without a retained successful-path witness', () => {
@@ -301,9 +301,9 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.root.allocations[0].targetingConditionIndex = 2
 
-    const { result, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: true, variant: 'on', flagMetadata: { __dd_allocation_key: 'root-targeted' } })
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('applies the protobuf maximum dependency depth override', () => {
@@ -343,7 +343,7 @@ describe('dependent flag evaluation', () => {
     const config = protobufDependentConfiguration(true)
     config.strings[1] = ''
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
     expect(result).toMatchObject({
       value: false,
@@ -352,20 +352,20 @@ describe('dependent flag evaluation', () => {
       errorMessage: 'Flag evaluation key must not be empty',
     })
     expect(dependencies).toEqual([])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('reports an unsupported protobuf prerequisite variation type as a dependency parse error', () => {
     const config = protobufDependentConfiguration(true)
     config.flags.prerequisite.variationType = 6 as VariationType
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('propagates a nested missing protobuf dependency and records its ancestor', () => {
@@ -381,13 +381,13 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies).toMatchObject([
       { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
     expect(logger.debug).toHaveBeenCalledWith('prerequisite flag is missing', { flagKey: 'missing' })
     expect(logger.warn).toHaveBeenCalledTimes(1)
   })
@@ -405,7 +405,7 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({
       value: false,
       reason: 'ERROR',
@@ -415,7 +415,7 @@ describe('dependent flag evaluation', () => {
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
     ])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
     expect(logger.debug).toHaveBeenCalledWith('flag dependency cycle detected', { flagKey: 'root' })
     expect(logger.warn).toHaveBeenCalledTimes(1)
   })
@@ -442,10 +442,10 @@ describe('dependent flag evaluation', () => {
     )
     config.flags.root.allocations[0].targetingConditionIndex = 3
 
-    const { result, dependencies, onExposures } = evaluateProtobuf(roundTrip(config), logger)
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
     expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
-    expect(onExposures).not.toHaveBeenCalled()
+    expect(exposures).toEqual([])
   })
 
   it('memoizes shared protobuf condition DAG outcomes', () => {
@@ -910,7 +910,6 @@ function roundTrip(configuration: Parameters<typeof encodeFlagsConfiguration>[0]
 }
 
 function evaluateProtobuf(configuration: ReturnType<typeof decodeFlagsConfiguration>, logger: Logger) {
-  const onExposures = jest.fn()
   const trace = evaluateRulesBasedConfigurationWithTrace(
     configuration,
     'boolean',
@@ -919,5 +918,9 @@ function evaluateProtobuf(configuration: ReturnType<typeof decodeFlagsConfigurat
     { targetingKey: 'subject' },
     logger
   )
-  return { result: trace.details, dependencies: trace.dependencyEvaluations, onExposures }
+  return {
+    result: trace.details,
+    dependencies: trace.dependencyEvaluations,
+    exposures: trace.dependencyExposures,
+  }
 }
