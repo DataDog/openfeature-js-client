@@ -50,9 +50,10 @@ export interface DatadogNodeServerProviderOptions {
    */
   exposureChannel: Channel<ExposureEvent>
   /**
-   * Report prerequisite evaluations, including errors propagated through dependency ancestors.
+   * Internal sidecar consumed by the integration's root evaluation hook.
+   * @internal
    */
-  dependencyEvaluationChannel?: Channel<DependencyEvaluationEvent>
+  dependencyTelemetrySidecar?: DependencyTelemetrySidecar
   /**
    * Timeout in milliseconds for provider initialization.
    * If the configuration is not set within this time, initialization will fail.
@@ -63,17 +64,63 @@ export interface DatadogNodeServerProviderOptions {
   experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
-export type DependencyEvaluationEvent = {
-  context: EvaluationContext
-  details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
-}
-
 type PreparedDependencyExposure = {
   details: Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue }
   event: ExposureEvent
 }
 
-type DependencyExposureBatches = WeakMap<object, readonly PreparedDependencyExposure[]>
+type PreparedDependencyTelemetry = {
+  dependencyEvaluations: readonly DependencyEvaluation[]
+  dependencyExposures: readonly PreparedDependencyExposure[]
+}
+
+/**
+ * Associates a completed dependency trace with the root result's metadata object.
+ * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
+ * @internal
+ */
+export class DependencyTelemetrySidecar {
+  private readonly batches = new WeakMap<object, PreparedDependencyTelemetry>()
+
+  constructor(readonly collectDependencyEvaluations = true) {}
+
+  stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void {
+    if (telemetry.dependencyEvaluations.length > 0 || telemetry.dependencyExposures.length > 0) {
+      this.batches.set(rootMetadata, telemetry)
+    }
+  }
+
+  takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[] {
+    if (metadata === undefined) {
+      return []
+    }
+    const batch = this.batches.get(metadata)
+    if (batch === undefined) {
+      return []
+    }
+    const evaluations = batch.dependencyEvaluations
+    batch.dependencyEvaluations = []
+    if (batch.dependencyExposures.length === 0) {
+      this.batches.delete(metadata)
+    }
+    return evaluations
+  }
+
+  takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[] {
+    if (metadata === undefined) {
+      return []
+    }
+    const exposures = this.batches.get(metadata)?.dependencyExposures ?? []
+    this.batches.delete(metadata)
+    return exposures
+  }
+
+  discard(metadata: object | undefined): void {
+    if (metadata !== undefined) {
+      this.batches.delete(metadata)
+    }
+  }
+}
 
 export class DatadogNodeServerProvider implements Provider {
   readonly metadata: ProviderMetadata = {
@@ -85,7 +132,7 @@ export class DatadogNodeServerProvider implements Provider {
   private initController?: InitializationController
   readonly events: ProviderEventEmitter<ServerProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
-  private readonly dependencyExposureBatches: DependencyExposureBatches = new WeakMap()
+  private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecar
 
   private configuration?: UniversalFlagConfigurationV1 | undefined
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
@@ -95,10 +142,11 @@ export class DatadogNodeServerProvider implements Provider {
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
     this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
-    // Runs in the final hook stage, where the SDK has turned any later hook error
-    // into an error result, so a failed evaluation is never published or recorded.
+    this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
     this.hooks.push(
-      new ExposureLoggingHook(this.exposureCache, this.options.exposureChannel, this.dependencyExposureBatches)
+      // Runs in the final hook stage, where the SDK has turned any later hook error
+      // into an error result, so a failed evaluation is never published or recorded.
+      new ExposureLoggingHook(this.exposureCache, this.options.exposureChannel, this.dependencyTelemetrySidecar)
     )
   }
 
@@ -199,10 +247,9 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
+      { collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations }
     )
-    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
-    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.stageDependencyTelemetry(context, trace.details, trace.dependencyEvaluations, trace.dependencyExposures)
     this.handleExposure(flagKey, context, trace.details)
     return trace.details
   }
@@ -221,10 +268,9 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
+      { collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations }
     )
-    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
-    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.stageDependencyTelemetry(context, trace.details, trace.dependencyEvaluations, trace.dependencyExposures)
     this.handleExposure(flagKey, context, trace.details)
     return trace.details
   }
@@ -243,10 +289,9 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
+      { collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations }
     )
-    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
-    this.handleDependencyExposures(context, trace.details, trace.dependencyExposures)
+    this.stageDependencyTelemetry(context, trace.details, trace.dependencyEvaluations, trace.dependencyExposures)
     this.handleExposure(flagKey, context, trace.details)
     return trace.details
   }
@@ -271,50 +316,26 @@ export class DatadogNodeServerProvider implements Provider {
       context,
       _logger,
       this.experimentationOptOutMode,
-      { collectDependencyEvaluations: this.options.dependencyEvaluationChannel?.hasSubscribers === true }
+      { collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations }
     )
     const resolutionDetails = trace.details as ResolutionDetails<T>
-    this.handleDependencyEvaluations(context, trace.dependencyEvaluations)
-    this.handleDependencyExposures(context, resolutionDetails, trace.dependencyExposures)
+    this.stageDependencyTelemetry(context, resolutionDetails, trace.dependencyEvaluations, trace.dependencyExposures)
     this.handleExposure(flagKey, context, resolutionDetails)
     return resolutionDetails
   }
 
-  private handleDependencyEvaluations(context: EvaluationContext, evaluations: readonly DependencyEvaluation[]): void {
-    if (!this.options.dependencyEvaluationChannel?.hasSubscribers) {
-      return
-    }
-    for (const evaluation of evaluations) {
-      try {
-        const eventContext = cloneForTelemetry(context)
-        if (eventContext === undefined) {
-          continue
-        }
-        this.options.dependencyEvaluationChannel.publish({
-          context: eventContext,
-          details: {
-            ...evaluation.details,
-            flagKey: evaluation.flagKey,
-            flagMetadata: evaluation.details.flagMetadata ?? {},
-          },
-        })
-      } catch {
-        // Evaluation telemetry is best effort and must not affect flag evaluation semantics.
-      }
-    }
-  }
-
-  private handleDependencyExposures(
+  private stageDependencyTelemetry(
     context: EvaluationContext,
     rootDetails: ResolutionDetails<FlagValue>,
-    evaluations: readonly DependencyExposureCandidate[]
+    dependencyEvaluations: readonly DependencyEvaluation[],
+    exposureCandidates: readonly DependencyExposureCandidate[]
   ): void {
     const rootMetadata = rootDetails.flagMetadata
-    if (rootMetadata === undefined || evaluations.length === 0) {
+    if (rootMetadata === undefined) {
       return
     }
     const prepared: PreparedDependencyExposure[] = []
-    for (const evaluation of evaluations) {
+    for (const evaluation of exposureCandidates) {
       const metadata = (evaluation.details.flagMetadata ?? {}) as FlagMetadata
       const details = {
         ...evaluation.details,
@@ -328,9 +349,10 @@ export class DatadogNodeServerProvider implements Provider {
       if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, event)
       prepared.push({ details, event })
     }
-    if (prepared.length > 0) {
-      this.dependencyExposureBatches.set(rootMetadata, prepared)
-    }
+    this.dependencyTelemetrySidecar.stage(rootMetadata, {
+      dependencyEvaluations,
+      dependencyExposures: prepared,
+    })
   }
 
   /** Prepares a verdict finalized by the provider hook after successful evaluation. */
@@ -363,7 +385,7 @@ class ExposureLoggingHook implements Hook {
   constructor(
     private readonly exposureCache: AssignmentCache | undefined,
     private readonly exposureChannel: Channel<ExposureEvent>,
-    private readonly dependencyExposureBatches: DependencyExposureBatches
+    private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecar
   ) {}
 
   after(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
@@ -373,9 +395,7 @@ class ExposureLoggingHook implements Hook {
   error(hookContext: Readonly<HookContext<FlagValue>>): void {
     const evaluationDetails = this.pending.get(hookContext)
     const metadata = evaluationDetails?.flagMetadata
-    if (metadata !== undefined) {
-      this.dependencyExposureBatches.delete(metadata)
-    }
+    this.dependencyTelemetrySidecar.discard(metadata)
     this.pending.delete(hookContext)
   }
 
@@ -389,8 +409,7 @@ class ExposureLoggingHook implements Hook {
     }
     const metadata = evaluationDetails.flagMetadata as FlagMetadata | undefined
     if (metadata !== undefined) {
-      const dependencyExposures = this.dependencyExposureBatches.get(metadata) ?? []
-      this.dependencyExposureBatches.delete(metadata)
+      const dependencyExposures = this.dependencyTelemetrySidecar.takeDependencyExposures(metadata)
       for (const dependencyExposure of dependencyExposures) {
         this.completeExposure(dependencyExposure.details, dependencyExposure.event)
       }
