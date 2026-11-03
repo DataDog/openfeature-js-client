@@ -2,7 +2,7 @@
 /**
  * Shared synthetic corpus, response-signing-v1-1.
  * Source: pinned ffe-response-signing-data submodule.
- * corpus.json SHA256 f749069c3344eb72eac11a614bdb92215208e472feeb98467367d78ef42782c5.
+ * corpus.json SHA256 393490bfefe382b9b75cf2964c131a910faa679888689457f99c2da2dc57fbbd.
  * 46 response cases: 6 accepts, 40 rejects. Two server-only private-key cases are excluded by profile.
  */
 import { createHash, webcrypto } from 'node:crypto'
@@ -38,7 +38,7 @@ afterAll(() => Object.defineProperty(globalThis, 'crypto', previousCrypto))
 
 test('the independent corpus and applicability counts are unchanged', () => {
   expect(createHash('sha256').update(raw).digest('hex')).toBe(
-    'f749069c3344eb72eac11a614bdb92215208e472feeb98467367d78ef42782c5'
+    '393490bfefe382b9b75cf2964c131a910faa679888689457f99c2da2dc57fbbd'
   )
   expect(corpus.cases).toHaveLength(46)
   expect(corpus.cases.filter((c) => c.expected_accept)).toHaveLength(6)
