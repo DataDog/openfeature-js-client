@@ -127,3 +127,41 @@ test.each(keyUsageSupplement.cases)('canonical DER control: $id', async (vector)
   if (vector.expected_accept) await expect(result).resolves.toHaveProperty('expiresAt')
   else await expect(result).rejects.toThrow('invalid-certificate')
 })
+
+const isolatedRaw = readFileSync(join(fixtureDirectory, 'isolated-certificate-rules.json'))
+const isolated = JSON.parse(isolatedRaw.toString()) as typeof corpus
+test('isolated certificate fixture integrity', () => {
+  expect(createHash('sha256').update(isolatedRaw).digest('hex')).toBe(
+    '7304bb12f011688a39b53ebd5fb5d842febd0f5ae81e67126a7e24d1e79a225a'
+  )
+  expect(isolated.cases).toHaveLength(4)
+})
+test.each(isolated.cases)('$id', async (vector) => {
+  const request = {
+    ...vector.request,
+    headers: new Headers(vector.request.headers),
+    body: decodeBase64(vector.request.body_base64, 1024 * 1024),
+  }
+  const response = {
+    ...vector.response,
+    headers: new Headers(vector.response.headers),
+    body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
+  }
+  if (vector.expected_accept) {
+    await expect(verifyResponse(request, response, [isolated.anchor_der_base64], vector.now)).resolves.toEqual({
+      expiresAt: Number(response.headers.get('x-datadog-feature-flags-expires-at')),
+      verifiedAt: vector.now,
+    })
+    const transcript = await buildSigningTranscript(
+      request,
+      response,
+      Number(response.headers.get('x-datadog-feature-flags-issued-at')),
+      Number(response.headers.get('x-datadog-feature-flags-expires-at')),
+      decodeBase64(response.headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
+      decodeBase64(response.headers.get('x-datadog-feature-flags-signing-intermediate')!, 4096)
+    )
+    expect(Buffer.from(transcript).toString('base64')).toBe(vector.transcript_base64)
+  } else {
+    await expect(verifyResponse(request, response, [isolated.anchor_der_base64], vector.now)).rejects.toThrow()
+  }
+})
