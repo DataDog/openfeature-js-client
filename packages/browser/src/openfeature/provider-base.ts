@@ -24,17 +24,21 @@ export abstract class DatadogProviderBase implements Provider {
 
   protected constructor(options: DebugConfiguration = {}) {
     this.debug = createDebugLogger(options.debugMode)
-    this.events = new OpenFeatureEventEmitter()
+    const events = new OpenFeatureEventEmitter()
+    this.events = events
     if (this.debug.enabled) {
+      // OpenFeature isolates sync/async handler failures and reports them through its logger.
+      // Observe that boundary without changing handler registration, removal, or error isolation.
+      events.setLogger({
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: (message, ...args) => this.debug.event('provider.listener_failed', () => ({ message, args })),
+      })
       const emit = this.events.emit.bind(this.events)
       this.events.emit = ((...args: Parameters<typeof emit>) => {
         this.debug.event('provider.event', () => ({ name: args[0], payload: args[1] }))
-        try {
-          return emit(...args)
-        } catch (error) {
-          this.debug.event('provider.listener_failed', () => ({ name: args[0], error }))
-          throw error
-        }
+        return emit(...args)
       }) as typeof this.events.emit
     }
   }

@@ -215,19 +215,27 @@ export function debugUrl(input: string): string {
   }
 }
 
-export function configurationDebugFields(configuration?: FlagsConfiguration): Record<string, unknown> {
+/** Metadata that does not traverse flag maps; full configuration snapshots belong at install boundaries. */
+export function configurationSummaryFields(configuration?: FlagsConfiguration): Record<string, unknown> {
   const precomputed = configuration?.precomputed
   const fetchedAt = precomputed?.fetchedAt ?? configuration?.rules?.fetchedAt
   return {
-    configuration,
     assignmentContext: precomputed?.context,
     fetchedAt,
     ageMs: fetchedAt === undefined ? undefined : Date.now() - fetchedAt,
     createdAt: precomputed?.response?.data?.attributes?.createdAt,
+    expirationPolicy: 'no_sdk_ttl',
+    serverDecisionTrace: 'not_available',
+  }
+}
+
+export function configurationDebugFields(configuration?: FlagsConfiguration): Record<string, unknown> {
+  const precomputed = configuration?.precomputed
+  return {
+    ...configurationSummaryFields(configuration),
+    configuration,
     flagKeys: precomputed && Object.keys(precomputed.response.data.attributes.flags),
     flagCount: precomputed && Object.keys(precomputed.response.data.attributes.flags).length,
     flagErrors: precomputed?.flagErrors,
-    expirationPolicy: 'no_sdk_ttl',
-    serverDecisionTrace: 'not_available',
   }
 }

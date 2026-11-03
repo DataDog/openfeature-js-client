@@ -293,3 +293,8 @@ provider events and actual evaluation calls, not through an assertion that a UI 
 Transport diagnostics use the existing pinned `@datadog/browser-core` 7.1.0 retry implementation through its CJS
 subpath because the public request observable omits terminal HTTP statuses. Keep the adapter parity tests when
 upgrading browser-core. Debug-disabled requests still use the public `createHttpRequest` path.
+
+Review regressions are covered in `debug-mode.spec.ts`: getter-backed targeting identities stay identical with debug
+on/off (provider and standalone fetch); evaluations retain raw assignment details without repeating unrelated flags;
+and synchronous/asynchronous provider-handler failures are logged while isolation and add/remove semantics stay intact.
+Client-level listeners remain owned by OpenFeature's own logger.

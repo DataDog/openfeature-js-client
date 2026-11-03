@@ -1,10 +1,11 @@
 import { configurationFromString } from '@datadog/flagging-core/rules-based'
-import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
+import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { withStore } from '../../src/cache/indexeddb-store'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import { withRetry, withTimeout } from '../../src/transport/fetch'
+import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import precomputed from '../data/precomputed-v1.json'
 import rulesWire from '../data/rules-v1-wire.json'
 
@@ -64,6 +65,127 @@ describe('browser debug-mode scenarios', () => {
     localStorage.clear()
     jest.restoreAllMocks()
   })
+
+  it.each(['provider', 'standalone'] as const)(
+    'preserves targeting getter reads through %s with debug on or off',
+    async (mode) => {
+      const outcomes = []
+      for (const debugMode of [false, true]) {
+        let reads = 0
+        const input = {
+          get targetingKey() {
+            return 'subject-' + ++reads
+          },
+        }
+        if (mode === 'provider') {
+          await provider({ debugMode }).initialize(input)
+        } else {
+          await fetchPrecomputedConfiguration({ ...options, debugMode, context: input })
+        }
+        const request = JSON.parse(fetch.mock.calls.slice(-1)[0][1].body)
+        outcomes.push({ reads, subject: request.data.attributes.subject })
+      }
+      expect(outcomes[1]).toEqual(outcomes[0])
+      expect(outcomes[0].reads).toBe(mode === 'provider' ? 1 : 2)
+      expect(outcomes[0].subject.targeting_key).toBe(mode === 'provider' ? 'subject-1' : 'subject-2')
+    }
+  )
+
+  it.each([false, true])('does not exhaust a single-read targeting getter with debugMode=%s', async (debugMode) => {
+    let reads = 0
+    const input = {
+      get targetingKey() {
+        if (++reads > 1) throw new Error('targeting key read twice')
+        return 'subject'
+      },
+    }
+    await expect(provider({ debugMode }).initialize(input)).resolves.toBeUndefined()
+    expect(reads).toBe(1)
+  })
+
+  it.each([false, true])(
+    'preserves listener isolation and removal while reporting failures with debugMode=%s',
+    async (debugMode) => {
+      const value = new DatadogCoreProvider({ debugMode })
+      const sync = jest.fn(() => {
+        throw new Error('sync handler failure')
+      })
+      const asyncHandler = jest.fn(async () => {
+        throw new Error('async handler failure')
+      })
+      const healthy = jest.fn()
+      value.events.addHandler(ProviderEvents.ConfigurationChanged, sync)
+      value.events.addHandler(ProviderEvents.ConfigurationChanged, asyncHandler)
+      value.events.addHandler(ProviderEvents.ConfigurationChanged, healthy)
+      value.events.addHandler(ProviderEvents.ConfigurationChanged, healthy)
+      value.events.removeHandler(ProviderEvents.ConfigurationChanged, healthy)
+      expect(() => value.events.emit(ProviderEvents.ConfigurationChanged)).not.toThrow()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(sync).toHaveBeenCalledTimes(1)
+      expect(asyncHandler).toHaveBeenCalledTimes(1)
+      expect(healthy).toHaveBeenCalledTimes(1)
+      const failures = events('provider.listener_failed')
+      expect(failures).toHaveLength(debugMode ? 2 : 0)
+      if (debugMode) {
+        expect(JSON.stringify(failures)).toContain('sync handler failure')
+        expect(JSON.stringify(failures)).toContain('async handler failure')
+      }
+      value.events.removeAllHandlers()
+      value.events.emit(ProviderEvents.ConfigurationChanged)
+      await Promise.resolve()
+      expect(healthy).toHaveBeenCalledTimes(1)
+      expect(events('provider.listener_failed')).toHaveLength(debugMode ? 2 : 0)
+    }
+  )
+
+  it.each(['provider', 'core'] as const)(
+    'logs full %s configurations on install without repeating unrelated flags per evaluation',
+    async (mode) => {
+      const payload = JSON.parse(JSON.stringify(precomputed))
+      for (let index = 0; index < 100; index++) {
+        payload.data.attributes.flags['unrelated-' + index] = {
+          ...payload.data.attributes.flags['string-flag'],
+          variationValue: 'unrelated-payload-' + index,
+        }
+      }
+      fetch.mockResolvedValue(response(payload))
+      let value: DatadogProvider | DatadogCoreProvider
+      if (mode === 'provider') {
+        value = provider()
+        await value.initialize(context)
+      } else {
+        value = new DatadogCoreProvider({ debugMode: true })
+        value.setConfiguration(await fetchPrecomputedConfiguration({ ...options, debugMode: false, context }))
+        await value.initialize(context)
+      }
+      expect(JSON.stringify(log.mock.calls)).toContain('unrelated-payload-99')
+      log.mockClear()
+      for (let index = 0; index < 10; index++) {
+        expect(value.resolveStringEvaluation('string-flag', 'fallback', context, logger).value).toBe('red')
+      }
+      expect(JSON.stringify(log.mock.calls)).not.toContain('unrelated-payload')
+      expect(events('evaluation.completed')).toHaveLength(10)
+      for (const record of events('evaluation.completed')) {
+        expect(record.details).not.toHaveProperty('configuration')
+        expect(record.details).not.toHaveProperty('flagKeys')
+        expect(record.details).not.toHaveProperty('flagErrors')
+        expect(record.details).toMatchObject({
+          defaultValue: 'fallback',
+          requestedContext: context,
+          result: { value: 'red', variant: 'variation-123' },
+        })
+        expect(record.details[mode === 'provider' ? 'configurationRevision' : 'configurationId']).toBeDefined()
+      }
+      expect(
+        events('evaluation.trace').some(
+          (record) =>
+            record.details.message === 'precomputed flag lookup' &&
+            record.details.args[0].rawFlag.variationValue === 'red'
+        )
+      ).toBe(true)
+    }
+  )
 
   it('logs startup, normalization, install and exact returned values without credentials', async () => {
     const value = provider()

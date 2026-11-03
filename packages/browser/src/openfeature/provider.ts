@@ -20,7 +20,7 @@ import type {
 import { ErrorCode, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
-import { bindDebugSignal, configurationDebugFields, registerDebugLogger } from '../debug'
+import { bindDebugSignal, configurationDebugFields, configurationSummaryFields, registerDebugLogger } from '../debug'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -166,7 +166,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   protected debugEvaluationFields(): Record<string, unknown> {
     return {
-      ...configurationDebugFields(this.flagsConfiguration),
+      ...configurationSummaryFields(this.flagsConfiguration),
       contextRevision: this.contextRevision,
       configurationRevision: this.configurationRevision,
       source: this.configurationSource,
@@ -215,6 +215,7 @@ export class DatadogProvider extends DatadogProviderBase {
     const revision = ++this.contextRevision
     const debug = this.debug.child({ contextRevision: revision, requestId: revision })
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context, debug) : context
+    const evaluationContext = { ...effectiveContext }
     debug.event('context.accepted', () => ({
       rawContext: context,
       effectiveContext,
@@ -222,9 +223,8 @@ export class DatadogProvider extends DatadogProviderBase {
       assignmentContext: this.evaluationContext,
       trigger,
       closed: this.closed,
-      targetingKeyPresent: !!effectiveContext.targetingKey,
+      targetingKeyPresent: !!evaluationContext.targetingKey,
     }))
-    const evaluationContext = { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)
     this.requestedEvaluationContext = evaluationContext

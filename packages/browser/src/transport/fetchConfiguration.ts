@@ -175,10 +175,11 @@ async function requestPrecomputedConfiguration(
   }
 
   const fetchImplementation = options.fetch ?? globalThis.fetch
+  const targetingKey = options.context.targetingKey || ''
   debug.event('context.normalized', () => ({
     rawContext: options.context,
     normalizedContext: stringifiedContext,
-    targetingKey: options.context.targetingKey || '',
+    targetingKey,
     optedOut,
     flagSelection,
     capabilities: capabilitiesHeader,
@@ -199,7 +200,7 @@ async function requestPrecomputedConfiguration(
               source: sourcePayload,
               ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
               subject: {
-                targeting_key: options.context.targetingKey || '',
+                targeting_key: targetingKey,
                 targeting_attributes: stringifiedContext,
               },
               ...(flagSelection && {

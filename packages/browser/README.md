@@ -132,7 +132,9 @@ IDs; uploads have batch IDs. The initial `debug.enabled` record confirms the opt
 Logs include **complete raw contexts, normalized targeting attributes, flag values, defaults, configuration responses,
 assignment metadata and event payloads**. Transport credential values and custom-header values are omitted from
 configuration diagnostics. Context attributes remain intact even if their names resemble credential fields.
-Values are snapshotted at logging time. Large records are emitted as `debug.chunk` records: group by
+Full configurations are logged at fetch, installation and cache boundaries. Per-evaluation records reference their
+configuration ID/revision and retain raw context, defaults, results and the evaluated assignment without repeating
+unrelated flags. Values are snapshotted at logging time. Large records are emitted as `debug.chunk` records: group by
 `providerInstanceId` and `sequence`, order by `chunk`, concatenate `data`, then parse the resulting JSON.
 Accessors are marked without invoking them, and cycles/undefined/non-finite numbers/BigInts use explicit type markers.
 
@@ -153,7 +155,8 @@ Useful events:
 `sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures
 can be indistinguishable and are reported as an unknown transport failure. Precomputed assignments expose the
 server's returned metadata, not a reconstructed server rule trace. The provider emits configuration/state events;
-it cannot observe whether React rendered or an Angular subscription updated the UI.
+it cannot observe whether React rendered or an Angular subscription updated the UI. Listener-failure diagnostics cover
+handlers registered on the provider emitter; OpenFeature client listeners use OpenFeature's own error logging.
 
 `DatadogCoreProvider` also accepts `{ debugMode: true }`. For application-managed tracking, pass `debugMode: true`
 to each `createDatadogExposureLoggingHook`, `createDatadogEvaluationLoggingHook`, or `createDatadogRumTrackingHook`

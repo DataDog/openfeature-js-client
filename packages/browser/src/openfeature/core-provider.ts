@@ -16,7 +16,12 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError, ProviderEvents, ProviderNotReadyError } from '@openfeature/web-sdk'
-import { configurationDebugFields, type DebugConfiguration, registerDebugLogger } from '../debug'
+import {
+  configurationDebugFields,
+  configurationSummaryFields,
+  type DebugConfiguration,
+  registerDebugLogger,
+} from '../debug'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
@@ -122,7 +127,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
 
   protected debugEvaluationFields(): Record<string, unknown> {
     return {
-      ...configurationDebugFields(this.flagsConfiguration),
+      ...configurationSummaryFields(this.flagsConfiguration),
       configurationId: this.flagsConfigurationId,
       context: this.context,
       source: 'application_managed',
