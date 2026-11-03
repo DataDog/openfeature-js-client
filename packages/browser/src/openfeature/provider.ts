@@ -35,9 +35,12 @@ import {
 import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
 import { registerDatadogProvider } from './exposure-scope'
 import { stampExposureCacheVerdict } from './exposures'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
+import { createLifecycleTelemetry } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
+import { runTrackingLifecycleOperation } from './tracking'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -75,6 +78,9 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+  private flagEvaluationTransport?: FlagEvaluationTransport
+  private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
+  private initializationStarted = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -132,6 +138,7 @@ export class DatadogProvider extends DatadogProviderBase {
       options,
       configuration: this.configuration,
       enabledByDefault: true,
+      getTransport: () => this.flagEvaluationTransport,
       getTrackingContext,
       telemetryPolicy: this.telemetryPolicy,
     })
@@ -150,15 +157,44 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    if (!this.initializationStarted) {
+      this.initializationStarted = true
+      try {
+        if (this.configuration) {
+          this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
+          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.flagEvaluationTransport)
+        }
+      } catch {
+        // Diagnostic transport setup must not prevent flag evaluation.
+      }
+    }
+    const telemetry = this.lifecycleTelemetry
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context, 'initialization')
+    try {
+      return await this.setContext(context, 'initialization')
+    } catch (error) {
+      telemetry?.settle('failed')
+      throw error
+    }
   }
 
   async onClose(): Promise<void> {
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Diagnostic shutdown must not interrupt application shutdown.
+    }
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
-    await this.tracking.shutdown()
+    try {
+      await this.tracking.shutdown()
+    } finally {
+      await runTrackingLifecycleOperation(() => this.flagEvaluationTransport?.stop())
+      this.flagEvaluationTransport = undefined
+      this.lifecycleTelemetry = undefined
+      this.initializationStarted = false
+    }
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -217,6 +253,9 @@ export class DatadogProvider extends DatadogProviderBase {
           this.flagsConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          // Report fallback errors only after the update survives cache reconciliation.
+          if (fromCache) this.lifecycleTelemetry?.providerError()
+          this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -275,6 +314,11 @@ export class DatadogProvider extends DatadogProviderBase {
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       signal.throwIfAborted()
+      if (config.precomputed) {
+        this.lifecycleTelemetry?.configurationReceived()
+      } else if (config.precomputedError) {
+        this.lifecycleTelemetry?.providerError()
+      }
       this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
@@ -286,6 +330,7 @@ export class DatadogProvider extends DatadogProviderBase {
         }
       } catch (err) {}
 
+      if (!signal.aborted) this.lifecycleTelemetry?.providerError()
       throw err
     }
   }
