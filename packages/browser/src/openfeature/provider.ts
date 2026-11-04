@@ -36,7 +36,7 @@ import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './exper
 import { registerDatadogProvider } from './exposure-scope'
 import { stampExposureCacheVerdict } from './exposures'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
-import { createLifecycleTelemetry } from './lifecycleTelemetry'
+import { createLifecycleTelemetry, logDiagnostic } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
@@ -78,6 +78,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+  private readonly debugMode: boolean
   private flagEvaluationTransport?: FlagEvaluationTransport
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
   private initializationStarted = false
@@ -126,6 +127,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    this.debugMode = options.debugMode === true
     this.experimentationOptOutMode = getExperimentationOptOutMode(options)
     this.requestDiagnostics = createRequestDiagnostics()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
@@ -159,13 +161,22 @@ export class DatadogProvider extends DatadogProviderBase {
   async initialize(context: EvaluationContext = {}): Promise<void> {
     if (!this.initializationStarted) {
       this.initializationStarted = true
+      if (this.debugMode) {
+        logDiagnostic(
+          'Initializing. If no remote events arrive, check the client token, site, network, and Content Security Policy.'
+        )
+      }
       try {
         if (this.configuration) {
           this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
-          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.flagEvaluationTransport)
+          this.lifecycleTelemetry = createLifecycleTelemetry(
+            this.configuration,
+            this.debugMode,
+            this.flagEvaluationTransport
+          )
         }
       } catch {
-        // Diagnostic transport setup must not prevent flag evaluation.
+        if (this.debugMode) logDiagnostic('Lifecycle transport unavailable. Inspect local diagnostics instead.')
       }
     }
     const telemetry = this.lifecycleTelemetry
@@ -174,6 +185,8 @@ export class DatadogProvider extends DatadogProviderBase {
       return await this.setContext(context, 'initialization')
     } catch (error) {
       telemetry?.settle('failed')
+      if (this.debugMode)
+        logDiagnostic('Initialization failed. Inspect the configuration request in browser developer tools.')
       throw error
     }
   }
@@ -318,10 +331,14 @@ export class DatadogProvider extends DatadogProviderBase {
         this.lifecycleTelemetry?.configurationReceived()
       } else if (config.precomputedError) {
         this.lifecycleTelemetry?.providerError()
+        if (this.debugMode) logDiagnostic('Configuration could not be parsed. Inspect the local response.')
       }
       this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
+      if (!signal.aborted) {
+        if (this.debugMode) logDiagnostic('Configuration fetch failed. Cached configuration may still be available.')
+      }
       // Try to recover with current/cached config
       try {
         const config = await waitWithAbort(signal, cachedConfigPromise)
@@ -390,10 +407,12 @@ export class DatadogProvider extends DatadogProviderBase {
     // Bind the evaluated context (for example the RUM-enriched subject) to
     // successful results so customer hooks read the same identity the exposure
     // event reports. Error results without metadata keep their existing shape.
-    return bindEvaluationTelemetryResult(
+    const details = bindEvaluationTelemetryResult(
       boundResult,
       this.telemetryPolicy,
       optOutEnabled || boundResult.flagMetadata !== undefined ? context : undefined
     )
+    if (this.debugMode) logDiagnostic('Evaluation details', { flagKey, ...details })
+    return details
   }
 }

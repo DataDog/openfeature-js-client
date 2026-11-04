@@ -34,8 +34,8 @@ async function eventTypes(provider: DatadogProvider): Promise<string[]> {
   )
 }
 
-describe('provider diagnostics', () => {
-  const options = baseOptions
+describe.each([undefined, false, true])('provider diagnostics with debugMode=%s', (debugMode) => {
+  const options = { ...baseOptions, debugMode }
   beforeEach(() => {
     jest.useFakeTimers()
     jest.clearAllMocks()
@@ -44,7 +44,7 @@ describe('provider diagnostics', () => {
     jest.spyOn(IndexedDBFlagsCache.prototype, 'set').mockImplementation(() => {})
   })
   afterEach(() => {
-    expect(console.log).not.toHaveBeenCalled()
+    if (!debugMode) expect(console.log).not.toHaveBeenCalled()
     jest.clearAllTimers()
     jest.useRealTimers()
     jest.restoreAllMocks()
@@ -324,11 +324,19 @@ describe('provider diagnostics', () => {
     expect(await eventTypes(provider)).toEqual(['ready'])
   })
 
-  it('does not log or upload flag data when evaluation reporting is disabled', async () => {
+  it('only logs evaluation details in debug mode, without changing values or uploading flag data', async () => {
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: success })
     await provider.initialize()
     const details = provider.resolveBooleanEvaluation('missing-test-flag', true, {}, logger)
-    expect(console.log).not.toHaveBeenCalled()
+    if (debugMode) {
+      expect(console.log).toHaveBeenCalledWith(
+        '[Datadog Feature Flags]',
+        'Evaluation details',
+        JSON.stringify({ flagKey: 'missing-test-flag', ...details })
+      )
+    } else {
+      expect(console.log).not.toHaveBeenCalled()
+    }
     await eventTypes(provider)
     expect(JSON.stringify(mockSend.mock.calls)).not.toContain('missing-test-flag')
     expect(details.value).toBe(true)

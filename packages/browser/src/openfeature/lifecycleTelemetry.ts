@@ -41,11 +41,25 @@ type Diagnostic =
     }
   | { event_type: 'provider_error'; error_code: 'CONFIG_FETCH_FAILED' }
 
+/** Local diagnostics must never change provider behavior, even with a replaced console. */
+export function logDiagnostic(message: string, details?: unknown): void {
+  try {
+    console.log('[Datadog Feature Flags]', message, details === undefined ? '' : JSON.stringify(details))
+  } catch {
+    // Diagnostic output is best effort and never uploaded.
+  }
+}
+
 /** One initialization attempt and at most one later fetch error, using the evaluation transport. */
 export function createLifecycleTelemetry(
   configuration: FlaggingConfiguration,
+  debugMode = false,
   sharedTransport?: FlagEvaluationTransport
 ) {
+  function log(message: string, details?: unknown): void {
+    if (debugMode) logDiagnostic(message, details)
+  }
+
   const startedAt = Date.now()
   const monotonicStart = performance.now()
   let configurationReceived: Milestone | undefined
@@ -65,12 +79,14 @@ export function createLifecycleTelemetry(
 
   function emit(diagnostic: Diagnostic) {
     try {
+      log(diagnostic.event_type, diagnostic)
       const identity = bounded(configuration.applicationId, MAX_APPLICATION_ID_LENGTH)
         ? { application_id: configuration.applicationId }
         : bounded(configuration.service, MAX_SERVICE_ID_LENGTH)
           ? { service_id: configuration.service }
           : undefined
       if (!identity || !bounded(configuration.env, MAX_ENVIRONMENT_LENGTH)) {
+        log('Remote lifecycle diagnostics require an applicationId or service and an env.')
         return
       }
       const timestamp = Date.now()
@@ -78,6 +94,7 @@ export function createLifecycleTelemetry(
         'initialization' in diagnostic &&
         (timestamp < startedAt || diagnostic.initialization.duration_ms > MAX_INITIALIZATION_DURATION_MS)
       ) {
+        log('Initialization timing is outside the diagnostic contract.')
         return
       }
       const event = {
@@ -94,7 +111,7 @@ export function createLifecycleTelemetry(
       }
       batch.add(event)
     } catch {
-      // Diagnostic queue failures must not affect flag evaluation.
+      log('Unable to queue lifecycle diagnostics. Flag evaluation is unaffected.')
     }
   }
 
