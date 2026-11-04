@@ -1,4 +1,5 @@
 import { type Context, getGlobalObject } from '@datadog/browser-core'
+import { getPrecomputedDependencyEvaluations } from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import { type EvaluationTelemetryPolicy, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHook } from './tracking'
@@ -48,6 +49,11 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy): Hook 
           return
         }
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment && dependency.variant != null) {
+            globalObject.DD_RUM?.addFeatureFlagEvaluation?.(dependency.flagKey, dependency.variant)
+          }
+        }
         globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
       },
     },

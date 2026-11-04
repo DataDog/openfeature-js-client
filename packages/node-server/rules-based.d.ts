@@ -982,7 +982,8 @@ type PrecomputedConfigurationResponse = {
 		};
 	};
 };
-type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
+type PrecomputedFlag<T extends FlagValueType = FlagValueType> = PrecomputedSuccessfulFlag<T> | PrecomputedErrorFlag;
+type PrecomputedSuccessfulFlag<T extends FlagValueType = FlagValueType> = {
 	allocationKey: string;
 	variationKey: string;
 	variationType: T;
@@ -990,8 +991,30 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
 	/** Split features of the selected assignment; parsed leniently at evaluation time. */
 	features?: unknown;
+};
+type PrecomputedErrorFlag = {
+	reason: "ERROR";
+	errorCode: string;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
+	allocationKey?: never;
+	variationKey?: never;
+	variationType?: never;
+	variationValue?: never;
+	doLog?: never;
+	serialId?: never;
+};
+type PrecomputedDependencyEvaluation = {
+	flagKey: string;
+	/** Whether this dependency belongs to the root flag's selected assignment path. */
+	isPresentInAssignment: boolean;
+} | {
+	flagKey: string;
+	/** Root-relative prerequisite failure; error entries never belong to an assignment. */
+	reason: "ERROR";
+	errorCode: string;
 };
 export type FlagsConfigurationWire = string;
 /**

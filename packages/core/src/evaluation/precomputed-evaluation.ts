@@ -14,6 +14,7 @@ import {
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import { bindPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 
 const NOOP_LOGGER: Logger = {
@@ -153,28 +154,59 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  if ('errorCode' in flag) {
+    const flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      flag.dependencyEvaluations,
+      attributes.flags,
+      precomputed.flagErrors
+    )
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: flag.errorCode as ErrorCode,
+      flagMetadata,
+    }
+  }
+
   if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
+    const flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      flag.dependencyEvaluations,
+      attributes.flags,
+      precomputed.flagErrors
+    )
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
+      flagMetadata,
     }
   }
 
   const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(flag.features, logger)
+  const flagMetadata = {
+    __dd_allocation_key: flag.allocationKey,
+    __dd_do_log: flag.doLog,
+    allocationKey: flag.allocationKey,
+    variationType: flag.variationType,
+    doLog: flag.doLog,
+    ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
+    ...featureEntries,
+    ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+  } as PrecomputedFlagMetadata
+  bindPrecomputedDependencyEvaluations(
+    flagMetadata,
+    flag.dependencyEvaluations,
+    attributes.flags,
+    precomputed.flagErrors
+  )
   return {
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
-    flagMetadata: {
-      __dd_allocation_key: flag.allocationKey,
-      __dd_do_log: flag.doLog,
-      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
-      allocationKey: flag.allocationKey,
-      variationType: flag.variationType,
-      doLog: flag.doLog,
-      ...featureEntries,
-      ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
-    } as PrecomputedFlagMetadata,
+    flagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
 }

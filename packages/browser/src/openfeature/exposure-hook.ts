@@ -2,6 +2,7 @@ import {
   completeExposureDecision,
   type FeatureValue,
   featuresWithPrefix,
+  getPrecomputedDependencyEvaluations,
   METADATA_FEATURE_PREFIX,
 } from '@datadog/flagging-core'
 import type {
@@ -180,18 +181,49 @@ export class ExposureHook implements Hook {
   /** Runs in the final hook stage, so a later hook's error is seen. */
   finally(hookContext: HookContext, evaluationDetails: EvaluationDetails<FlagValue>): void {
     if (evaluationDetails == null || !supportsExposureAdmission(hookContext)) return
+    let evaluations: Array<
+      EvaluationDetails<FlagValue> | (Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue })
+    >
     try {
-      // The callback must read the final verdict, whether or not a provider or
-      // tracking hook finalized the decision first.
-      completeExposureDecision(evaluationDetails)
-      this.callback(new ExposureEvaluationImpl(hookContext, evaluationDetails))
+      const succeeded =
+        evaluationDetails.errorCode === undefined &&
+        evaluationDetails.reason !== 'ERROR' &&
+        evaluationDetails.variant != null
+      evaluations = succeeded
+        ? [
+            ...getPrecomputedDependencyEvaluations(evaluationDetails).filter(
+              (dependency) => dependency.isPresentInAssignment
+            ),
+            evaluationDetails,
+          ]
+        : [evaluationDetails]
     } catch (error) {
-      if (this.warned) {
-        console.debug('Exposure callback failed', error)
-      } else {
-        this.warned = true
-        console.warn('Exposure callback failed; later failures are logged at debug level', error)
+      this.logCallbackFailure(error)
+      return
+    }
+    for (const evaluation of evaluations) {
+      try {
+        // The callback must read the final verdict, whether or not a provider or
+        // tracking hook finalized the decision first.
+        completeExposureDecision(evaluation)
+        this.callback(
+          new ExposureEvaluationImpl(
+            evaluation === evaluationDetails ? hookContext : { ...hookContext, flagKey: evaluation.flagKey },
+            evaluation as EvaluationDetails<FlagValue>
+          )
+        )
+      } catch (error) {
+        this.logCallbackFailure(error)
       }
+    }
+  }
+
+  private logCallbackFailure(error: unknown): void {
+    if (this.warned) {
+      console.debug('Exposure callback failed', error)
+    } else {
+      this.warned = true
+      console.warn('Exposure callback failed; later failures are logged at debug level', error)
     }
   }
 }

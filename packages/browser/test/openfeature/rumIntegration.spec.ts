@@ -1,4 +1,5 @@
 import { getGlobalObject } from '@datadog/browser-core'
+import { bindPrecomputedDependencyEvaluations, type PrecomputedFlag } from '@datadog/flagging-core'
 import { ErrorCode, type EvaluationDetails, type FlagValue, type HookContext } from '@openfeature/web-sdk'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import { createRumTrackingHook, enrichEvaluationContextWithRumUser } from '../../src/openfeature/rumIntegration'
@@ -24,6 +25,46 @@ describe('createRumTrackingHook', () => {
     hook.finally!(mockHookContext, makeDetails('test-flag', 'variant-a', true))
 
     expect(mockAddFeatureFlagEvaluation).toHaveBeenCalledWith('test-flag', 'variant-a')
+  })
+
+  it('tracks only dependencies present in the selected assignment before the root', () => {
+    const mockAddFeatureFlagEvaluation = jest.fn()
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = { addFeatureFlagEvaluation: mockAddFeatureFlagEvaluation }
+    const details = makeDetails('root', 'root-on', true)
+    details.flagMetadata = {}
+    const flags = {
+      selected: {
+        allocationKey: 'selected-allocation',
+        variationKey: 'selected-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: false,
+      },
+      rejected: {
+        allocationKey: 'rejected-allocation',
+        variationKey: 'rejected-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+    } satisfies Record<string, PrecomputedFlag>
+    bindPrecomputedDependencyEvaluations(
+      details.flagMetadata,
+      [
+        { flagKey: 'selected', isPresentInAssignment: true },
+        { flagKey: 'rejected', isPresentInAssignment: false },
+      ],
+      flags
+    )
+
+    createRumTrackingHook().finally!(mockHookContext, details)
+
+    expect(mockAddFeatureFlagEvaluation.mock.calls).toEqual([
+      ['selected', 'selected-on'],
+      ['root', 'root-on'],
+    ])
   })
 
   it('should be a no-op when DD_RUM is absent', () => {

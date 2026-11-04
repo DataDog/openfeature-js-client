@@ -43,6 +43,17 @@ receiving configuration. Existing low-level evaluation calls still accept raw co
 and prepare each flag once on first use. Replace changed flags instead of mutating prepared
 flags in place. Preparation does not change the serialized configuration.
 
+## Precomputed dependent assignments
+
+Successful dependency records contain only `flagKey` and `isPresentInAssignment`; their
+assignment details come from the dependency's top-level flag entry. Root-relative dependency
+failures remain inline error records and never include `isPresentInAssignment`.
+
+When a present prerequisite produces no assignment, the root is terminally returned as
+`reason: "ERROR"` with `errorCode: "GENERAL"`, and the prerequisite is an inline dependency
+error. The server does not continue to a later root fallback, and the unassigned prerequisite
+does not receive a standalone top-level flag entry.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.

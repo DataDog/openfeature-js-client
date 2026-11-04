@@ -35,7 +35,7 @@ describe('dependent flag exposures', () => {
       hookContext: { context: EvaluationContext },
       evaluationDetails: EvaluationDetails<FlagValue>
     ) => {
-      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata)) {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext)) {
         try {
           dependencyEvaluationChannel.publish({
             context: structuredClone(hookContext.context),
@@ -162,6 +162,30 @@ describe('dependent flag exposures', () => {
       'second',
       'root',
     ])
+  })
+
+  it('keeps dependency evaluations but rolls back exposures when a later after hook throws', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+    provider.setConfiguration(configuration({ root: dependentFlag('root', ['leaf']), leaf: booleanFlag('leaf') }))
+    const client = await clientFor(provider)
+
+    await expect(
+      client.getBooleanDetails(
+        'root',
+        false,
+        { targetingKey: 'subject' },
+        { hooks: [{ after: () => Promise.reject(new Error('application hook failed')) }] }
+      )
+    ).resolves.toMatchObject({ reason: 'ERROR', errorCode: 'GENERAL' })
+
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(
+        ([event]) => (event as DependencyEvaluationEvent).details.flagKey
+      )
+    ).toEqual(['leaf'])
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
   })
 
   it('keeps concurrent root evaluation batches isolated', async () => {

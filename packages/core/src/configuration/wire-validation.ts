@@ -1,5 +1,5 @@
 import type { EvaluationContext } from '@openfeature/core'
-import type { PrecomputedConfigurationResponse, PrecomputedFlag } from './configuration'
+import type { PrecomputedConfigurationResponse, PrecomputedDependencyEvaluation, PrecomputedFlag } from './configuration'
 import { isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
 
 type WireEntry = {
@@ -67,8 +67,9 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
 }
 
 function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
+  if (!isRecord(value) || !isDependencyEvaluations(value.dependencyEvaluations)) return false
+  if (value.reason === 'ERROR') return typeof value.errorCode === 'string'
   if (
-    !isRecord(value) ||
     typeof value.allocationKey !== 'string' ||
     typeof value.variationKey !== 'string' ||
     typeof value.variationType !== 'string' ||
@@ -89,6 +90,25 @@ function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
     )
   }
   return false
+}
+
+function isDependencyEvaluations(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!Array.isArray(value)) return false
+  const flagKeys = new Set<string>()
+  for (const evaluation of value) {
+    if (!isDependencyEvaluation(evaluation) || flagKeys.has(evaluation.flagKey)) return false
+    flagKeys.add(evaluation.flagKey)
+  }
+  return true
+}
+
+function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyEvaluation {
+  if (!isRecord(value) || typeof value.flagKey !== 'string') return false
+  if (value.reason === 'ERROR') {
+    return typeof value.errorCode === 'string' && value.isPresentInAssignment === undefined
+  }
+  return typeof value.isPresentInAssignment === 'boolean' && value.reason === undefined && value.errorCode === undefined
 }
 
 function isJsonValue(value: unknown): boolean {

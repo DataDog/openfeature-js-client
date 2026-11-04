@@ -634,11 +634,14 @@ type PreparedDependencyTelemetry = {
 export declare class DependencyTelemetrySidecar {
 	readonly collectDependencyEvaluations: boolean;
 	private readonly batches;
+	private readonly evaluationAliases;
 	constructor(collectDependencyEvaluations?: boolean);
 	stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void;
-	takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[];
+	associateDependencyEvaluations(alias: object, metadata: object | undefined): void;
+	takeDependencyEvaluations(metadata: object | undefined, alias?: object): readonly DependencyEvaluation[];
 	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
 	discard(metadata: object | undefined): void;
+	discardDependencyExposures(metadata: object | undefined): void;
 }
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;

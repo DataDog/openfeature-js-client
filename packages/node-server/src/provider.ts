@@ -81,6 +81,7 @@ type PreparedDependencyTelemetry = {
  */
 export class DependencyTelemetrySidecar {
   private readonly batches = new WeakMap<object, PreparedDependencyTelemetry>()
+  private readonly evaluationAliases = new WeakMap<object, PreparedDependencyTelemetry>()
 
   constructor(readonly collectDependencyEvaluations = true) {}
 
@@ -90,17 +91,27 @@ export class DependencyTelemetrySidecar {
     }
   }
 
-  takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[] {
-    if (metadata === undefined) {
-      return []
+  associateDependencyEvaluations(alias: object, metadata: object | undefined): void {
+    const batch = metadata === undefined ? undefined : this.batches.get(metadata)
+    if (batch !== undefined && batch.dependencyEvaluations.length > 0) {
+      this.evaluationAliases.set(alias, batch)
     }
-    const batch = this.batches.get(metadata)
+  }
+
+  takeDependencyEvaluations(
+    metadata: object | undefined,
+    alias?: object
+  ): readonly DependencyEvaluation[] {
+    const batch =
+      (metadata === undefined ? undefined : this.batches.get(metadata)) ??
+      (alias === undefined ? undefined : this.evaluationAliases.get(alias))
     if (batch === undefined) {
       return []
     }
+    if (alias !== undefined) this.evaluationAliases.delete(alias)
     const evaluations = batch.dependencyEvaluations
     batch.dependencyEvaluations = []
-    if (batch.dependencyExposures.length === 0) {
+    if (metadata !== undefined && batch.dependencyExposures.length === 0) {
       this.batches.delete(metadata)
     }
     return evaluations
@@ -119,6 +130,14 @@ export class DependencyTelemetrySidecar {
     if (metadata !== undefined) {
       this.batches.delete(metadata)
     }
+  }
+
+  discardDependencyExposures(metadata: object | undefined): void {
+    if (metadata === undefined) return
+    const batch = this.batches.get(metadata)
+    if (batch === undefined) return
+    batch.dependencyExposures = []
+    if (batch.dependencyEvaluations.length === 0) this.batches.delete(metadata)
   }
 }
 
@@ -390,12 +409,13 @@ class ExposureLoggingHook implements Hook {
 
   after(hookContext: Readonly<HookContext<FlagValue>>, evaluationDetails: EvaluationDetails<FlagValue>): void {
     this.pending.set(hookContext, evaluationDetails)
+    this.dependencyTelemetrySidecar.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
   }
 
   error(hookContext: Readonly<HookContext<FlagValue>>): void {
     const evaluationDetails = this.pending.get(hookContext)
     const metadata = evaluationDetails?.flagMetadata
-    this.dependencyTelemetrySidecar.discard(metadata)
+    this.dependencyTelemetrySidecar.discardDependencyExposures(metadata)
     this.pending.delete(hookContext)
   }
 

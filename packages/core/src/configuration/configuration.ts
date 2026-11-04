@@ -67,7 +67,11 @@ export type PrecomputedConfigurationResponse = {
 }
 
 /** @internal */
-export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
+export type PrecomputedFlag<T extends FlagValueType = FlagValueType> =
+  PrecomputedSuccessfulFlag<T> | PrecomputedErrorFlag
+
+/** @internal */
+export type PrecomputedSuccessfulFlag<T extends FlagValueType = FlagValueType> = {
   allocationKey: string
   variationKey: string
   variationType: T
@@ -75,9 +79,39 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
+  dependencyEvaluations?: PrecomputedDependencyEvaluation[]
   /** Split features of the selected assignment; parsed leniently at evaluation time. */
   features?: unknown
 }
+
+/** @internal */
+export type PrecomputedErrorFlag = {
+  reason: 'ERROR'
+  errorCode: string
+  dependencyEvaluations?: PrecomputedDependencyEvaluation[]
+  // Keep success-field access source-compatible for callers that inspect a
+  // precomputed entry before narrowing the wire-result union.
+  allocationKey?: never
+  variationKey?: never
+  variationType?: never
+  variationValue?: never
+  doLog?: never
+  serialId?: never
+}
+
+/** @internal */
+export type PrecomputedDependencyEvaluation =
+  | {
+      flagKey: string
+      /** Whether this dependency belongs to the root flag's selected assignment path. */
+      isPresentInAssignment: boolean
+    }
+  | {
+      flagKey: string
+      /** Root-relative prerequisite failure; error entries never belong to an assignment. */
+      reason: 'ERROR'
+      errorCode: string
+    }
 
 /** @internal */
 export type PrecomputedFlagMetadata = {
