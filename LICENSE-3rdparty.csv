@@ -864,6 +864,7 @@
 "yocto-queue","yocto-queue","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
 "yoctocolors-cjs","yoctocolors-cjs","['MIT']","['Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)']"
 
+"smol-toml","smol-toml","['BSD-3-Clause']","['Squirrel Chat et al., All rights reserved.']"
 @peculiar/asn1-schema,@peculiar/asn1-schema,['MIT'],['2020']
 @peculiar/asn1-x509,@peculiar/asn1-x509,['MIT'],['2020']
 @peculiar/utils,@peculiar/utils,['MIT'],"['2017-2026 Peculiar Ventures, LLC']"

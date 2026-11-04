@@ -2,6 +2,7 @@ import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { createDatadogExposureLoggingHook } from '../../src/openfeature/exposures'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
@@ -65,14 +66,20 @@ describe('Exposures End-to-End', () => {
         const hook = tracking.hooks[0]
         expect(hook.after).toBeUndefined()
         expect(hook.finally).toBeDefined()
-        hook.finally!({ context: { targetingKey: 'test-user' } } as HookContext, {
-          flagKey: 'test-flag',
-          value: false,
-          variant: 'variant-a',
-          reason: 'TARGETING_MATCH',
-          flagMetadata: { allocationKey: 'allocation-a', doLog: true },
-          ...fallbackDetails,
-        })
+        hook.finally!(
+          {
+            context: { targetingKey: 'test-user' },
+            providerMetadata: new DatadogCoreProvider().metadata,
+          } as HookContext,
+          {
+            flagKey: 'test-flag',
+            value: false,
+            variant: 'variant-a',
+            reason: 'TARGETING_MATCH',
+            flagMetadata: { allocationKey: 'allocation-a', doLog: true },
+            ...fallbackDetails,
+          }
+        )
       } finally {
         await tracking.shutdown?.()
       }

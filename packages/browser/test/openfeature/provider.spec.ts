@@ -60,7 +60,7 @@ describe('DatadogProvider', () => {
       expect(providerWithDefaults.hooks).toHaveLength(3)
     })
 
-    it('should not add exposure logging hook when enableExposureLogging is false', () => {
+    it('should still add the exposure recording hook when enableExposureLogging is false', () => {
       const providerWithoutExposures = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -68,8 +68,10 @@ describe('DatadogProvider', () => {
         site: INTAKE_SITE_STAGING,
         enableExposureLogging: false,
       })
-      // Should have 2 hooks: EVP flag evaluation + auto RUM tracking
-      expect(providerWithoutExposures.hooks).toHaveLength(2)
+      // The exposure cache keeps recording for customer hooks; the option only
+      // stops the batch send to Datadog.
+      // 3 hooks: EVP flag evaluation + exposure recording + auto RUM tracking
+      expect(providerWithoutExposures.hooks).toHaveLength(3)
     })
 
     it('should add EVP flag evaluation hook by default when enableFlagEvaluationTracking is not specified', () => {
@@ -105,8 +107,8 @@ describe('DatadogProvider', () => {
         enableExposureLogging: false,
         enableFlagEvaluationTracking: false,
       })
-      // Should have 1 hook: auto RUM tracking only
-      expect(providerWithMinHooks.hooks).toHaveLength(1)
+      // 2 hooks: auto RUM tracking + exposure recording (always on)
+      expect(providerWithMinHooks.hooks).toHaveLength(2)
     })
 
     it('should not add auto RUM tracking hook when enableRumFeatureFlagTracking is false', () => {
@@ -121,7 +123,7 @@ describe('DatadogProvider', () => {
       expect(providerWithoutRum.hooks).toHaveLength(2)
     })
 
-    it('should have no hooks when all tracking options are disabled', () => {
+    it('should keep the exposure recording hook when all other tracking options are disabled', () => {
       const providerWithNoHooks = new DatadogProvider({
         clientToken: 'xxx',
         applicationId: 'xxx',
@@ -131,7 +133,8 @@ describe('DatadogProvider', () => {
         enableFlagEvaluationTracking: false,
         enableRumFeatureFlagTracking: false,
       })
-      expect(providerWithNoHooks.hooks).toHaveLength(0)
+      // 1 hook: exposure recording (always on)
+      expect(providerWithNoHooks.hooks).toHaveLength(1)
     })
   })
 
@@ -320,6 +323,9 @@ describe('DatadogProvider', () => {
         variant: 'variation-123',
         reason: 'TARGETING_MATCH',
         flagMetadata: {
+          __dd_allocation_key: 'allocation-123',
+          __dd_do_log: true,
+          __dd_exposure_cache_hit: false,
           allocationKey: 'allocation-123',
           doLog: true,
           variationType: 'STRING',

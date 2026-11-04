@@ -187,15 +187,17 @@ for (const mode of ['online', 'rules', 'precomputed']) {
         const result = await page.evaluate(() => window.telemetryTest.close())
         await page.waitForLoadState('networkidle')
         expect(evaluations.reduce((total, event) => total + event.evaluation_count, 0)).toBe(scenario.evaluations)
-        expect(exposures).toHaveLength(new Set(scenario.values).size)
+        // Exposures are not supported under composed providers.
         expect(exposures).toEqual(
-          [...new Set(scenario.values)].map((value) =>
-            expect.objectContaining({
-              subject: expect.objectContaining({
-                attributes: expect.objectContaining({ dd_evaluation_telemetry_opt_out: value }),
-              }),
-            })
-          )
+          multi
+            ? []
+            : [...new Set(scenario.values)].map((value) =>
+                expect.objectContaining({
+                  subject: expect.objectContaining({
+                    attributes: expect.objectContaining({ dd_evaluation_telemetry_opt_out: value }),
+                  }),
+                })
+              )
         )
         expect(result.rum).toHaveLength(scenario.rum)
         expect(result.customerHooks).toBe(scenario.values.length * 4)

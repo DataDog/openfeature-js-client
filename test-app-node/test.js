@@ -111,13 +111,96 @@ async function runTests() {
     }
   })
 
+  let openFeatureAvailable = true
+  try {
+    require.resolve('@openfeature/server-sdk')
+  } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND') throw error
+    openFeatureAvailable = false
+    console.log('SKIP: Exposure lifecycle requires an installed OpenFeature SDK')
+  }
+  const exposureTestPassed =
+    !openFeatureAvailable ||
+    (await testAsync('Finalize exposures with the installed OpenFeature SDK', async () => {
+      const assert = require('node:assert/strict')
+      const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+      const { OpenFeature } = require('@openfeature/server-sdk')
+      const channel = diagnostics_channel.channel('dd-trace:openfeature:exposure-compatibility')
+      const events = []
+      const record = (event) => events.push(event)
+      channel.subscribe(record)
+      try {
+        const provider = new DatadogNodeServerProvider({ exposureChannel: channel })
+        provider.setConfiguration({
+          createdAt: '2026-10-23T00:00:00.000Z',
+          format: 'ufc-v1',
+          environment: { name: 'test' },
+          flags: {
+            flag: {
+              key: 'flag',
+              enabled: true,
+              variationType: 'BOOLEAN',
+              variations: { control: { key: 'control', value: false } },
+              allocations: [
+                {
+                  key: 'allocation',
+                  doLog: true,
+                  splits: [
+                    {
+                      variationKey: 'control',
+                      serialId: 1,
+                      shards: [{ salt: 's', ranges: [{ start: 0, end: 10000 }], totalShards: 10000 }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        })
+        await OpenFeature.setProviderAndWait('exposure-compatibility', provider)
+        const client = OpenFeature.getClient('exposure-compatibility')
+        const results = await Promise.all([
+          client.getBooleanDetails('flag', true, { targetingKey: 'user' }),
+          client.getBooleanDetails('flag', true, { targetingKey: 'user' }, { hookHints: { example: true } }),
+        ])
+        assert.deepEqual(
+          results.map((result) => result.value),
+          [false, false]
+        )
+        assert.equal(events.length, 1)
+        assert.deepEqual(results.map((result) => result.flagMetadata.__dd_exposure_cache_hit).sort(), [false, true])
+        const failed = await client.getBooleanDetails(
+          'flag',
+          true,
+          { targetingKey: 'retry-user' },
+          {
+            hooks: [
+              {
+                after() {
+                  throw new Error('application rejects evaluation')
+                },
+              },
+            ],
+          }
+        )
+        assert.equal(failed.errorCode, 'GENERAL')
+        assert.equal(events.length, 1)
+        const retried = await client.getBooleanDetails('flag', true, { targetingKey: 'retry-user' })
+        assert.equal(retried.flagMetadata.__dd_exposure_cache_hit, false)
+        assert.equal(events.length, 2)
+      } finally {
+        channel.unsubscribe(record)
+        await OpenFeature.clearProviders()
+      }
+    }))
+
   // Summary
   console.log('\n=== Summary ===')
   const passed = results.filter((r) => r.status === 'pass').length
   const failed = results.filter((r) => r.status === 'fail').length
   console.log(`Passed: ${passed}/${results.length}`)
   console.log(`Failed: ${failed}/${results.length}`)
-  if (!consentTestPassed) process.exitCode = 1
+  if (!consentTestPassed || !exposureTestPassed) process.exitCode = 1
 }
 
 runTests().catch((e) => {

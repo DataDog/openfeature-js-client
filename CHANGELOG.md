@@ -6,6 +6,53 @@
 
 ---
 
+## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
+
+**Features:**
+
+- Add split features to flag metadata. A holdout split carries `holdout.key`, `holdout.assignment_group` and `holdout.should_include_in_holdout_analysis` as `__dd_feature.*` entries. Features routed to Datadog are added to exposure events and evaluation counts ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER] [CORE]
+- Add the exposure deduplication verdict to flag metadata as `__dd_exposure_cache_hit`. The Datadog exposure send and the metadata use the same decision ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER] [CORE]
+- Add `ExposureHook`, which hands each evaluation to a callback with the exposure decision (`isExposure()`, `isCacheHit()`, `shouldSend()`) and the split's `HOOK` features (`getFeatures()`), so applications can record exposures in their own data store ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- Add `trackExposures`. Set it to `false` to stop sending exposure events to Datadog while the exposure cache and `ExposureHook` keep working ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- Add the `exposureCache` option to `DatadogCoreProvider`, so rules-based mode shares one exposure cache with the tracking hooks ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+
+**Bug Fixes:**
+
+- Send and record an exposure only after the evaluation succeeds. A later hook that rejects the result no longer leaves a sent exposure behind ([#438](https://github.com/DataDog/openfeature-js-client/pull/438), [#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER] [NODE-SERVER]
+- Record exposures with the minimum supported OpenFeature server SDK (1.15.0 with core 1.3.0) ([#438](https://github.com/DataDog/openfeature-js-client/pull/438)) [NODE-SERVER]
+- Do not count an assignment whose reason is `ERROR` as an exposure ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+
+**Usage Notes:**
+
+- Behaviour change: exposures now require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`. Under a composed provider such as OpenFeature's `MultiProvider`, the SDK sends no exposures, does not update the exposure cache and does not call `ExposureHook` callbacks. It logs one warning. Flag evaluation is not affected ([#439](https://github.com/DataDog/openfeature-js-client/pull/439)) [BROWSER]
+- `enableExposureLogging` is deprecated. Use `trackExposures`; when both are set, `trackExposures` wins [BROWSER]
+- `ExposureHook` passes the callback a copy of the evaluated context. Changes to it do not affect later evaluations [BROWSER]
+- Split features need configuration that includes them. Older configurations add no `__dd_feature.*` entries [BROWSER] [NODE-SERVER]
+
+## @datadog/openfeature-browser@2.2.0, @datadog/openfeature-node-server@2.6.0, @datadog/flagging-core@3.3.0
+
+**Features:**
+
+- Load selected flags by tags or key patterns with the optional `flagSelection` setting. Normalize selections consistently across precomputed and rules-based requests, and isolate cached configurations by selection ([#426](https://github.com/DataDog/openfeature-js-client/pull/426)) [BROWSER] [CORE]
+- Add opt-in `Immediate` and `FutureExperimentsOnly` experimentation opt-out modes using the application's `dd_experimentation_opt_out_at` timestamp. Share allocation filtering, activation timestamp preparation, and precomputed response acknowledgement checks in core ([#423](https://github.com/DataDog/openfeature-js-client/pull/423)) [BROWSER] [CORE]
+- Add opt-in subject-level evaluation telemetry suppression through `enableEvaluationTelemetryOptOutParameter` and the boolean `dd_evaluation_telemetry_opt_out` context attribute. This suppresses new evaluation events, counts, and automatic RUM flag annotations; it does not suppress exposures or assignment requests ([#418](https://github.com/DataDog/openfeature-js-client/pull/418)) [BROWSER]
+
+**Bug Fixes:**
+
+- Handle configuration withdrawal and recovery in the Node provider. Clear stale exposure state, report unavailable configuration, and install replacement configuration before notifying listeners ([#430](https://github.com/DataDog/openfeature-js-client/pull/430)) [NODE-SERVER]
+- Include SDK source contents in published browser and core JavaScript source maps ([#422](https://github.com/DataDog/openfeature-js-client/pull/422)) [BROWSER] [CORE]
+
+**Usage Notes:**
+
+- Flag selection requires server support; older servers or disabled gates may return the full configuration. Invalid or oversized selections fall back to loading all flags. Caller-supplied initial configurations are not filtered locally. [BROWSER]
+- Experimentation opt-out is disabled by default. Precomputed delivery requires backend acknowledgement; enabled modes withhold assignments from a different context until usable replacements arrive. Future mode uses allocation activation time, not prior enrollment, and skips exposure allocations with missing activation metadata. [BROWSER] [CORE]
+- The Node provider does not expose experimentation opt-out controls in this release. [NODE-SERVER]
+
+**Internal Changes:**
+
+- Add provider instance IDs, logical fetch sequence numbers, and fetch triggers to precomputed assignment requests for request diagnostics ([a56eb89](https://github.com/DataDog/openfeature-js-client/commit/a56eb890810ffcd1d03af51290f906ec547710c8)) [BROWSER]
+- Pin browser and Node.js internal dependencies to `@datadog/flagging-core@3.3.0`. Publish core before browser and Node.js.
+
 ## @datadog/openfeature-node-server@2.5.0
 
 **Features:**

@@ -175,15 +175,18 @@ test('negotiates obfuscation, rotates salts, and restores hashed assignments fro
                   resolve([])
                   return
                 }
-                const read = db.transaction('configurations').objectStore('configurations').getAll()
+                const store = db.transaction('configurations').objectStore('configurations')
+                const keys = store.getAllKeys()
+                const read = store.getAll()
                 read.onerror = () => {
                   db.close()
                   reject(read.error)
                 }
                 read.onsuccess = () => {
-                  const salts = read.result.map(
-                    (entry) => entry.precomputed?.response.data.attributes.obfuscation?.salt
-                  )
+                  // The exposure cache shares this store under assignments-* keys.
+                  const salts = read.result
+                    .filter((_, index) => !String(keys.result[index]).startsWith('assignments-'))
+                    .map((entry) => entry.precomputed?.response.data.attributes.obfuscation?.salt)
                   db.close()
                   resolve(salts)
                 }
@@ -373,3 +376,31 @@ for (const scenario of [
     )
   })
 }
+
+test('runs the core provider shared exposure cache workflow', async ({ page }) => {
+  const unexpectedRequests: string[] = []
+  await page.route('**/*', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin === 'http://127.0.0.1:4173') {
+      await route.continue()
+      return
+    }
+    unexpectedRequests.push(request.url())
+    // Fulfill locally so an unexpected send fails the request assertion itself.
+    await route.fulfill({ status: 200, body: '{}' })
+  })
+
+  const result = await runSmoke<Record<string, unknown>>(page, '/core-provider-exposures.html')
+  // Record-only mode: verdicts come from the one shared cache, and no request
+  // leaves the page for the Datadog exposure intake.
+  expect(result).toEqual({
+    provider: 'datadog-core',
+    value: true,
+    variant: 'on',
+    verdicts: ['new', 'cache-hit'],
+    firstVerdict: false,
+    secondVerdict: true,
+  })
+  expect(unexpectedRequests).toEqual([])
+})

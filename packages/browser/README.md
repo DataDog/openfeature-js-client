@@ -18,7 +18,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 const provider = new DatadogProvider({
   applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
-  enableExposureLogging: true,
+  trackExposures: true,
   enableFlagEvaluationTracking: true,
   site: 'datadoghq.com',
 })
@@ -45,8 +45,8 @@ const provider = new DatadogProvider({
   version: '1.0.0', // Application version
   applicationId: 'app-id', // Your application ID for RUM attribution
 
-  // Enable exposure logging
-  enableExposureLogging: true,
+  // Enable exposure logging to Datadog (default: true)
+  trackExposures: true,
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
@@ -211,6 +211,104 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+### Exposures in your own data store
+
+Use `ExposureHook` to receive every completed evaluation with the same deduplication decision the SDK uses when
+sending exposures to Datadog, so you can record exposures in your own data store:
+
+```javascript
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(), // split features, e.g. holdout.key
+    })
+  })
+)
+```
+
+- `isExposure()` is true when the evaluation succeeded and selected an allocation that logs exposures, repeats
+  included.
+- `isCacheHit()` is true when this subject was already exposed to the same flag, allocation, variant and serial ID.
+- `shouldSend()` is true for a new or changed exposure: exactly what the SDK sends to Datadog.
+- `getFeatures()` returns the read-only `HOOK` features of the selected split, such as `holdout.key` and
+  `holdout.assignment_group`, when the flag is part of a holdout.
+
+The callback runs on the evaluation thread; hand the data to a background queue instead of doing I/O in the callback.
+An exception from the callback never affects the evaluation (the first failure logs a warning, later ones log at debug
+level).
+
+The SDK's exposure cache persists across page loads. A page reload that re-evaluates the same assignment is a cache
+hit, so `shouldSend()` stays false and Datadog does not log the exposure again.
+
+Set `trackExposures: false` to stop sending exposure events to Datadog only. The hook still receives every
+evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
+and superseded by `trackExposures`; when both are set, `trackExposures` wins.
+
+Exposures require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`.
+Composed providers such as OpenFeature's `MultiProvider` are not supported: their child hooks finish before the
+application's hooks can reject the result. Under a composed provider, the SDK sends no exposures to Datadog, does not
+update the exposure cache and does not call `ExposureHook` callbacks, and logs one warning. Flag evaluation is not
+affected.
+
+#### Rules-based mode and `DatadogCoreProvider`
+
+`DatadogProvider` wires this up automatically. In rules-based mode the application composes its own tracking
+hooks, so it must share the exposure controller's cache with the provider for the verdicts to be stamped:
+
+```javascript
+import {
+  composeDatadogTrackingHooks,
+  createDatadogExposureLoggingHook,
+  DatadogCoreProvider,
+} from '@datadog/openfeature-browser/rules-based'
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+// One exposure controller owns the one exposure cache; pass it to the provider.
+const exposureTracking = createDatadogExposureLoggingHook({
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  trackExposures: false, // record-only: no exposures go to Datadog
+})
+const tracking = composeDatadogTrackingHooks(exposureTracking)
+await tracking.initialize()
+
+const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+provider.setConfiguration(rulesConfiguration)
+
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
+client.addHooks(...tracking.hooks)
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(),
+    })
+  })
+)
+```
+
+The provider and the Datadog send path share that one cache, so `shouldSend()` and the SDK's own deduplication
+always agree. `DatadogCoreProvider.initialize()` waits for the shared cache to load, so evaluations after
+`setProviderAndWait` see persisted entries; still call `tracking.initialize()` before evaluating so the recording
+hooks are active. Without the `exposureCache` option, evaluations carry no exposure verdict and the tracking
+hooks behave exactly as before.
 
 ### Experimentation opt-out
 
@@ -496,7 +594,11 @@ client.clearHooks()
 await tracking.shutdown()
 ```
 
-`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically. The composed result (and each exposure controller) exposes the one exposure cache as `exposureCache`; pass it to `DatadogCoreProvider`'s `exposureCache` option to stamp exposure deduplication verdicts in rules-based mode, as described in [Exposures in your own data store](#exposures-in-your-own-data-store).
+
+The exposure controller accepts the same `trackExposures` option as `DatadogProvider` (default `true`; the deprecated
+`enableExposureLogging` alias behaves identically). With `trackExposures: false` it runs record-only: nothing is
+sent to Datadog, but the shared cache keeps recording so `ExposureHook` verdicts stay correct.
 
 `tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
 
@@ -529,6 +631,30 @@ For rules-based configurations, `DatadogCoreProvider` also includes the rules co
 Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Existing localStorage and Chrome storage entries are not migrated or deleted, so upgrading can produce repeat exposures. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
+
+## SDK lifecycle telemetry
+
+`DatadogProvider` sends SDK initialization and configuration-fetch error diagnostics through the same
+`/api/v2/flagevaluation` JSONL transport as flag evaluations. No RUM initialization or flag evaluation is required.
+Diagnostics are independent of the evaluation, exposure, and RUM tracking options.
+
+An initialization report records `ready`, `failed`, `cached_fallback`, or `incomplete`, with elapsed timings.
+Pending initialization produces an incomplete observation on page exit or provider close, at most once.
+There is no initialization timeout observation. A resumed page can later report its settled result.
+After initialization settles, at most one configuration-fetch error is reported before the provider closes.
+Initializing a closed provider starts a new diagnostic lifecycle, including new timings and error limits.
+Each initialize-to-close lifecycle produces at most three diagnostic records. Transport batching can delay delivery, and page-exit delivery
+is best effort. No diagnostic events does not establish whether the SDK is healthy.
+
+Reports require `env` and either `applicationId` or `service`; `applicationId` takes precedence when both are provided.
+They contain SDK name/version, application or service identity, environment, timings, and bounded error codes.
+They do not contain flag values, evaluation context, targeting keys, client tokens, raw errors, or an instance identifier.
+Reports are separate observations and must not be correlated to a specific instance from their timestamps alone.
+Diagnostic queue failures do not change evaluation results.
+
+The wire schema fixture in `test/data/sdkdiagnostic-v1.json` matches the flageval worker's diagnostic contract.
+`yarn test:browser-install` tests the packaged SDK in Chromium, including mixed evaluation/diagnostic batches.
+For manual staging checks, run `yarn dev` in `test-app` after that command and open `/diagnostics.html`.
 
 ## End-user license agreement
 

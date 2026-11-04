@@ -200,7 +200,7 @@ describe('evaluation telemetry opt-out', () => {
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(activated ? 0 : 2)
     expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
-    expect(events('exposures')).toHaveLength(1)
+    expect(events('exposures')).toEqual([])
   })
 
   it.each([false, true])('does not copy unrelated attributes with activation=%s', (activated) => {
@@ -269,7 +269,7 @@ describe('evaluation telemetry opt-out', () => {
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(activated ? 0 : 1)
     expect(rum).toHaveBeenCalledTimes(activated ? 0 : 1)
-    expect(events('exposures')).toHaveLength(1)
+    expect(events('exposures')).toEqual([])
   })
 
   it('does not apply a Datadog child policy to an unrelated provider result', async () => {
