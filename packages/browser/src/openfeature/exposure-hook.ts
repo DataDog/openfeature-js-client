@@ -62,14 +62,16 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   readonly details: EvaluationDetails<FlagValue>
   private readonly evaluationContext: EvaluationContext | undefined
 
-  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>) {
+  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>, trackingContext?: EvaluationContext) {
     this.flagKey = hookContext?.flagKey ?? details.flagKey
     this.details = details
     // Prefer the context the provider actually evaluated (for example the
     // RUM-enriched subject); fall back to the hook context for unbound results.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
-      this.evaluationContext = cloneExposureContext(getEvaluationTrackingContext(details, () => hookContext?.context))
+      this.evaluationContext = cloneExposureContext(
+        trackingContext ?? getEvaluationTrackingContext(details, () => hookContext?.context)
+      )
     } catch {
       this.evaluationContext = undefined
     }
@@ -206,10 +208,12 @@ export class ExposureHook implements Hook {
         // The callback must read the final verdict, whether or not a provider or
         // tracking hook finalized the decision first.
         completeExposureDecision(evaluation)
+        const trackingContext = getEvaluationTrackingContext(evaluationDetails, () => hookContext.context)
         this.callback(
           new ExposureEvaluationImpl(
             evaluation === evaluationDetails ? hookContext : { ...hookContext, flagKey: evaluation.flagKey },
-            evaluation as EvaluationDetails<FlagValue>
+            evaluation as EvaluationDetails<FlagValue>,
+            trackingContext
           )
         )
       } catch (error) {

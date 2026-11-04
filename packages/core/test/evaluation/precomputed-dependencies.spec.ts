@@ -1,4 +1,9 @@
-import { type FlagsConfiguration, type PrecomputedConfigurationResponse } from '../../src/configuration'
+import {
+  type FlagsConfiguration,
+  type PrecomputedConfigurationResponse,
+  type PrecomputedFlag,
+} from '../../src/configuration'
+import { encodePrecomputedFlagKey, type FlagKeyObfuscation } from '../../src/configuration/flag-key-obfuscation'
 import { parsePrecomputedConfigurationResponse } from '../../src/configuration/wire-validation'
 import { getPrecomputedDependencyEvaluations } from '../../src/evaluation/precomputed-dependencies'
 import { evaluatePrecomputedConfiguration } from '../../src/evaluation/precomputed-evaluation'
@@ -13,7 +18,7 @@ const parentFlag = {
   reason: 'TARGETING_MATCH',
   doLog: true,
   serialId: 42,
-}
+} satisfies PrecomputedFlag
 
 function configuration(
   flag: Record<string, unknown>,
@@ -61,6 +66,7 @@ describe('precomputed dependent flags', () => {
     expect(getPrecomputedDependencyEvaluations(result)).toEqual([
       {
         flagKey: 'parent',
+        value: true,
         variant: 'parent-on',
         reason: 'TARGETING_MATCH',
         isPresentInAssignment: true,
@@ -73,6 +79,85 @@ describe('precomputed dependent flags', () => {
         },
       },
     ])
+  })
+
+  it('reconstructs dependencies from obfuscated top-level assignments without obfuscating telemetry keys', () => {
+    const obfuscation: FlagKeyObfuscation = {
+      scheme: 'flag-key-sha256-v1',
+      salt: '00112233445566778899aabbccddeeff',
+    }
+    const parentKey = encodePrecomputedFlagKey('parent', obfuscation)
+    const rootKey = encodePrecomputedFlagKey('root', obfuscation)
+    if ('error' in parentKey || 'error' in rootKey) throw new Error('test keys must encode')
+    const flags: FlagsConfiguration = {
+      precomputed: {
+        context,
+        response: {
+          data: {
+            attributes: {
+              createdAt: '2026-10-21T00:00:00Z',
+              obfuscated: true,
+              obfuscation,
+              flags: {
+                [parentKey.key]: parentFlag,
+                [rootKey.key]: {
+                  allocationKey: 'root-allocation',
+                  variationKey: 'root-on',
+                  variationType: 'boolean',
+                  variationValue: true,
+                  reason: 'TARGETING_MATCH',
+                  doLog: true,
+                  dependencyEvaluations: [successfulDependency],
+                },
+              } satisfies Record<string, PrecomputedFlag>,
+            },
+          },
+        },
+      },
+    }
+
+    const result = evaluatePrecomputedConfiguration(flags, 'boolean', 'root', false, context)
+
+    expect(getPrecomputedDependencyEvaluations(result)).toEqual([
+      expect.objectContaining({ flagKey: 'parent', value: true, variant: 'parent-on' }),
+    ])
+  })
+
+  it('preserves each dependency split feature for its destination', () => {
+    const result = evaluatePrecomputedConfiguration(
+      configuration(
+        {
+          allocationKey: 'root-allocation',
+          variationKey: 'root-on',
+          variationType: 'boolean',
+          variationValue: true,
+          reason: 'TARGETING_MATCH',
+          doLog: true,
+          dependencyEvaluations: [successfulDependency],
+        },
+        {
+          parent: {
+            ...parentFlag,
+            features: [
+              { key: 'hook', value: 'h', destinations: ['HOOK'] },
+              { key: 'exposure', value: 2, destinations: ['EXPOSURE'] },
+              { key: 'evaluation', value: true, destinations: ['EVALUATION'] },
+            ],
+          },
+        }
+      ),
+      'boolean',
+      'root',
+      false,
+      context
+    )
+
+    expect(getPrecomputedDependencyEvaluations(result)[0].flagMetadata).toMatchObject({
+      '__dd_feature.hook': 'h',
+      '__dd_exposure_feature.exposure': 2,
+      '__dd_evaluation_feature.evaluation': true,
+      __dd_has_evaluation_features: true,
+    })
   })
 
   it('resolves successful details from the top-level assignment and retains rejected-path membership', () => {

@@ -7,10 +7,11 @@ export function withCoreConfigurationId<T extends FlagValue>(
   details: ResolutionDetails<T>,
   configurationId: string | undefined
 ): ResolutionDetails<T> {
-  const allocationKey = details.flagMetadata?.allocationKey
+  const sourceMetadata = details.flagMetadata
+  const allocationKey = sourceMetadata?.allocationKey
   if (
+    !sourceMetadata ||
     configurationId === undefined ||
-    details.flagMetadata?.doLog !== true ||
     typeof allocationKey !== 'string' ||
     details.variant == null
   ) {
@@ -18,10 +19,10 @@ export function withCoreConfigurationId<T extends FlagValue>(
   }
 
   const flagMetadata = {
-    ...details.flagMetadata,
+    ...sourceMetadata,
     [CORE_CONFIGURATION_ID_METADATA_KEY]: configurationId,
   }
-  inheritPrecomputedDependencyEvaluations(details.flagMetadata, flagMetadata)
+  inheritPrecomputedDependencyEvaluations(sourceMetadata, flagMetadata)
   return {
     ...details,
     flagMetadata,

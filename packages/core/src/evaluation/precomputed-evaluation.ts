@@ -160,7 +160,9 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       flagMetadata,
       flag.dependencyEvaluations,
       attributes.flags,
-      precomputed.flagErrors
+      precomputed.flagErrors,
+      encoding.encoding,
+      logger
     )
     return {
       value: defaultValue,
@@ -176,7 +178,9 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       flagMetadata,
       flag.dependencyEvaluations,
       attributes.flags,
-      precomputed.flagErrors
+      precomputed.flagErrors,
+      encoding.encoding,
+      logger
     )
     return {
       value: defaultValue,
@@ -201,7 +205,9 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     flagMetadata,
     flag.dependencyEvaluations,
     attributes.flags,
-    precomputed.flagErrors
+    precomputed.flagErrors,
+    encoding.encoding,
+    logger
   )
   return {
     value: flag.variationValue as FlagTypeToValue<T>,

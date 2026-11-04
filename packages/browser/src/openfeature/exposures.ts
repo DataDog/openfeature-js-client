@@ -97,7 +97,6 @@ export function createExposureLoggingHook(
           // Dependency exposures belong to the same immutable configuration
           // snapshot as the root result.
           const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
-          const isRoot = evaluation === details
           const stampedVerdict = exposureDetails.flagMetadata?.__dd_exposure_cache_hit
           const hasLoggedAssignment =
             stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
@@ -105,11 +104,8 @@ export function createExposureLoggingHook(
 
           if (exposuresBatch) {
             // Features stay off the cache entry: a features change must not turn a
-            // repeat exposure into a new one. Dependency feature data is not part
-            // of the root precomputed result, so only the root event carries it.
-            const features = isRoot
-              ? featuresWithPrefix(details.flagMetadata, METADATA_EXPOSURE_FEATURE_PREFIX)
-              : undefined
+            // repeat exposure into a new one.
+            const features = featuresWithPrefix(exposureDetails.flagMetadata, METADATA_EXPOSURE_FEATURE_PREFIX)
             const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
               ...exposureEvent,
               ...(features && { features }),

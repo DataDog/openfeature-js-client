@@ -38,6 +38,7 @@ describe('Exposures End-to-End', () => {
       reason: 'TARGETING_MATCH',
       doLog: true,
       serialId: 12,
+      features: [{ key: 'dependency.exposure', value: 'parent', destinations: ['EXPOSURE'] }],
     },
     rejected: {
       allocationKey: 'rejected-allocation',
@@ -167,6 +168,7 @@ describe('Exposures End-to-End', () => {
         allocation: { key: 'parent-allocation' },
         variant: { key: 'parent-on' },
         serial_id: 12,
+        features: { 'dependency.exposure': 'parent' },
       })
     } finally {
       await tracking.shutdown?.()

@@ -1,5 +1,5 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { type EvaluationContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { type ExposureEvaluation, ExposureHook } from '../../src/openfeature/exposure-hook'
@@ -65,6 +65,11 @@ describe('ExposureHook', () => {
               variationValue: true,
               reason: 'TARGETING_MATCH',
               doLog: true,
+              features: [
+                { key: 'dependency.hook', value: 'parent', destinations: ['HOOK'] },
+                { key: 'dependency.exposure', value: 2, destinations: ['EXPOSURE'] },
+                { key: 'dependency.evaluation', value: true, destinations: ['EVALUATION'] },
+              ],
             },
             'dependency-silent-parent': {
               allocationKey: 'silent-parent-allocation',
@@ -110,7 +115,7 @@ describe('ExposureHook', () => {
     }),
   })
 
-  async function startProvider() {
+  async function startProvider(evaluationContext: EvaluationContext = context) {
     fetchMock.mockImplementation((url: string) => {
       if (url.toString().includes('exposures')) {
         return Promise.resolve({ ok: true, status: 200 })
@@ -118,7 +123,7 @@ describe('ExposureHook', () => {
       return Promise.resolve(precomputedResponse())
     })
     const provider = new DatadogProvider(baseProviderConfig)
-    await OpenFeature.setContext(context)
+    await OpenFeature.setContext(evaluationContext)
     await OpenFeature.setProviderAndWait(provider)
   }
 
@@ -240,6 +245,23 @@ describe('ExposureHook', () => {
     ])
     expect(evaluations.map((evaluation) => evaluation.isExposure())).toEqual([true, false, true])
     expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([true, false, true])
+    expect(evaluations[0].details.value).toBe(true)
+    expect(evaluations[0].getFeatures()).toEqual({ 'dependency.hook': 'parent' })
+  })
+
+  it('uses the root provider-bound RUM subject for dependency callbacks', async () => {
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => ({ id: 'rum-user', plan: 'pro' }),
+    }
+    await startProvider({})
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((evaluation) => evaluations.push(evaluation)))
+
+    OpenFeature.getClient().getBooleanDetails('dependent-root', false)
+
+    expect(evaluations.map((evaluation) => evaluation.targetingKey)).toEqual(['rum-user', 'rum-user', 'rum-user'])
+    expect(evaluations[0].context).toMatchObject({ targetingKey: 'rum-user', plan: 'pro' })
   })
 
   it('continues dependency and root callbacks after one callback throws', async () => {
