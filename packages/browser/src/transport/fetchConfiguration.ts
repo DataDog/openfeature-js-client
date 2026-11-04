@@ -137,13 +137,14 @@ export async function fetchPrecomputedConfiguration(
 }
 
 async function requestPrecomputedConfiguration(
-  options: PrecomputedConfigurationFetchOptions & { assignmentToken?: unknown },
-  flagSelection?: CanonicalFlagSelection
+  options: PrecomputedConfigurationFetchOptions,
+  flagSelection?: CanonicalFlagSelection,
+  contextAssignmentToken?: unknown
 ): Promise<FlagsConfiguration> {
   // Also sanitize the standalone fetch API; it can be used without a provider.
   const extracted = extractAssignmentToken(options.context)
   const assignmentToken = validateAssignmentToken(
-    options.assignmentToken !== undefined ? options.assignmentToken : extracted.assignmentToken
+    contextAssignmentToken !== undefined ? contextAssignmentToken : extracted.assignmentToken
   )
   options = { ...options, context: extracted.context }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
@@ -267,9 +268,9 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         context,
         fetch: initConfiguration.flagConfigurationFetch,
         signal,
-        assignmentToken,
       },
-      flagSelection
+      flagSelection,
+      assignmentToken
     )
     // Use the provider's existing context-matched cache fallback. Do not replace
     // a valid snapshot with a malformed response or unsupported encoding.

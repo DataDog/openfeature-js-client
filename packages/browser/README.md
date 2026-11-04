@@ -171,6 +171,8 @@ The provider sends the token in the reserved `DD-Assignment-Token` header, which
 headers of the same name. It excludes the reserved context field from Datadog targeting attributes, telemetry,
 and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
 application hooks can still access the original context. Datadog's tracking hooks remove the token.
+Other providers sharing that context can also read or forward it. Scope token-bearing contexts to a Datadog-only
+OpenFeature domain rather than sharing them with other providers.
 Customer proxies must allow `DD-Assignment-Token` in CORS and make error responses readable by the browser.
 
 Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
@@ -483,6 +485,10 @@ if (context !== undefined) {
   await OpenFeature.setProviderAndWait(provider)
 }
 ```
+
+For protected environments, add a current `dd_assignment_token` to the context passed to
+`setProviderAndWait` above. `getPrecomputedContext(configuration)` deliberately excludes the token;
+without one, the initial refresh can be rejected even when cached assignments remain usable.
 
 Rules-based configurations contain targeting rules that the SDK evaluates locally
 against the OpenFeature evaluation context, rather than assignments precomputed for one context.

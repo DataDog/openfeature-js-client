@@ -1,5 +1,5 @@
 import { display, getGlobalObject } from '@datadog/browser-core'
-import { ErrorCode, OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { ErrorCode, type EvaluationContext, OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { openDB, STORE_NAME } from '../../src/cache/indexeddb-store'
 import { ASSIGNMENT_AUTHORIZATION_FAILED } from '../../src/domain/assignment-token'
@@ -362,6 +362,23 @@ describe('assignment authorization', () => {
     expect(fetchMock.mock.calls[2][1].body).not.toContain(jwt)
   })
 
+  it.each([undefined, 'context.jwt.signature'])(
+    'ignores undocumented standalone token options in favor of the context token: %s',
+    async (jwt) => {
+      const evaluationContext: EvaluationContext = { ...context }
+      if (jwt !== undefined) evaluationContext.dd_assignment_token = jwt
+      const fetchOptions = {
+        clientToken: 'client-token',
+        env: 'test',
+        context: evaluationContext,
+        assignmentToken: 'stray.jwt.signature',
+        fetch: fetchMock,
+      }
+      await fetchPrecomputedConfiguration(fetchOptions)
+      expect(new Headers(fetchMock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(jwt ?? null)
+    }
+  )
+
   it.each([42, null, true, {}, '', 'bad\r\nheader'])(
     'rejects unsafe token values locally without echoing them: %p',
     async (value) => {
@@ -389,16 +406,19 @@ describe('assignment authorization', () => {
     expect(provider.status).toBe(ProviderStatus.STALE)
   })
 
-  it('does not reflect a credential-bearing server error body into OpenFeature errors', async () => {
-    const jwt = token()
-    // Use the bare fetch here to avoid transient HTTP retries.
-    provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ errors: [{ detail: jwt }] }), {
-        status: 500,
-        headers: { 'content-type': 'application/json' },
-      })
-    )
-    await expect(provider.initialize({ ...context, dd_assignment_token: jwt })).rejects.toThrow('HTTP 500')
-  })
+  it.each([401, 500])(
+    'does not reflect a credential-bearing HTTP %s error body into OpenFeature errors',
+    async (status) => {
+      const jwt = token()
+      // Use the bare fetch here to avoid transient HTTP retries.
+      provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ errors: [{ detail: jwt }] }), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+      await expect(provider.initialize({ ...context, dd_assignment_token: jwt })).rejects.toThrow(`HTTP ${status}`)
+    }
+  )
 })
