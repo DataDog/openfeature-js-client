@@ -168,7 +168,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: flag.errorCode as ErrorCode,
-      flagMetadata,
+      ...(flag.dependencyEvaluations?.length ? { flagMetadata } : {}),
     }
   }
 
@@ -186,7 +186,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
-      flagMetadata,
+      ...(flag.dependencyEvaluations?.length ? { flagMetadata } : {}),
     }
   }
 
