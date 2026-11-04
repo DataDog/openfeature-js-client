@@ -24,7 +24,6 @@ for (const scenario of ['success', 'failure'] as const) {
       await route.fulfill({ status: 202, body: '' })
     })
     await page.goto('/diagnostics.html')
-    await page.getByLabel('Enable debugMode', { exact: false }).uncheck()
     await page.getByLabel('Staging client token').fill('test-client-token')
     await page.getByLabel('Application ID').fill('test-app')
     await page.getByLabel('Configuration request').selectOption(scenario)
@@ -47,43 +46,40 @@ for (const scenario of ['success', 'failure'] as const) {
   })
 }
 
-for (const debugMode of [false, true]) {
-  test(`blocked telemetry preserves flag evaluation with debugMode=${debugMode}`, async ({ page }) => {
-    const attemptedEvents: string[] = []
-    await page.clock.install()
-    await page.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
-    await page.route('https://browser-intake-datad0g.com/**', async (route) => {
-      expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
-      expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
-      for (const line of (route.request().postData() ?? '').split('\n').filter(Boolean)) {
-        attemptedEvents.push(JSON.parse(line).payload.event_type)
-      }
-      await route.abort()
-    })
-    await page.goto('/diagnostics.html')
-    await page.getByLabel('Enable debugMode', { exact: false }).setChecked(debugMode)
-    await page.getByLabel('Staging client token').fill('test-client-token')
-    await page.getByLabel('Application ID').fill('test-app')
-    await page.getByRole('button', { name: 'Initialize provider' }).click()
-    await expect(page.locator('#status')).toContainText('Initialization completed')
-
-    const failedUpload = page.waitForEvent('requestfailed', (request) =>
-      request.url().startsWith('https://browser-intake-datad0g.com/')
-    )
-    await page.clock.runFor(30_001)
-    expect((await failedUpload).failure()).not.toBeNull()
-    expect(attemptedEvents).toEqual(['sdk_initialization'])
-
-    await page.getByLabel('Flag key').fill('boolean-flag')
-    await page.getByRole('button', { name: 'Evaluate boolean details' }).click()
-    await expect(page.locator('#status')).toContainText('"value": true')
-    const details = JSON.parse((await page.locator('#status').textContent())!)
-    expect(details).toMatchObject({ value: true, reason: 'TARGETING_MATCH', variant: 'variation-124' })
-    expect(details.errorCode).toBeUndefined()
-    await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
-    await expect(page.locator('#status')).toContainText('Provider closed')
+test('blocked telemetry preserves flag evaluation', async ({ page }) => {
+  const attemptedEvents: string[] = []
+  await page.clock.install()
+  await page.route('**/precompute-assignments**', (route) => route.fulfill({ json: precomputedResponse }))
+  await page.route('https://browser-intake-datad0g.com/**', async (route) => {
+    expect(new URL(route.request().url()).pathname).toBe('/api/v2/flagevaluation')
+    expect(route.request().headers()['content-type']).toMatch(/^text\/plain(?:;|$)/)
+    for (const line of (route.request().postData() ?? '').split('\n').filter(Boolean)) {
+      attemptedEvents.push(JSON.parse(line).payload.event_type)
+    }
+    await route.abort()
   })
-}
+  await page.goto('/diagnostics.html')
+  await page.getByLabel('Staging client token').fill('test-client-token')
+  await page.getByLabel('Application ID').fill('test-app')
+  await page.getByRole('button', { name: 'Initialize provider' }).click()
+  await expect(page.locator('#status')).toContainText('Initialization completed')
+
+  const failedUpload = page.waitForEvent('requestfailed', (request) =>
+    request.url().startsWith('https://browser-intake-datad0g.com/')
+  )
+  await page.clock.runFor(30_001)
+  expect((await failedUpload).failure()).not.toBeNull()
+  expect(attemptedEvents).toEqual(['sdk_initialization'])
+
+  await page.getByLabel('Flag key').fill('boolean-flag')
+  await page.getByRole('button', { name: 'Evaluate boolean details' }).click()
+  await expect(page.locator('#status')).toContainText('"value": true')
+  const details = JSON.parse((await page.locator('#status').textContent())!)
+  expect(details).toMatchObject({ value: true, reason: 'TARGETING_MATCH', variant: 'variation-124' })
+  expect(details.errorCode).toBeUndefined()
+  await page.getByRole('button', { name: 'Flush diagnostics and close provider' }).click()
+  await expect(page.locator('#status')).toContainText('Provider closed')
+})
 
 test('slow initialization sends only its settled report', async ({ page }) => {
   const records: {

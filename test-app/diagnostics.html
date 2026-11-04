@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Feature Flags lifecycle diagnostic experiment</title>
+    <title>Feature Flags SDK telemetry</title>
   </head>
   <body>
     <h1>Feature Flags diagnostics</h1>
-    <p>Experimental staging harness. Credentials stay in memory. Open the developer console for local diagnostics.</p>
+    <p>Staging telemetry harness. Credentials stay in memory. Inspect requests in the network panel.</p>
     <form id="setup">
       <p>
         <label>Staging client token <input id="token" type="password" required autocomplete="off" /></label>
@@ -27,9 +27,6 @@
             <option value="slow">Delay configuration by 35 seconds</option>
           </select>
         </label>
-      </p>
-      <p>
-        <label><input id="debug" type="checkbox" checked /> Enable debugMode (console logging only)</label>
       </p>
       <p>
         <label><input id="evaluations" type="checkbox" /> Track genuine flag evaluations</label>

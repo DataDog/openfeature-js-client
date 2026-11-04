@@ -34,7 +34,7 @@ async function initialize() {
   if (!(start instanceof HTMLButtonElement) || !(scenario instanceof HTMLSelectElement)) return
   start.disabled = true
   const mode = scenario.value
-  show('Initializing; inspect the console and network panel. Intake acceptance is not proof of storage.')
+  show('Initializing; inspect the network panel. Intake acceptance is not proof of storage.')
   try {
     await provider?.onClose()
     provider = new DatadogProvider({
@@ -42,9 +42,8 @@ async function initialize() {
       applicationId: input('application').value || undefined,
       env: input('environment').value,
       site: 'datad0g.com',
-      debugMode: input('debug').checked,
       enableFlagEvaluationTracking: input('evaluations').checked,
-      enableExposureLogging: false,
+      trackExposures: false,
       enableRumFeatureFlagTracking: false,
       flagConfigurationFetch: async (url, options) => {
         if (mode === 'failure') throw new TypeError('Deliberate configuration-only failure')
@@ -55,7 +54,9 @@ async function initialize() {
     await OpenFeature.setProviderAndWait(provider)
     show(`Initialization completed. Provider status: ${provider.status}. Check remote evidence separately.`)
   } catch {
-    show('Initialization failed. Inspect local console/network diagnostics; remote evidence may be unavailable.')
+    show(
+      'Initialization failed. Inspect the configuration request in the network panel; remote evidence may be unavailable.'
+    )
   } finally {
     start.disabled = false
   }
@@ -63,7 +64,6 @@ async function initialize() {
 
 document.getElementById('evaluate')?.addEventListener('click', () => {
   const details = OpenFeature.getClient().getBooleanDetails(input('flag').value, false)
-  console.log('getBooleanDetails:', JSON.stringify(details))
   show(JSON.stringify(details, null, 2))
 })
 

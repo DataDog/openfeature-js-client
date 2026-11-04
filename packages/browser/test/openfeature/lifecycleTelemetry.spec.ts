@@ -1,7 +1,7 @@
 import { TextEncoder } from 'node:util'
 import { createHttpRequest, Observable, type PageMayExitEvent } from '@datadog/browser-core'
 import { validateAndBuildFlaggingConfiguration } from '../../src/domain/configuration'
-import { createLifecycleTelemetry, logDiagnostic } from '../../src/openfeature/lifecycleTelemetry'
+import { createLifecycleTelemetry } from '../../src/openfeature/lifecycleTelemetry'
 import { diagnosticRecords } from './diagnostic-contract'
 
 const mockSend = jest.fn()
@@ -221,24 +221,13 @@ describe('lifecycle diagnostic transport', () => {
     expect(records()).toHaveLength(1)
   })
 
-  it.each([undefined, false, true])('telemetry and upload failures are independent of debugMode=%s', (debugMode) => {
-    const telemetry = createLifecycleTelemetry(configuration(), debugMode)
+  it('handles upload failures without console output', () => {
+    const telemetry = createLifecycleTelemetry(configuration())
     telemetry.settle('failed')
     const onError = jest.mocked(createHttpRequest).mock.calls[0][1]
     expect(() => onError?.({} as never)).not.toThrow()
     telemetry.stop()
     expect(records()).toHaveLength(1)
-    if (debugMode) expect(console.log).toHaveBeenCalled()
-    else expect(console.log).not.toHaveBeenCalled()
-  })
-
-  it('does not throw when local logging is replaced', () => {
-    jest.spyOn(console, 'log').mockImplementation(() => {
-      throw new Error('console unavailable')
-    })
-    expect(() => logDiagnostic('details', { value: true })).not.toThrow()
-    const telemetry = createLifecycleTelemetry(configuration(), true)
-    expect(() => telemetry.settle('failed')).not.toThrow()
-    telemetry.stop()
+    expect(console.log).not.toHaveBeenCalled()
   })
 })
