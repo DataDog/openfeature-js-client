@@ -1,5 +1,4 @@
-import type { Context, RawError } from '@datadog/browser-core'
-import { addTelemetryDebug, createPageMayExitObservable, Observable } from '@datadog/browser-core'
+import { addTelemetryDebug, type Context } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import {
   ErrorCode,
@@ -8,42 +7,29 @@ import {
   type FlagValue,
   type HookContext,
 } from '@openfeature/web-sdk'
-import { NO_DEBUG } from '../debug'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
-import { createTrackedBatch } from '../transport/debugBatch'
 import {
   type EvaluationTelemetryPolicy,
   getEvaluationTrackingContext,
   withEvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
 export function createFlagEvalEVPHook(
   configuration: FlaggingTrackingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
-  policy?: EvaluationTelemetryPolicy
+  policy?: EvaluationTelemetryPolicy,
+  sharedTransport?: FlagEvaluationTransport
 ): ManagedTrackingHook {
-  const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const sessionExpireObservable = new Observable<void>()
-  const debug = configuration.debug?.child({ channel: 'evaluation' }) ?? NO_DEBUG
-  const flagEvaluationBatch = createTrackedBatch(
-    configuration.flagEvaluationEndpointBuilder,
-    (error: RawError) => {
-      debug.event('upload.error', () => ({ error }))
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    },
-    pageMayExitObservable,
-    sessionExpireObservable,
-    debug
-  )
-  debug.event('evaluation.aggregation_started', () => ({ intervalMs: configuration.flagEvaluationTrackingInterval }))
+  const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
+  const flagEvaluationBatch = transport.batch
 
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,
     (events: FlagEvaluationEvent[]) => {
-      debug.event('evaluation.aggregation_flushed', () => ({ events, count: events.length }))
       events.forEach((event) => {
         try {
           const url = window?.location?.href
@@ -62,7 +48,6 @@ export function createFlagEvalEVPHook(
           }
           flagEvaluationBatch.add(eventWithMetadata as unknown as Context)
         } catch (error) {
-          debug.event('batch.enqueue_failed', () => ({ error, event }))
           addTelemetryDebug('Error adding flag evaluation to batch', {
             'error.message': error instanceof Error ? error.message : String(error),
           })
@@ -73,7 +58,11 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  const pageExitSubscription = pageMayExitObservable.subscribe(() => {
+  const pageExitSubscription = (
+    sharedTransport
+      ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
+      : transport.pageMayExitObservable
+  ).subscribe(() => {
     aggregator.stop()
   })
 
@@ -82,10 +71,9 @@ export function createFlagEvalEVPHook(
       shutdown: () => {
         try {
           aggregator.stop()
-          sessionExpireObservable.notify()
         } finally {
           pageExitSubscription.unsubscribe()
-          flagEvaluationBatch.stop()
+          if (!sharedTransport) transport.stop()
         }
       },
       // Failed evaluations skip `after`; `finally` receives the result returned to the application.
@@ -97,25 +85,25 @@ export function createFlagEvalEVPHook(
             details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
               ? details.errorCode
               : ErrorCode.GENERAL
-          const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
-          aggregator.addEvaluation(context, details, errorCode)
-          debug.event('evaluation.aggregated', () => ({ context, details, errorCode, countDelta: 1 }))
+          aggregator.addEvaluation(
+            getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
+            details,
+            errorCode
+          )
         } catch (error) {
-          debug.event('evaluation.aggregation_failed', () => ({ error, details }))
           addTelemetryDebug('Error adding evaluation to aggregator', {
             'error.message': error instanceof Error ? error.message : String(error),
           })
         }
       },
     },
-    policy,
-    debug
+    policy
   )
 }
 
 export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {
   const configuration = validateAndBuildFlaggingTrackingConfiguration(options)
   return configuration
-    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration), configuration.debug)
+    ? createTrackingHookController(() => createFlagEvalEVPHook(configuration))
     : composeDatadogTrackingHooks()
 }
