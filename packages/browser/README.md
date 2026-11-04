@@ -169,12 +169,17 @@ the SDK does not restore old tokens when switching users.
 
 The provider sends the token in the reserved `DD-Assignment-Token` header, which takes precedence over custom
 headers of the same name. It excludes the reserved context field from Datadog targeting attributes, telemetry,
-and assignment-cache data. OpenFeature and customer-installed hooks can still access the original context.
+and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
+application hooks can still access the original context. Datadog's tracking hooks remove the token.
+Customer proxies must allow `DD-Assignment-Token` in CORS and make error responses readable by the browser.
 
 Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
 `STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
 behavior applies. Supplying a replacement token can recover without recreating the provider. The diagnostic logger
 reports `ASSIGNMENT_AUTHORIZATION_FAILED` without the token; there is no custom refresh-required event.
+The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
+Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
+the HTTP status in diagnostics to avoid reflecting credentials.
 
 The SDK skips downloads when a numeric JWT `exp` is at least 60 seconds in the past, allowing for client clock skew.
 This check does not verify the signature. Fastly remains authoritative, including for recently expired tokens,
@@ -349,7 +354,8 @@ Immediate responses acknowledge `experimentation_opt_out=true`. Future responses
 The provider rejects unsupported responses and cached assignments from a different subject, mode, or opt-out timestamp.
 With either enabled mode, `DatadogProvider` withholds assignments fetched for a different context, including for
 subjects without an opt-out timestamp. Until usable assignments arrive, evaluations return the application default
-with `PROVIDER_NOT_READY`, including after a failed refresh. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
+with `PROVIDER_NOT_READY`, including after an ordinary failed refresh. A subject-authorization rejection without
+usable assignments returns `GENERAL` instead. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
 With `Disabled`, the previous assignments remain available during a context change.
 For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
 

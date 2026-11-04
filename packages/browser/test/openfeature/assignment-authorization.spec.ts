@@ -4,7 +4,9 @@ import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { openDB, STORE_NAME } from '../../src/cache/indexeddb-store'
 import { ASSIGNMENT_AUTHORIZATION_FAILED } from '../../src/domain/assignment-token'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { getEvaluationTrackingContext } from '../../src/openfeature/evaluation-telemetry-policy'
+import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import type { DDRum } from '../../src/openfeature/rumIntegration'
 import { withRetry } from '../../src/transport/fetch'
@@ -14,7 +16,11 @@ import response from '../data/precomputed-v1.json'
 const context = { targetingKey: 'user-a', country: 'US' }
 const token = (exp = Date.now() / 1000 + 3600) => `eyJhbGciOiJQUzI1NiJ9.${btoa(JSON.stringify({ exp }))}.signature`
 const success = () => new Response(JSON.stringify(response), { status: 200 })
-const rejection = () => new Response(JSON.stringify({ errors: [{ detail: 'untrusted server text' }] }), { status: 401 })
+const rejection = () =>
+  new Response(
+    JSON.stringify({ errors: [{ code: ASSIGNMENT_AUTHORIZATION_FAILED, detail: 'untrusted server text' }] }),
+    { status: 401 }
+  )
 const options: FlaggingInitConfiguration = {
   clientToken: 'client-token',
   env: 'test',
@@ -97,6 +103,20 @@ describe('assignment authorization', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(error.mock.calls)).not.toContain('untrusted server text')
     expect(JSON.stringify((console.error as jest.Mock).mock.calls)).not.toContain('untrusted server text')
+    fetchMock.mockImplementation(success)
+    await OpenFeature.setContext({ ...context, dd_assignment_token: 'replacement.jwt.signature' })
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+  })
+
+  it('recognizes a missing-token rejection from a protected environment', async () => {
+    fetchMock.mockImplementation(rejection)
+    await expect(provider.initialize(context)).rejects.toMatchObject({
+      code: ErrorCode.GENERAL,
+      message: ASSIGNMENT_AUTHORIZATION_FAILED,
+    })
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expect(provider.status).toBe(ProviderStatus.ERROR)
   })
 
   it('does not inherit an assignment token from RUM when it is omitted from OpenFeature context', async () => {
@@ -137,6 +157,86 @@ describe('assignment authorization', () => {
     await OpenFeature.setContext({ ...context, dd_assignment_token: token() })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+  })
+
+  it('evaluates portable assignments with the same token-bearing OpenFeature context', async () => {
+    const original = Object.freeze({ ...context, dd_assignment_token: token() })
+    const core = new DatadogCoreProvider()
+    core.setConfiguration(
+      await fetchPrecomputedConfiguration({
+        clientToken: 'client-token',
+        env: 'test',
+        context: original,
+        fetch: fetchMock,
+      })
+    )
+    await OpenFeature.setProviderAndWait(core, original)
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+    await OpenFeature.setContext({ ...context, dd_assignment_token: 'replacement.jwt.signature' })
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(original.dd_assignment_token).toBeDefined()
+  })
+
+  it('resumes usable assignments immediately when returning to a previously accepted subject', async () => {
+    await OpenFeature.setProviderAndWait(provider, { ...context, dd_assignment_token: token() })
+    fetchMock.mockImplementation(rejection)
+    await OpenFeature.setContext({ targetingKey: 'user-b', dd_assignment_token: token() })
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(false)
+    let finish!: (response: Response) => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve
+        })
+    )
+    const returning = OpenFeature.setContext({ ...context, dd_assignment_token: token() })
+    try {
+      expect(provider.status).toBe(ProviderStatus.RECONCILING)
+      expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+    } finally {
+      finish(success())
+      await returning
+    }
+  })
+
+  it('keeps defaults during a retry for a rejected subject with no usable assignments', async () => {
+    await OpenFeature.setProviderAndWait(provider, { ...context, dd_assignment_token: token() })
+    fetchMock.mockImplementation(rejection)
+    const rejected = { targetingKey: 'user-b', dd_assignment_token: token() }
+    await OpenFeature.setContext(rejected)
+    let finish!: (response: Response) => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve
+        })
+    )
+    const retry = OpenFeature.setContext({ ...rejected, dd_assignment_token: 'replacement.jwt.signature' })
+    try {
+      expect(provider.status).toBe(ProviderStatus.RECONCILING)
+      expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(false)
+    } finally {
+      finish(success())
+      await retry
+    }
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+  })
+
+  it('does not mask a subsequent invalid opt-out context with a previous authorization failure', async () => {
+    provider = new DatadogProvider({
+      ...options,
+      experimentationOptOutMode: ExperimentationOptOutMode.Immediate,
+      flagConfigurationFetch: fetchMock,
+    })
+    fetchMock.mockImplementation(rejection)
+    await expect(provider.initialize({ ...context, dd_assignment_token: token() })).rejects.toThrow(
+      ASSIGNMENT_AUTHORIZATION_FAILED
+    )
+    const invalid = { ...context, dd_experimentation_opt_out_at: 'invalid' }
+    await expect(provider.onContextChange({}, invalid)).rejects.toMatchObject({ code: ErrorCode.INVALID_CONTEXT })
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, invalid, logger)).toMatchObject({
+      errorCode: ErrorCode.INVALID_CONTEXT,
+    })
   })
 
   it('does not use another subject or attribute set as matching fallback', async () => {

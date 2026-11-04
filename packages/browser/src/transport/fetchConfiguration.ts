@@ -14,6 +14,7 @@ import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
 import {
+  ASSIGNMENT_AUTHORIZATION_FAILED,
   ASSIGNMENT_TOKEN_HEADER,
   assignmentAuthorizationError,
   extractAssignmentToken,
@@ -63,7 +64,6 @@ export interface PrecomputedConfigurationFetchOptions
   extends ConfigurationFetchOptions, ExperimentationOptOutConfiguration {
   applicationId?: string
   context: EvaluationContext
-  assignmentToken?: unknown
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -137,7 +137,7 @@ export async function fetchPrecomputedConfiguration(
 }
 
 async function requestPrecomputedConfiguration(
-  options: PrecomputedConfigurationFetchOptions,
+  options: PrecomputedConfigurationFetchOptions & { assignmentToken?: unknown },
   flagSelection?: CanonicalFlagSelection
 ): Promise<FlagsConfiguration> {
   // Also sanitize the standalone fetch API; it can be used without a provider.
@@ -203,7 +203,7 @@ async function requestPrecomputedConfiguration(
       options.signal
     ),
   })
-  if (response.status === 401) throw assignmentAuthorizationError()
+  if (await isAssignmentAuthorizationRejection(response)) throw assignmentAuthorizationError()
   if (!response.ok) {
     // A proxy may echo request headers in an error body. Do not expose that body
     // through OpenFeature errors when a credential was supplied.
@@ -223,6 +223,29 @@ async function requestPrecomputedConfiguration(
       context: options.context,
       fetchedAt,
     },
+  }
+}
+
+async function isAssignmentAuthorizationRejection(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false
+  try {
+    const body: unknown = await response.clone().json()
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'errors' in body &&
+      Array.isArray(body.errors) &&
+      body.errors.some(
+        (error: unknown) =>
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === ASSIGNMENT_AUTHORIZATION_FAILED
+      )
+    )
+  } catch {
+    // An unrelated or malformed error must retain ordinary HTTP error handling.
+    return false
   }
 }
 

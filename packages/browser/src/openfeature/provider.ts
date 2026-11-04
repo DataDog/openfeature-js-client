@@ -200,6 +200,7 @@ export class DatadogProvider extends DatadogProviderBase {
       this.lifecycleTelemetry = undefined
       this.initializationStarted = false
     }
+    this.assignmentAuthorizationRejected = false
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -217,6 +218,11 @@ export class DatadogProvider extends DatadogProviderBase {
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
     this.requestedEvaluationContext = evaluationContext
+    // Returning to a matching downloaded configuration need not wait for the
+    // new download to finish, even after another subject was rejected.
+    if (this.canUseConfiguration(this.flagsConfiguration, evaluationContext)) {
+      this.assignmentAuthorizationRejected = false
+    }
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -287,9 +293,8 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
-            if (error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
-              this.assignmentAuthorizationRejected = true
-            }
+            this.assignmentAuthorizationRejected =
+              error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -314,10 +319,7 @@ export class DatadogProvider extends DatadogProviderBase {
     }
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
-    const canUse = (config: FlagsConfiguration | undefined) =>
-      configMatchesContext(config, context) &&
-      (!optedOut || config?.precomputed?.context !== undefined) &&
-      acknowledgesExperimentationOptOut(config, optedOut)
+    const canUse = (config: FlagsConfiguration | undefined) => this.canUseConfiguration(config, context)
 
     // Prefer current config over cache if it matches the requested context
     const cachedConfigPromise = canUse(this.flagsConfiguration)
@@ -349,6 +351,16 @@ export class DatadogProvider extends DatadogProviderBase {
       if (!signal.aborted) this.lifecycleTelemetry?.providerError()
       throw err
     }
+  }
+
+  private canUseConfiguration(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
+    const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
+    return (
+      optedOut !== undefined &&
+      configMatchesContext(config, context) &&
+      (!optedOut || config?.precomputed?.context !== undefined) &&
+      acknowledgesExperimentationOptOut(config, optedOut)
+    )
   }
 
   private effectiveTrackingContext(): EvaluationContext {
