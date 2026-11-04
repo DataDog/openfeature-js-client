@@ -1,8 +1,4 @@
-import {
-  addTelemetryDebug,
-  createPageMayExitObservable,
-  Observable,
-} from '@datadog/browser-core'
+import { addTelemetryDebug, createPageMayExitObservable, Observable } from '@datadog/browser-core'
 import { NO_DEBUG } from '../debug'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { createTrackedBatch } from '../transport/debugBatch'
