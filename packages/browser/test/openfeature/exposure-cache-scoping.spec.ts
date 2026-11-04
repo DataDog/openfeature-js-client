@@ -22,6 +22,8 @@ describe('IndexedDB exposure cache isolation', () => {
   let originalFetch: typeof globalThis.fetch
   let fetchMock: jest.Mock
 
+  const exposureCalls = () => fetchMock.mock.calls.filter(([url]) => url.toString().includes('exposures'))
+
   beforeEach(() => {
     jest.useFakeTimers()
     localStorage.clear()
@@ -49,13 +51,16 @@ describe('IndexedDB exposure cache isolation', () => {
       'isolates %s and retains deduplication when each scope is recreated',
       async (_name, changedOptions) => {
         await evaluateWith(baseOptions)
-        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenCalledTimes(providerKind === 'online' ? 2 : 1)
+        expect(exposureCalls()).toHaveLength(1)
         await evaluateWith({ ...baseOptions, ...changedOptions })
-        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(fetchMock).toHaveBeenCalledTimes(providerKind === 'online' ? 4 : 2)
+        expect(exposureCalls()).toHaveLength(2)
 
         await evaluateWith(baseOptions, false)
         await evaluateWith({ ...baseOptions, ...changedOptions }, false)
-        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(fetchMock).toHaveBeenCalledTimes(providerKind === 'online' ? 6 : 2)
+        expect(exposureCalls()).toHaveLength(2)
 
         const storageKeys = await withStore('readonly', (store) => store.getAllKeys())
         expect(storageKeys.join()).not.toContain(baseOptions.clientToken)
@@ -65,7 +70,8 @@ describe('IndexedDB exposure cache isolation', () => {
     it('uses the same scope for implicit and explicit default site', async () => {
       await evaluateWith(baseOptions)
       await evaluateWith({ ...baseOptions, site: 'datadoghq.com' }, false)
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledTimes(providerKind === 'online' ? 3 : 1)
+      expect(exposureCalls()).toHaveLength(1)
     })
 
     async function evaluateWith(options: DatadogTrackingHooksOptions, expectExposure = true) {
