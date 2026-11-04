@@ -1,5 +1,7 @@
 import type { ErrorCode, EvaluationContext, JsonValue, Logger } from '@openfeature/core'
+import { DependencyGraphError } from '../evaluation/errors'
 import { resolveProtobufAssignment } from '../evaluation/evaluateProtobufConfiguration'
+import { createProtobufDependencyResolver } from '../evaluation/evaluation'
 import { type ExperimentationOptOutModeValue, experimentationOptOutPolicy } from '../evaluation/experimentation-opt-out'
 import { timeStampNow } from '../time'
 import type { FlagsConfiguration, PrecomputedFlag } from './configuration'
@@ -67,7 +69,34 @@ export function precomputeConfiguration(
   const flags: Array<[string, PrecomputedFlag]> = []
   const errors: PrecomputeEvaluationError[] = []
   for (const flagKey of Object.keys(rules.flags)) {
-    const result = resolveProtobufAssignment(rules, flagKey, snapshotContext, NOOP_LOGGER, now, optOut)
+    let result: ReturnType<typeof resolveProtobufAssignment>
+    try {
+      const dependencies = createProtobufDependencyResolver(
+        rules,
+        flagKey,
+        snapshotContext,
+        NOOP_LOGGER,
+        now,
+        optOut,
+        observeFullEvaluationData
+      )
+      result = resolveProtobufAssignment(
+        rules,
+        flagKey,
+        snapshotContext,
+        NOOP_LOGGER,
+        now,
+        optOut,
+        undefined,
+        dependencies.resolve
+      )
+    } catch (error) {
+      errors.push({
+        flagKey,
+        errorCode: error instanceof DependencyGraphError ? error.errorCode : ('GENERAL' as ErrorCode),
+      })
+      continue
+    }
     if (result.kind === 'error') {
       errors.push({ flagKey, errorCode: result.errorCode })
     } else if (result.kind === 'assignment') {

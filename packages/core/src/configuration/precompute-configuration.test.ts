@@ -52,6 +52,101 @@ afterEach(() => {
 })
 
 describe('precomputeConfiguration', () => {
+  function dependentRules(parent: JsonObject = flag(), overrides: JsonObject = {}): FlagsConfiguration {
+    return rules(
+      {
+        child: flag({
+          variations: [
+            { keyStringIndex: 0, booleanValue: true },
+            { keyStringIndex: 1, booleanValue: false },
+          ],
+          allocations: [
+            { key: 'matched', targetingConditionIndex: 0, splits: [{ reason: 'REASON_TARGETING_MATCH' }] },
+            { key: 'fallback', splits: [{ variationIndex: 1, reason: 'REASON_DEFAULT' }] },
+          ],
+        }),
+        parent,
+        unrelated: flag(),
+      },
+      {
+        strings: ['on', 'off', 'parent', 'child'],
+        conditions: [{ flagEvaluationStringMembership: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0] } }],
+        ...overrides,
+      }
+    )
+  }
+
+  it.each([true, false])('matches direct dependency evaluation when the parent value is %s', (parentValue) => {
+    const input = dependentRules(
+      flag({ variations: [{ keyStringIndex: parentValue ? 0 : 1, booleanValue: parentValue }] })
+    )
+    const onEvaluationError = jest.fn()
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+    for (const key of ['child', 'parent', 'unrelated']) {
+      const direct = evaluate(input, 'boolean', key, false, context)
+      expect(evaluate(result, 'boolean', key, false, context)).toMatchObject({
+        value: direct.value,
+        variant: direct.variant,
+        reason: direct.reason,
+      })
+    }
+    expect(result.precomputed?.response.data.attributes.flags.child.variationValue).toBe(parentValue)
+    expect(onEvaluationError).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing parent', 'FLAG_NOT_FOUND'],
+    ['unassigned parent', 'GENERAL'],
+    ['invalid parent', 'PARSE_ERROR'],
+    ['cycle', 'GENERAL'],
+    ['depth limit', 'GENERAL'],
+    ['invalid depth', 'PARSE_ERROR'],
+  ])('omits a child with %s, reports its error, and continues precomputing', (failure, errorCode) => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    if (failure === 'missing parent') delete source.flags.parent
+    if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
+    if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
+    if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
+    if (failure === 'depth limit' || failure === 'invalid depth') {
+      source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+        evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
+      }).evaluatorParams
+    }
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+    const onEvaluationError = jest.fn()
+    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({ reason: 'ERROR', errorCode })
+    expect(result.precomputed?.response.data.attributes.flags).not.toHaveProperty('child')
+    expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
+    expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'child', errorCode })
+  })
+
+  it('applies the same opt-out policy to parent and child assignments', () => {
+    const input = dependentRules(
+      flag({
+        variations: [
+          { keyStringIndex: 0, booleanValue: true },
+          { keyStringIndex: 1, booleanValue: false },
+        ],
+        allocations: [
+          { key: 'experiment', logExposureEvent: true, splits: [{ reason: 'REASON_SPLIT' }] },
+          { key: 'fallback', splits: [{ variationIndex: 1, reason: 'REASON_DEFAULT' }] },
+        ],
+      })
+    )
+    const optedOutContext = { ...context, dd_experimentation_opt_out_at: '2026-10-01T00:00:00Z' }
+    const active = precomputeConfiguration(input, optedOutContext)
+    const optedOut = roundTrip(
+      precomputeConfiguration(input, optedOutContext, { experimentationOptOutMode: 'immediate' })
+    )
+    for (const key of ['child', 'parent']) {
+      expect(active.precomputed?.response.data.attributes.flags[key].variationValue).toBe(true)
+      expect(optedOut.precomputed?.response.data.attributes.flags[key].variationValue).toBe(false)
+    }
+    expect(optedOut.precomputed?.response.data.attributes.evaluation_options).toEqual({ experimentation_opt_out: true })
+  })
+
   it.each([
     ['BOOLEAN', { booleanValue: false }, 'boolean', false],
     ['STRING', { stringValueIndex: 2 }, 'string', 'hello'],
