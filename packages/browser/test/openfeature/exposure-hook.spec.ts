@@ -264,10 +264,7 @@ describe('ExposureHook', () => {
 
     OpenFeature.getClient().getBooleanDetails('dependent-silent-root', false)
 
-    expect(evaluations.map((evaluation) => evaluation.flagKey)).toEqual([
-      'dependency-parent',
-      'dependent-silent-root',
-    ])
+    expect(evaluations.map((evaluation) => evaluation.flagKey)).toEqual(['dependency-parent', 'dependent-silent-root'])
     expect(evaluations.map((evaluation) => evaluation.isExposure())).toEqual([true, false])
     expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([true, false])
   })

@@ -1,5 +1,9 @@
 import type { EvaluationContext } from '@openfeature/core'
-import type { PrecomputedConfigurationResponse, PrecomputedDependencyEvaluation, PrecomputedFlag } from './configuration'
+import type {
+  PrecomputedConfigurationResponse,
+  PrecomputedDependencyEvaluation,
+  PrecomputedFlag,
+} from './configuration'
 import { isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
 
 type WireEntry = {

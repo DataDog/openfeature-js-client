@@ -98,10 +98,7 @@ export class DependencyTelemetrySidecar {
     }
   }
 
-  takeDependencyEvaluations(
-    metadata: object | undefined,
-    alias?: object
-  ): readonly DependencyEvaluation[] {
+  takeDependencyEvaluations(metadata: object | undefined, alias?: object): readonly DependencyEvaluation[] {
     const batch =
       (metadata === undefined ? undefined : this.batches.get(metadata)) ??
       (alias === undefined ? undefined : this.evaluationAliases.get(alias))
