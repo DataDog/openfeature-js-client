@@ -627,18 +627,21 @@ type PreparedDependencyTelemetry = {
 	dependencyExposures: readonly PreparedDependencyExposure[];
 };
 /**
- * Associates a completed dependency trace with the root result's metadata object.
+ * Associates a completed dependency trace with the root result's metadata and evaluation context.
  * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
  * @internal
  */
 export declare class DependencyTelemetrySidecar {
 	readonly collectDependencyEvaluations: boolean;
-	private readonly batches;
+	private readonly batchesByMetadata;
+	private readonly batchesByContext;
 	constructor(collectDependencyEvaluations?: boolean);
-	stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void;
-	takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[];
+	stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void;
+	takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[];
 	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
-	discard(metadata: object | undefined): void;
+	discardDependencyExposures(metadata: object | undefined): void;
+	private getBatch;
+	private deleteBatch;
 }
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
@@ -681,6 +684,7 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private stageDependencyTelemetry;
 	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;
+	private prepareExposure;
 }
 
 export {};

@@ -35,7 +35,7 @@ describe('dependent flag exposures', () => {
       hookContext: { context: EvaluationContext },
       evaluationDetails: EvaluationDetails<FlagValue>
     ) => {
-      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata)) {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
         try {
           dependencyEvaluationChannel.publish({
             context: structuredClone(hookContext.context),
@@ -204,6 +204,8 @@ describe('dependent flag exposures', () => {
       if (event.flag.key === 'leaf') {
         const profile = event.subject.attributes.profile as { tier: string }
         profile.tier = 'mutated by subscriber'
+        const evaluatedAt = event.subject.attributes.evaluatedAt as Date
+        evaluatedAt.setUTCFullYear(2030)
       }
     })
     const provider = new DatadogNodeServerProvider({ exposureChannel })
@@ -215,9 +217,15 @@ describe('dependent flag exposures', () => {
     )
     const client = await clientFor(provider)
     // Untyped JavaScript callers can supply values outside EvaluationContextValue.
+    const sharedProfile = { tier: 'gold' }
+    const evaluatedAt = new Date('2026-10-07T12:00:00Z')
     const context = {
       targetingKey: 'subject',
-      profile: { tier: 'gold' },
+      profile: sharedProfile,
+      backupProfile: sharedProfile,
+      repeatedProfiles: [sharedProfile, sharedProfile],
+      evaluatedAt,
+      backupDate: evaluatedAt,
       callback: (() => true) as unknown as string,
     }
 
@@ -229,15 +237,74 @@ describe('dependent flag exposures', () => {
       'root',
     ])
     expect(context.profile).toEqual({ tier: 'gold' })
-    expect(
-      exposureChannel.publish.mock.calls.map(([published]) => (published as ExposureEvent).subject.attributes.profile)
-    ).toEqual([{ tier: 'mutated by subscriber' }, { tier: 'gold' }])
+    const [leafExposure, rootExposure] = exposureChannel.publish.mock.calls.map(
+      ([published]) => published as ExposureEvent
+    )
+    expect(leafExposure.subject.attributes).toMatchObject({
+      profile: { tier: 'mutated by subscriber' },
+      backupProfile: { tier: 'gold' },
+      repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+      evaluatedAt: new Date('2030-10-07T12:00:00Z'),
+      backupDate: new Date('2026-10-07T12:00:00Z'),
+    })
+    expect(rootExposure.subject.attributes).toMatchObject({
+      profile: { tier: 'gold' },
+      backupProfile: { tier: 'gold' },
+      repeatedProfiles: [{ tier: 'gold' }, { tier: 'gold' }],
+      evaluatedAt: new Date('2026-10-07T12:00:00Z'),
+      backupDate: new Date('2026-10-07T12:00:00Z'),
+    })
+    expect(evaluatedAt).toEqual(new Date('2026-10-07T12:00:00Z'))
     expect(
       exposureChannel.publish.mock.calls.every(
         ([published]) => !('callback' in (published as ExposureEvent).subject.attributes)
       )
     ).toBe(true)
   })
+
+  it.each([
+    { dependencyDoLog: false, rootDoLog: false },
+    { dependencyDoLog: false, rootDoLog: true },
+    { dependencyDoLog: true, rootDoLog: false },
+    { dependencyDoLog: true, rootDoLog: true },
+  ])(
+    'keeps assignment and dependency evaluations when cyclic exposure attributes cannot be cached ($dependencyDoLog, $rootDoLog)',
+    async ({ dependencyDoLog, rootDoLog }) => {
+      const exposureChannel = channel<ExposureEvent>()
+      const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+      const provider = providerWithDependencyEvaluations(exposureChannel, dependencyEvaluationChannel)
+      const root = dependentFlag('root', ['leaf'])
+      const leaf = booleanFlag('leaf')
+      root.allocations[0].doLog = rootDoLog
+      leaf.allocations[0].doLog = dependencyDoLog
+      provider.setConfiguration(configuration({ root, leaf }))
+      const client = await clientFor(provider)
+      const traits: Record<string, unknown> = {}
+      traits.self = traits
+
+      await expect(
+        client.getBooleanDetails('root', false, {
+          targetingKey: 'subject',
+          traits: traits as never,
+        })
+      ).resolves.toMatchObject({ value: true, variant: 'on' })
+      expect(
+        dependencyEvaluationChannel.publish.mock.calls.map(
+          ([event]) => (event as DependencyEvaluationEvent).details.flagKey
+        )
+      ).toEqual(['leaf'])
+      expect(exposureChannel.publish).not.toHaveBeenCalled()
+
+      await expect(client.getBooleanDetails('root', false, { targetingKey: 'safe-subject' })).resolves.toMatchObject({
+        value: true,
+        variant: 'on',
+      })
+      expect(exposureChannel.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+        ...(dependencyDoLog ? ['leaf'] : []),
+        ...(rootDoLog ? ['root'] : []),
+      ])
+    }
+  )
 
   it('keeps re-entrant root evaluation sessions isolated', async () => {
     const exposureChannel = channel<ExposureEvent>()
@@ -470,6 +537,62 @@ describe('dependent flag exposures', () => {
       'leaf',
       'root',
     ])
+  })
+
+  it('preserves dependency evaluations when a hook fails before a later telemetry hook', async () => {
+    const exposureChannel = channel<ExposureEvent>()
+    const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()
+    const sidecar = new DependencyTelemetrySidecar()
+    const provider = new DatadogNodeServerProvider({ exposureChannel, dependencyTelemetrySidecar: sidecar })
+    provider.setConfiguration(
+      configuration({
+        root: dependentFlag('root', ['leaf']),
+        leaf: booleanFlag('leaf'),
+      })
+    )
+    const client = await clientFor(provider)
+    const publishDependencyEvaluations = (
+      hookContext: { context: EvaluationContext },
+      evaluationDetails: EvaluationDetails<FlagValue>
+    ) => {
+      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
+        dependencyEvaluationChannel.publish({
+          context: hookContext.context,
+          details: {
+            ...evaluation.details,
+            flagKey: evaluation.flagKey,
+            flagMetadata: evaluation.details.flagMetadata ?? {},
+          },
+        })
+      }
+    }
+    client.addHooks({
+      after: publishDependencyEvaluations,
+      finally: publishDependencyEvaluations,
+    })
+
+    const failed = await client.getBooleanDetails(
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      {
+        hooks: [
+          {
+            after: () => {
+              throw new Error('application hook failed before telemetry')
+            },
+          },
+        ],
+      }
+    )
+
+    expect(failed).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(
+      dependencyEvaluationChannel.publish.mock.calls.map(
+        ([event]) => (event as DependencyEvaluationEvent).details.flagKey
+      )
+    ).toEqual(['leaf'])
+    expect(exposureChannel.publish).not.toHaveBeenCalled()
   })
 
   it('records dependency exposure decisions when the exposure channel has no subscribers', async () => {

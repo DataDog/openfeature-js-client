@@ -74,34 +74,39 @@ type PreparedDependencyTelemetry = {
   dependencyExposures: readonly PreparedDependencyExposure[]
 }
 
+type StagedDependencyTelemetry = PreparedDependencyTelemetry & {
+  rootMetadata: object
+  rootContext: object
+}
+
 /**
- * Associates a completed dependency trace with the root result's metadata object.
+ * Associates a completed dependency trace with the root result's metadata and evaluation context.
  * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
  * @internal
  */
 export class DependencyTelemetrySidecar {
-  private readonly batches = new WeakMap<object, PreparedDependencyTelemetry>()
+  private readonly batchesByMetadata = new WeakMap<object, StagedDependencyTelemetry>()
+  private readonly batchesByContext = new WeakMap<object, StagedDependencyTelemetry>()
 
   constructor(readonly collectDependencyEvaluations = true) {}
 
-  stage(rootMetadata: object, telemetry: PreparedDependencyTelemetry): void {
+  stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void {
     if (telemetry.dependencyEvaluations.length > 0 || telemetry.dependencyExposures.length > 0) {
-      this.batches.set(rootMetadata, telemetry)
+      const batch = { ...telemetry, rootMetadata, rootContext }
+      this.batchesByMetadata.set(rootMetadata, batch)
+      this.batchesByContext.set(rootContext, batch)
     }
   }
 
-  takeDependencyEvaluations(metadata: object | undefined): readonly DependencyEvaluation[] {
-    if (metadata === undefined) {
-      return []
-    }
-    const batch = this.batches.get(metadata)
+  takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[] {
+    const batch = this.getBatch(metadata, context)
     if (batch === undefined) {
       return []
     }
     const evaluations = batch.dependencyEvaluations
     batch.dependencyEvaluations = []
     if (batch.dependencyExposures.length === 0) {
-      this.batches.delete(metadata)
+      this.deleteBatch(batch)
     }
     return evaluations
   }
@@ -110,14 +115,45 @@ export class DependencyTelemetrySidecar {
     if (metadata === undefined) {
       return []
     }
-    const exposures = this.batches.get(metadata)?.dependencyExposures ?? []
-    this.batches.delete(metadata)
+    const batch = this.batchesByMetadata.get(metadata)
+    if (batch === undefined) {
+      return []
+    }
+    const exposures = batch.dependencyExposures
+    batch.dependencyExposures = []
+    if (batch.dependencyEvaluations.length === 0) {
+      this.deleteBatch(batch)
+    }
     return exposures
   }
 
-  discard(metadata: object | undefined): void {
-    if (metadata !== undefined) {
-      this.batches.delete(metadata)
+  discardDependencyExposures(metadata: object | undefined): void {
+    if (metadata === undefined) {
+      return
+    }
+    const batch = this.batchesByMetadata.get(metadata)
+    if (batch === undefined) {
+      return
+    }
+    batch.dependencyExposures = []
+    if (batch.dependencyEvaluations.length === 0) {
+      this.deleteBatch(batch)
+    }
+  }
+
+  private getBatch(metadata: object | undefined, context: object | undefined): StagedDependencyTelemetry | undefined {
+    return (
+      (metadata === undefined ? undefined : this.batchesByMetadata.get(metadata)) ??
+      (context === undefined ? undefined : this.batchesByContext.get(context))
+    )
+  }
+
+  private deleteBatch(batch: StagedDependencyTelemetry): void {
+    if (this.batchesByMetadata.get(batch.rootMetadata) === batch) {
+      this.batchesByMetadata.delete(batch.rootMetadata)
+    }
+    if (this.batchesByContext.get(batch.rootContext) === batch) {
+      this.batchesByContext.delete(batch.rootContext)
     }
   }
 }
@@ -336,20 +372,15 @@ export class DatadogNodeServerProvider implements Provider {
     }
     const prepared: PreparedDependencyExposure[] = []
     for (const evaluation of exposureCandidates) {
-      const metadata = (evaluation.details.flagMetadata ?? {}) as FlagMetadata
       const details = {
         ...evaluation.details,
         flagKey: evaluation.flagKey,
-        flagMetadata: metadata,
+        flagMetadata: (evaluation.details.flagMetadata ?? {}) as FlagMetadata,
       }
-      const event = createExposureEvent(context, details)
-      if (event === undefined) {
-        continue
-      }
-      if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, event)
-      prepared.push({ details, event })
+      const exposure = this.prepareExposure(context, details)
+      if (exposure !== undefined) prepared.push(exposure)
     }
-    this.dependencyTelemetrySidecar.stage(rootMetadata, {
+    this.dependencyTelemetrySidecar.stage(rootMetadata, context, {
       dependencyEvaluations,
       dependencyExposures: prepared,
     })
@@ -361,16 +392,26 @@ export class DatadogNodeServerProvider implements Provider {
     context: EvaluationContext,
     resolutionDetails: Omit<ResolutionDetails<T>, 'value'> & { value?: T }
   ): void {
-    const metadata = (resolutionDetails.flagMetadata ?? {}) as FlagMetadata
-    const exposureEvent = createExposureEvent(context, {
+    this.prepareExposure(context, {
       flagKey,
       variant: resolutionDetails.variant,
-      flagMetadata: resolutionDetails.flagMetadata ?? {},
+      flagMetadata: (resolutionDetails.flagMetadata ?? {}) as FlagMetadata,
     })
-    if (!exposureEvent) {
+  }
+
+  private prepareExposure(
+    context: EvaluationContext,
+    details: PreparedDependencyExposure['details']
+  ): PreparedDependencyExposure | undefined {
+    try {
+      const event = createExposureEvent(context, details)
+      if (event === undefined) return
+      if (this.exposureCache) prepareExposureDecision(details.flagMetadata, this.exposureCache, event)
+      return { details, event }
+    } catch {
+      // Exposure preparation is best effort and must not affect assignment or evaluation telemetry.
       return
     }
-    if (this.exposureCache) prepareExposureDecision(metadata, this.exposureCache, exposureEvent)
   }
 }
 
@@ -395,7 +436,9 @@ class ExposureLoggingHook implements Hook {
   error(hookContext: Readonly<HookContext<FlagValue>>): void {
     const evaluationDetails = this.pending.get(hookContext)
     const metadata = evaluationDetails?.flagMetadata
-    this.dependencyTelemetrySidecar.discard(metadata)
+    // A later hook failure rolls back transactional exposures, but dependency
+    // evaluation telemetry remains observable from the root finally lifecycle.
+    this.dependencyTelemetrySidecar.discardDependencyExposures(metadata)
     this.pending.delete(hookContext)
   }
 
@@ -477,30 +520,35 @@ function cloneTelemetryValue(value: unknown, seen: WeakSet<object>): unknown | t
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
     return value
   }
+  if (value instanceof Date) return new Date(value.getTime())
   if (typeof value !== 'object' || seen.has(value)) return unsupportedTelemetryValue
 
   seen.add(value)
-  if (Array.isArray(value)) {
-    const clone: unknown[] = []
-    for (const entry of value) {
+  try {
+    if (Array.isArray(value)) {
+      const clone: unknown[] = []
+      for (const entry of value) {
+        const clonedEntry = cloneTelemetryValue(entry, seen)
+        if (clonedEntry !== unsupportedTelemetryValue) clone.push(clonedEntry)
+      }
+      return clone
+    }
+
+    const clone: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) {
+      let entry: unknown
+      try {
+        entry = (value as Record<string, unknown>)[key]
+      } catch {
+        continue
+      }
       const clonedEntry = cloneTelemetryValue(entry, seen)
-      if (clonedEntry !== unsupportedTelemetryValue) clone.push(clonedEntry)
+      if (clonedEntry !== unsupportedTelemetryValue) {
+        Object.defineProperty(clone, key, { value: clonedEntry, enumerable: true, configurable: true, writable: true })
+      }
     }
     return clone
+  } finally {
+    seen.delete(value)
   }
-
-  const clone: Record<string, unknown> = {}
-  for (const key of Object.keys(value)) {
-    let entry: unknown
-    try {
-      entry = (value as Record<string, unknown>)[key]
-    } catch {
-      continue
-    }
-    const clonedEntry = cloneTelemetryValue(entry, seen)
-    if (clonedEntry !== unsupportedTelemetryValue) {
-      Object.defineProperty(clone, key, { value: clonedEntry, enumerable: true, configurable: true, writable: true })
-    }
-  }
-  return clone
 }
