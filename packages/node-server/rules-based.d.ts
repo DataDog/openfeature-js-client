@@ -993,6 +993,10 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	/** Split features of the selected assignment; parsed leniently at evaluation time. */
 	features?: unknown;
 };
+export interface FlagSelection {
+	tags?: readonly string[];
+	keyPatterns?: readonly string[];
+}
 export type FlagsConfigurationWire = string;
 /**
  * Decode a binary flags configuration response.
@@ -1011,6 +1015,15 @@ interface ConfigurationFetchOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
+	/**
+	 * Request flags matching any of these tags or key patterns.
+	 * Best-effort: an invalid or over-limit selection is not sent.
+	 */
+	flagSelection?: FlagSelection;
+	/** Reports dropped or server-ignored selections. Defaults to console. */
+	logger?: {
+		error(message: string): void;
+	};
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;
 	signal?: AbortSignal;
