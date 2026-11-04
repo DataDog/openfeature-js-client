@@ -52,7 +52,7 @@ describe('createFlagEvalEVPHook', () => {
     hook = createFlagEvalEVPHook(mockConfiguration)
 
     expect(hook).toBeDefined()
-    expect(hook.after).toBeUndefined()
+    expect(hook.after).toBeDefined()
     expect(hook.finally).toBeDefined()
   })
 
@@ -178,6 +178,43 @@ describe('createFlagEvalEVPHook', () => {
       ['missing-parent', ErrorCode.FLAG_NOT_FOUND],
       ['failed-ancestor', ErrorCode.FLAG_NOT_FOUND],
       ['root', ErrorCode.FLAG_NOT_FOUND],
+    ])
+  })
+
+  it('retains prerequisite telemetry when a later after hook replaces the root result', () => {
+    const flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(flagMetadata, [{ flagKey: 'parent', isPresentInAssignment: true }], {
+      parent: {
+        allocationKey: 'parent-allocation',
+        variationKey: 'parent-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+    })
+    const hookContext = { context: { targetingKey: 'subject' } } as HookContext
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    hook = createFlagEvalEVPHook(mockConfiguration)
+
+    hook.after?.(hookContext, {
+      flagKey: 'root',
+      value: true,
+      variant: 'root-on',
+      reason: 'TARGETING_MATCH',
+      flagMetadata,
+    })
+    hook.finally?.(hookContext, {
+      flagKey: 'root',
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.GENERAL,
+      flagMetadata: {},
+    })
+
+    expect(addEvaluationSpy.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['parent', undefined],
+      ['root', ErrorCode.GENERAL],
     ])
   })
 })

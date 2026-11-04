@@ -1,5 +1,6 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { type EvaluationContext, OpenFeature } from '@openfeature/web-sdk'
+import { FlagEvaluationAggregator } from '@datadog/flagging-core'
+import { ErrorCode, type EvaluationContext, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { type ExposureEvaluation, ExposureHook } from '../../src/openfeature/exposure-hook'
@@ -125,6 +126,7 @@ describe('ExposureHook', () => {
     const provider = new DatadogProvider(baseProviderConfig)
     await OpenFeature.setContext(evaluationContext)
     await OpenFeature.setProviderAndWait(provider)
+    return provider
   }
 
   beforeAll(() => {
@@ -264,6 +266,28 @@ describe('ExposureHook', () => {
     expect(evaluations[0].context).toMatchObject({ targetingKey: 'rum-user', plan: 'pro' })
   })
 
+  it('delivers an unbound evaluation when the hook context is unreadable', async () => {
+    const provider = await startProvider()
+    const callback = jest.fn()
+    const hookContext = { flagKey: 'unbound', providerMetadata: provider.metadata } as HookContext
+    Object.defineProperty(hookContext, 'context', {
+      get: () => {
+        throw new Error('context unavailable')
+      },
+    })
+
+    new ExposureHook(callback).finally(hookContext, {
+      flagKey: 'unbound',
+      value: true,
+      variant: 'on',
+      reason: 'STATIC',
+      flagMetadata: {},
+    })
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0].context).toBeUndefined()
+  })
+
   it('continues dependency and root callbacks after one callback throws', async () => {
     await startProvider()
     const flagKeys: string[] = []
@@ -277,6 +301,26 @@ describe('ExposureHook', () => {
     OpenFeature.getClient().getBooleanDetails('dependent-root', false)
 
     expect(flagKeys).toEqual(['dependency-parent', 'dependency-silent-parent', 'dependent-root'])
+  })
+
+  it('keeps reached dependency telemetry when an application after hook rejects the root', async () => {
+    await startProvider()
+    const addEvaluation = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    OpenFeature.addHooks({
+      after: () => {
+        throw new Error('application hook failed')
+      },
+    })
+
+    const details = OpenFeature.getClient().getBooleanDetails('dependent-root', false)
+
+    expect(details.errorCode).toBe(ErrorCode.GENERAL)
+    expect(addEvaluation.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['dependency-parent', undefined],
+      ['dependency-silent-parent', undefined],
+      ['dependency-rejected-parent', undefined],
+      ['dependent-root', ErrorCode.GENERAL],
+    ])
   })
 
   it('reports an exposed dependency when the selected root does not log', async () => {

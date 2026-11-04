@@ -35,6 +35,10 @@ export function createFlagEvalEVPHook(
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
   policy?: EvaluationTelemetryPolicy
 ): ManagedTrackingHook {
+  const completedDependencies = new WeakMap<
+    HookContext,
+    { context: EvaluationContext; evaluations: ReturnType<typeof getPrecomputedDependencyEvaluations> }
+  >()
   const pageMayExitObservable = createPageMayExitObservable(configuration)
   const sessionExpireObservable = new Observable<void>()
   const flagEvaluationBatch = createBatch({
@@ -94,8 +98,22 @@ export function createFlagEvalEVPHook(
           flagEvaluationBatch.stop()
         }
       },
+      // Provider hooks run before application after hooks. Retain prerequisite
+      // telemetry in case a later hook replaces the successful root result.
+      after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        try {
+          const evaluations = getPrecomputedDependencyEvaluations(details)
+          if (evaluations.length === 0) return
+          const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+          completedDependencies.set(hookContext, { context, evaluations })
+        } catch {
+          // Telemetry capture must not turn a successful evaluation into an error.
+        }
+      },
       // Failed evaluations skip `after`; `finally` receives the result returned to the application.
       finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        const completed = completedDependencies.get(hookContext)
+        completedDependencies.delete(hookContext)
         try {
           // OpenFeature can copy a customer hook's error.code without validation.
           // Restrict telemetry to standard OpenFeature error codes.
@@ -103,8 +121,10 @@ export function createFlagEvalEVPHook(
             details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
               ? details.errorCode
               : ErrorCode.GENERAL
-          const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
-          for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          const context =
+            completed?.context ?? getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+          const dependencies = getPrecomputedDependencyEvaluations(details)
+          for (const dependency of dependencies.length > 0 ? dependencies : (completed?.evaluations ?? [])) {
             const dependencyErrorCode =
               dependency.errorCode === undefined || Object.values(ErrorCode).includes(dependency.errorCode)
                 ? dependency.errorCode

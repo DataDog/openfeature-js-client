@@ -67,6 +67,48 @@ describe('createRumTrackingHook', () => {
     ])
   })
 
+  it('continues dependencies and the root when one RUM recording throws', () => {
+    const addFeatureFlagEvaluation = jest.fn().mockImplementationOnce(() => {
+      throw new Error('RUM unavailable')
+    })
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = { addFeatureFlagEvaluation }
+    const details = makeDetails('root', 'root-on', true)
+    details.flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(
+      details.flagMetadata,
+      [
+        { flagKey: 'first', isPresentInAssignment: true },
+        { flagKey: 'second', isPresentInAssignment: true },
+      ],
+      {
+        first: {
+          allocationKey: 'first-allocation',
+          variationKey: 'first-on',
+          variationType: 'boolean',
+          variationValue: true,
+          reason: 'TARGETING_MATCH',
+          doLog: false,
+        },
+        second: {
+          allocationKey: 'second-allocation',
+          variationKey: 'second-on',
+          variationType: 'boolean',
+          variationValue: true,
+          reason: 'TARGETING_MATCH',
+          doLog: false,
+        },
+      }
+    )
+
+    createRumTrackingHook().finally!(mockHookContext, details)
+
+    expect(addFeatureFlagEvaluation.mock.calls).toEqual([
+      ['first', 'first-on'],
+      ['second', 'second-on'],
+      ['root', 'root-on'],
+    ])
+  })
+
   it('should be a no-op when DD_RUM is absent', () => {
     const hook = createRumTrackingHook()
     expect(() => hook.finally!(mockHookContext, makeDetails('test-flag', 'variant-a', 'foo-bar-baz'))).not.toThrow()

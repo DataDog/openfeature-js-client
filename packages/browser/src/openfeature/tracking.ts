@@ -35,7 +35,11 @@ export function createTrackingHookController(
 
   return {
     hooks: [
-      { before: (...args) => activeHook?.before?.(...args), finally: (...args) => activeHook?.finally?.(...args) },
+      {
+        before: (...args) => activeHook?.before?.(...args),
+        after: (...args) => activeHook?.after?.(...args),
+        finally: (...args) => activeHook?.finally?.(...args),
+      },
     ],
     initialize: () => {
       // Serialize setup and teardown so shutdown also waits for a pending cache read.

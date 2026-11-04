@@ -49,12 +49,19 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy): Hook 
           return
         }
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
-          if (dependency.isPresentInAssignment && dependency.variant != null) {
-            globalObject.DD_RUM?.addFeatureFlagEvaluation?.(dependency.flagKey, dependency.variant)
+        const record = (flagKey: string, variant: string) => {
+          try {
+            globalObject.DD_RUM?.addFeatureFlagEvaluation?.(flagKey, variant)
+          } catch {
+            // One RUM failure must not suppress the remaining dependency graph.
           }
         }
-        globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment && dependency.variant != null) {
+            record(dependency.flagKey, dependency.variant)
+          }
+        }
+        record(details.flagKey, details.variant)
       },
     },
     policy
