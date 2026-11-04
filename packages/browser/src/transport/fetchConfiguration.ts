@@ -13,6 +13,12 @@ import {
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
+import {
+  ASSIGNMENT_TOKEN_HEADER,
+  assignmentAuthorizationError,
+  extractAssignmentToken,
+  validateAssignmentToken,
+} from '../domain/assignment-token'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
@@ -57,6 +63,7 @@ export interface PrecomputedConfigurationFetchOptions
   extends ConfigurationFetchOptions, ExperimentationOptOutConfiguration {
   applicationId?: string
   context: EvaluationContext
+  assignmentToken?: unknown
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -133,6 +140,12 @@ async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
   flagSelection?: CanonicalFlagSelection
 ): Promise<FlagsConfiguration> {
+  // Also sanitize the standalone fetch API; it can be used without a provider.
+  const extracted = extractAssignmentToken(options.context)
+  const assignmentToken = validateAssignmentToken(
+    options.assignmentToken !== undefined ? options.assignmentToken : extracted.assignmentToken
+  )
+  options = { ...options, context: extracted.context }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
@@ -147,6 +160,12 @@ async function requestPrecomputedConfiguration(
     },
     'precomputed'
   )
+
+  // Context is the sole source of this reserved header, including on removal.
+  for (const name of Object.keys(defaultHeaders)) {
+    if (name.toLowerCase() === ASSIGNMENT_TOKEN_HEADER.toLowerCase()) delete defaultHeaders[name]
+  }
+  if (assignmentToken !== undefined) defaultHeaders[ASSIGNMENT_TOKEN_HEADER] = assignmentToken
 
   const envPayload = {
     dd_env: options.env || '',
@@ -184,8 +203,11 @@ async function requestPrecomputedConfiguration(
       options.signal
     ),
   })
+  if (response.status === 401) throw assignmentAuthorizationError()
   if (!response.ok) {
-    const errorMessage = await getErrorMessage(response)
+    // A proxy may echo request headers in an error body. Do not expose that body
+    // through OpenFeature errors when a credential was supplied.
+    const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   if (flagSelection) reportIgnoredFlagSelection(response)
@@ -211,7 +233,10 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     initConfiguration.flagSelection
   )
   if (flagSelectionError) reportDroppedFlagSelection(flagSelectionError)
-  return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
+  return async (
+    context: EvaluationContext,
+    { signal, assignmentToken }: { signal?: AbortSignal; assignmentToken?: unknown } = {}
+  ): Promise<FlagsConfiguration> => {
     const configuration = await requestPrecomputedConfiguration(
       {
         ...initConfiguration,
@@ -219,6 +244,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         context,
         fetch: initConfiguration.flagConfigurationFetch,
         signal,
+        assignmentToken,
       },
       flagSelection
     )

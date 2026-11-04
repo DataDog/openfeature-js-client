@@ -149,6 +149,38 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### Subject authorization for assignment downloads
+
+For environments configured to require subject authorization, obtain a JWT from your backend and include it in
+one complete OpenFeature context update:
+
+```javascript
+await OpenFeature.setContext({
+  targetingKey: 'user-123',
+  country: 'US',
+  dd_assignment_token: jwtFromYourBackend,
+})
+```
+
+Your backend signs a token for the requested subject and environment. Keep the signing private key on your backend.
+Your application obtains a replacement before expiration and submits it with the complete context using the same
+call. Changing only the token triggers another download. Omitting `dd_assignment_token` removes the credential;
+the SDK does not restore old tokens when switching users.
+
+The provider sends the token in the reserved `DD-Assignment-Token` header, which takes precedence over custom
+headers of the same name. It excludes the reserved context field from Datadog targeting attributes, telemetry,
+and assignment-cache data. OpenFeature and customer-installed hooks can still access the original context.
+
+Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
+`STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
+behavior applies. Supplying a replacement token can recover without recreating the provider. The diagnostic logger
+reports `ASSIGNMENT_AUTHORIZATION_FAILED` without the token; there is no custom refresh-required event.
+
+The SDK skips downloads when a numeric JWT `exp` is at least 60 seconds in the past, allowing for client clock skew.
+This check does not verify the signature. Fastly remains authoritative, including for recently expired tokens,
+malformed JWT strings, and missing or invalid `exp` claims. Non-string, empty, whitespace-containing, or non-ASCII
+token values fail locally. Token expiration does not itself clear downloaded assignments.
+
 ### Exposures in your own data store
 
 Use `ExposureHook` to receive every completed evaluation with the same deduplication decision the SDK uses when
