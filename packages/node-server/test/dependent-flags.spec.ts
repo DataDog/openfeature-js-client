@@ -199,6 +199,13 @@ describe('dependent flag exposures', () => {
 
   it('publishes exposures when the evaluation context cannot be cloned', async () => {
     const exposureChannel = channel<ExposureEvent>()
+    exposureChannel.publish.mockImplementation((published) => {
+      const event = published as ExposureEvent
+      if (event.flag.key === 'leaf') {
+        const profile = event.subject.attributes.profile as { tier: string }
+        profile.tier = 'mutated by subscriber'
+      }
+    })
     const provider = new DatadogNodeServerProvider({ exposureChannel })
     provider.setConfiguration(
       configuration({
@@ -208,7 +215,11 @@ describe('dependent flag exposures', () => {
     )
     const client = await clientFor(provider)
     // Untyped JavaScript callers can supply values outside EvaluationContextValue.
-    const context = { targetingKey: 'subject', callback: (() => true) as unknown as string }
+    const context = {
+      targetingKey: 'subject',
+      profile: { tier: 'gold' },
+      callback: (() => true) as unknown as string,
+    }
 
     await client.getBooleanDetails('root', false, context)
     await client.getBooleanDetails('root', false, context)
@@ -217,6 +228,15 @@ describe('dependent flag exposures', () => {
       'leaf',
       'root',
     ])
+    expect(context.profile).toEqual({ tier: 'gold' })
+    expect(
+      exposureChannel.publish.mock.calls.map(([published]) => (published as ExposureEvent).subject.attributes.profile)
+    ).toEqual([{ tier: 'mutated by subscriber' }, { tier: 'gold' }])
+    expect(
+      exposureChannel.publish.mock.calls.every(
+        ([published]) => !('callback' in (published as ExposureEvent).subject.attributes)
+      )
+    ).toBe(true)
   })
 
   it('keeps re-entrant root evaluation sessions isolated', async () => {
