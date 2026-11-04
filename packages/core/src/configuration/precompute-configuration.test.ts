@@ -76,10 +76,19 @@ describe('precomputeConfiguration', () => {
     )
   }
 
-  it.each([true, false])('matches direct dependency evaluation when the parent value is %s', (parentValue) => {
+  it.each([
+    [true, false],
+    [true, true],
+    [false, false],
+    [false, true],
+  ])('matches dependency evaluation for parent=%s, parentFirst=%s', (parentValue, parentFirst) => {
     const input = dependentRules(
       flag({ variations: [{ keyStringIndex: parentValue ? 0 : 1, booleanValue: parentValue }] })
     )
+    if (parentFirst) {
+      const { child, parent, unrelated } = input.rules!.response.flags
+      input.rules!.response.flags = { parent, child, unrelated }
+    }
     const onEvaluationError = jest.fn()
     const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
     for (const key of ['child', 'parent', 'unrelated']) {
@@ -91,6 +100,11 @@ describe('precomputeConfiguration', () => {
       })
     }
     expect(result.precomputed?.response.data.attributes.flags.child.variationValue).toBe(parentValue)
+    expect(result.precomputed?.response.data.attributes.flags.child).toMatchObject({
+      variationKey: parentValue ? 'on' : 'off',
+      reason: parentValue ? 'TARGETING_MATCH' : 'DEFAULT',
+      allocationKey: parentValue ? 'matched' : 'fallback',
+    })
     expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
@@ -117,9 +131,17 @@ describe('precomputeConfiguration', () => {
     const onEvaluationError = jest.fn()
     const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
     expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({ reason: 'ERROR', errorCode })
-    expect(result.precomputed?.response.data.attributes.flags).not.toHaveProperty('child')
+    const parentFails = failure === 'invalid parent' || failure === 'cycle'
+    const parentAssigned = !parentFails && failure !== 'missing parent' && failure !== 'unassigned parent'
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
+      parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
+    )
     expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
-    expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'child', errorCode })
+    expect(
+      onEvaluationError.mock.calls
+        .map(([error]) => error)
+        .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
+    ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
