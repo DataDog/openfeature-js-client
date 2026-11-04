@@ -26,6 +26,7 @@ import { DependencyGraphError, FlagConfigurationError, InvalidContextError, Targ
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import type { DependencyExposureTransaction } from './rules'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
@@ -41,10 +42,11 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
+export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & DependencyExposureTransaction
 
 type ConditionOutcome = {
   matches: boolean
+  dependencyKeys: readonly string[]
 }
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
@@ -97,6 +99,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
+      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -106,11 +109,15 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
-      if (!split) continue
+      if (!split) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
+        continue
+      }
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
@@ -204,37 +211,77 @@ function conditionOutcome(
   results: Map<number, ConditionOutcome>,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ConditionOutcome {
-  if (index === undefined) return { matches: true }
+  if (index === undefined) return { matches: true, dependencyKeys: [] }
+  const retainDependencyKeys = resolveFlagEvaluation?.checkpoint !== undefined
   const cached = results.get(index)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (retainDependencyKeys) {
+      for (const dependencyKey of cached.dependencyKeys) {
+        resolveFlagEvaluation(dependencyKey)
+      }
+    }
+    return cached
+  }
+  const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    outcome = { matches: true }
+    outcome = { matches: true, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
       if (!childOutcome.matches) {
-        outcome = childOutcome
+        outcome = { matches: false, dependencyKeys: [] }
         break
+      }
+      if (retainDependencyKeys) {
+        outcome = {
+          matches: true,
+          dependencyKeys: mergeDependencyKeys(outcome.dependencyKeys, childOutcome.dependencyKeys),
+        }
       }
     }
   } else if (condition.kind.case === 'any') {
-    outcome = { matches: false }
+    outcome = { matches: false, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
       if (childOutcome.matches) {
-        outcome = { matches: true }
+        outcome = childOutcome
         break
       }
     }
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
-    outcome = { matches }
+    outcome = {
+      matches,
+      dependencyKeys:
+        retainDependencyKeys && matches && condition.kind.case === 'flagEvaluationStringMembership'
+          ? [atIndex(configuration.strings, condition.kind.value.flagKeyStringIndex, 'flag key')]
+          : [],
+    }
+  }
+  if (!outcome.matches) {
+    // A false condition node is a provenance barrier. This discards dependency
+    // exposures from a failed ALL and from each failed branch visited by ANY.
+    resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
   results.set(index, outcome)
   return outcome
+}
+
+function mergeDependencyKeys(left: readonly string[], right: readonly string[]): readonly string[] {
+  if (right.length === 0) return left
+  if (left.length === 0) return right
+  const merged = [...left]
+  const seen = new Set(left)
+  for (const key of right) {
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(key)
+    }
+  }
+  return merged
 }
 
 function matchesLeafCondition(

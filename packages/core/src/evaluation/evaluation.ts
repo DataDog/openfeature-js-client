@@ -313,11 +313,17 @@ function evaluateRules<T extends FlagValueType>(
             ),
           logger,
           evaluationTimestampMs,
-          false,
+          collectDependencyExposures,
           collectDependencyEvaluations
         )
         return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
       }) as ResolveProtobufFlagEvaluation
+      // Install hooks only when exposure candidates are collected: the protobuf evaluator treats
+      // hook presence as the signal to retain and replay dependency keys.
+      if (collectDependencyExposures) {
+        resolveDependency.checkpoint = () => dependencySession?.checkpoint()
+        resolveDependency.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
+      }
       details = evaluateProtobufConfiguration(
         prepared,
         type,
