@@ -1,6 +1,6 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
 import { bindPrecomputedDependencyEvaluations, type PrecomputedFlag } from '@datadog/flagging-core'
-import { ErrorCode, type HookContext, OpenFeature } from '@openfeature/web-sdk'
+import { ErrorCode, type EvaluationDetails, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
@@ -93,7 +93,7 @@ describe('Exposures End-to-End', () => {
       await tracking.initialize()
       try {
         const hook = tracking.hooks[0]
-        expect(hook.after).toBeUndefined()
+        expect(hook.after).toBeDefined()
         expect(hook.finally).toBeDefined()
         const flagMetadata = { allocationKey: 'allocation-a', doLog: true }
         bindPrecomputedDependencyEvaluations(
@@ -106,20 +106,20 @@ describe('Exposures End-to-End', () => {
           ],
           dependencyFlags
         )
-        hook.finally!(
-          {
-            context: { targetingKey: 'test-user' },
-            providerMetadata: new DatadogCoreProvider().metadata,
-          } as HookContext,
-          {
-            flagKey: 'test-flag',
-            value: false,
-            variant: 'variant-a',
-            reason: 'TARGETING_MATCH',
-            flagMetadata,
-            ...fallbackDetails,
-          }
-        )
+        const hookContext = {
+          context: { targetingKey: 'test-user' },
+          providerMetadata: new DatadogCoreProvider().metadata,
+        } as HookContext
+        const details: EvaluationDetails<boolean> = {
+          flagKey: 'test-flag',
+          value: false,
+          variant: 'variant-a',
+          reason: 'TARGETING_MATCH',
+          flagMetadata,
+          ...fallbackDetails,
+        }
+        hook.after!(hookContext, details)
+        hook.finally!(hookContext, details)
       } finally {
         await tracking.shutdown?.()
       }
