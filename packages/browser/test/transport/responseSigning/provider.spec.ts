@@ -148,6 +148,7 @@ test('off preserves ordinary headers/redirect behavior and performs no crypto', 
   await subject.initialize(context)
   const init = (global.fetch as jest.Mock).mock.calls[0][1]
   expect(new Headers(init.headers).get(SIGNING_VERSION_HEADER)).toBeNull()
+  expect(new Headers(init.headers).get('x-stream')).toBeNull()
   expect(init.redirect).toBeUndefined()
   // Provider construction retains its existing tracking UUID generation.
   expect(digest).not.toHaveBeenCalled()
@@ -173,6 +174,7 @@ test.each(['observe', 'required'] as const)(
     expect(new Headers(init.headers).get('dd-client-token')).toBe('effective-token')
     expect(new Headers(init.headers).get(SIGNING_NONCE_HEADER)).toMatch(/^[0-9a-f]{32}$/)
     expect(new Headers(init.headers).get(SIGNING_VERSION_HEADER)).toBe('1')
+    expect(new Headers(init.headers).get('x-stream')).toBe('false')
     expect(new Headers(init.headers).get('x-dd-feature-flags-capabilities')?.split(',')).toContain(
       'response-signing-v1'
     )

@@ -88,6 +88,10 @@ network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate t
 
 ### Response signing (draft public v1)
 
+Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
+Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
+Custom proxies must forward this header and permit it in CORS preflights.
+
 Response signing is opt-in and defaults to `off`. The draft supports `observe` for
 fail-open dogfooding and `required` for protected responses. Existing authentication,
 HTTP errors, JSON validation, and experimentation opt-out checks still apply.
