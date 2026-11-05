@@ -8,7 +8,7 @@ import type {
   ResolutionDetails,
   ResolutionReason,
 } from '@openfeature/core'
-import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
+import type { FlagTypeToValue, PrecomputedFlag, PrecomputedFlagMetadata } from '../configuration'
 import type {
   Allocation,
   Condition,
@@ -26,6 +26,7 @@ import { DependencyGraphError, FlagConfigurationError, InvalidContextError, Targ
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import type { DependencyExposureTransaction } from './rules'
 import { compareVersions, isParsedVersion, parseVersion } from './semver'
 import { sha256 } from './sha256'
 import { MD5Sharder } from './sharders'
@@ -41,10 +42,11 @@ import {
 
 const SUPPORTED_FEATURE_LEVEL = 0
 
-export type ResolveProtobufFlagEvaluation = (flagKey: string) => string | undefined
+export type ResolveProtobufFlagEvaluation = ((flagKey: string) => string | undefined) & DependencyExposureTransaction
 
 type ConditionOutcome = {
   matches: boolean
+  dependencyKeys: readonly string[]
 }
 
 export function evaluateProtobufConfiguration<T extends FlagValueType>(
@@ -58,15 +60,72 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const result = resolveProtobufAssignment(
+    configuration,
+    flagKey,
+    context,
+    logger,
+    evaluationTimestampMs,
+    excludeExperiments,
+    type,
+    resolveFlagEvaluation
+  )
+  if (result.kind !== 'assignment') {
+    return {
+      value: defaultValue,
+      reason: result.kind === 'error' ? 'ERROR' : 'DEFAULT',
+      ...(result.kind === 'error'
+        ? {
+            errorCode: result.errorCode,
+            ...(result.errorMessage === undefined ? {} : { errorMessage: result.errorMessage }),
+          }
+        : {}),
+      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
+    }
+  }
+  const { assignment } = result
+  const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(assignment.features, logger)
+  return {
+    value: assignment.variationValue as FlagTypeToValue<T>,
+    reason: assignment.reason,
+    variant: assignment.variationKey,
+    flagMetadata: {
+      ...createEvaluationTimestampMetadata(evaluationTimestampMs),
+      __dd_allocation_key: assignment.allocationKey,
+      __dd_do_log: assignment.doLog,
+      __dd_split_serial_id: assignment.serialId,
+      ...featureEntries,
+      ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+      allocationKey: assignment.allocationKey,
+      variationType: assignment.variationType,
+      doLog: assignment.doLog,
+    } as PrecomputedFlagMetadata,
+  }
+}
+
+type RulesAssignmentResult =
+  | { kind: 'assignment'; assignment: PrecomputedFlag }
+  | { kind: 'unassigned' }
+  | { kind: 'error'; errorCode: ErrorCode; errorMessage?: string }
+
+/** Resolve an assignment without substituting an application's code default. */
+export function resolveProtobufAssignment(
+  configuration: PreparedRulesResponse,
+  flagKey: string,
+  context: EvaluationContext,
+  logger: Logger,
+  evaluationTimestampMs: TimeStamp,
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
+  expectedType?: FlagValueType,
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+): RulesAssignmentResult {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
   if (!flag) {
     logger.debug('returning default value because flag is not found', { flagKey, targetingKey })
     return {
-      value: defaultValue,
-      reason: 'ERROR',
+      kind: 'error',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
@@ -75,18 +134,16 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
       throw new FlagConfigurationError('Flag requires an unsupported feature level')
     }
     const flagValueType = protobufVariationTypeToFlagValueType(flag.variationType)
-    if (type !== flagValueType) {
+    if (expectedType !== undefined && expectedType !== flagValueType) {
       logger.debug('variant value type mismatch, returning default value', {
         flagKey,
         targetingKey,
-        expectedType: type,
+        expectedType,
         variantType: flag.variationType,
       })
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'TYPE_MISMATCH' as ErrorCode,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
 
@@ -97,6 +154,7 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
       if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
+      const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
       if (
         !matchesCondition(
           allocation.targetingConditionIndex,
@@ -106,35 +164,32 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
           resolveFlagEvaluation
         )
       ) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
       const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
       const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
-      if (!split) continue
+      if (!split) {
+        resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
+        continue
+      }
 
       const variation = atIndex(flag.variations, split.variationIndex, 'split variation')
       const variationKey = atIndex(configuration.strings, variation.keyStringIndex, 'variation key')
       const value = variationValue(flag, variation.value, configuration)
       logger.debug('evaluated a flag', { flagKey, targetingKey, assignment: value })
-      const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
-        splitFeaturesMetadataInput(split.features),
-        logger
-      )
       return {
-        value: value as FlagTypeToValue<T>,
-        reason: resolutionReason(split),
-        variant: variationKey,
-        flagMetadata: {
-          ...createEvaluationTimestampMetadata(evaluationTimestampMs),
-          __dd_allocation_key: allocation.key,
-          __dd_do_log: allocation.logExposureEvent,
-          __dd_split_serial_id: split.serialId,
-          ...featureEntries,
-          ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+        kind: 'assignment',
+        assignment: {
+          variationValue: value,
+          variationKey,
+          reason: resolutionReason(split),
           allocationKey: allocation.key,
-          variationType: protobufVariationTypeToFlagValueType(flag.variationType),
+          variationType: flagValueType,
           doLog: allocation.logExposureEvent,
-        } as PrecomputedFlagMetadata,
+          ...(split.serialId === undefined ? {} : { serialId: split.serialId }),
+          ...(split.features.length === 0 ? {} : { features: splitFeaturesMetadataInput(split.features) }),
+        },
       }
     }
   } catch (error) {
@@ -146,45 +201,33 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
         error: error.message,
       })
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'PARSE_ERROR' as ErrorCode,
         errorMessage: error.message,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     if (error instanceof TargetingKeyMissingError) {
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'TARGETING_KEY_MISSING' as ErrorCode,
         errorMessage: error.message,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     if (error instanceof InvalidContextError) {
       return {
-        value: defaultValue,
-        reason: 'ERROR',
+        kind: 'error',
         errorCode: 'INVALID_CONTEXT' as ErrorCode,
-        flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     }
     logger.error('Error evaluating flag', { error })
     return {
-      value: defaultValue,
-      reason: 'ERROR',
+      kind: 'error',
       errorCode: 'GENERAL' as ErrorCode,
-      flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
     }
   }
 
   logger.debug('returning default assignment because no allocation matched', { flagKey, targetingKey })
-  return {
-    value: defaultValue,
-    reason: 'DEFAULT',
-    flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
-  }
+  return { kind: 'unassigned' }
 }
 
 function matchesCondition(
@@ -204,37 +247,77 @@ function conditionOutcome(
   results: Map<number, ConditionOutcome>,
   resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
 ): ConditionOutcome {
-  if (index === undefined) return { matches: true }
+  if (index === undefined) return { matches: true, dependencyKeys: [] }
+  const retainDependencyKeys = resolveFlagEvaluation?.checkpoint !== undefined
   const cached = results.get(index)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (retainDependencyKeys) {
+      for (const dependencyKey of cached.dependencyKeys) {
+        resolveFlagEvaluation(dependencyKey)
+      }
+    }
+    return cached
+  }
+  const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
   const condition = atIndex(configuration.conditions, index, 'condition')
   let outcome: ConditionOutcome
   if (condition.kind.case === 'all') {
-    outcome = { matches: true }
+    outcome = { matches: true, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
       if (!childOutcome.matches) {
-        outcome = childOutcome
+        outcome = { matches: false, dependencyKeys: [] }
         break
+      }
+      if (retainDependencyKeys) {
+        outcome = {
+          matches: true,
+          dependencyKeys: mergeDependencyKeys(outcome.dependencyKeys, childOutcome.dependencyKeys),
+        }
       }
     }
   } else if (condition.kind.case === 'any') {
-    outcome = { matches: false }
+    outcome = { matches: false, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
       const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
       if (childOutcome.matches) {
-        outcome = { matches: true }
+        outcome = childOutcome
         break
       }
     }
   } else {
     const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
-    outcome = { matches }
+    outcome = {
+      matches,
+      dependencyKeys:
+        retainDependencyKeys && matches && condition.kind.case === 'flagEvaluationStringMembership'
+          ? [atIndex(configuration.strings, condition.kind.value.flagKeyStringIndex, 'flag key')]
+          : [],
+    }
+  }
+  if (!outcome.matches) {
+    // A false condition node is a provenance barrier. This discards dependency
+    // exposures from a failed ALL and from each failed branch visited by ANY.
+    resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
   results.set(index, outcome)
   return outcome
+}
+
+function mergeDependencyKeys(left: readonly string[], right: readonly string[]): readonly string[] {
+  if (right.length === 0) return left
+  if (left.length === 0) return right
+  const merged = [...left]
+  const seen = new Set(left)
+  for (const key of right) {
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(key)
+    }
+  }
+  return merged
 }
 
 function matchesLeafCondition(

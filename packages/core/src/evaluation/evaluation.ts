@@ -14,7 +14,7 @@ import {
   type RulesConfiguration,
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
-import { prepareRulesResponse } from '../configuration/prepared-rules-response'
+import { type PreparedRulesResponse, prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
@@ -286,38 +286,19 @@ function evaluateRules<T extends FlagValueType>(
 
   if (isProtobufConfiguration(config)) {
     const prepared = prepareRulesResponse(config)
-    let dependencySession: DependencyEvaluationSession | undefined
+    const dependencies = createProtobufDependencyResolver(
+      prepared,
+      flagKey,
+      context,
+      logger,
+      evaluationTimestampMs,
+      excludeExperiments,
+      observeFullEvaluationData,
+      collectDependencyExposures,
+      collectDependencyEvaluations
+    )
     let details: ResolutionDetails<FlagTypeToValue<T>>
     try {
-      const resolveDependency = ((dependencyFlagKey: string) => {
-        dependencySession ??= new DependencyEvaluationSession(
-          flagKey,
-          getMaxDependencyDepth(config, flagKey),
-          observeFullEvaluationData,
-          (key) => {
-            const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
-            if (flag === undefined) return undefined
-            return protobufDependencyFlag(flag)
-          },
-          (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
-            evaluateProtobufConfiguration(
-              prepared,
-              dependencyType,
-              key,
-              dependencyDefault,
-              context,
-              logger,
-              evaluationTimestampMs,
-              excludeExperiments,
-              resolveFlagEvaluation
-            ),
-          logger,
-          evaluationTimestampMs,
-          false,
-          collectDependencyEvaluations
-        )
-        return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
-      }) as ResolveProtobufFlagEvaluation
       details = evaluateProtobufConfiguration(
         prepared,
         type,
@@ -327,7 +308,7 @@ function evaluateRules<T extends FlagValueType>(
         logger,
         evaluationTimestampMs,
         excludeExperiments,
-        resolveDependency
+        dependencies.resolve
       )
     } catch (error) {
       if (error instanceof DependencyGraphError) {
@@ -342,13 +323,7 @@ function evaluateRules<T extends FlagValueType>(
         }
       }
     }
-    return (
-      dependencySession?.complete(details.reason !== 'ERROR' && details.errorCode === undefined, details) ?? {
-        details,
-        dependencyEvaluations: [],
-        dependencyExposures: [],
-      }
-    )
+    return dependencies.complete(details)
   }
 
   const { targetingKey: subjectKey, ...remainingContext } = context
@@ -450,6 +425,67 @@ function evaluateRules<T extends FlagValueType>(
       dependencyExposures: [],
     }
   )
+}
+
+/** Internal shared dependency traversal for typed evaluation and assignment-only precomputation. */
+export function createProtobufDependencyResolver(
+  config: PreparedRulesResponse,
+  flagKey: string,
+  context: EvaluationContext,
+  logger: Logger,
+  evaluationTimestampMs: TimeStamp,
+  excludeExperiments: ExperimentationOptOutPolicy,
+  observeFullEvaluationData: boolean,
+  collectDependencyExposures = false,
+  collectDependencyEvaluations = false
+) {
+  let dependencySession: DependencyEvaluationSession | undefined
+  const resolve = ((dependencyFlagKey: string) => {
+    dependencySession ??= new DependencyEvaluationSession(
+      flagKey,
+      getMaxDependencyDepth(config, flagKey),
+      observeFullEvaluationData,
+      (key) => {
+        const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
+        if (flag === undefined) return undefined
+        return protobufDependencyFlag(flag)
+      },
+      (key, dependencyType, dependencyDefault, resolveFlagEvaluation) =>
+        evaluateProtobufConfiguration(
+          config,
+          dependencyType,
+          key,
+          dependencyDefault,
+          context,
+          logger,
+          evaluationTimestampMs,
+          excludeExperiments,
+          resolveFlagEvaluation
+        ),
+      logger,
+      evaluationTimestampMs,
+      collectDependencyExposures,
+      collectDependencyEvaluations
+    )
+    return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
+  }) as ResolveProtobufFlagEvaluation
+  // Hook presence tells the protobuf evaluator to retain and replay dependency keys.
+  if (collectDependencyExposures) {
+    resolve.checkpoint = () => dependencySession?.checkpoint()
+    resolve.rollback = (checkpoint) => dependencySession?.rollback(checkpoint)
+  }
+  return {
+    resolve,
+    complete<T extends FlagValue>(details: ResolutionDetails<T>): EvaluationTrace<T> {
+      return (
+        dependencySession?.complete(details.reason !== 'ERROR' && details.errorCode === undefined, details) ?? {
+          details,
+          dependencyEvaluations: [],
+          dependencyExposures: [],
+        }
+      )
+    },
+  }
 }
 
 function dependencyGraphFailure<T extends FlagValue>(
