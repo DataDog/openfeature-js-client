@@ -104,6 +104,7 @@ describe('precomputeConfiguration', () => {
       variationKey: parentValue ? 'on' : 'off',
       reason: parentValue ? 'TARGETING_MATCH' : 'DEFAULT',
       allocationKey: parentValue ? 'matched' : 'fallback',
+      dependencyEvaluations: [{ flagKey: 'parent', isPresentInAssignment: parentValue }],
     })
     expect(onEvaluationError).not.toHaveBeenCalled()
   })
@@ -137,11 +138,77 @@ describe('precomputeConfiguration', () => {
       parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
     )
     expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
+    const evaluationErrors = result.precomputed?.response.data.attributes.flagEvaluationErrors ?? {}
+    expect(evaluationErrors.child).toMatchObject({ reason: 'ERROR', errorCode })
+    if (failure === 'missing parent' || failure === 'unassigned parent') {
+      expect(evaluationErrors.parent).toBeUndefined()
+    } else if (parentFails) {
+      expect(evaluationErrors.parent).toMatchObject({ reason: 'ERROR', errorCode })
+    }
+    if (failure === 'missing parent' || failure === 'unassigned parent') {
+      expect(evaluationErrors.child.dependencyEvaluations).toEqual([
+        expect.objectContaining({
+          flagKey: 'parent',
+          reason: 'ERROR',
+          errorCode: failure === 'missing parent' ? 'FLAG_NOT_FOUND' : 'GENERAL',
+        }),
+      ])
+    }
     expect(
       onEvaluationError.mock.calls
         .map(([error]) => error)
         .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
     ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
+  })
+
+  it('hashes both top-level maps and encrypts dependency keys with the shared fixed vector', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    const { child, parent } = source.flags
+    source.flags = { 'checkout-redesign': child, 'new-payment-flow': parent }
+    source.strings[2] = 'new-payment-flow'
+
+    const result = roundTrip(
+      precomputeConfiguration(input, context, {
+        obfuscation: { scheme: 'flag-key-sha256-v1', salt: '000102030405060708090a0b0c0d0e0f' },
+      })
+    )
+    const attributes = result.precomputed!.response.data.attributes
+    const root = attributes.flags['48b7d4159a8d76fdedfe394963458bd62c086678150cc050f78fafd2a401ceb2']
+    expect(attributes.obfuscated).toBe(true)
+    expect(Object.keys(attributes.flags).sort()).toEqual([
+      '48b7d4159a8d76fdedfe394963458bd62c086678150cc050f78fafd2a401ceb2',
+      '759237c770620cac2495dcc9dc7e4ac5a1093cda7c1eb976f065e9066d55618a',
+    ])
+    expect(root.dependencyEvaluations).toEqual([
+      {
+        flagKey: 'Eb_cST-0-FZKdvcpKLHbDDG_CX2hK4Xfrw7h5o-47Gp6GyFntOGTZO3wmLg',
+        isPresentInAssignment: true,
+      },
+    ])
+  })
+
+  it('encodes dependent root failures without fabricating an assignment for an unassigned parent', () => {
+    const input = dependentRules()
+    input.rules!.response.flags.parent.allocations.length = 0
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(input.rules!.response))
+    const result = roundTrip(
+      precomputeConfiguration(configuration, context, {
+        obfuscation: { scheme: 'flag-key-sha256-v1', salt: '000102030405060708090a0b0c0d0e0f' },
+      })
+    )
+    const attributes = result.precomputed!.response.data.attributes
+    expect(Object.keys(attributes.flags)).toEqual(['e59b23d6a1d150b3c54f2d029d99081aafc65e4ea3b05200783adecc186f65a1'])
+    expect(Object.keys(attributes.flagEvaluationErrors ?? {})).toEqual([
+      'ee6ef10f7432d756d81d26ae3ee2790b22cac4358dc2192b8abc367a6fb6f4e8',
+    ])
+    expect(Object.values(attributes.flagEvaluationErrors ?? {})).toEqual([
+      expect.objectContaining({
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        dependencyEvaluations: [expect.objectContaining({ reason: 'ERROR', errorCode: 'GENERAL' })],
+      }),
+    ])
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
@@ -623,14 +690,18 @@ describe('precomputeConfiguration', () => {
     }
   )
 
-  it.each([null, [], { experimentationOptOutMode: 'unknown' }, { onEvaluationError: true }])(
-    'rejects invalid options %j',
-    (options) => {
-      expect(() => precomputeConfiguration(rules(), context, options as PrecomputeConfigurationOptions)).toThrow(
-        expect.objectContaining({ code: 'invalid_options' })
-      )
-    }
-  )
+  it.each([
+    null,
+    [],
+    { experimentationOptOutMode: 'unknown' },
+    { onEvaluationError: true },
+    { obfuscation: { scheme: 'unknown', salt: '0'.repeat(32) } },
+    { obfuscation: { scheme: 'flag-key-sha256-v1', salt: 'short' } },
+  ])('rejects invalid options %j', (options) => {
+    expect(() => precomputeConfiguration(rules(), context, options as PrecomputeConfigurationOptions)).toThrow(
+      expect.objectContaining({ code: 'invalid_options' })
+    )
+  })
 
   it.each([
     null,

@@ -69,7 +69,7 @@ const rules = await fetchRulesConfiguration({
 const context = { targetingKey: user.id, country: user.country }
 const precomputed = precomputeConfiguration(rules, context, {
   onEvaluationError: ({ flagKey, errorCode }) => {
-    console.warn('Flag omitted from precomputed configuration', { flagKey, errorCode })
+    console.warn('Flag evaluation failed during precomputation', { flagKey, errorCode })
   },
 })
 const wire = configurationToString(precomputed)
@@ -79,11 +79,12 @@ const wire = configurationToString(precomputed)
 You can also pass rules parsed with `configurationFromString()` or `configurationFromRulesBinary()`. The existing browser initialization example above accepts the resulting wire. A configuration containing both capabilities is evaluated using its rules, not its existing precomputed assignments.
 
 - The helper captures one evaluation time and a detached JSON-compatible context. Recompute when rules or context change; a precomputed-only provider cannot reevaluate rules for a different subject. Dates, undefined values, nonfinite numbers, custom class instances, and cycles are not portable context values and are rejected.
-- Only actual assignments are included. Flags with no matching assignment or an individual evaluation error are omitted, without inventing code defaults. The receiving JS provider returns the application's default with `FLAG_NOT_FOUND` for an omitted flag; the original error/reason is not preserved. This is Datadog's assignment-only format, not an OFREP bulk response.
+- Complete successful assignments are included in `attributes.flags`. Individual failures are retained in the sibling `attributes.flagEvaluationErrors` map, so a dependent-flags-capable receiver can return the caller's default with the original error. A flag with no matching assignment remains absent from both maps. A prerequisite with no assignment fails its dependent root, and no legacy assignment value is fabricated for either result. This is Datadog's assignment-only format, not an OFREP bulk response.
 - `onEvaluationError` receives the flag key and error code for each evaluation failure after the entire snapshot has been computed. It receives no context, values, or raw error messages; no-assignment outcomes do not invoke it. Exceptions thrown by the callback propagate.
 - Missing or malformed rules, invalid contexts, and invalid options throw `ConfigurationPrecomputeError` with `invalid_configuration`, `invalid_context`, or `invalid_options`, respectively. A valid configuration with no flags produces an empty, context-bound snapshot.
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
+- Pass an `obfuscation` descriptor with `scheme: 'flag-key-sha256-v1'` and a 32-character lowercase hexadecimal salt to produce an encoded packet. Keys in both top-level maps are hashed. Each nested prerequisite key is encrypted and authenticated using the plaintext root key; a capable receiver uses the caller's root key to decrypt it and hashes the recovered parent key for the top-level lookup. Plain packets keep plaintext prerequisite keys. Capability forwarding and cache partitioning are delivery concerns and are unchanged by this local utility.
 
 **Precomputation is not an access-control boundary.** For client-directed SSR output, use client-distributed rules or an explicitly reviewed client-safe policy. Do not expose server-only flags or private context attributes merely because the rules were removed. Select a context that is safe to send to that client.
 
