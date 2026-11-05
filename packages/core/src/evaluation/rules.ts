@@ -1,4 +1,4 @@
-import type { EvaluationContext, EvaluationContextValue, Logger } from '@openfeature/core'
+import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { compareSemver, parseSemver } from './semver'
 
@@ -58,6 +58,24 @@ type NotOneOfCondition = {
   value: string[]
 }
 
+export type FlagEvaluation = {
+  key: string
+}
+
+type FlagEvaluationCondition = {
+  operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF
+  flagEvaluation: FlagEvaluation
+  value: string[]
+}
+
+export type DependencyExposureTransaction = {
+  checkpoint?: () => unknown
+  rollback?: (checkpoint: unknown) => void
+}
+
+export type ResolveFlagEvaluation = ((flagEvaluation: FlagEvaluation) => string | undefined) &
+  DependencyExposureTransaction
+
 type NumericCondition = {
   operator: NumericOperator
   attribute: string
@@ -81,6 +99,7 @@ export type Condition =
   | NotMatchesCondition
   | OneOfCondition
   | NotOneOfCondition
+  | FlagEvaluationCondition
   | NumericCondition
   | NullCondition
   | SemVerCondition
@@ -95,63 +114,82 @@ export function isValidRule(rule: unknown): rule is Rule {
   }
 
   return rule.conditions.every((condition) => {
-    if (!isRecord(condition) || typeof condition.attribute !== 'string' || typeof condition.operator !== 'string') {
+    if (!isRecord(condition) || typeof condition.operator !== 'string') {
       return false
     }
     if (!supportedOperators.has(condition.operator)) {
       return false
     }
-    if (isNumericOperator(condition.operator)) {
-      return typeof condition.value === 'number' && Number.isFinite(condition.value)
-    }
-    if (condition.operator === OperatorType.ONE_OF || condition.operator === OperatorType.NOT_ONE_OF) {
-      return Array.isArray(condition.value) && condition.value.every((value) => typeof value === 'string')
-    }
-    if (condition.operator === OperatorType.IS_NULL) {
-      return typeof condition.value === 'boolean'
-    }
-    if (isSemVerOperator(condition.operator)) {
-      return parseSemver(condition.value) !== null
-    }
-    if (typeof condition.value !== 'string') {
+    const hasAttribute = Object.prototype.hasOwnProperty.call(condition, 'attribute')
+    const hasFlagEvaluation = Object.prototype.hasOwnProperty.call(condition, 'flagEvaluation')
+    if (hasAttribute === hasFlagEvaluation) {
       return false
     }
-    try {
-      compileRegex(condition.value)
-      return true
-    } catch {
+    if (hasFlagEvaluation) {
+      if (!isValidFlagEvaluation(condition.flagEvaluation) || !isFlagEvaluationOperator(condition.operator)) {
+        return false
+      }
+    } else if (typeof condition.attribute !== 'string') {
       return false
     }
+    return isValidOperatorOperand(condition.operator, condition.value)
   })
 }
 
-export function matchesRule(rule: Rule, subjectAttributes: EvaluationContext, logger?: Logger): boolean {
-  const conditionEvaluations = evaluateRuleConditions(subjectAttributes, rule.conditions, logger)
-  logger?.debug('rule evaluated', {
-    rule,
-    conditions: conditionEvaluations,
-    matched: !conditionEvaluations.includes(false),
-  })
-  // TODO: short-circuit return when false condition is found
-  return !conditionEvaluations.includes(false)
+function isValidOperatorOperand(operator: string, value: unknown): boolean {
+  if (isNumericOperator(operator)) {
+    return typeof value === 'number' && Number.isFinite(value)
+  }
+  if (operator === OperatorType.ONE_OF || operator === OperatorType.NOT_ONE_OF) {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string')
+  }
+  if (operator === OperatorType.IS_NULL) {
+    return typeof value === 'boolean'
+  }
+  if (isSemVerOperator(operator)) {
+    return parseSemver(value) !== null
+  }
+  if (typeof value !== 'string') {
+    return false
+  }
+  try {
+    compileRegex(value)
+    return true
+  } catch {
+    return false
+  }
 }
 
-function evaluateRuleConditions(
+export function matchesRule(
+  rule: Rule,
   subjectAttributes: EvaluationContext,
-  conditions: Condition[],
-  logger?: Logger
-): boolean[] {
-  return conditions.map((condition) => evaluateCondition(subjectAttributes, condition, logger))
+  resolveFlagEvaluation?: ResolveFlagEvaluation
+): boolean {
+  const checkpoint = resolveFlagEvaluation?.checkpoint?.()
+  for (const condition of rule.conditions) {
+    if (evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation)) {
+      continue
+    }
+    resolveFlagEvaluation?.rollback?.(checkpoint)
+    return false
+  }
+  return true
 }
 
-function evaluateCondition(subjectAttributes: EvaluationContext, condition: Condition, logger?: Logger): boolean {
+function evaluateCondition(
+  subjectAttributes: EvaluationContext,
+  condition: Condition,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
+): boolean {
+  if ('flagEvaluation' in condition) {
+    const flagValue = resolveFlagEvaluation?.(condition.flagEvaluation)
+    if (flagValue === undefined) {
+      return false
+    }
+    return evaluateStringCondition(flagValue, condition.operator, condition.value)
+  }
+
   const value = subjectAttributes[condition.attribute]
-  const matched = evaluateConditionValue(value, condition, logger)
-  logger?.debug('condition evaluated', { condition, rawValue: value, matched })
-  return matched
-}
-
-function evaluateConditionValue(value: EvaluationContextValue, condition: Condition, logger?: Logger): boolean {
   if (condition.operator === OperatorType.IS_NULL) {
     if (condition.value) {
       return value === null || value === undefined
@@ -173,7 +211,7 @@ function evaluateConditionValue(value: EvaluationContextValue, condition: Condit
               : condition.operator === OperatorType.LTE
                 ? a <= b
                 : a < b
-        return compareNumber(value, condition.value, comparator, logger)
+        return compareNumber(value, condition.value, comparator)
       }
       case OperatorType.MATCHES: {
         const attributeValue = coerceToString(value)
@@ -207,8 +245,34 @@ function evaluateConditionValue(value: EvaluationContextValue, condition: Condit
   return false
 }
 
+function evaluateStringCondition(
+  value: string,
+  operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF,
+  comparand: string[]
+): boolean {
+  switch (operator) {
+    case OperatorType.ONE_OF:
+      return isOneOf(value, comparand)
+    case OperatorType.NOT_ONE_OF:
+      return isNotOneOf(value, comparand)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isValidFlagEvaluation(value: unknown): value is FlagEvaluation {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    value.key.length > 0 &&
+    Object.keys(value).every((key) => key === 'key')
+  )
+}
+
+function isFlagEvaluationOperator(operator: string): boolean {
+  return operator === OperatorType.ONE_OF || operator === OperatorType.NOT_ONE_OF
 }
 
 function isNumericOperator(operator: string): operator is NumericOperator {
@@ -274,11 +338,9 @@ function isNotOneOf(attributeValue: string, conditionValues: string[]) {
 function compareNumber(
   attributeValue: EvaluationContextValue,
   conditionValue: ConditionValueType,
-  compareFn: (a: number, b: number) => boolean,
-  logger?: Logger
+  compareFn: (a: number, b: number) => boolean
 ): boolean {
   const attribute = coerceToNumber(attributeValue)
   const comparand = coerceToNumber(conditionValue)
-  logger?.debug('numeric condition coercion', { attributeValue, conditionValue, attribute, comparand })
   return attribute !== undefined && comparand !== undefined && compareFn(attribute, comparand)
 }

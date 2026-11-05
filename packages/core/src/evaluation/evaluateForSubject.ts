@@ -6,7 +6,7 @@ import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { matchesShard } from './matchesShard'
-import { isValidRule, matchesRule, type Rule } from './rules'
+import { isValidRule, matchesRule, type ResolveFlagEvaluation, type Rule } from './rules'
 import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
@@ -18,7 +18,8 @@ export function evaluateForSubject<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow(),
-  excludeExperiments: ExperimentationOptOutPolicy | boolean = false
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!isValidFlag(flag)) {
     logger.debug(`returning default assignment because flag configuration is invalid`, {
@@ -71,14 +72,8 @@ export function evaluateForSubject<T extends FlagValueType>(
     if (
       prepared &&
       excludesExperimentAt(excludeExperiments, allocation.doLog !== false, prepared.allocations[index].activation)
-    ) {
-      logger.debug('allocation excluded by experimentation policy', {
-        allocationKey: allocation.key,
-        excludeExperiments,
-        activation: prepared.allocations[index].activation,
-      })
+    )
       continue
-    }
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,
@@ -99,8 +94,10 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger)
+    const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
+    const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger, resolveFlagEvaluation)
     if (!matched) {
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
       continue
     }
 
@@ -152,6 +149,7 @@ export function evaluateForSubject<T extends FlagValueType>(
         subjectKey,
         allocationKey: allocation.key,
       })
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
     }
   }
 
@@ -268,7 +266,8 @@ function isValidShard(shard: unknown): boolean {
 export function containsMatchingRule(
   rules: Rule[] | undefined,
   subjectAttributes: EvaluationContext,
-  logger: Logger
+  logger: Logger,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
 ): boolean {
   if (!rules?.length) {
     return true
@@ -277,7 +276,7 @@ export function containsMatchingRule(
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  return rules.some((rule) => matchesRule(rule, subjectAttributes, logger))
+  return rules.some((rule) => matchesRule(rule, subjectAttributes, resolveFlagEvaluation))
 }
 
 function selectSplitUsingSharding(
@@ -302,7 +301,7 @@ function selectSplitUsingSharding(
       if (subjectKey == null) {
         throw new TargetingKeyMissingError()
       }
-      const shardMatches = matchesShard(shard, subjectKey, undefined, logger)
+      const shardMatches = matchesShard(shard, subjectKey)
       logger.debug(`shard match result`, {
         flagKey,
         subjectKey,
