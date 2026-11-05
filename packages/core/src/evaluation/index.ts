@@ -1,6 +1,16 @@
 export * from './errors'
 export * from './evaluateForSubject'
-export * from './evaluation'
+export {
+  type DependencyEvaluation,
+  type DependencyExposureCandidate,
+  type EvaluationTrace,
+  type EvaluationTraceOptions,
+  evaluate,
+  evaluateRulesBasedConfiguration,
+  evaluateRulesBasedConfigurationWithTrace,
+  type FlagsConfigurationError,
+  getFlagsConfigurationError,
+} from './evaluation'
 export * from './evaluationMetadata'
 export * from './experimentation-opt-out'
 export * from './matchesShard'

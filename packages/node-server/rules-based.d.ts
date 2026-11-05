@@ -58,6 +58,40 @@ declare const StandardResolutionReasons: {
 	 */
 	readonly ERROR: "ERROR";
 };
+declare enum ErrorCode {
+	/**
+	 * The value was resolved before the provider was ready.
+	 */
+	PROVIDER_NOT_READY = "PROVIDER_NOT_READY",
+	/**
+	 * The provider has entered an irrecoverable error state.
+	 */
+	PROVIDER_FATAL = "PROVIDER_FATAL",
+	/**
+	 * The flag could not be found.
+	 */
+	FLAG_NOT_FOUND = "FLAG_NOT_FOUND",
+	/**
+	 * An error was encountered parsing data, such as a flag configuration.
+	 */
+	PARSE_ERROR = "PARSE_ERROR",
+	/**
+	 * The type of the flag value does not match the expected type.
+	 */
+	TYPE_MISMATCH = "TYPE_MISMATCH",
+	/**
+	 * The provider requires a targeting key and one was not provided in the evaluation context.
+	 */
+	TARGETING_KEY_MISSING = "TARGETING_KEY_MISSING",
+	/**
+	 * The evaluation context does not meet provider requirements.
+	 */
+	INVALID_CONTEXT = "INVALID_CONTEXT",
+	/**
+	 * An error with an unspecified code.
+	 */
+	GENERAL = "GENERAL"
+}
 type TimeStamp = number & {
 	t: "Epoch time";
 };
@@ -897,6 +931,7 @@ declare enum Reason {
 	 */
 	DEFAULT = 4
 }
+type ExperimentationOptOutModeValue = "disabled" | "immediate" | "future_experiments_only";
 interface OptOutInstant {
 	readonly seconds: number;
 	readonly fraction: string;
@@ -968,6 +1003,11 @@ type PrecomputedConfigurationResponse = {
 		attributes: {
 			/** When configuration was generated. */
 			createdAt: string;
+			format?: "PRECOMPUTED";
+			environment?: {
+				name: string;
+			};
+			observeFullEvaluationData?: boolean;
 			/** Effective server evaluation options, retained in portable and persisted configurations. */
 			evaluation_options?: {
 				experimentation_opt_out?: boolean;
@@ -998,6 +1038,31 @@ export interface FlagSelection {
 	keyPatterns?: readonly string[];
 }
 export type FlagsConfigurationWire = string;
+export type ConfigurationPrecomputeErrorCode = "invalid_configuration" | "invalid_context" | "invalid_options";
+/** A top-level input error. Individual flag failures are reported separately. */
+export declare class ConfigurationPrecomputeError extends Error {
+	readonly code: ConfigurationPrecomputeErrorCode;
+	constructor(code: ConfigurationPrecomputeErrorCode);
+}
+export type PrecomputeEvaluationError = {
+	flagKey: string;
+	errorCode: ErrorCode;
+};
+export type PrecomputeConfigurationOptions = {
+	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
+	experimentationOptOutMode?: ExperimentationOptOutModeValue;
+	/**
+	 * Called for each omitted evaluation error, after all flags have been evaluated.
+	 * Contains no context, values, or raw error messages. Exceptions from this callback propagate.
+	 */
+	onEvaluationError?: (error: PrecomputeEvaluationError) => void;
+};
+/**
+ * Locally resolve rules for one context, without defaults, tracking, or network calls.
+ * Returns a context-bound, precomputed-only snapshot. Failed and unassigned flags are omitted.
+ * Recompute when the context or rules change; client-directed output requires client-safe source rules.
+ */
+export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions): FlagsConfiguration$1;
 /**
  * Decode a binary flags configuration response.
  */
