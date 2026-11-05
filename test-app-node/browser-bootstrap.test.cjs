@@ -1,8 +1,42 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
-const { configurationToString, fetchRulesConfiguration } = require('@datadog/openfeature-node-server/rules-based')
+const {
+  configurationToString,
+  fetchRulesConfiguration,
+  precomputeConfiguration,
+} = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
+
+test('the browser consumes a Node precomputed snapshot without rules, requests or tracking hooks', async () => {
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    throw new Error('Precomputation and browser initialization must not fetch')
+  }
+  try {
+    const rules = configurationFromString(JSON.stringify(fixture))
+    const context = { targetingKey: 'user-1', country: 'US' }
+    const snapshot = configurationFromString(configurationToString(precomputeConfiguration(rules, context)))
+    assert.equal(snapshot.rules, undefined)
+    const provider = new DatadogCoreProvider()
+    provider.setConfiguration(snapshot)
+    await provider.initialize(context)
+    const logger = { debug() {}, info() {}, warn() {}, error() {} }
+    const details = provider.resolveBooleanEvaluation('test-flag', false, context, logger)
+    assert.equal(details.value, true)
+    assert.equal(details.variant, 'on')
+    assert.equal(details.reason, 'TARGETING_MATCH')
+    assert.equal(calls, 0)
+    assert.equal(
+      provider.resolveBooleanEvaluation('test-flag', false, { ...context, country: 'CA' }, logger).errorCode,
+      'INVALID_CONTEXT'
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
 
 test('the unchanged browser provider initializes from Node wire and reevaluates without requests', async () => {
   const originalFetch = globalThis.fetch

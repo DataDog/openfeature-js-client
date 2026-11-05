@@ -34,7 +34,14 @@ const jsonActivations = new WeakMap<Flag, PreparedAllocations<Allocation>>()
 export function prepareUniversalFlagConfiguration(
   configuration: UniversalFlagConfigurationV1
 ): UniversalFlagConfigurationV1 {
-  for (const flag of Object.values(configuration.flags)) {
+  // Parsed UFC uses own data properties. Inspect descriptors so preparation does not
+  // execute accessors on malformed or instrumented objects before evaluation.
+  const flagsDescriptor = Object.getOwnPropertyDescriptor(configuration, 'flags')
+  const flags = flagsDescriptor && 'value' in flagsDescriptor ? flagsDescriptor.value : undefined
+  if (!flags || typeof flags !== 'object') return configuration
+  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(flags))) {
+    if (!('value' in descriptor)) continue
+    const flag = descriptor.value
     // Leave malformed flag shapes to the existing per-flag validation.
     if (flag && Array.isArray(flag.allocations)) prepareJsonFlagActivations(flag)
   }
