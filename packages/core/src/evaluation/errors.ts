@@ -25,7 +25,9 @@ export class DependencyGraphError extends Error {
   constructor(
     readonly flagKey: string,
     readonly errorCode: ErrorCode,
-    message: string
+    message: string,
+    readonly rootErrorCode: ErrorCode = 'GENERAL' as ErrorCode,
+    readonly rootErrorMessage: string = `prerequisite flag "${flagKey}" failed: ${message}`
   ) {
     super(message)
     this.name = 'DependencyGraphError'
