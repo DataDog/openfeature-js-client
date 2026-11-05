@@ -1,4 +1,3 @@
-import { base64Decode, base64Encode } from '@bufbuild/protobuf/wire'
 import { gcm } from '@noble/ciphers/aes'
 import { sha256 } from '../evaluation/sha256'
 import { encodeUtf8 } from '../utf8'
@@ -7,6 +6,7 @@ import type { FlagKeyObfuscation } from './flag-key-obfuscation'
 const AAD = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1\0')
 const INFO = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1')
 const NONCE_DOMAIN = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.nonce.v1\0')
+const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 const TAG_LENGTH = 16
 const NONCE_LENGTH = 12
 
@@ -71,13 +71,35 @@ function concatenate(left: Uint8Array, right: Uint8Array): Uint8Array {
 }
 
 function encodeBase64Url(value: Uint8Array): string {
-  return base64Encode(value).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  let output = ''
+  for (let index = 0; index < value.length; index += 3) {
+    const remaining = value.length - index
+    const chunk = (value[index] << 16) | ((value[index + 1] ?? 0) << 8) | (value[index + 2] ?? 0)
+    output += BASE64URL_ALPHABET[(chunk >>> 18) & 63]
+    output += BASE64URL_ALPHABET[(chunk >>> 12) & 63]
+    if (remaining > 1) output += BASE64URL_ALPHABET[(chunk >>> 6) & 63]
+    if (remaining > 2) output += BASE64URL_ALPHABET[chunk & 63]
+  }
+  return output
 }
 
 function decodeBase64Url(value: string): Uint8Array {
   if (!value || value.length % 4 === 1 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Invalid base64url')
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)
-  return base64Decode(base64)
+  const output = new Uint8Array(Math.floor((value.length * 6) / 8))
+  let buffer = 0
+  let bits = 0
+  let outputIndex = 0
+  for (const character of value) {
+    buffer = (buffer << 6) | BASE64URL_ALPHABET.indexOf(character)
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      output[outputIndex++] = (buffer >>> bits) & 0xff
+      buffer &= (1 << bits) - 1
+    }
+  }
+  if (buffer !== 0) throw new Error('Invalid base64url padding bits')
+  return output
 }
 
 function decodeUtf8(value: Uint8Array): string {
