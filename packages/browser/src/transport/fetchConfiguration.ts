@@ -1,6 +1,5 @@
 import {
   acknowledgesExperimentationOptOut,
-  buildEndpointHost,
   type CanonicalFlagSelection,
   canonicalizeFlagSelection,
   experimentationOptOutPolicy,
@@ -18,6 +17,8 @@ import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
+import { buildConfigurationUrl } from './configurationEndpoint'
+
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import {
@@ -25,6 +26,8 @@ import {
   type ResponseSigningConfiguration,
   type ResponseSigningController,
 } from './responseSigning/controller'
+
+export { buildConfigurationUrl } from './configurationEndpoint'
 
 const sourcePayload = {
   sdk_name: 'browser',
@@ -87,27 +90,6 @@ export async function getErrorMessage(response: Response) {
   return response.statusText || 'Unknown error'
 }
 
-export function buildConfigurationUrl(options: ConfigurationRequestOptions, endpoint: 'precomputed' | 'rules'): URL {
-  let url: URL
-  if (options.flaggingProxy?.match('https?://')) {
-    // If flaggingProxy has a protocol, use it as-is
-    url = new URL(`${options.flaggingProxy}`)
-  } else if (options.flaggingProxy) {
-    // Otherwise, prepend https:// to the proxy
-    url = new URL(`https://${options.flaggingProxy}`)
-  } else {
-    const host = buildEndpointHost(options.site || 'datadoghq.com', endpoint === 'rules' ? 'ufc-client' : 'preview')
-    url = new URL(
-      endpoint === 'rules'
-        ? `https://${host}/api/v2/feature-flagging/config/rules-based/client`
-        : `https://${host}/precompute-assignments`
-    )
-  }
-
-  url.searchParams.set('dd_env', options.env || '')
-  return url
-}
-
 export function buildConfigurationHeaders(
   options: ConfigurationRequestOptions,
   contentHeaders: Record<string, string>,
@@ -132,10 +114,15 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
+  const requestOptions: ConfigurationRequestOptions = options
   return requestPrecomputedConfiguration(
     options,
     undefined,
-    createResponseSigningController(options.responseSigning, { site: options.site })
+    createResponseSigningController(options.responseSigning, {
+      site: requestOptions.site,
+      flaggingProxy: requestOptions.flaggingProxy,
+      env: requestOptions.env,
+    })
   )
 }
 
@@ -227,6 +214,8 @@ export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
   signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
     site: initConfiguration.site,
+    flaggingProxy: initConfiguration.flaggingProxy,
+    env: initConfiguration.env,
   })
 ) {
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }

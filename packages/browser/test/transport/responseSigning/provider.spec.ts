@@ -4,7 +4,10 @@ import { ProviderStatus } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../../src/cache/indexeddb-flags-cache'
 import type { FlaggingInitConfiguration } from '../../../src/domain/configuration'
 import { DatadogProvider } from '../../../src/openfeature/provider'
-import { fetchPrecomputedConfiguration } from '../../../src/transport/fetchConfiguration'
+import {
+  createFlagsConfigurationFetcher,
+  fetchPrecomputedConfiguration,
+} from '../../../src/transport/fetchConfiguration'
 import { createResponseSigningController } from '../../../src/transport/responseSigning/controller'
 import {
   buildSigningTranscript,
@@ -157,43 +160,92 @@ test('off preserves ordinary headers/redirect behavior and performs no crypto', 
 test('required needs an explicit local anchor before any network operation', () => {
   expect(() => provider('required', { responseSigning: { mode: 'required' } })).toThrow('locally trusted root')
 })
-test.each([undefined, 'datadoghq.com', 'datadoghq.eu', 'datad0g.com.attacker.test'])(
-  'bundled staging trust rejects non-staging site %s',
-  (site) => {
-    expect(() => createResponseSigningController({ mode: 'observe', trustDatadogStaging: true }, { site })).toThrow(
-      'Staging signing trust requires site'
-    )
-  }
-)
-test('staging site alone does not enable signing or enroll its bundled root', () => {
+test('staging selects its root only when signing is enabled', () => {
   expect(createResponseSigningController(undefined, { site: 'datad0g.com' })).toBeUndefined()
-  expect(() => createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })).toThrow(
-    'locally trusted root'
-  )
-  expect(
-    createResponseSigningController({ mode: 'off', trustDatadogStaging: true }, { site: 'datadoghq.com' })
-  ).toBeUndefined()
-  expect(
-    createResponseSigningController({ mode: 'required', trustDatadogStaging: true }, { site: 'datad0g.com' })
-  ).toBeDefined()
+  expect(createResponseSigningController({ mode: 'off' }, { site: 'datad0g.com' })).toBeUndefined()
+  expect(createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })).toBeDefined()
+  expect(() =>
+    createResponseSigningController({ mode: 'required', trustedRootCertificates: [] }, { site: 'datad0g.com' })
+  ).toThrow('locally trusted root')
 })
-test.each(['provider', 'fetch'] as const)(
-  '%s forwards the staging site for explicit root enrollment',
+test.each([
+  'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
+  'https://preview.ff-cdn.datad0g.com.attacker.test/precompute-assignments',
+  'https://attacker-preview.ff-cdn.datad0g.com/precompute-assignments',
+  'https://preview.ff-cdn.datad0g.com:444/precompute-assignments',
+  'http://preview.ff-cdn.datad0g.com/precompute-assignments',
+  'https://user@preview.ff-cdn.datad0g.com/precompute-assignments',
+  'https://proxy.test/assign',
+])('staging site cannot enroll a different destination: %s', (flaggingProxy) => {
+  expect(() =>
+    provider('required', {
+      site: 'datad0g.com',
+      flaggingProxy,
+      responseSigning: { mode: 'required' },
+    })
+  ).toThrow('locally trusted root')
+})
+test('the effective staging endpoint overrides a production site for root selection', () => {
+  const subject = provider('required', {
+    site: 'datadoghq.com',
+    flaggingProxy: 'https://preview.ff-cdn.datad0g.com/precompute-assignments',
+    responseSigning: { mode: 'required' },
+  })
+  expect(subject).toBeDefined()
+})
+test('automatic trust cannot be reused for a different request origin', () => {
+  const signing = createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })!
+  expect(() => signing.prepare('https://proxy.test/assign', {}, '{}')).toThrow('unsupported-request')
+})
+test.each(['provider', 'fetch', 'factory'] as const)(
+  '%s selects staging trust from the resolved endpoint without another option',
   async (entry) => {
     const onVerification = jest.fn()
     global.fetch = jest.fn().mockResolvedValue(unsigned())
-    const options: Partial<FlaggingInitConfiguration> = {
-      site: 'datad0g.com',
+    const options = {
+      ...defaultOptions,
+      site: 'datad0g.com' as const,
       env: 'staging',
-      responseSigning: { mode: 'observe', trustDatadogStaging: true, onVerification },
+      responseSigning: { mode: 'observe' as const, onVerification },
     }
     if (entry === 'provider') await provider('observe', options).initialize(context)
-    else await fetchPrecomputedConfiguration({ ...defaultOptions, ...options, env: 'staging', context })
+    else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
+    else await fetchPrecomputedConfiguration({ ...options, context })
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBe('1')
     expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
   }
 )
+test.each(['provider', 'fetch', 'factory'] as const)(
+  '%s uses the proxy destination even when site is production',
+  async (entry) => {
+    const onVerification = jest.fn()
+    global.fetch = jest.fn().mockResolvedValue(unsigned())
+    const options = {
+      ...defaultOptions,
+      site: 'datadoghq.com' as const,
+      env: 'staging',
+      flaggingProxy: 'https://preview.ff-cdn.datad0g.com/precompute-assignments',
+      responseSigning: { mode: 'observe' as const, onVerification },
+    }
+    if (entry === 'provider') await provider('observe', options).initialize(context)
+    else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
+    else await fetchPrecomputedConfiguration({ ...options, context })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain('https://preview.ff-cdn.datad0g.com/')
+    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
+  }
+)
+test('the standalone fetcher honors a proxy override when selecting trust', () => {
+  expect(() =>
+    createFlagsConfigurationFetcher({
+      ...defaultOptions,
+      site: 'datad0g.com',
+      flaggingProxy: 'https://proxy.test/assign',
+      responseSigning: { mode: 'required' },
+    })
+  ).toThrow('locally trusted root')
+})
 test.each(['observe', 'required'] as const)(
   '%s verifies the actual normalized request, token override, query and response before provider admission',
   async (mode) => {

@@ -22,11 +22,12 @@ an application package-manager resolution for `@datadog/flagging-core` to the
 local core tarball so it cannot resolve to an unrelated registry release.
 
 The SDK embeds the **public staging root** in
-`packages/browser/src/transport/responseSigning/staging-root.json`. QA selects it
-with `site: 'datad0g.com'` and
-`responseSigning: { mode: 'observe', trustDatadogStaging: true }`. Both signing and
-staging trust remain explicit opt-ins; active staging trust is rejected for other
-sites. No root is downloaded from a response. Use that same public root for the
+`packages/browser/src/transport/responseSigning/staging-root.json`. QA enables
+`responseSigning: { mode: 'observe' }`; its resolved assignment endpoint selects
+the public root. The catalog currently recognizes only the exact HTTPS origin
+`https://preview.ff-cdn.datad0g.com`. A proxy override controls both destination
+and trust selection; unknown origins need explicit roots. Signing stays off by
+default. No root is downloaded from a response. Use that same public root for the
 staging edge build. Only the leaf key and leaf/
 intermediate certificates go into the edge Secret Store; issuer private keys
 never enter the application or npm artifacts.
@@ -37,6 +38,10 @@ deployment do not require separate SDK pins. These are response-signing
 certificates, independent of HTTPS certificates. The proof binds the exact request
 hostname, but the verifier does not enforce certificate-to-hostname authorization:
 the shared staging root is one trust boundary across enrolled deployments.
+Production roots should be distinct per Datadog site, with reviewed CDN/origin
+aliases mapped to that site. All SDK platforms should embed the same public catalog;
+DC intermediates and per-deployment leaf keys rotate beneath it. Production roots
+and additional aliases are not provisioned by this staging draft.
 
 Begin with `observe`, then test `required` in a bounded QA session. Keep the same
 provider and public root while rotating the leaf, then the intermediate. Record

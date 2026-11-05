@@ -1,6 +1,7 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-import stagingRoot from './staging-root.json'
+import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
+import { bundledRootsForEndpoint } from './trustRoots'
 import {
   cryptoProvider,
   hex,
@@ -24,12 +25,10 @@ export interface ResponseSigningConfiguration {
   mode: ResponseSigningMode
   /**
    * Explicit trusted root certificates, standard padded base64 DER. Draft dogfood/test API.
-   * No production root is bundled yet. Required mode needs at least one locally provisioned anchor.
+   * Overrides endpoint-selected bundled roots, including when empty. No production root is bundled yet.
    * These public anchors are fixed for the lifetime of the provider; never populate them from a response.
    */
   trustedRootCertificates?: readonly string[]
-  /** Explicitly trust the bundled public staging root. Requires site: 'datad0g.com'; default: false. */
-  trustDatadogStaging?: boolean
   /** Called at most once per distinct outcome per provider. Contains no request data or certificate contents. */
   onVerification?: (outcome: { status: 'verified' } | { status: 'unverified'; reason: VerificationFailure }) => void
 }
@@ -50,16 +49,14 @@ export function signingContextKey(context: EvaluationContext): string {
 
 export function createResponseSigningController(
   options: ResponseSigningConfiguration | undefined,
-  scope: Record<string, unknown> = {}
+  scope: ConfigurationEndpointOptions & Record<string, unknown> = {}
 ) {
   const mode = options?.mode ?? 'off'
   if (!['off', 'observe', 'required'].includes(mode)) throw new Error('Invalid response signing mode')
   if (mode === 'off') return undefined
-  const roots = [...(options?.trustedRootCertificates || [])]
-  if (options?.trustDatadogStaging) {
-    if (scope.site !== 'datad0g.com') throw new Error('Staging signing trust requires site: datad0g.com')
-    roots.push(stagingRoot.certificateDerBase64)
-  }
+  const endpoint = buildConfigurationUrl(scope, 'precomputed')
+  const automaticRoots = options?.trustedRootCertificates === undefined
+  const roots = [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]
   if (roots.length > 4 || roots.some((root) => typeof root !== 'string' || root.length > 5464))
     throw new Error('Invalid response signing trust anchors')
   if (mode === 'required' && !roots.length)
@@ -98,6 +95,8 @@ export function createResponseSigningController(
     },
     prepare(url: string, headers: Record<string, string>, body: string): SigningRequest | undefined {
       try {
+        if (automaticRoots && new URL(url).origin !== endpoint.origin)
+          throw new ResponseVerificationError('unsupported-request')
         const normalized = new Headers(headers)
         // Case-distinct object keys become duplicate HTTP fields, even if Headers later coalesces them.
         const semantic = new Set([

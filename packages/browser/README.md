@@ -120,12 +120,15 @@ configuration. Observe mode reports `missing-anchor` and accepts an otherwise va
 response. It also accepts unsigned or invalidly signed responses without calling
 them verified. Diagnostics contain no token, context, response, or certificate data.
 
-For Datadog staging, the SDK embeds a separate **public staging root**. Select it
-explicitly with `site: 'datad0g.com'` and
-`responseSigning: { mode: 'observe', trustDatadogStaging: true }`. Selecting the
-staging site alone does not enable signing or trust that root. Active staging trust
-is rejected for other sites, and off mode retains ordinary behavior. The certificate
-contains no private key; production trust must be provisioned separately.
+For Datadog staging, select `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
+the bundled **public staging root** automatically. Signing still defaults to off.
+The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
+A `flaggingProxy` override takes precedence over `site` for both requests and trust;
+unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
+(including when empty), for custom proxies and tests. Additional Datadog aliases
+and production site roots must be provisioned before they enter the catalog.
 
 A response carries its leaf and intermediate certificates, so rotating either under
 the unchanged trusted root requires no SDK update or prior rotation history. The
