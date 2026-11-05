@@ -372,7 +372,8 @@ describe('dependent flag exposures', () => {
     await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
     })
     expect(
       dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
@@ -419,7 +420,7 @@ describe('dependent flag exposures', () => {
       value: true,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'prerequisite flag evaluation returned no variant',
+      errorMessage: 'prerequisite flag "prerequisite" failed: prerequisite flag evaluation returned no variant',
     })
     expect(
       dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {

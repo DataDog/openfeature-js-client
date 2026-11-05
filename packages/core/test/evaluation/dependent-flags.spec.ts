@@ -52,6 +52,43 @@ describe('dependent flag evaluation', () => {
     ])
   })
 
+  it('ignores future fields in a JSON flag-evaluation reference', () => {
+    const condition = flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])
+    Object.assign(condition.flagEvaluation, { property: 'variant', futureOption: { enabled: true } })
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [condition]),
+    })
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+  })
+
+  it('reports a missing JSON prerequisite on its event and GENERAL on the root', () => {
+    const config = configuration({
+      root: dependentBooleanFlag('root', [flagCondition('missing', OperatorType.ONE_OF, ['on'])]),
+    })
+
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      config,
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+
+    expect(trace.details).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
+    })
+    expect(trace.dependencyEvaluations).toMatchObject([
+      { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
+    ])
+    expect(trace.dependencyExposures).toEqual([])
+  })
+
   it('reads a prerequisite only for descriptor resolution and evaluation', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const config = configuration({
@@ -89,7 +126,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'prerequisite flag evaluation returned no variant',
+      errorMessage: 'prerequisite flag "prerequisite" failed: prerequisite flag evaluation returned no variant',
     })
     expect(trace.dependencyEvaluations).toMatchObject([
       { flagKey: 'prerequisite', details: { value: false, reason: 'ERROR', errorCode: 'GENERAL' } },
@@ -207,7 +244,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'prerequisite flag evaluation returned no variant',
+      errorMessage: 'prerequisite flag "prerequisite" failed: prerequisite flag evaluation returned no variant',
     })
     expect(trace.dependencyEvaluations).toMatchObject([
       {
@@ -517,7 +554,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'maximum flag dependency depth exceeded',
+      errorMessage: 'prerequisite flag "prerequisite" failed: maximum flag dependency depth exceeded',
     })
   })
 
@@ -530,16 +567,33 @@ describe('dependent flag evaluation', () => {
 
     const dependent = protobufDependentConfiguration(true)
     dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
+    const { result, dependencies, exposures } = evaluateProtobuf(dependent, logger)
+    expect(result).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(dependencies).toMatchObject([
+      { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
+    ])
+    expect(exposures).toEqual([])
     expect(logger.warn).toHaveBeenLastCalledWith(
       'flag dependency graph evaluation failed',
       expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
     )
+  })
+
+  it('does not emit the protobuf root as a dependency when invalid depth is reached through self-reference', () => {
+    const config = protobufDependentConfiguration(true)
+    config.strings[1] = 'root'
+    config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
+
+    const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
+
+    expect(result).toMatchObject({ reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(dependencies).toEqual([])
+    expect(exposures).toEqual([])
   })
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
@@ -564,7 +618,7 @@ describe('dependent flag evaluation', () => {
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
@@ -585,7 +639,12 @@ describe('dependent flag evaluation', () => {
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    expect(result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
+    })
     expect(dependencies).toMatchObject([
       { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
@@ -613,7 +672,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'flag dependency cycle detected',
+      errorMessage: 'prerequisite flag "root" failed: flag dependency cycle detected',
     })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
@@ -646,7 +705,7 @@ describe('dependent flag evaluation', () => {
     config.flags.root.allocations[0].targetingConditionIndex = 3
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
     expect(exposures).toEqual([])
   })
@@ -748,16 +807,60 @@ describe('dependent flag evaluation', () => {
       },
       maximumDepth
     )
-    expect(evaluate(dependent, 'root', logger)).toMatchObject({
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      dependent,
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+    expect(trace.details).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
+    expect(trace.dependencyEvaluations).toMatchObject([
+      { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
+    ])
+    expect(trace.dependencyExposures).toEqual([])
     expect(logger.warn).toHaveBeenLastCalledWith(
       'flag dependency graph evaluation failed',
       expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
     )
+  })
+
+  it('ignores a non-object JSON evaluatorParams value', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = 5 as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+  })
+
+  it('does not emit the root as a dependency when its invalid depth is reached through self-reference', () => {
+    const config = configuration(
+      {
+        root: dependentBooleanFlag('root', [flagCondition('root', OperatorType.ONE_OF, ['on'])]),
+      },
+      256
+    )
+
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      config,
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+
+    expect(trace.details).toMatchObject({ reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(trace.dependencyEvaluations).toEqual([])
+    expect(trace.dependencyExposures).toEqual([])
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
@@ -776,7 +879,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'maximum flag dependency depth exceeded',
+      errorMessage: 'prerequisite flag "c" failed: maximum flag dependency depth exceeded',
     })
     expect(dependencies).toMatchObject([
       { flagKey: 'c', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
@@ -815,7 +918,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'maximum flag dependency depth exceeded',
+      errorMessage: expect.stringMatching(/^prerequisite flag ".+" failed: maximum flag dependency depth exceeded$/),
     })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['leaf', 'a', 'b'])
     expect(onExposures).not.toHaveBeenCalled()
@@ -854,7 +957,7 @@ describe('dependent flag evaluation', () => {
 
     const result = evaluate(config, 'root', logger, (dependency) => dependencies.push(dependency), {}, onExposures)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])

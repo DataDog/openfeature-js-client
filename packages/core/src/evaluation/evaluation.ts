@@ -350,10 +350,10 @@ function evaluateRules<T extends FlagValueType>(
   let dependencySession: DependencyEvaluationSession | undefined
   let details: ResolutionDetails<FlagTypeToValue<T>>
   try {
-    const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
-      dependencySession ??= new DependencyEvaluationSession(
+    const createDependencySession = (maxDependencyDepth: number) =>
+      new DependencyEvaluationSession(
         flagKey,
-        getMaxDependencyDepth(config, flagKey),
+        maxDependencyDepth,
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -376,6 +376,18 @@ function evaluateRules<T extends FlagValueType>(
         collectDependencyExposures,
         collectDependencyEvaluations
       )
+    const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
+      if (dependencySession === undefined) {
+        try {
+          dependencySession = createDependencySession(getMaxDependencyDepth(config, flagKey))
+        } catch (error) {
+          if (error instanceof DependencyGraphError) {
+            dependencySession = createDependencySession(DEFAULT_MAX_DEPENDENCY_DEPTH)
+            dependencySession.recordConfigurationFailure(flagEvaluation.key, error)
+          }
+          throw error
+        }
+      }
       return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
     }) as ResolveFlagEvaluation
     resolveDependency.checkpoint = () => dependencySession?.checkpoint()
@@ -440,10 +452,10 @@ export function createProtobufDependencyResolver(
   collectDependencyEvaluations = false
 ) {
   let dependencySession: DependencyEvaluationSession | undefined
-  const resolve = ((dependencyFlagKey: string) => {
-    dependencySession ??= new DependencyEvaluationSession(
+  const createDependencySession = (maxDependencyDepth: number) =>
+    new DependencyEvaluationSession(
       flagKey,
-      getMaxDependencyDepth(config, flagKey),
+      maxDependencyDepth,
       observeFullEvaluationData,
       (key) => {
         const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -467,6 +479,18 @@ export function createProtobufDependencyResolver(
       collectDependencyExposures,
       collectDependencyEvaluations
     )
+  const resolve = ((dependencyFlagKey: string) => {
+    if (dependencySession === undefined) {
+      try {
+        dependencySession = createDependencySession(getMaxDependencyDepth(config, flagKey))
+      } catch (error) {
+        if (error instanceof DependencyGraphError) {
+          dependencySession = createDependencySession(DEFAULT_MAX_DEPENDENCY_DEPTH)
+          dependencySession.recordConfigurationFailure(dependencyFlagKey, error)
+        }
+        throw error
+      }
+    }
     return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
   }) as ResolveProtobufFlagEvaluation
   // Hook presence tells the protobuf evaluator to retain and replay dependency keys.
@@ -502,8 +526,8 @@ function dependencyGraphFailure<T extends FlagValue>(
   return {
     value: defaultValue,
     reason: 'ERROR',
-    errorCode: error.errorCode,
-    errorMessage: error.message,
+    errorCode: error.rootErrorCode,
+    errorMessage: error.rootErrorMessage,
     flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }
 }
@@ -546,6 +570,21 @@ class DependencyEvaluationSession {
       dependencyEvaluations: this.evaluations,
       dependencyExposures: commitExposures && this.exposures !== undefined ? this.exposures : [],
     }
+  }
+
+  recordConfigurationFailure(flagKey: string, error: DependencyGraphError): void {
+    if (this.active.has(flagKey) || this.memo.has(flagKey)) {
+      return
+    }
+    this.recordEvaluation({
+      flagKey,
+      details: {
+        reason: 'ERROR',
+        errorCode: error.errorCode,
+        errorMessage: error.message,
+        flagMetadata: createEvaluationMetadata(this.evaluationTimestampMs, this.observeFullEvaluationData),
+      },
+    })
   }
 
   checkpoint(): DependencyExposureCheckpoint | undefined {
@@ -858,11 +897,8 @@ function getMaxDependencyDepth(
   if (Number.isInteger(numericDepth) && numericDepth >= 0 && numericDepth <= 255) {
     return numericDepth
   }
-  throw new DependencyGraphError(
-    rootFlagKey,
-    'PARSE_ERROR' as ErrorCode,
-    'maxDependencyDepth must be an integer from 0 through 255'
-  )
+  const message = 'maxDependencyDepth must be an integer from 0 through 255'
+  throw new DependencyGraphError(rootFlagKey, 'PARSE_ERROR' as ErrorCode, message, 'PARSE_ERROR' as ErrorCode, message)
 }
 
 function defaultValueForType(type: FlagValueType): FlagValue {

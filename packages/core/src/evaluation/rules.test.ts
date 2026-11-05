@@ -41,19 +41,24 @@ describe('condition attribute coercion', () => {
 })
 
 describe('dependent condition validation', () => {
-  it('accepts key-only variant membership', () => {
+  it.each([
+    ['key-only variant membership', { key: 'prerequisite' }],
+    ['future fields alongside the key', { key: 'prerequisite', property: 'variant', futureOption: true }],
+  ])('accepts %s', (_description, flagEvaluation) => {
     expect(
       isValidRule({
-        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.ONE_OF, value: ['on'] }],
+        conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }],
       })
     ).toBe(true)
   })
 
   it.each([
     [
-      'a malformed flag-evaluation reference',
-      { flagEvaluation: { key: 'prerequisite', unexpected: true }, operator: OperatorType.ONE_OF, value: ['on'] },
+      'a missing dependency key',
+      { flagEvaluation: { property: 'variant' }, operator: OperatorType.ONE_OF, value: ['on'] },
     ],
+    ['an empty dependency key', { flagEvaluation: { key: '' }, operator: OperatorType.ONE_OF, value: ['on'] }],
+    ['a null dependency key', { flagEvaluation: { key: null }, operator: OperatorType.ONE_OF, value: ['on'] }],
     ['a regex operator', { flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
   ])('rejects %s', (_description, condition) => {
     expect(isValidRule({ conditions: [condition] })).toBe(false)
