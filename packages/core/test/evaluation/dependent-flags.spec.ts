@@ -71,6 +71,32 @@ describe('dependent flag evaluation', () => {
     expect(reads).toBe(2)
   })
 
+  it('normalizes a missing JSON prerequisite only at the root', () => {
+    const trace = evaluateRulesBasedConfigurationWithTrace(
+      configuration({
+        root: dependentBooleanFlag('root', [flagCondition('missing', OperatorType.ONE_OF, ['on'])]),
+      }),
+      'boolean',
+      'root',
+      false,
+      { targetingKey: 'subject' },
+      logger
+    )
+
+    expect(trace.details).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(trace.dependencyEvaluations).toMatchObject([
+      {
+        flagKey: 'missing',
+        details: {
+          reason: 'ERROR',
+          errorCode: 'FLAG_NOT_FOUND',
+          errorMessage: 'prerequisite flag is missing',
+        },
+      },
+    ])
+    expect(trace.dependencyExposures).toEqual([])
+  })
+
   it('applies experimentation opt-out to dependency evaluations', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
@@ -457,7 +483,7 @@ describe('dependent flag evaluation', () => {
     expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
+      errorCode: 'GENERAL',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
     expect(logger.warn).toHaveBeenLastCalledWith(
@@ -488,7 +514,7 @@ describe('dependent flag evaluation', () => {
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
@@ -509,9 +535,16 @@ describe('dependent flag evaluation', () => {
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toMatchObject([
-      { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
+      {
+        flagKey: 'missing',
+        details: {
+          reason: 'ERROR',
+          errorCode: 'FLAG_NOT_FOUND',
+          errorMessage: 'prerequisite flag is missing',
+        },
+      },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
     expect(exposures).toEqual([])
@@ -570,7 +603,7 @@ describe('dependent flag evaluation', () => {
     config.flags.root.allocations[0].targetingConditionIndex = 3
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
     expect(exposures).toEqual([])
   })
@@ -675,7 +708,7 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(dependent, 'root', logger)).toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
+      errorCode: 'GENERAL',
       errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
     })
     expect(logger.warn).toHaveBeenLastCalledWith(
@@ -778,7 +811,7 @@ describe('dependent flag evaluation', () => {
 
     const result = evaluate(config, 'root', logger, (dependency) => dependencies.push(dependency), {}, onExposures)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])

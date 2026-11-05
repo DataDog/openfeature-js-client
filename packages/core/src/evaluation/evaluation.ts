@@ -470,7 +470,7 @@ function dependencyGraphFailure<T extends FlagValue>(
   return {
     value: defaultValue,
     reason: 'ERROR',
-    errorCode: error.errorCode,
+    errorCode: 'GENERAL' as ErrorCode,
     errorMessage: error.message,
     flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }

@@ -309,7 +309,7 @@ describe('dependent flag exposures', () => {
     await expect(client.getBooleanDetails('root', false, { targetingKey: 'subject' })).resolves.toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'FLAG_NOT_FOUND',
+      errorCode: 'GENERAL',
     })
     expect(
       dependencyEvaluationChannel.publish.mock.calls.map(([published]) => {
