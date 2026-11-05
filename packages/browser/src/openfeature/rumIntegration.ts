@@ -1,4 +1,5 @@
 import { type Context, getGlobalObject } from '@datadog/browser-core'
+import { getPrecomputedDependencyEvaluations } from '@datadog/flagging-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import { type EvaluationTelemetryPolicy, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHook } from './tracking'
@@ -48,7 +49,19 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy): Hook 
           return
         }
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-        globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+        const record = (flagKey: string, variant: string) => {
+          try {
+            globalObject.DD_RUM?.addFeatureFlagEvaluation?.(flagKey, variant)
+          } catch {
+            // One RUM failure must not suppress the remaining dependency graph.
+          }
+        }
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment && dependency.variant != null) {
+            record(dependency.flagKey, dependency.variant)
+          }
+        }
+        record(details.flagKey, details.variant)
       },
     },
     policy

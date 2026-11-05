@@ -14,6 +14,7 @@ export {
 export * from './evaluationMetadata'
 export * from './experimentation-opt-out'
 export * from './matchesShard'
+export * from './precomputed-dependencies'
 export * from './precomputed-evaluation'
 export * from './rules'
 export * from './sharders'

@@ -5,6 +5,7 @@ import {
   type FlagsConfigurationError,
   getFlagsConfigurationError,
   getMD5Hash,
+  getPrecomputedDependencyEvaluations,
 } from '@datadog/flagging-core'
 import { configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -51,7 +52,11 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   readonly hooks: Hook[] = [
     {
       finally: (context, details) => {
-        if (supportsExposureAdmission(context)) completeExposureDecision(details)
+        if (!supportsExposureAdmission(context)) return
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment) completeExposureDecision(dependency)
+        }
+        completeExposureDecision(details)
       },
     },
   ]
