@@ -159,18 +159,14 @@ export function precomputeConfiguration(
       } catch {
         flagEvaluationErrors.push([
           flagKey,
-          precomputedError(
-            'PARSE_ERROR' as ErrorCode,
-            undefined,
-            trace.dependencyEvaluations,
-            trace.dependencyExposures
-          ),
+          precomputedError('PARSE_ERROR' as ErrorCode, undefined, trace.dependencyEvaluations, []),
         ])
         errors.push({ flagKey, errorCode: 'PARSE_ERROR' as ErrorCode })
       }
     }
   }
 
+  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors)
   const encoded = encodePrecomputedResults(flags, flagEvaluationErrors, obfuscation)
 
   const precomputed: FlagsConfiguration = {
@@ -287,6 +283,59 @@ function toPrecomputedDependencyEvaluations(
         }
       : { flagKey, isPresentInAssignment: present.has(flagKey) }
   )
+}
+
+function reconcileDependencySerializationFailures(
+  flags: Array<[string, PrecomputedFlag]>,
+  flagEvaluationErrors: Array<[string, PrecomputedErrorFlag]>,
+  errors: PrecomputeEvaluationError[]
+): void {
+  const successfulKeys = new Set(flags.map(([flagKey]) => flagKey))
+  const failures = new Map(flagEvaluationErrors)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (let index = flags.length - 1; index >= 0; index--) {
+      const [rootKey, flag] = flags[index]
+      const missingDependencies = flag.dependencyEvaluations?.filter(
+        (dependency) => 'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+      )
+      if (!missingDependencies?.length) continue
+
+      const missingDependency = missingDependencies[0]
+      const dependencyEvaluations = flag.dependencyEvaluations?.map((dependency) =>
+        'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+          ? dependencySerializationError(dependency.flagKey, failures.get(dependency.flagKey))
+          : 'isPresentInAssignment' in dependency
+            ? { ...dependency, isPresentInAssignment: false }
+            : dependency
+      )
+      const failure: PrecomputedErrorFlag = {
+        reason: 'ERROR',
+        errorCode: 'GENERAL' as ErrorCode,
+        errorMessage: `Dependency "${missingDependency.flagKey}" has no serializable assignment`,
+        ...(dependencyEvaluations?.length ? { dependencyEvaluations } : {}),
+      }
+      flags.splice(index, 1)
+      successfulKeys.delete(rootKey)
+      flagEvaluationErrors.push([rootKey, failure])
+      failures.set(rootKey, failure)
+      errors.push({ flagKey: rootKey, errorCode: 'GENERAL' as ErrorCode })
+      changed = true
+    }
+  }
+}
+
+function dependencySerializationError(
+  flagKey: string,
+  failure: PrecomputedErrorFlag | undefined
+): PrecomputedDependencyEvaluation {
+  return {
+    flagKey,
+    reason: 'ERROR',
+    errorCode: failure?.errorCode ?? ('PARSE_ERROR' as ErrorCode),
+    ...(failure?.errorMessage === undefined ? {} : { errorMessage: failure.errorMessage }),
+  }
 }
 
 function encodePrecomputedResults(

@@ -5,7 +5,7 @@ import { evaluate } from '../evaluation/evaluation'
 import * as clock from '../time'
 import type { FlagsConfiguration } from './configuration'
 import { createExposureEvent } from './exposureEvent'
-import { FlagsConfigurationSchema } from './generated/ufc_pb'
+import { FlagsConfigurationSchema, VariationType } from './generated/ufc_pb'
 import {
   ConfigurationPrecomputeError,
   type PrecomputeConfigurationOptions,
@@ -481,6 +481,56 @@ describe('precomputeConfiguration', () => {
     const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
     expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['good'])
     expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'bad', errorCode: 'PARSE_ERROR' })
+  })
+
+  it.each([false, true])(
+    'fails a dependent root when its prerequisite is not portable, parentFirst=%s',
+    (parentFirst) => {
+      const input = dependentRules(
+        flag({ variationType: 'VARIATION_TYPE_JSON', variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }] }),
+        { jsonStrings: ['{"overflow":1e400}'] }
+      )
+      if (parentFirst) {
+        const { child, parent, unrelated } = input.rules!.response.flags
+        input.rules!.response.flags = { parent, child, unrelated }
+      }
+      const onEvaluationError = jest.fn()
+      const attributes = roundTrip(precomputeConfiguration(input, context, { onEvaluationError })).precomputed!.response
+        .data.attributes
+      expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).toMatchObject({
+        parent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
+        child: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+        },
+      })
+      expect(onEvaluationError.mock.calls.map(([error]) => error)).toEqual(
+        expect.arrayContaining([
+          { flagKey: 'parent', errorCode: 'PARSE_ERROR' },
+          { flagKey: 'child', errorCode: 'GENERAL' },
+        ])
+      )
+    }
+  )
+
+  it('rolls back selected dependency exposure markers when the root is not portable', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    source.flags.child.variationType = VariationType.JSON
+    source.flags.child.variations = [
+      { ...source.flags.child.variations[0], value: { case: 'jsonStringIndex', value: 0 } },
+    ]
+    source.jsonStrings = ['{"overflow":1e400}']
+    const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+    expect(attributes.flags).toHaveProperty('parent')
+    expect(attributes.flags).not.toHaveProperty('child')
+    expect(attributes.flagEvaluationErrors?.child).toMatchObject({
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      dependencyEvaluations: [{ flagKey: 'parent', isPresentInAssignment: false }],
+    })
   })
 
   it('evaluates targeting and sharding for the requested subject', () => {
