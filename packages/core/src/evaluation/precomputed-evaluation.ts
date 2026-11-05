@@ -145,7 +145,44 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  const evaluationError = attributes.flagEvaluationErrors
+    ? getOwnProperty(attributes.flagEvaluationErrors, lookup.key)
+    : undefined
   const flag = getOwnProperty(attributes.flags, lookup.key)
+  if (evaluationError && flag) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'A precomputed flag cannot have both an assignment and an evaluation error',
+    }
+  }
+  if (evaluationError) {
+    const flagMetadata = {}
+    const dependencyError = bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      evaluationError.dependencyEvaluations,
+      attributes.flags,
+      precomputed.flagErrors,
+      logger,
+      { rootFlagKey: flagKey, encoding: encoding.encoding }
+    )
+    if (dependencyError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR' as ErrorCode,
+        errorMessage: dependencyError,
+      }
+    }
+    return {
+      value: defaultValue,
+      reason: evaluationError.reason,
+      errorCode: evaluationError.errorCode as ErrorCode,
+      ...(evaluationError.errorMessage === undefined ? {} : { errorMessage: evaluationError.errorMessage }),
+      ...(evaluationError.dependencyEvaluations?.length ? { flagMetadata } : {}),
+    }
+  }
   if (!flag) {
     return {
       value: defaultValue,
@@ -154,34 +191,24 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
-  if ('errorCode' in flag) {
-    const flagMetadata = {}
-    bindPrecomputedDependencyEvaluations(
-      flagMetadata,
-      flag.dependencyEvaluations,
-      attributes.flags,
-      precomputed.flagErrors,
-      encoding.encoding,
-      logger
-    )
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: flag.errorCode as ErrorCode,
-      ...(flag.dependencyEvaluations?.length ? { flagMetadata } : {}),
-    }
-  }
-
   if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
     const flagMetadata = {}
-    bindPrecomputedDependencyEvaluations(
+    const dependencyError = bindPrecomputedDependencyEvaluations(
       flagMetadata,
       flag.dependencyEvaluations,
       attributes.flags,
       precomputed.flagErrors,
-      encoding.encoding,
-      logger
+      logger,
+      { rootFlagKey: flagKey, encoding: encoding.encoding }
     )
+    if (dependencyError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR' as ErrorCode,
+        errorMessage: dependencyError,
+      }
+    }
     return {
       value: defaultValue,
       reason: 'ERROR',
@@ -201,14 +228,22 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     ...featureEntries,
     ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
   } as PrecomputedFlagMetadata
-  bindPrecomputedDependencyEvaluations(
+  const dependencyError = bindPrecomputedDependencyEvaluations(
     flagMetadata,
     flag.dependencyEvaluations,
     attributes.flags,
     precomputed.flagErrors,
-    encoding.encoding,
-    logger
+    logger,
+    { rootFlagKey: flagKey, encoding: encoding.encoding }
   )
+  if (dependencyError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: dependencyError,
+    }
+  }
   return {
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,

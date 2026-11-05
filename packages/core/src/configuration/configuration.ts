@@ -61,14 +61,16 @@ export type PrecomputedConfigurationResponse = {
       obfuscated?: boolean
       /** Required when obfuscated is true; retained with the map in caches. */
       obfuscation?: FlagKeyObfuscation
+      /** Complete successful assignments only. */
       flags: Record<string, PrecomputedFlag>
+      /** Terminal per-flag evaluation failures for dependent-flags-capable clients. */
+      flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>
     }
   }
 }
 
 /** @internal */
-export type PrecomputedFlag<T extends FlagValueType = FlagValueType> =
-  PrecomputedSuccessfulFlag<T> | PrecomputedErrorFlag
+export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = PrecomputedSuccessfulFlag<T>
 
 /** @internal */
 export type PrecomputedSuccessfulFlag<T extends FlagValueType = FlagValueType> = {
@@ -88,15 +90,8 @@ export type PrecomputedSuccessfulFlag<T extends FlagValueType = FlagValueType> =
 export type PrecomputedErrorFlag = {
   reason: 'ERROR'
   errorCode: string
+  errorMessage?: string
   dependencyEvaluations?: PrecomputedDependencyEvaluation[]
-  // Keep success-field access source-compatible for callers that inspect a
-  // precomputed entry before narrowing the wire-result union.
-  allocationKey?: never
-  variationKey?: never
-  variationType?: never
-  variationValue?: never
-  doLog?: never
-  serialId?: never
 }
 
 /** @internal */
@@ -111,6 +106,7 @@ export type PrecomputedDependencyEvaluation =
       /** Root-relative prerequisite failure; error entries never belong to an assignment. */
       reason: 'ERROR'
       errorCode: string
+      errorMessage?: string
     }
 
 /** @internal */

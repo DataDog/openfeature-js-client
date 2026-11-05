@@ -2,6 +2,7 @@ import type { ErrorCode, EvaluationDetails, FlagMetadata, FlagValue, Logger } fr
 import type { PrecomputedDependencyEvaluation, PrecomputedFlag } from '../configuration'
 import type { FlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { encodePrecomputedFlagKey } from '../configuration/flag-key-obfuscation'
+import { decryptDependencyFlagKey } from './dependency-key-encryption'
 import { getOwnProperty } from './getOwnProperty'
 import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 
@@ -20,14 +21,25 @@ export function bindPrecomputedDependencyEvaluations(
   dependencies: readonly PrecomputedDependencyEvaluation[] | undefined,
   flags: Record<string, PrecomputedFlag>,
   flagErrors?: Record<string, string>,
-  encoding?: FlagKeyObfuscation,
-  logger: Logger = NOOP_LOGGER
-): void {
-  if (!dependencies?.length) return
-  dependencyEvaluations.set(
-    metadata,
-    dependencies.map((dependency) => toEvaluationDetails(dependency, flags, flagErrors, encoding, logger))
-  )
+  logger: Logger = NOOP_LOGGER,
+  identity?: { rootFlagKey: string; encoding?: FlagKeyObfuscation }
+): string | undefined {
+  if (!dependencies?.length) return undefined
+  const resolved: PrecomputedDependencyEvaluationDetails[] = []
+  for (const dependency of dependencies) {
+    const details = toEvaluationDetails(
+      dependency,
+      flags,
+      identity?.rootFlagKey ?? '',
+      identity?.encoding,
+      flagErrors,
+      logger
+    )
+    if ('bindingError' in details) return details.bindingError
+    resolved.push(details)
+  }
+  dependencyEvaluations.set(metadata, resolved)
+  return undefined
 }
 
 export function inheritPrecomputedDependencyEvaluations(from: FlagMetadata, to: FlagMetadata): void {
@@ -44,32 +56,42 @@ export function getPrecomputedDependencyEvaluations(details: {
 function toEvaluationDetails(
   dependency: PrecomputedDependencyEvaluation,
   flags: Record<string, PrecomputedFlag>,
-  flagErrors: Record<string, string> | undefined,
+  rootFlagKey: string,
   encoding: FlagKeyObfuscation | undefined,
+  flagErrors: Record<string, string> | undefined,
   logger: Logger
-): PrecomputedDependencyEvaluationDetails {
+): PrecomputedDependencyEvaluationDetails | { bindingError: string } {
+  const decrypted = encoding
+    ? decryptDependencyFlagKey(dependency.flagKey, rootFlagKey, encoding)
+    : { key: dependency.flagKey }
+  if ('error' in decrypted) {
+    return { bindingError: decrypted.error }
+  }
+  const lookup = encoding ? encodePrecomputedFlagKey(decrypted.key, encoding) : { key: decrypted.key }
+  if ('error' in lookup) {
+    return { bindingError: lookup.error }
+  }
   if ('errorCode' in dependency) {
     return {
-      flagKey: dependency.flagKey,
+      flagKey: decrypted.key,
       reason: 'ERROR',
       errorCode: dependency.errorCode as ErrorCode,
+      ...(dependency.errorMessage === undefined ? {} : { errorMessage: dependency.errorMessage }),
       flagMetadata: {},
     }
   }
-  const lookup = encoding ? encodePrecomputedFlagKey(dependency.flagKey, encoding) : { key: dependency.flagKey }
-  const flag = 'error' in lookup ? undefined : getOwnProperty(flags, lookup.key)
-  const flagError = flagErrors && !('error' in lookup) ? getOwnProperty(flagErrors, lookup.key) : undefined
+  const flag = getOwnProperty(flags, lookup.key)
+  const flagError = flagErrors ? getOwnProperty(flagErrors, lookup.key) : undefined
   if (
     flagError !== undefined ||
     !flag ||
-    'errorCode' in flag ||
     typeof flag.allocationKey !== 'string' ||
     typeof flag.variationKey !== 'string' ||
     typeof flag.reason !== 'string' ||
     typeof flag.doLog !== 'boolean'
   ) {
     return {
-      flagKey: dependency.flagKey,
+      flagKey: decrypted.key,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
       errorMessage: flagError ?? 'Successful dependency evaluation is missing its top-level assignment',
@@ -78,7 +100,7 @@ function toEvaluationDetails(
   }
   const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(flag.features, logger)
   return {
-    flagKey: dependency.flagKey,
+    flagKey: decrypted.key,
     value: flag.variationValue,
     variant: flag.variationKey,
     reason: flag.reason,

@@ -24,6 +24,7 @@ function configuration(
   flag: Record<string, unknown>,
   additionalFlags: Record<string, unknown> = { parent: parentFlag }
 ): FlagsConfiguration {
+  const isEvaluationError = flag.reason === 'ERROR' && !('variationValue' in flag)
   return {
     precomputed: {
       context,
@@ -31,7 +32,8 @@ function configuration(
         data: {
           attributes: {
             createdAt: '2026-10-21T00:00:00Z',
-            flags: { ...additionalFlags, root: flag },
+            flags: { ...additionalFlags, ...(isEvaluationError ? {} : { root: flag }) },
+            ...(isEvaluationError ? { flagEvaluationErrors: { root: flag } } : {}),
           },
         },
       } as unknown as PrecomputedConfigurationResponse,
@@ -81,7 +83,7 @@ describe('precomputed dependent flags', () => {
     ])
   })
 
-  it('reconstructs dependencies from obfuscated top-level assignments without obfuscating telemetry keys', () => {
+  it('decrypts dependency identities before hashing them for top-level lookup', () => {
     const obfuscation: FlagKeyObfuscation = {
       scheme: 'flag-key-sha256-v1',
       salt: '00112233445566778899aabbccddeeff',
@@ -107,7 +109,12 @@ describe('precomputed dependent flags', () => {
                   variationValue: true,
                   reason: 'TARGETING_MATCH',
                   doLog: true,
-                  dependencyEvaluations: [successfulDependency],
+                  dependencyEvaluations: [
+                    {
+                      flagKey: 'Dnh0eaLWDiAaLkwLG6hAV7Q-rU7_xMvXou2PWK3dCjz9rg',
+                      isPresentInAssignment: true,
+                    },
+                  ],
                 },
               } satisfies Record<string, PrecomputedFlag>,
             },
@@ -354,7 +361,32 @@ describe('precomputed dependent flags', () => {
     const payload = configuration(flag).precomputed!.response
     expect(parsePrecomputedConfigurationResponse(payload)).toEqual({
       response: payload,
-      flagErrors: { root: 'Invalid precomputed flag configuration' },
+      flagErrors: {
+        root:
+          flag.reason === 'ERROR'
+            ? 'Invalid precomputed flag evaluation error'
+            : 'Invalid precomputed flag configuration',
+      },
+    })
+  })
+
+  it('rejects a flag key present in both assignments and evaluation errors', () => {
+    const response = configuration(parentFlag).precomputed!.response
+    const payload = {
+      ...response,
+      data: {
+        ...response.data,
+        attributes: {
+          ...response.data.attributes,
+          flagEvaluationErrors: {
+            root: { reason: 'ERROR', errorCode: 'GENERAL', dependencyEvaluations: [] },
+          },
+        },
+      },
+    }
+
+    expect(parsePrecomputedConfigurationResponse(payload)).toEqual({
+      error: 'A precomputed flag cannot have both an assignment and an evaluation error',
     })
   })
 })
