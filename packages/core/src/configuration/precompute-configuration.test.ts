@@ -114,7 +114,6 @@ describe('precomputeConfiguration', () => {
     ['invalid parent', 'GENERAL', 'PARSE_ERROR', 'PARSE_ERROR'],
     ['cycle', 'GENERAL', 'GENERAL', 'GENERAL'],
     ['depth limit', 'GENERAL', 'GENERAL', undefined],
-    ['invalid depth', 'PARSE_ERROR', 'PARSE_ERROR', undefined],
   ])(
     'omits a child with %s, reports its error, and continues precomputing',
     (failure, rootErrorCode, evaluationErrorCode, parentErrorCode) => {
@@ -124,9 +123,9 @@ describe('precomputeConfiguration', () => {
       if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
       if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
       if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
-      if (failure === 'depth limit' || failure === 'invalid depth') {
+      if (failure === 'depth limit') {
         source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-          evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
+          evaluatorParams: { maxDependencyDepth: 0 },
         }).evaluatorParams
       }
       const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
@@ -152,6 +151,23 @@ describe('precomputeConfiguration', () => {
       ])
     }
   )
+
+  it('uses the default depth when precomputing malformed evaluator options', () => {
+    const input = dependentRules()
+    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+      evaluatorParams: { maxDependencyDepth: 256 },
+    }).evaluatorParams
+    const onEvaluationError = jest.fn()
+
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
+      'child',
+      'parent',
+      'unrelated',
+    ])
+    expect(onEvaluationError).not.toHaveBeenCalled()
+  })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
     const input = dependentRules(
