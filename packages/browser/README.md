@@ -120,6 +120,13 @@ configuration. Observe mode reports `missing-anchor` and accepts an otherwise va
 response. It also accepts unsigned or invalidly signed responses without calling
 them verified. Diagnostics contain no token, context, response, or certificate data.
 
+For Datadog staging, the SDK embeds a separate **public staging root**. Select it
+explicitly with `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe', trustDatadogStaging: true }`. Selecting the
+staging site alone does not enable signing or trust that root. Active staging trust
+is rejected for other sites, and off mode retains ordinary behavior. The certificate
+contains no private key; production trust must be provisioned separately.
+
 A response carries its leaf and intermediate certificates, so rotating either under
 the unchanged trusted root requires no SDK update or prior rotation history. The
 SDK verifies the chain, exact request and response bytes, nonce, effective client

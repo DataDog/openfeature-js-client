@@ -157,6 +157,43 @@ test('off preserves ordinary headers/redirect behavior and performs no crypto', 
 test('required needs an explicit local anchor before any network operation', () => {
   expect(() => provider('required', { responseSigning: { mode: 'required' } })).toThrow('locally trusted root')
 })
+test.each([undefined, 'datadoghq.com', 'datadoghq.eu', 'datad0g.com.attacker.test'])(
+  'bundled staging trust rejects non-staging site %s',
+  (site) => {
+    expect(() => createResponseSigningController({ mode: 'observe', trustDatadogStaging: true }, { site })).toThrow(
+      'Staging signing trust requires site'
+    )
+  }
+)
+test('staging site alone does not enable signing or enroll its bundled root', () => {
+  expect(createResponseSigningController(undefined, { site: 'datad0g.com' })).toBeUndefined()
+  expect(() => createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })).toThrow(
+    'locally trusted root'
+  )
+  expect(
+    createResponseSigningController({ mode: 'off', trustDatadogStaging: true }, { site: 'datadoghq.com' })
+  ).toBeUndefined()
+  expect(
+    createResponseSigningController({ mode: 'required', trustDatadogStaging: true }, { site: 'datad0g.com' })
+  ).toBeDefined()
+})
+test.each(['provider', 'fetch'] as const)(
+  '%s forwards the staging site for explicit root enrollment',
+  async (entry) => {
+    const onVerification = jest.fn()
+    global.fetch = jest.fn().mockResolvedValue(unsigned())
+    const options: Partial<FlaggingInitConfiguration> = {
+      site: 'datad0g.com',
+      env: 'staging',
+      responseSigning: { mode: 'observe', trustDatadogStaging: true, onVerification },
+    }
+    if (entry === 'provider') await provider('observe', options).initialize(context)
+    else await fetchPrecomputedConfiguration({ ...defaultOptions, ...options, env: 'staging', context })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBe('1')
+    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
+  }
+)
 test.each(['observe', 'required'] as const)(
   '%s verifies the actual normalized request, token override, query and response before provider admission',
   async (mode) => {

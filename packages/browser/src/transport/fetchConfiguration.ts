@@ -132,7 +132,11 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  return requestPrecomputedConfiguration(options, undefined, createResponseSigningController(options.responseSigning))
+  return requestPrecomputedConfiguration(
+    options,
+    undefined,
+    createResponseSigningController(options.responseSigning, { site: options.site })
+  )
 }
 
 async function requestPrecomputedConfiguration(
@@ -221,7 +225,9 @@ async function requestPrecomputedConfiguration(
 
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
-  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning)
+  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
+    site: initConfiguration.site,
+  })
 ) {
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.

@@ -21,12 +21,22 @@ to the checkout's package versions occurs. Install both tarballs together; use
 an application package-manager resolution for `@datadog/flagging-core` to the
 local core tarball so it cannot resolve to an unrelated registry release.
 
-The QA application supplies `responseSigning.trustedRootCertificates` from its
-build's pinned **public staging root** (standard padded base64 DER). No root is
-downloaded from a response, and no staging root is trusted by normal SDK builds.
-Use that same root for the staging edge build. Only the leaf key and leaf/
+The SDK embeds the **public staging root** in
+`packages/browser/src/transport/responseSigning/staging-root.json`. QA selects it
+with `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe', trustDatadogStaging: true }`. Both signing and
+staging trust remain explicit opt-ins; active staging trust is rejected for other
+sites. No root is downloaded from a response. Use that same public root for the
+staging edge build. Only the leaf key and leaf/
 intermediate certificates go into the edge Secret Store; issuer private keys
 never enter the application or npm artifacts.
+
+Separate staging deployments can use distinct leaf/intermediate chains beneath
+this root, stored in their own Secret Stores. Hostname aliases for the same
+deployment do not require separate SDK pins. These are response-signing
+certificates, independent of HTTPS certificates. The proof binds the exact request
+hostname, but the verifier does not enforce certificate-to-hostname authorization:
+the shared staging root is one trust boundary across enrolled deployments.
 
 Begin with `observe`, then test `required` in a bounded QA session. Keep the same
 provider and public root while rotating the leaf, then the intermediate. Record
