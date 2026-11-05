@@ -879,7 +879,8 @@ function getMaxDependencyDepth(
   if (configuredDepth === undefined) {
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
-  const numericDepth = typeof configuredDepth === 'bigint' ? Number(configuredDepth) : configuredDepth
+  const numericDepth =
+    typeof configuredDepth === 'bigint' && isProtobufConfiguration(config) ? Number(configuredDepth) : configuredDepth
   if (typeof numericDepth === 'number' && Number.isInteger(numericDepth) && numericDepth >= 0 && numericDepth <= 255) {
     return numericDepth
   }
