@@ -186,6 +186,8 @@ describe('precomputeConfiguration', () => {
         isPresentInAssignment: true,
       },
     ])
+    expect(JSON.stringify(attributes)).not.toContain('checkout-redesign')
+    expect(JSON.stringify(attributes)).not.toContain('new-payment-flow')
   })
 
   it('encodes dependent root failures without fabricating an assignment for an unassigned parent', () => {
@@ -209,6 +211,8 @@ describe('precomputeConfiguration', () => {
         dependencyEvaluations: [expect.objectContaining({ reason: 'ERROR', errorCode: 'GENERAL' })],
       }),
     ])
+    expect(JSON.stringify(attributes)).not.toContain('child')
+    expect(JSON.stringify(attributes)).not.toContain('parent')
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
@@ -512,6 +516,65 @@ describe('precomputeConfiguration', () => {
           { flagKey: 'child', errorCode: 'GENERAL' },
         ])
       )
+    }
+  )
+
+  it.each([false, true])(
+    'reconciles transitive serialization failures against the final assignments, parentFirst=%s',
+    (parentFirst) => {
+      const dependent = (targetingConditionIndex: number): JsonObject =>
+        flag({
+          allocations: [
+            {
+              key: 'matched',
+              targetingConditionIndex,
+              splits: [{ reason: 'REASON_TARGETING_MATCH' }],
+            },
+          ],
+        })
+      const parent = dependent(0)
+      const root = dependent(1)
+      const grandparent = flag({
+        variationType: 'VARIATION_TYPE_JSON',
+        variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }],
+      })
+      const input = rules(
+        parentFirst
+          ? { parent, root, grandparent, unrelated: flag() }
+          : { root, parent, grandparent, unrelated: flag() },
+        {
+          strings: ['on', 'off', 'grandparent', 'parent'],
+          jsonStrings: ['{"overflow":1e400}'],
+          conditions: [
+            { flagEvaluationStringMembership: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0] } },
+            { flagEvaluationStringMembership: { flagKeyStringIndex: 3, variantKeyStringIndexes: [0] } },
+          ],
+        }
+      )
+
+      const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+      expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).toMatchObject({
+        grandparent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
+        parent: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: [{ flagKey: 'grandparent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+        },
+        root: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: expect.arrayContaining([
+            { flagKey: 'grandparent', reason: 'ERROR', errorCode: 'PARSE_ERROR' },
+            {
+              flagKey: 'parent',
+              reason: 'ERROR',
+              errorCode: 'GENERAL',
+              errorMessage: 'Dependency has no serializable assignment',
+            },
+          ]),
+        },
+      })
     }
   )
 

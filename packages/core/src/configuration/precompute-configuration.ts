@@ -302,7 +302,6 @@ function reconcileDependencySerializationFailures(
       )
       if (!missingDependencies?.length) continue
 
-      const missingDependency = missingDependencies[0]
       const dependencyEvaluations = flag.dependencyEvaluations?.map((dependency) =>
         'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
           ? dependencySerializationError(dependency.flagKey, failures.get(dependency.flagKey))
@@ -313,7 +312,7 @@ function reconcileDependencySerializationFailures(
       const failure: PrecomputedErrorFlag = {
         reason: 'ERROR',
         errorCode: 'GENERAL' as ErrorCode,
-        errorMessage: `Dependency "${missingDependency.flagKey}" has no serializable assignment`,
+        errorMessage: 'Dependency has no serializable assignment',
         ...(dependencyEvaluations?.length ? { dependencyEvaluations } : {}),
       }
       flags.splice(index, 1)
@@ -323,6 +322,20 @@ function reconcileDependencySerializationFailures(
       errors.push({ flagKey: rootKey, errorCode: 'GENERAL' as ErrorCode })
       changed = true
     }
+  }
+
+  // Reconcile every failed root against the final assignment set. A root can be
+  // demoted before one of its transitive dependencies, so normalizing only at
+  // demotion time would leave an order-dependent successful dependency entry.
+  for (const [, failure] of flagEvaluationErrors) {
+    if (!failure.dependencyEvaluations) continue
+    failure.dependencyEvaluations = failure.dependencyEvaluations.map((dependency) =>
+      'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+        ? dependencySerializationError(dependency.flagKey, failures.get(dependency.flagKey))
+        : 'isPresentInAssignment' in dependency
+          ? { ...dependency, isPresentInAssignment: false }
+          : dependency
+    )
   }
 }
 
@@ -373,14 +386,21 @@ function encodeDependencies<T extends PrecomputedFlag | PrecomputedErrorFlag>(
   result: T,
   obfuscation: FlagKeyObfuscation
 ): T {
-  if (!result.dependencyEvaluations) return result
-  return {
-    ...result,
-    dependencyEvaluations: result.dependencyEvaluations.map((dependency) => ({
-      ...dependency,
-      flagKey: encryptDependencyFlagKey(dependency.flagKey, rootKey, obfuscation),
-    })),
+  const encoded: PrecomputedFlag | PrecomputedErrorFlag = { ...result }
+  // Diagnostic text is optional and may contain plaintext flag keys supplied by
+  // the evaluator. Obfuscated packets retain structured error codes only.
+  if ('errorMessage' in encoded) delete encoded.errorMessage
+  if (result.dependencyEvaluations) {
+    encoded.dependencyEvaluations = result.dependencyEvaluations.map((dependency) => {
+      const encodedDependency = {
+        ...dependency,
+        flagKey: encryptDependencyFlagKey(dependency.flagKey, rootKey, obfuscation),
+      }
+      if ('errorMessage' in encodedDependency) delete encodedDependency.errorMessage
+      return encodedDependency
+    })
   }
+  return encoded as T
 }
 
 function snapshotEvaluationContext(context: EvaluationContext): EvaluationContext {
