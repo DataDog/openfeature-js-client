@@ -109,39 +109,64 @@ describe('precomputeConfiguration', () => {
   })
 
   it.each([
-    ['missing parent', 'FLAG_NOT_FOUND'],
-    ['unassigned parent', 'GENERAL'],
-    ['invalid parent', 'PARSE_ERROR'],
-    ['cycle', 'GENERAL'],
-    ['depth limit', 'GENERAL'],
-    ['invalid depth', 'PARSE_ERROR'],
-  ])('omits a child with %s, reports its error, and continues precomputing', (failure, errorCode) => {
-    const input = dependentRules()
-    const source = input.rules!.response
-    if (failure === 'missing parent') delete source.flags.parent
-    if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
-    if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
-    if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
-    if (failure === 'depth limit' || failure === 'invalid depth') {
-      source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-        evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
-      }).evaluatorParams
+    ['missing parent', 'GENERAL', 'FLAG_NOT_FOUND', undefined],
+    ['unassigned parent', 'GENERAL', 'GENERAL', undefined],
+    ['invalid parent', 'GENERAL', 'PARSE_ERROR', 'PARSE_ERROR'],
+    ['cycle', 'GENERAL', 'GENERAL', 'GENERAL'],
+    ['depth limit', 'GENERAL', 'GENERAL', undefined],
+  ])(
+    'omits a child with %s, reports its error, and continues precomputing',
+    (failure, rootErrorCode, evaluationErrorCode, parentErrorCode) => {
+      const input = dependentRules()
+      const source = input.rules!.response
+      if (failure === 'missing parent') delete source.flags.parent
+      if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
+      if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
+      if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
+      if (failure === 'depth limit') {
+        source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+          evaluatorParams: { maxDependencyDepth: 0 },
+        }).evaluatorParams
+      }
+      const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+      const onEvaluationError = jest.fn()
+      const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+      expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
+        reason: 'ERROR',
+        errorCode: rootErrorCode,
+      })
+      const parentFails = failure === 'invalid parent' || failure === 'cycle'
+      const parentAssigned = !parentFails && failure !== 'missing parent' && failure !== 'unassigned parent'
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
+        parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
+      )
+      expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
+      expect(
+        onEvaluationError.mock.calls
+          .map(([error]) => error)
+          .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
+      ).toEqual([
+        { flagKey: 'child', errorCode: evaluationErrorCode },
+        ...(parentFails ? [{ flagKey: 'parent', errorCode: parentErrorCode }] : []),
+      ])
     }
-    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+  )
+
+  it('uses the default depth when precomputing malformed evaluator options', () => {
+    const input = dependentRules()
+    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+      evaluatorParams: { maxDependencyDepth: 256 },
+    }).evaluatorParams
     const onEvaluationError = jest.fn()
-    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
-    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({ reason: 'ERROR', errorCode })
-    const parentFails = failure === 'invalid parent' || failure === 'cycle'
-    const parentAssigned = !parentFails && failure !== 'missing parent' && failure !== 'unassigned parent'
-    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
-      parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
-    )
-    expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
-    expect(
-      onEvaluationError.mock.calls
-        .map(([error]) => error)
-        .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
-    ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
+
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
+      'child',
+      'parent',
+      'unrelated',
+    ])
+    expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
