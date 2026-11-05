@@ -86,14 +86,14 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
-### Response signing (draft public v1)
+### Response signing
 
 Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
 Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
 Custom proxies must forward this header and permit it in CORS preflights.
 
-Response signing is opt-in and defaults to `off`. The draft supports `observe` for
-fail-open dogfooding and `required` for protected responses. Existing authentication,
+Response signing is opt-in and defaults to `off`. Use `observe` to report verification outcomes while accepting ordinary valid
+assignments, or `required` to admit only verified responses. Existing authentication,
 HTTP errors, JSON validation, and experimentation opt-out checks still apply.
 
 ```typescript
@@ -113,8 +113,8 @@ const provider = new DatadogProvider({
 
 `DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
 `trustedRootCertificates` accepts at most four standard padded base64 DER public
-root certificates fixed at initialization. This draft bundles **no production root**;
-provisioning and pinning that anchor is a release prerequisite. Never obtain trust
+root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
+approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
 anchors from an assignment response. Required mode rejects missing anchor
 configuration. Observe mode reports `missing-anchor` and accepts an otherwise valid
 response. It also accepts unsigned or invalidly signed responses without calling
@@ -155,7 +155,7 @@ ordinary network and in-memory availability but cannot use its scoped persistent
 cache. Required mode fails locally.
 
 Off mode preserves ordinary transport and caching and performs no signing work.
-This draft signs complete buffered JSON responses in the same assignment request;
+Signing covers complete buffered JSON responses in the same assignment request;
 it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
 or change the existing unsigned streaming protocol.
 
