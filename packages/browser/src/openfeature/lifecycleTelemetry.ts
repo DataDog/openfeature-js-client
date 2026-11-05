@@ -86,7 +86,7 @@ export function createLifecycleTelemetry(
         payload: {
           ...diagnostic,
           timestamp,
-          sdk_name: 'dd-openfeature-browser',
+          sdk_name: 'browser',
           sdk_version: __BUILD_ENV__SDK_VERSION__,
           ...identity,
           environment: configuration.env,
