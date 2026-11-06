@@ -152,8 +152,8 @@ export function createResponseSigningController(
             if (result.done) break
             length += result.value.length
             if (length > MAX_SIGNED_RESPONSE) {
-              void reader.cancel()
-              throw new ResponseVerificationError('response-too-large')
+              void reader.cancel().catch(() => undefined)
+              failure(new ResponseVerificationError('response-too-large'))
             }
             chunks.push(result.value)
           }

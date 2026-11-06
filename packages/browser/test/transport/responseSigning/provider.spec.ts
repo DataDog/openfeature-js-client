@@ -1,4 +1,5 @@
 import { createPrivateKey, sign, webcrypto } from 'node:crypto'
+import { ReadableStream } from 'node:stream/web'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { ProviderStatus } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../../src/cache/indexeddb-flags-cache'
@@ -12,6 +13,7 @@ import { createResponseSigningController } from '../../../src/transport/response
 import {
   buildSigningTranscript,
   decodeBase64,
+  MAX_SIGNED_RESPONSE,
   SIGNING_NONCE_HEADER,
   SIGNING_VERSION_HEADER,
 } from '../../../src/transport/responseSigning/verification'
@@ -560,4 +562,74 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
       })
     ).toThrow('valid provider configuration')
   }
+})
+
+
+describe('required response stream reads', () => {
+  function setup() {
+    const onVerification = jest.fn()
+    const signing = createResponseSigningController({
+      mode: 'required',
+      trustedRootCertificates: roots,
+      onVerification,
+    })!
+    const request = signing.prepare('https://example.test/assign', { 'dd-client-token': 'test' }, '{}')!
+    return { signing, request, onVerification }
+  }
+
+  function streamed(body: ReadableStream<Uint8Array>, headers = new Headers()): Response {
+    return { ...response('', headers), body } as unknown as Response
+  }
+
+  test.each([false, true])('reports overflow once and handles cancellation (rejects: %s)', async (rejectCancel) => {
+    const { signing, request, onVerification } = setup()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const cancel = jest.fn(() => (rejectCancel ? Promise.reject(new Error('cancel failed')) : Promise.resolve()))
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(MAX_SIGNED_RESPONSE))
+          controller.enqueue(new Uint8Array(1))
+        },
+        cancel,
+      })
+      await expect(signing.read(streamed(body), request)).rejects.toMatchObject({ reason: 'response-too-large' })
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(body.locked).toBe(false)
+      // Give rejected cleanup promises a turn to surface as unhandled rejections in Jest.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    expect(onVerification).toHaveBeenCalledTimes(1)
+    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'response-too-large' })
+  })
+
+  test('verifies a valid signed response delivered in chunks', async () => {
+    const { signing, request } = setup()
+    const result = await signed(request.url, { headers: request.headers, body: '{}' })
+    const data = new Uint8Array(await result.arrayBuffer())
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(data.slice(0, 10))
+        controller.enqueue(data.slice(10))
+        controller.close()
+      },
+    })
+    await expect(signing.read(streamed(body, result.headers), request)).resolves.toMatchObject({
+      json: payload(),
+      proof: { expiresAt: vector.now + 300 },
+    })
+    expect(body.locked).toBe(false)
+  })
+
+  test('preserves ordinary stream failures without verification diagnostics', async () => {
+    const { signing, request, onVerification } = setup()
+    const error = new Error('stream failed')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(error)
+      },
+    })
+    await expect(signing.read(streamed(body), request)).rejects.toBe(error)
+    expect(body.locked).toBe(false)
+    expect(onVerification).not.toHaveBeenCalled()
+  })
 })
