@@ -396,6 +396,10 @@ cross-origin requests, allow it in its CORS response before enabling it.
 The provider accepts both plaintext and obfuscated responses without an
 application configuration change.
 
+Dependent precomputed assignments are negotiated through the URL query parameter
+`cap_dependent-flags-variant-key=v1`. The provider adds it to every precompute
+request, including requests sent through `flaggingProxy`.
+
 Continue evaluating the original flag key. The shared core hashes it with the
 response's public salt before lookup. Flag values do not change. Evaluation
 details, exposure events, and RUM annotations retain the original flag key. Portable

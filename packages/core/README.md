@@ -51,6 +51,29 @@ receiving configuration. Existing low-level evaluation calls still accept raw co
 and prepare each flag once on first use. Replace changed flags instead of mutating prepared
 flags in place. Preparation does not change the serialized configuration.
 
+## Precomputed dependent assignments
+
+Successful dependency records contain only `flagKey` and `isPresentInAssignment`; their
+assignment details come from the dependency's top-level flag entry. Root-relative dependency
+failures remain inline error records and never include `isPresentInAssignment`.
+
+`attributes.flags` contains only complete assignments. Terminal root failures are carried in
+the sibling `attributes.flagEvaluationErrors` map under the failed flag key. The two maps are
+mutually exclusive by key. A capable client resolves an entry from `flagEvaluationErrors` with
+the caller's default while retaining its `reason`, `errorCode`, and dependency telemetry. Older
+clients ignore the sibling map and therefore treat the failed flag as absent; no placeholder
+assignment value is fabricated.
+
+For obfuscated responses, keys in both maps are hashed. Each `dependencyEvaluations[].flagKey`
+is authenticated ciphertext bound to the plaintext root key. The capable client decrypts the
+reference with the caller-supplied root key, hashes the recovered plaintext prerequisite key,
+and uses that digest for the top-level lookup. Plain responses keep plaintext dependency keys.
+
+When a present prerequisite produces no assignment, the root is terminally returned as
+`reason: "ERROR"` with `errorCode: "GENERAL"`, and the prerequisite is an inline dependency
+error. The server does not continue to a later root fallback, and the unassigned prerequisite
+does not receive a standalone top-level flag entry.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.

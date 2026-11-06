@@ -113,6 +113,40 @@ function rulesConfiguration({
   return configurationFromRulesBinary(new Uint8Array(configuration))
 }
 
+function precomputedDependentConfiguration({ rootAllocationKey = 'root-allocation' } = {}): FlagsConfiguration {
+  return {
+    precomputed: {
+      context,
+      response: {
+        data: {
+          attributes: {
+            createdAt: '2026-10-26T00:00:00Z',
+            flags: {
+              parent: {
+                allocationKey: 'parent-allocation',
+                variationKey: 'parent-on',
+                variationType: 'boolean',
+                variationValue: true,
+                reason: 'TARGETING_MATCH',
+                doLog: true,
+              },
+              root: {
+                allocationKey: rootAllocationKey,
+                variationKey: 'root-on',
+                variationType: 'boolean',
+                variationValue: true,
+                reason: 'TARGETING_MATCH',
+                doLog: false,
+                dependencyEvaluations: [{ flagKey: 'parent', isPresentInAssignment: true }],
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
 const context = { targetingKey: 'rules-user' }
 
 const exposureCalls = (fetchMock: jest.Mock) =>
@@ -202,6 +236,35 @@ describe('DatadogCoreProvider with a shared exposure cache', () => {
         features: { 'exposure.only': 'exposed' },
       }),
     ])
+  })
+
+  it('finalizes selected dependencies without requiring a tracking hook', async () => {
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(precomputedDependentConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    const client = OpenFeature.getClient(DOMAIN)
+
+    expect(client.getBooleanDetails('root', false).flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
+    expect(client.getBooleanDetails('parent', false).flagMetadata?.__dd_exposure_cache_hit).toBe(true)
+    await tracking.shutdown()
+  })
+
+  it('scopes dependencies selected by a silent root to the active configuration', async () => {
+    const tracking = createDatadogExposureLoggingHook(trackingConfig)
+    await tracking.initialize()
+    const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+    provider.setConfiguration(precomputedDependentConfiguration())
+    await OpenFeature.setProviderAndWait(DOMAIN, provider, context)
+    const client = OpenFeature.getClient(DOMAIN)
+
+    client.getBooleanDetails('root', false)
+    expect(client.getBooleanDetails('parent', false).flagMetadata?.__dd_exposure_cache_hit).toBe(true)
+
+    provider.setConfiguration(precomputedDependentConfiguration({ rootAllocationKey: 'replacement-root-allocation' }))
+    expect(client.getBooleanDetails('parent', false).flagMetadata?.__dd_exposure_cache_hit).toBe(false)
+    await tracking.shutdown()
   })
 
   it.each([

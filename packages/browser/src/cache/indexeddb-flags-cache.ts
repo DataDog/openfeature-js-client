@@ -32,7 +32,8 @@ export class IndexedDBFlagsCache {
   ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+      const configKey = `${policyPrefix(optedOut, 'v3')}-${legacyKey}${this.selectionSuffix}`
+      const previousConfigKey = `${policyPrefix(optedOut, 'v2')}-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -44,24 +45,32 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (optedOut || this.selectionSuffix) {
-              resolve(undefined)
-              return
-            }
-            // Read older plaintext entries on upgrade. Never expose encoded
-            // snapshots written by a prerelease SDK through the legacy key.
-            const legacy = store.get(legacyKey)
-            legacy.onerror = () => reject(legacy.error)
-            legacy.onsuccess = () => {
-              const config = legacy.result as FlagsConfiguration | undefined
-              const attributes = config?.precomputed?.response?.data?.attributes
-              resolve(
-                attributes &&
-                  (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
-                  attributes.obfuscation === undefined
-                  ? config
-                  : undefined
-              )
+            const previous = store.get(previousConfigKey)
+            previous.onerror = () => reject(previous.error)
+            previous.onsuccess = () => {
+              if (previous.result !== undefined) {
+                resolve(previous.result as FlagsConfiguration)
+                return
+              }
+              if (optedOut || this.selectionSuffix) {
+                resolve(undefined)
+                return
+              }
+              // Read older plaintext entries on upgrade. Never expose encoded
+              // snapshots written by a prerelease SDK through the legacy key.
+              const legacy = store.get(legacyKey)
+              legacy.onerror = () => reject(legacy.error)
+              legacy.onsuccess = () => {
+                const config = legacy.result as FlagsConfiguration | undefined
+                const attributes = config?.precomputed?.response?.data?.attributes
+                resolve(
+                  attributes &&
+                    (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
+                    attributes.obfuscation === undefined
+                    ? config
+                    : undefined
+                )
+              }
             }
           }
           request.onerror = () => reject(request.error)
@@ -80,9 +89,9 @@ export class IndexedDBFlagsCache {
 
   /** Fire-and-forget persist. Never throws. */
   set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
-    // One namespace for new writes keeps plaintext rollback and encoded
-    // refreshes in the same slot without changing what older SDKs can read.
-    const prefix = policyPrefix(optedOut)
+    // New wire shapes use a new namespace so an older SDK cannot consume a
+    // snapshot it does not understand after an application rollback.
+    const prefix = policyPrefix(optedOut, 'v3')
     const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
     openDB()
       .then((db) => {
@@ -99,6 +108,7 @@ export class IndexedDBFlagsCache {
   }
 }
 
-function policyPrefix(policy: ExperimentationOptOutPolicy): string {
-  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
+function policyPrefix(policy: ExperimentationOptOutPolicy, version: 'v2' | 'v3'): string {
+  if (version === 'v2') return policy ? experimentationOptOutCacheKey(policy) : version
+  return policy ? `${version}-${experimentationOptOutCacheKey(policy)}` : version
 }
