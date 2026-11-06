@@ -108,8 +108,8 @@ export function precomputeConfiguration(
         dependencies.resolve
       )
     } catch (error) {
-      const errorCode = error instanceof DependencyGraphError ? error.errorCode : ('GENERAL' as ErrorCode)
-      const errorMessage = error instanceof DependencyGraphError ? error.message : undefined
+      const errorCode = error instanceof DependencyGraphError ? error.rootErrorCode : ('GENERAL' as ErrorCode)
+      const errorMessage = error instanceof DependencyGraphError ? error.rootErrorMessage : undefined
       const trace = dependencies.complete({ value: false, reason: 'ERROR', errorCode, errorMessage })
       const failure = precomputedError(errorCode, errorMessage, trace.dependencyEvaluations, trace.dependencyExposures)
       flagEvaluationErrors.push([flagKey, failure])

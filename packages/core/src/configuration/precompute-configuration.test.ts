@@ -110,55 +110,78 @@ describe('precomputeConfiguration', () => {
   })
 
   it.each([
-    ['missing parent', 'FLAG_NOT_FOUND'],
-    ['unassigned parent', 'GENERAL'],
-    ['invalid parent', 'PARSE_ERROR'],
-    ['cycle', 'GENERAL'],
-    ['depth limit', 'GENERAL'],
-    ['invalid depth', 'PARSE_ERROR'],
-  ])('omits a child with %s, reports its error, and continues precomputing', (failure, errorCode) => {
-    const input = dependentRules()
-    const source = input.rules!.response
-    if (failure === 'missing parent') delete source.flags.parent
-    if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
-    if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
-    if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
-    if (failure === 'depth limit' || failure === 'invalid depth') {
-      source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-        evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
-      }).evaluatorParams
-    }
-    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
-    const onEvaluationError = jest.fn()
-    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
-    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({ reason: 'ERROR', errorCode })
-    const parentFails = failure === 'invalid parent' || failure === 'cycle'
-    const parentAssigned = !parentFails && failure !== 'missing parent' && failure !== 'unassigned parent'
-    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
-      parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
-    )
-    expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
-    const evaluationErrors = result.precomputed?.response.data.attributes.flagEvaluationErrors ?? {}
-    expect(evaluationErrors.child).toMatchObject({ reason: 'ERROR', errorCode })
-    if (failure === 'missing parent' || failure === 'unassigned parent') {
-      expect(evaluationErrors.parent).toBeUndefined()
-    } else if (parentFails) {
-      expect(evaluationErrors.parent).toMatchObject({ reason: 'ERROR', errorCode })
-    }
-    if (failure === 'missing parent' || failure === 'unassigned parent') {
-      expect(evaluationErrors.child.dependencyEvaluations).toEqual([
-        expect.objectContaining({
-          flagKey: 'parent',
-          reason: 'ERROR',
-          errorCode: failure === 'missing parent' ? 'FLAG_NOT_FOUND' : 'GENERAL',
-        }),
+    ['missing parent', 'GENERAL', undefined, 'FLAG_NOT_FOUND'],
+    ['unassigned parent', 'GENERAL', undefined, 'GENERAL'],
+    ['invalid parent', 'GENERAL', 'PARSE_ERROR', 'PARSE_ERROR'],
+    ['cycle', 'GENERAL', 'GENERAL', 'GENERAL'],
+    ['depth limit', 'GENERAL', undefined, 'GENERAL'],
+  ])(
+    'omits a child with %s, reports its error, and continues precomputing',
+    (failure, rootErrorCode, parentErrorCode, dependencyErrorCode) => {
+      const input = dependentRules()
+      const source = input.rules!.response
+      if (failure === 'missing parent') delete source.flags.parent
+      if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
+      if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
+      if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
+      if (failure === 'depth limit') {
+        source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+          evaluatorParams: { maxDependencyDepth: 0 },
+        }).evaluatorParams
+      }
+      const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+      const onEvaluationError = jest.fn()
+      const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+      expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
+        reason: 'ERROR',
+        errorCode: rootErrorCode,
+      })
+      const parentFails = failure === 'invalid parent' || failure === 'cycle'
+      const parentAssigned = !parentFails && failure !== 'missing parent' && failure !== 'unassigned parent'
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
+        parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
+      )
+      expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
+      const evaluationErrors = result.precomputed?.response.data.attributes.flagEvaluationErrors ?? {}
+      expect(evaluationErrors.child).toMatchObject({
+        reason: 'ERROR',
+        errorCode: rootErrorCode,
+        dependencyEvaluations: [
+          expect.objectContaining({ flagKey: 'parent', reason: 'ERROR', errorCode: dependencyErrorCode }),
+        ],
+      })
+      if (parentErrorCode === undefined) {
+        expect(evaluationErrors.parent).toBeUndefined()
+      } else {
+        expect(evaluationErrors.parent).toMatchObject({ reason: 'ERROR', errorCode: parentErrorCode })
+      }
+      expect(
+        onEvaluationError.mock.calls
+          .map(([error]) => error)
+          .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
+      ).toEqual([
+        { flagKey: 'child', errorCode: rootErrorCode },
+        ...(parentFails ? [{ flagKey: 'parent', errorCode: parentErrorCode }] : []),
       ])
     }
-    expect(
-      onEvaluationError.mock.calls
-        .map(([error]) => error)
-        .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
-    ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
+  )
+
+  it('uses the default depth when precomputing malformed evaluator options', () => {
+    const input = dependentRules()
+    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+      evaluatorParams: { maxDependencyDepth: 256 },
+    }).evaluatorParams
+    const onEvaluationError = jest.fn()
+
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
+      'child',
+      'parent',
+      'unrelated',
+    ])
+    expect(result.precomputed?.response.data.attributes.flagEvaluationErrors).toBeUndefined()
+    expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
   it('hashes both top-level maps and encrypts dependency keys with the shared fixed vector', () => {
@@ -518,6 +541,26 @@ describe('precomputeConfiguration', () => {
       )
     }
   )
+
+  it('retains dependency status when a deeply nested prerequisite value cannot be cloned', () => {
+    const depth = 10_000
+    const deeplyNestedJson = `${'{"nested":'.repeat(depth)}null${'}'.repeat(depth)}`
+    const input = dependentRules(
+      flag({ variationType: 'VARIATION_TYPE_JSON', variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }] }),
+      { jsonStrings: [deeplyNestedJson] }
+    )
+
+    const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+    expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+    expect(attributes.flagEvaluationErrors).toMatchObject({
+      parent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
+      child: {
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+      },
+    })
+  })
 
   it.each([false, true])(
     'reconciles transitive serialization failures against the final assignments, parentFirst=%s',
