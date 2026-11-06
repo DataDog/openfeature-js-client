@@ -17,6 +17,22 @@ describe('existing unauthenticated assignment errors', () => {
 
 describe('assignment rejection classification', () => {
   it.each([
+    [JSON.stringify({ errors: [{ code: 'OTHER' }, { code: 'ASSIGNMENT_AUTHORIZATION_FAILED' }] }), 'GENERAL'],
+    [JSON.stringify({ errors: [{ code: 'OTHER' }] }), undefined],
+    ['Unauthorized', undefined],
+    ['<html>401</html>', undefined],
+  ])('classifies an HTTP 401 body %s', async (body, errorCode) => {
+    const fetcher = createFlagsConfigurationFetcher({
+      clientToken: 'client-token',
+      env: 'test',
+      flagConfigurationFetch: async () => new Response(body, { status: 401 }),
+    })
+    const error = await fetcher({ targetingKey: 'a' }).catch((error) => error)
+    expect(error).toBeInstanceOf(Error)
+    expect(error.code).toBe(errorCode)
+  })
+
+  it.each([
     [401, 'ASSIGNMENT_AUTHORIZATION_FAILED', 'GENERAL'],
     [401, 'invalid_client_token', undefined],
     [403, 'ASSIGNMENT_AUTHORIZATION_FAILED', undefined],

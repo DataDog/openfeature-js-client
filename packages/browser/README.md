@@ -164,16 +164,24 @@ await OpenFeature.setContext({
 
 Your backend signs a token for the requested subject and environment. Keep the signing private key on your backend.
 Your application obtains a replacement before expiration and submits it with the complete context using the same
-call. Changing only the token triggers another download. Omitting `dd_assignment_token` removes the credential;
-the SDK does not restore old tokens when switching users.
+call. Changing only the token triggers a full assignment download. When the response's `createdAt` changes,
+exposure deduplication resets, so the next evaluation of each flag eligible for exposure logging can send another
+exposure. Avoid unnecessary token-only updates while continuing to replace tokens before expiration.
+Omitting `dd_assignment_token` removes the credential; the SDK does not restore old tokens when switching users.
 
-The provider sends the token in the reserved `DD-Assignment-Token` header, which takes precedence over custom
-headers of the same name. It excludes the reserved context field from Datadog targeting attributes, telemetry,
+The provider sends the token in the reserved `DD-Assignment-Token` header. The context is the only source of this
+header: a `customHeaders` entry with that name, in any letter case, is replaced when a token is supplied and removed
+when it is omitted. It excludes the reserved context field from Datadog targeting attributes, telemetry,
 and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
 application hooks can still access the original context. Datadog's tracking hooks remove the token.
 Other providers sharing that context can also read or forward it. Scope token-bearing contexts to a Datadog-only
 OpenFeature domain rather than sharing them with other providers.
-Customer proxies must allow `DD-Assignment-Token` in CORS and make error responses readable by the browser.
+Customer proxies must forward `DD-Assignment-Token`, allow it in CORS preflight responses, and include CORS headers
+on error responses. A blocked preflight prevents the assignment request. If the browser cannot read an authorization
+rejection, the SDK treats it as an ordinary network failure: it cannot log `ASSIGNMENT_AUTHORIZATION_FAILED`, retry
+wrappers can retry the request, and previous assignments can remain available during a context change with the
+default `Disabled` experimentation opt-out mode. This does not clear an authorization rejection already recognized
+by the SDK.
 
 Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
 `STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
@@ -190,7 +198,7 @@ withheld from console and debug telemetry for these requests. This does not reda
 customer-provided fetch implementation or other application code.
 
 The SDK skips downloads when a numeric JWT `exp` is at least 60 seconds in the past, allowing for client clock skew.
-This check does not verify the signature. Fastly remains authoritative, including for recently expired tokens,
+This check does not verify the signature. The assignment endpoint remains authoritative, including for recently expired tokens,
 malformed JWT strings, and missing or invalid `exp` claims. Non-string, empty, whitespace-containing, or non-ASCII
 token values fail locally. Token expiration does not itself clear downloaded assignments.
 

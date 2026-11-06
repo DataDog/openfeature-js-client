@@ -171,8 +171,10 @@ describe('assignment authorization', () => {
       })
     )
     await OpenFeature.setProviderAndWait(core, original)
+    expect(OpenFeature.getClient().providerStatus).toBe(ProviderStatus.READY)
     expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
     await OpenFeature.setContext({ ...context, dd_assignment_token: 'replacement.jwt.signature' })
+    expect(OpenFeature.getClient().providerStatus).toBe(ProviderStatus.READY)
     expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
     expect(original.dd_assignment_token).toBeDefined()
   })
@@ -261,6 +263,20 @@ describe('assignment authorization', () => {
     expect(provider.status).toBe(ProviderStatus.READY)
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
   })
+
+  it.each([ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.FutureExperimentsOnly])(
+    'reports GENERAL and tracks the rejected subject in %s mode',
+    async (mode) => {
+      provider = new DatadogProvider({ ...options, experimentationOptOutMode: mode, flagConfigurationFetch: fetchMock })
+      await provider.initialize({ ...context, dd_assignment_token: token() })
+      fetchMock.mockImplementation(rejection)
+      const rejected = { targetingKey: 'user-b', dd_assignment_token: token() }
+      await expect(provider.onContextChange({}, rejected)).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
+      const result = provider.resolveBooleanEvaluation('boolean-flag', false, rejected, logger)
+      expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: ErrorCode.GENERAL })
+      expect(getEvaluationTrackingContext(result, () => ({}))).toEqual({ targetingKey: 'user-b' })
+    }
+  )
 
   it('does not mask a subsequent invalid opt-out context with a previous authorization failure', async () => {
     provider = new DatadogProvider({
@@ -402,6 +418,25 @@ describe('assignment authorization', () => {
     expect(fetchMock.mock.calls[2][1].body).not.toContain(jwt)
   })
 
+  it.each(['DD-Assignment-Token', 'DD-ASSIGNMENT-TOKEN', 'Dd-Assignment-Token'])(
+    'replaces or removes a %s custom header with the context credential',
+    async (name) => {
+      const jwt = token()
+      const fetcher = createFlagsConfigurationFetcher({
+        ...options,
+        customHeaders: { [name]: 'old-token' },
+        flagConfigurationFetch: fetchMock,
+      })
+      await fetcher({ ...context, dd_assignment_token: jwt })
+      const sent = fetchMock.mock.calls[0][1].headers as Record<string, string>
+      expect(Object.entries(sent).filter(([header]) => header.toLowerCase() === 'dd-assignment-token')).toEqual([
+        ['DD-Assignment-Token', jwt],
+      ])
+      await fetcher(context)
+      expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(false)
+    }
+  )
+
   it.each([undefined, 'context.jwt.signature'])(
     'ignores undocumented standalone token options in favor of the context token: %s',
     async (jwt) => {
@@ -419,7 +454,7 @@ describe('assignment authorization', () => {
     }
   )
 
-  it.each([42, null, true, {}, '', 'bad\r\nheader'])(
+  it.each([42, null, true, {}, '', 'bad\r\nheader', ' ', 'a b', 't\u00f6ken.payload.signature'])(
     'rejects unsafe token values locally without echoing them: %p',
     async (value) => {
       await expect(provider.initialize({ ...context, dd_assignment_token: value })).rejects.toThrow(
@@ -444,6 +479,18 @@ describe('assignment authorization', () => {
     await provider.onContextChange({}, { ...context, dd_assignment_token: token(now / 1000 - 60) })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(provider.status).toBe(ProviderStatus.STALE)
+  })
+
+  it('decodes base64url JWT payloads when skipping clearly expired tokens', async () => {
+    const payload = btoa(JSON.stringify({ sub: 'x???', exp: Math.floor(Date.now() / 1000) - 120 }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    expect(payload).toMatch(/[-_]/)
+    await expect(
+      provider.initialize({ ...context, dd_assignment_token: `eyJhbGciOiJQUzI1NiJ9.${payload}.signature` })
+    ).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it.each([401, 500])(
