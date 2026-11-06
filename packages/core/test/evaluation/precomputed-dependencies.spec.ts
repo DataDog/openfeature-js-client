@@ -83,6 +83,31 @@ describe('precomputed dependent flags', () => {
     ])
   })
 
+  it('fails closed when a successful root contains a failed dependency evaluation', () => {
+    const result = evaluatePrecomputedConfiguration(
+      configuration({
+        allocationKey: 'root-allocation',
+        variationKey: 'root-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+        dependencyEvaluations: [{ flagKey: 'missing-parent', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' }],
+      }),
+      'boolean',
+      'root',
+      false,
+      context
+    )
+
+    expect(result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Successful root assignment contains a failed dependency evaluation',
+    })
+  })
+
   it('treats nullable error fields on a successful dependency as absent', () => {
     const payload = configuration({
       allocationKey: 'root-allocation',

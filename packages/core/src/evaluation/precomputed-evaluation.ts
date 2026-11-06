@@ -165,7 +165,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       attributes.flags,
       precomputed.flagErrors,
       logger,
-      { rootFlagKey: flagKey, encoding: encoding.encoding }
+      { rootFlagKey: flagKey, encoding: encoding.encoding, allowDependencyErrors: true }
     )
     if (dependencyError) {
       return {

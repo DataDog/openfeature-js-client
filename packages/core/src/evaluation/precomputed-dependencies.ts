@@ -1,6 +1,6 @@
 import type { ErrorCode, EvaluationDetails, FlagMetadata, FlagValue, Logger } from '@openfeature/core'
 import type { PrecomputedDependencyEvaluation, PrecomputedFlag } from '../configuration'
-import { decryptDependencyFlagKey } from '../configuration/dependency-key-encryption'
+import { createDependencyFlagKeyDecryptor } from '../configuration/dependency-key-encryption'
 import type { FlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { encodePrecomputedFlagKey } from '../configuration/flag-key-obfuscation'
 import { getOwnProperty } from './getOwnProperty'
@@ -26,20 +26,26 @@ export function bindPrecomputedDependencyEvaluations(
   flags: Record<string, PrecomputedFlag>,
   flagErrors?: Record<string, string>,
   logger: Logger = NOOP_LOGGER,
-  identity?: { rootFlagKey: string; encoding?: FlagKeyObfuscation }
+  identity?: { rootFlagKey: string; encoding?: FlagKeyObfuscation; allowDependencyErrors?: boolean }
 ): string | undefined {
   if (!dependencies?.length) return undefined
   const resolved: PrecomputedDependencyEvaluationDetails[] = []
+  const decryptDependencyFlagKey = identity?.encoding
+    ? createDependencyFlagKeyDecryptor(identity.rootFlagKey, identity.encoding)
+    : undefined
   for (const dependency of dependencies) {
     const details = toEvaluationDetails(
       dependency,
       flags,
-      identity?.rootFlagKey ?? '',
       identity?.encoding,
+      decryptDependencyFlagKey,
       flagErrors,
       logger
     )
     if ('bindingError' in details) return details.bindingError
+    if (!identity?.allowDependencyErrors && details.reason === 'ERROR') {
+      return 'Successful root assignment contains a failed dependency evaluation'
+    }
     resolved.push(details)
   }
   Object.defineProperty(metadata, DEPENDENCY_EVALUATIONS, {
@@ -62,14 +68,12 @@ export function getPrecomputedDependencyEvaluations(details: {
 function toEvaluationDetails(
   dependency: PrecomputedDependencyEvaluation,
   flags: Record<string, PrecomputedFlag>,
-  rootFlagKey: string,
   encoding: FlagKeyObfuscation | undefined,
+  decryptDependencyFlagKey: ((encryptedFlagKey: string) => { key: string } | { error: string }) | undefined,
   flagErrors: Record<string, string> | undefined,
   logger: Logger
 ): PrecomputedDependencyEvaluationDetails | { bindingError: string } {
-  const decrypted = encoding
-    ? decryptDependencyFlagKey(dependency.flagKey, rootFlagKey, encoding)
-    : { key: dependency.flagKey }
+  const decrypted = decryptDependencyFlagKey ? decryptDependencyFlagKey(dependency.flagKey) : { key: dependency.flagKey }
   if ('error' in decrypted) {
     return { bindingError: decrypted.error }
   }

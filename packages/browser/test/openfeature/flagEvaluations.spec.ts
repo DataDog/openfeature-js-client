@@ -153,7 +153,10 @@ describe('createFlagEvalEVPHook', () => {
         { flagKey: 'missing-parent', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
         { flagKey: 'failed-ancestor', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
       ],
-      flags
+      flags,
+      undefined,
+      undefined,
+      { rootFlagKey: '', allowDependencyErrors: true }
     )
     const details: EvaluationDetails<boolean> = {
       flagKey: 'root',
