@@ -35,7 +35,11 @@ describe('dependent flag exposures', () => {
       hookContext: { context: EvaluationContext },
       evaluationDetails: EvaluationDetails<FlagValue>
     ) => {
-      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
+      for (const evaluation of sidecar.takeDependencyEvaluations(
+        evaluationDetails.flagMetadata,
+        hookContext,
+        hookContext.context
+      )) {
         try {
           dependencyEvaluationChannel.publish({
             context: structuredClone(hookContext.context),
@@ -51,7 +55,10 @@ describe('dependent flag exposures', () => {
       }
     }
     provider.hooks?.push({
-      after: publishDependencyEvaluations,
+      after: (hookContext, evaluationDetails) => {
+        sidecar.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
+        publishDependencyEvaluations(hookContext, evaluationDetails)
+      },
       finally: publishDependencyEvaluations,
     })
     return provider
@@ -383,7 +390,7 @@ describe('dependent flag exposures', () => {
     ).toEqual([
       ['successful', 'STATIC', undefined, undefined],
       ['missing', 'ERROR', 'FLAG_NOT_FOUND', 'prerequisite flag is missing'],
-      ['parent', 'ERROR', 'FLAG_NOT_FOUND', 'prerequisite flag is missing'],
+      ['parent', 'ERROR', 'GENERAL', 'prerequisite flag "missing" failed: prerequisite flag is missing'],
     ])
     expect(exposureChannel.publish).not.toHaveBeenCalled()
 
@@ -556,7 +563,11 @@ describe('dependent flag exposures', () => {
       hookContext: { context: EvaluationContext },
       evaluationDetails: EvaluationDetails<FlagValue>
     ) => {
-      for (const evaluation of sidecar.takeDependencyEvaluations(evaluationDetails.flagMetadata, hookContext.context)) {
+      for (const evaluation of sidecar.takeDependencyEvaluations(
+        evaluationDetails.flagMetadata,
+        hookContext,
+        hookContext.context
+      )) {
         dependencyEvaluationChannel.publish({
           context: hookContext.context,
           details: {
@@ -568,7 +579,10 @@ describe('dependent flag exposures', () => {
       }
     }
     client.addHooks({
-      after: publishDependencyEvaluations,
+      after: (hookContext, evaluationDetails) => {
+        sidecar.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
+        publishDependencyEvaluations(hookContext, evaluationDetails)
+      },
       finally: publishDependencyEvaluations,
     })
 

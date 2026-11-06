@@ -96,10 +96,13 @@ describe('dependent flag evaluation', () => {
     expect(trace.dependencyExposures).toEqual([])
   })
 
-  it('reads a prerequisite only for descriptor resolution and evaluation', () => {
+  it('does not read a memoized prerequisite configuration again', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const config = configuration({
-      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+      root: dependentBooleanFlag('root', [
+        flagCondition('prerequisite', OperatorType.ONE_OF, ['on']),
+        flagCondition('prerequisite', OperatorType.ONE_OF, ['on']),
+      ]),
     })
     let reads = 0
     Object.defineProperty(config.flags, 'prerequisite', {
@@ -565,6 +568,18 @@ describe('dependent flag evaluation', () => {
     })
   })
 
+  it('allows ten protobuf dependency edges and rejects eleven when the override is omitted', () => {
+    expect(evaluateProtobuf(protobufDependencyChain(10), logger).result).toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+    expect(evaluateProtobuf(protobufDependencyChain(11), logger).result).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+    })
+  })
+
   it('accepts the protobuf maximum dependency depth override of 255', () => {
     const config = protobufDependentConfiguration(true)
     config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(255) })
@@ -584,6 +599,7 @@ describe('dependent flag evaluation', () => {
     const dependent = protobufDependentConfiguration(true)
     dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
     const { result, dependencies, exposures } = evaluateProtobuf(dependent, logger)
+    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({ value: true, variant: 'on' })
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: true, variant: 'on' } }])
     expect(exposures).toHaveLength(1)
@@ -591,6 +607,7 @@ describe('dependent flag evaluation', () => {
       flagKey: 'root',
       defaultMaxDependencyDepth: 10,
     })
+    expect(logger.error).toHaveBeenCalledTimes(1)
   })
 
   it('uses the default depth for invalid protobuf options before detecting self-reference', () => {
@@ -667,7 +684,14 @@ describe('dependent flag evaluation', () => {
           errorMessage: 'prerequisite flag is missing',
         },
       },
-      { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
+      {
+        flagKey: 'prerequisite',
+        details: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
+        },
+      },
     ])
     expect(exposures).toEqual([])
     expect(logger.debug).toHaveBeenCalledWith('prerequisite flag is missing', { flagKey: 'missing' })
@@ -805,7 +829,7 @@ describe('dependent flag evaluation', () => {
     })
   })
 
-  it('uses the hard-coded maximum when the override is omitted', () => {
+  it('allows ten dependency edges and rejects eleven when the override is omitted', () => {
     const flags: Record<string, Flag> = { leaf: booleanFlag('leaf', 'on') }
     for (let depth = 9; depth >= 0; depth -= 1) {
       const key = depth === 0 ? 'root' : `depth-${depth}`
@@ -814,6 +838,26 @@ describe('dependent flag evaluation', () => {
     }
 
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+
+    flags['depth-10'] = dependentBooleanFlag('depth-10', [flagCondition('leaf', OperatorType.ONE_OF, ['on'])])
+    flags['depth-9'] = dependentBooleanFlag('depth-9', [flagCondition('depth-10', OperatorType.ONE_OF, ['on'])])
+    expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+    })
+  })
+
+  it('logs malformed evaluator options only once per configuration', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = { maxDependencyDepth: 256 }
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.error).toHaveBeenCalledTimes(1)
   })
 
   it.each([0, 255])('accepts JSON maximum depth %p', (maximumDepth) => {
@@ -1293,6 +1337,56 @@ function protobufDependentConfiguration(prerequisiteHasAllocation: boolean) {
     },
   })
   return decodeFlagsConfiguration(encodeFlagsConfiguration(configuration))
+}
+
+function protobufDependencyChain(edgeCount: number) {
+  const dependencyKeys = Array.from({ length: edgeCount }, (_, index) =>
+    index === edgeCount - 1 ? 'leaf' : `depth-${index + 1}`
+  )
+  const variation = {
+    keyStringIndex: 0,
+    value: { case: 'booleanValue' as const, value: true },
+  }
+  const split = {
+    ranges: [],
+    variationIndex: 0,
+    serialId: 1,
+    reason: Reason.TARGETING_MATCH,
+  }
+  const flags = Object.fromEntries(
+    ['root', ...dependencyKeys].map((key, index) => [
+      key,
+      {
+        variationType: VariationType.BOOLEAN,
+        variations: [variation],
+        allocations: [
+          {
+            key: `${key}-allocation`,
+            ...(index < edgeCount ? { targetingConditionIndex: index } : {}),
+            partitionKey: [],
+            splits: [{ ...split, reason: index < edgeCount ? Reason.TARGETING_MATCH : Reason.STATIC }],
+            logExposureEvent: true,
+          },
+        ],
+      },
+    ])
+  )
+
+  return decodeFlagsConfiguration(
+    encodeFlagsConfiguration(
+      create(FlagsConfigurationSchema, {
+        environmentName: 'test',
+        strings: ['on', ...dependencyKeys],
+        conditions: dependencyKeys.map((_, index) => ({
+          kind: {
+            case: 'flagEvaluationStringMembership' as const,
+            value: { flagKeyStringIndex: index + 1, variantKeyStringIndexes: [0], negate: false },
+          },
+        })),
+        flags,
+      })
+    )
+  )
 }
 
 function roundTrip(configuration: Parameters<typeof encodeFlagsConfiguration>[0]) {

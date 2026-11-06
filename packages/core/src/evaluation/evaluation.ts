@@ -577,7 +577,7 @@ class DependencyEvaluationSession {
     }
   }
 
-  private evaluate(flagKey: string, flag: DependencyFlag, depth: number): MemoizedDependency {
+  private evaluate(flagKey: string, depth: number): MemoizedDependency {
     const memoized = this.memo.get(flagKey)
     if (memoized !== undefined) {
       if (depth + memoized.descendantDepth > this.maxDependencyDepth) {
@@ -588,6 +588,13 @@ class DependencyEvaluationSession {
         throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'maximum flag dependency depth exceeded')
       }
       return memoized
+    }
+
+    const flag = this.getFlag(flagKey)
+    if (flag === undefined) {
+      this.logger.debug('prerequisite flag is missing', { flagKey })
+      this.recordMissingFlagEvaluation(flagKey)
+      throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
     }
 
     const { type, defaultValue } = flag
@@ -639,13 +646,14 @@ class DependencyEvaluationSession {
       return memoizedResult
     } catch (error) {
       const graphError = this.toDependencyGraphError(flagKey, error)
+      const isOriginatingFailure = graphError.flagKey === flagKey
       this.recordEvaluation({
         flagKey,
         details: {
           value: defaultValue,
           reason: 'ERROR',
-          errorCode: graphError.errorCode,
-          errorMessage: graphError.message,
+          errorCode: isOriginatingFailure ? graphError.errorCode : ('GENERAL' as ErrorCode),
+          errorMessage: isOriginatingFailure ? graphError.message : graphError.rootErrorMessage,
           flagMetadata: createEvaluationMetadata(this.evaluationTimestampMs, this.observeFullEvaluationData),
         },
       })
@@ -681,14 +689,7 @@ class DependencyEvaluationSession {
       throw new DependencyGraphError(flagKey, 'GENERAL' as ErrorCode, 'flag dependency cycle detected')
     }
 
-    const flag = this.getFlag(flagKey)
-    if (flag === undefined) {
-      this.logger.debug('prerequisite flag is missing', { flagKey })
-      this.recordMissingFlagEvaluation(flagKey)
-      throw new DependencyGraphError(flagKey, 'FLAG_NOT_FOUND' as ErrorCode, 'prerequisite flag is missing')
-    }
-
-    const result = this.evaluate(flagKey, flag, depth)
+    const result = this.evaluate(flagKey, depth)
     this.recordReachedDepth(depth + result.descendantDepth)
     if (result.exposureTrace !== undefined) {
       this.recordExposureTrace(result.exposureTrace)
@@ -859,21 +860,21 @@ function getMaxDependencyDepth(
   try {
     evaluatorParams = config.evaluatorParams
   } catch {
-    logInvalidEvaluatorParams(logger, rootFlagKey)
+    logInvalidEvaluatorParams(config, logger, rootFlagKey)
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
   if (evaluatorParams === undefined) {
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
   if (evaluatorParams === null || typeof evaluatorParams !== 'object' || Array.isArray(evaluatorParams)) {
-    logInvalidEvaluatorParams(logger, rootFlagKey)
+    logInvalidEvaluatorParams(config, logger, rootFlagKey)
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
   let configuredDepth: unknown
   try {
     configuredDepth = (evaluatorParams as { maxDependencyDepth?: unknown }).maxDependencyDepth
   } catch {
-    logInvalidEvaluatorParams(logger, rootFlagKey)
+    logInvalidEvaluatorParams(config, logger, rootFlagKey)
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
   if (configuredDepth === undefined) {
@@ -884,11 +885,19 @@ function getMaxDependencyDepth(
   if (typeof numericDepth === 'number' && Number.isInteger(numericDepth) && numericDepth >= 0 && numericDepth <= 255) {
     return numericDepth
   }
-  logInvalidEvaluatorParams(logger, rootFlagKey)
+  logInvalidEvaluatorParams(config, logger, rootFlagKey)
   return DEFAULT_MAX_DEPENDENCY_DEPTH
 }
 
-function logInvalidEvaluatorParams(logger: Logger, rootFlagKey: string): void {
+const invalidEvaluatorParamsLogged = new WeakSet<object>()
+
+function logInvalidEvaluatorParams(
+  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
+  logger: Logger,
+  rootFlagKey: string
+): void {
+  if (invalidEvaluatorParamsLogged.has(config)) return
+  invalidEvaluatorParamsLogged.add(config)
   logger.error('invalid evaluatorParams; using default maxDependencyDepth', {
     flagKey: rootFlagKey,
     defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,

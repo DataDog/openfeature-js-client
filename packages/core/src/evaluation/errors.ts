@@ -22,14 +22,16 @@ export class InvalidContextError extends Error {
 }
 
 export class DependencyGraphError extends Error {
+  readonly rootErrorCode = 'GENERAL' as ErrorCode
+  readonly rootErrorMessage: string
+
   constructor(
     readonly flagKey: string,
     readonly errorCode: ErrorCode,
-    message: string,
-    readonly rootErrorCode: ErrorCode = 'GENERAL' as ErrorCode,
-    readonly rootErrorMessage: string = `prerequisite flag "${flagKey}" failed: ${message}`
+    message: string
   ) {
     super(message)
+    this.rootErrorMessage = `prerequisite flag "${flagKey}" failed: ${message}`
     this.name = 'DependencyGraphError'
   }
 }

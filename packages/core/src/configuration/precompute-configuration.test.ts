@@ -109,9 +109,9 @@ describe('precomputeConfiguration', () => {
   })
 
   it.each([
-    ['missing parent', 'GENERAL', 'FLAG_NOT_FOUND', undefined],
+    ['missing parent', 'GENERAL', 'GENERAL', undefined],
     ['unassigned parent', 'GENERAL', 'GENERAL', undefined],
-    ['invalid parent', 'GENERAL', 'PARSE_ERROR', 'PARSE_ERROR'],
+    ['invalid parent', 'GENERAL', 'GENERAL', 'PARSE_ERROR'],
     ['cycle', 'GENERAL', 'GENERAL', 'GENERAL'],
     ['depth limit', 'GENERAL', 'GENERAL', undefined],
   ])(
