@@ -222,6 +222,46 @@ describe('assignment authorization', () => {
     expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
   })
 
+  it.each([
+    ['503', undefined],
+    ['503', 'replacement.jwt.signature'],
+    ['network error', undefined],
+    ['network error', 'replacement.jwt.signature'],
+  ])('keeps defaults after a rejected subject retries with %s and token %s', async (failure, replacementToken) => {
+    await OpenFeature.setProviderAndWait(provider, { ...context, dd_assignment_token: token() })
+    const client = OpenFeature.getClient()
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+
+    const rejected = { targetingKey: 'user-b', dd_assignment_token: token() }
+    fetchMock.mockImplementation(rejection)
+    await OpenFeature.setContext(rejected)
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(false)
+
+    fetchMock.mockImplementation(() => {
+      if (failure === 'network error') throw new TypeError('Failed to fetch')
+      return new Response('temporarily unavailable', { status: 503 })
+    })
+    await OpenFeature.setContext({
+      targetingKey: rejected.targetingKey,
+      ...(replacementToken === undefined ? {} : { dd_assignment_token: replacementToken }),
+    })
+    expect(provider.status).toBe(ProviderStatus.ERROR)
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.GENERAL,
+    })
+    expect(client.getStringValue('string-flag', 'fallback')).toBe('fallback')
+    expect(client.getNumberValue('integer-flag', -1)).toBe(-1)
+    expect(client.getObjectValue('json-flag', {})).toEqual({})
+
+    fetchMock.mockImplementation(success)
+    await OpenFeature.setContext({ ...rejected, dd_assignment_token: 'valid.jwt.signature' })
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+  })
+
   it('does not mask a subsequent invalid opt-out context with a previous authorization failure', async () => {
     provider = new DatadogProvider({
       ...options,

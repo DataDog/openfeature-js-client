@@ -293,8 +293,13 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            // A failed retry cannot make another context's retained assignments usable.
+            // Preserve rejection until matching assignments are available; invalid context
+            // errors still use the ordinary context-validation result below.
             this.assignmentAuthorizationRejected =
-              error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
+              !(error instanceof InvalidContextError) &&
+              (this.assignmentAuthorizationRejected ||
+                (error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED))
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error

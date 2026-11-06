@@ -246,6 +246,36 @@ test('readable rejection preserves matching cache, rejects another subject, and 
   await page.evaluate(() => window.authorizationTest.close())
 })
 
+test('a 503 retry after a rejected user switch keeps application defaults until recovery', async ({ page, origin }) => {
+  await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [origin.url, context] as const)
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
+
+  const rejected = { targetingKey: 'user-b', dd_assignment_token: token() }
+  origin.mode = 'authorization'
+  await page.evaluate((ctx) => window.authorizationTest.update(ctx), rejected)
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(false)
+
+  origin.mode = 'unavailable'
+  const state = await page.evaluate((ctx) => window.authorizationTest.update(ctx), {
+    ...rejected,
+    dd_assignment_token: token(7200),
+  })
+  expect(state.status).toBe('ERROR')
+  expect(origin.posts).toHaveLength(5) // A succeeds, B is rejected, then the 503 exhausts three attempts.
+  expect(await page.evaluate(() => window.authorizationTest.evaluate())).toMatchObject({
+    boolean: { value: false, errorCode: 'GENERAL' },
+    string: 'fallback',
+    integer: -1,
+    number: -1,
+    object: {},
+  })
+
+  origin.mode = 'success'
+  expect((await page.evaluate((ctx) => window.authorizationTest.update(ctx), rejected)).status).toBe('READY')
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
+  await page.evaluate(() => window.authorizationTest.close())
+})
+
 test('cold authorization rejection returns defaults and permits recovery', async ({ page, origin }) => {
   origin.mode = 'authorization'
   expect(

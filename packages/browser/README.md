@@ -177,8 +177,10 @@ Customer proxies must allow `DD-Assignment-Token` in CORS and make error respons
 
 Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
 `STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
-behavior applies. Supplying a replacement token can recover without recreating the provider. The diagnostic logger
-reports `ASSIGNMENT_AUTHORIZATION_FAILED` without the token; there is no custom refresh-required event.
+behavior applies. Subsequent download failures keep those defaults until matching assignments are available;
+supplying a replacement token alone does not restore another subject's assignments. A successful download can
+recover without recreating the provider. The diagnostic logger reports `ASSIGNMENT_AUTHORIZATION_FAILED` without
+the token; there is no custom refresh-required event.
 The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
 Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
 the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing
