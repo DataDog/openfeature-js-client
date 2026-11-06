@@ -1,4 +1,10 @@
 import { display, getGlobalObject } from '@datadog/browser-core'
+import {
+  configurationFromString,
+  configurationToString,
+  getPrecomputedContext,
+  precomputeConfiguration,
+} from '@datadog/flagging-core/rules-based'
 import { ErrorCode, type EvaluationContext, OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { openDB, STORE_NAME } from '../../src/cache/indexeddb-store'
@@ -12,6 +18,7 @@ import type { DDRum } from '../../src/openfeature/rumIntegration'
 import { withRetry } from '../../src/transport/fetch'
 import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import response from '../data/precomputed-v1.json'
+import rulesWire from '../data/rules-v1-wire.json'
 
 const context = { targetingKey: 'user-a', country: 'US' }
 const token = (exp = Date.now() / 1000 + 3600) => `eyJhbGciOiJQUzI1NiJ9.${btoa(JSON.stringify({ exp }))}.signature`
@@ -178,6 +185,44 @@ describe('assignment authorization', () => {
     expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
     expect(original.dd_assignment_token).toBeDefined()
   })
+
+  it.each(['fetching', 'portable'])(
+    'loads a server-generated snapshot with a fresh token in the %s provider',
+    async (kind) => {
+      const original = Object.freeze({ ...context, dd_assignment_token: token() })
+      const snapshot = precomputeConfiguration(configurationFromString(JSON.stringify(rulesWire)), original)
+      const configuration = configurationFromString(configurationToString(snapshot))
+      const browserContext = {
+        ...getPrecomputedContext(configuration),
+        dd_assignment_token: 'replacement.jwt.signature',
+      }
+      if (kind === 'fetching') {
+        fetchMock.mockImplementation(() => new Response('temporarily unavailable', { status: 503 }))
+        provider = new DatadogProvider({
+          ...options,
+          initialFlagsConfiguration: configuration,
+          flagConfigurationFetch: fetchMock,
+        })
+        await OpenFeature.setProviderAndWait(provider, browserContext)
+        expect(provider.status).toBe(ProviderStatus.STALE)
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(new Headers(fetchMock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(
+          'replacement.jwt.signature'
+        )
+      } else {
+        const core = new DatadogCoreProvider()
+        core.setConfiguration(configuration)
+        await OpenFeature.setProviderAndWait(core, browserContext)
+        expect(OpenFeature.getClient().providerStatus).toBe(ProviderStatus.READY)
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+      const result = OpenFeature.getClient().getBooleanDetails('test-flag', false)
+      expect(result.value).toBe(true)
+      expect(result.errorCode).toBeUndefined()
+      expect(getPrecomputedContext(configuration)).toEqual(context)
+      expect(original.dd_assignment_token).toBeDefined()
+    }
+  )
 
   it('resumes usable assignments immediately when returning to a previously accepted subject', async () => {
     await OpenFeature.setProviderAndWait(provider, { ...context, dd_assignment_token: token() })

@@ -505,8 +505,11 @@ if (context !== undefined) {
 ```
 
 For protected environments, add a current `dd_assignment_token` to the context passed to
-`setProviderAndWait` above. `getPrecomputedContext(configuration)` deliberately excludes the token;
-without one, the initial refresh can be rejected even when cached assignments remain usable.
+`setProviderAndWait` above; without one, the initial refresh can be rejected even when cached
+assignments remain usable. `precomputeConfiguration()` excludes this reserved field before
+evaluating rules and creating a snapshot. `getPrecomputedContext(configuration)` returns a copy
+of the stored context; it does not sanitize snapshots from older or custom producers, which
+must also exclude the token.
 
 Rules-based configurations contain targeting rules that the SDK evaluates locally
 against the OpenFeature evaluation context, rather than assignments precomputed for one context.
