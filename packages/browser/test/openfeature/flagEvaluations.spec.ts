@@ -1,5 +1,6 @@
-import { FlagEvaluationAggregator } from '@datadog/flagging-core'
+import { FlagEvaluationAggregator, type PrecomputedFlag } from '@datadog/flagging-core'
 import { ErrorCode, type EvaluationDetails, type HookContext } from '@openfeature/web-sdk'
+import { bindPrecomputedDependencyEvaluations } from '../../../core/src/evaluation/precomputed-dependencies'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
 
@@ -48,7 +49,7 @@ describe('createFlagEvalEVPHook', () => {
     hook = createFlagEvalEVPHook(mockConfiguration)
 
     expect(hook).toBeDefined()
-    expect(hook.after).toBeUndefined()
+    expect(hook.after).toBeDefined()
     expect(hook.finally).toBeDefined()
   })
 
@@ -118,5 +119,99 @@ describe('createFlagEvalEVPHook', () => {
     }).not.toThrow()
     expect(addEvaluationSpy).toHaveBeenCalledTimes(1)
     expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails, expectedError)
+  })
+
+  it('tracks ordered dependency evaluations before the root evaluation', () => {
+    const flagMetadata = { allocationKey: 'root-allocation' }
+    const flags = {
+      parent: {
+        allocationKey: 'parent-allocation',
+        variationKey: 'parent-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+      rejected: {
+        allocationKey: 'rejected-allocation',
+        variationKey: 'rejected-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+    } satisfies Record<string, PrecomputedFlag>
+    bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      [
+        {
+          flagKey: 'parent',
+          isPresentInAssignment: true,
+        },
+        { flagKey: 'rejected', isPresentInAssignment: false },
+        { flagKey: 'no-assignment-parent', reason: 'ERROR', errorCode: 'GENERAL' },
+        { flagKey: 'missing-parent', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
+        { flagKey: 'failed-ancestor', reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
+      ],
+      flags
+    )
+    const details: EvaluationDetails<boolean> = {
+      flagKey: 'root',
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.GENERAL,
+      flagMetadata,
+    }
+    const context = { targetingKey: 'subject' }
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    hook = createFlagEvalEVPHook(mockConfiguration)
+
+    hook.finally?.({ context } as HookContext, details)
+
+    expect(addEvaluationSpy.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['parent', undefined],
+      ['rejected', undefined],
+      ['no-assignment-parent', ErrorCode.GENERAL],
+      ['missing-parent', ErrorCode.FLAG_NOT_FOUND],
+      ['failed-ancestor', ErrorCode.FLAG_NOT_FOUND],
+      ['root', ErrorCode.GENERAL],
+    ])
+  })
+
+  it('retains prerequisite telemetry when a later after hook replaces the root result', () => {
+    const flagMetadata = {}
+    bindPrecomputedDependencyEvaluations(flagMetadata, [{ flagKey: 'parent', isPresentInAssignment: true }], {
+      parent: {
+        allocationKey: 'parent-allocation',
+        variationKey: 'parent-on',
+        variationType: 'boolean',
+        variationValue: true,
+        reason: 'TARGETING_MATCH',
+        doLog: true,
+      },
+    })
+    const hookContext = { context: { targetingKey: 'subject' } } as HookContext
+    const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    hook = createFlagEvalEVPHook(mockConfiguration)
+
+    hook.after?.(hookContext, {
+      flagKey: 'root',
+      value: true,
+      variant: 'root-on',
+      reason: 'TARGETING_MATCH',
+      flagMetadata,
+    })
+    hook.finally?.(hookContext, {
+      flagKey: 'root',
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.GENERAL,
+      flagMetadata: {},
+    })
+
+    expect(addEvaluationSpy.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['parent', undefined],
+      ['root', ErrorCode.GENERAL],
+    ])
   })
 })

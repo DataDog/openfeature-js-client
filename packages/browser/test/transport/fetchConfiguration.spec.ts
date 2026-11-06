@@ -85,27 +85,27 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'HTTP protocol',
           flaggingProxy: 'http://localhost:8080',
-          expectedUrl: 'http://localhost:8080/?dd_env=test',
+          expectedUrl: 'http://localhost:8080/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTPS protocol',
           flaggingProxy: 'https://proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTPS protocol with path',
           flaggingProxy: 'https://proxy.example.com/api/flags',
-          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTP protocol with port and path',
           flaggingProxy: 'http://localhost:3000/proxy',
-          expectedUrl: 'http://localhost:3000/proxy?dd_env=test',
+          expectedUrl: 'http://localhost:3000/proxy?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTP protocol with port, path and params',
           flaggingProxy: 'http://localhost:3000/proxy?foo=bar',
-          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test',
+          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -129,22 +129,22 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'domain only',
           flaggingProxy: 'proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'domain with port',
           flaggingProxy: 'proxy.example.com:8080',
-          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'localhost with port',
           flaggingProxy: 'localhost:3000',
-          expectedUrl: 'https://localhost:3000/?dd_env=test',
+          expectedUrl: 'https://localhost:3000/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'domain with path',
           flaggingProxy: 'proxy.example.com/api',
-          expectedUrl: 'https://proxy.example.com/api?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/api?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -168,17 +168,20 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'default site',
           config: baseConfig,
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'specific site',
           config: { ...baseConfig, site: 'datadoghq.eu' as const },
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'US3 site',
           config: { ...baseConfig, site: 'us3.datadoghq.com' as const },
-          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -543,7 +546,7 @@ describe('createFlagsConfigurationFetcher', () => {
           key_patterns: ['ffe-*'],
         })
         expect(mockFetch.mock.calls[0][0]).toBe(
-          'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test'
+          'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1'
         )
         expect(displayError).not.toHaveBeenCalled()
         expect(addTelemetryDebug).not.toHaveBeenCalled()
@@ -558,7 +561,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
-        expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example.com/?dd_env=test')
+        expect(mockFetch.mock.calls[0][0]).toBe(
+          'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1'
+        )
         expect(requestBody().data.attributes.flag_selection).toEqual({ tags: ['beta'], key_patterns: [] })
       })
 

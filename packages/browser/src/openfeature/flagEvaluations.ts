@@ -15,6 +15,7 @@ import {
   withEvaluationTelemetryPolicy,
 } from './evaluation-telemetry-policy'
 import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
+import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
@@ -26,7 +27,10 @@ export function createFlagEvalEVPHook(
 ): ManagedTrackingHook {
   const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
   const flagEvaluationBatch = transport.batch
-
+  const completedDependencies = new WeakMap<
+    HookContext,
+    { context: EvaluationContext; evaluations: ReturnType<typeof getPrecomputedDependencyEvaluations> }
+  >()
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,
     (events: FlagEvaluationEvent[]) => {
@@ -76,8 +80,22 @@ export function createFlagEvalEVPHook(
           if (!sharedTransport) transport.stop()
         }
       },
+      // Provider hooks run before application after hooks. Retain prerequisite
+      // telemetry in case a later hook replaces the successful root result.
+      after: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        try {
+          const evaluations = getPrecomputedDependencyEvaluations(details)
+          if (evaluations.length === 0) return
+          const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+          completedDependencies.set(hookContext, { context, evaluations })
+        } catch {
+          // Telemetry capture must not turn a successful evaluation into an error.
+        }
+      },
       // Failed evaluations skip `after`; `finally` receives the result returned to the application.
       finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        const completed = completedDependencies.get(hookContext)
+        completedDependencies.delete(hookContext)
         try {
           // OpenFeature can copy a customer hook's error.code without validation.
           // Restrict telemetry to standard OpenFeature error codes.
@@ -85,11 +103,17 @@ export function createFlagEvalEVPHook(
             details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
               ? details.errorCode
               : ErrorCode.GENERAL
-          aggregator.addEvaluation(
-            getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
-            details,
-            errorCode
-          )
+          const context =
+            completed?.context ?? getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+          const dependencies = getPrecomputedDependencyEvaluations(details)
+          for (const dependency of dependencies.length > 0 ? dependencies : (completed?.evaluations ?? [])) {
+            const dependencyErrorCode =
+              dependency.errorCode === undefined || Object.values(ErrorCode).includes(dependency.errorCode)
+                ? dependency.errorCode
+                : ErrorCode.GENERAL
+            aggregator.addEvaluation(context, dependency as EvaluationDetails<FlagValue>, dependencyErrorCode)
+          }
+          aggregator.addEvaluation(context, details, errorCode)
         } catch (error) {
           addTelemetryDebug('Error adding evaluation to aggregator', {
             'error.message': error instanceof Error ? error.message : String(error),

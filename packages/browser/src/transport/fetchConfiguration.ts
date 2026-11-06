@@ -26,6 +26,7 @@ const sourcePayload = {
   sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
 const capabilitiesHeader = [...SUPPORTED_FLAGS_CAPABILITIES].sort().join(',')
+const DEPENDENT_FLAGS_CAPABILITY_QUERY = 'cap_dependent-flags-variant-key'
 
 type JSONAPIError = {
   errors: {
@@ -99,6 +100,9 @@ export function buildConfigurationUrl(options: ConfigurationRequestOptions, endp
   }
 
   url.searchParams.set('dd_env', options.env || '')
+  if (endpoint === 'precomputed') {
+    url.searchParams.set(DEPENDENT_FLAGS_CAPABILITY_QUERY, 'v1')
+  }
   return url
 }
 
