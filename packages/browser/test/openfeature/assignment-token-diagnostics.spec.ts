@@ -166,6 +166,31 @@ describe('assignment credential diagnostic isolation', () => {
     expectNoCredential(loggedData())
   })
 
+  it('omits an unusable token without leaking it through diagnostics or emitted evaluation telemetry', async () => {
+    const fetch = jest.fn().mockImplementation(success)
+    const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
+    const errors = jest.fn()
+    provider.events.addHandler(ProviderEvents.Error, errors)
+    await OpenFeature.setProviderAndWait(provider, { ...context, dd_assignment_token: `${jwt}\r\n` })
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(new Headers(fetch.mock.calls[0][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expectNoCredential(fetch.mock.calls.map(([url, init]) => ({ url, headers: init.headers, body: init.body })))
+    expect(errors).not.toHaveBeenCalled()
+    expect(display.warn).toHaveBeenCalledTimes(1)
+    expect(display.warn).toHaveBeenCalledWith(expect.stringContaining('Assignment token omitted'))
+    await OpenFeature.clearProviders()
+    const diagnostics = mockSend.mock.calls.flatMap(([request]) =>
+      (request.data as string)
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+    )
+    expect(diagnostics.some((record) => record.type === 'sdk_diagnostic')).toBe(true)
+    expect(diagnostics.some((record) => record.flag?.key === 'boolean-flag')).toBe(true)
+    expectNoCredential([errors.mock.calls, loggedData()])
+  })
+
   it('also sanitizes standalone assignment fetching', async () => {
     const caught = await fetchPrecomputedConfiguration({
       ...options,

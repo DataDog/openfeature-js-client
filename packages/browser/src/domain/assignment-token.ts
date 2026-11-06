@@ -1,3 +1,4 @@
+import { display } from '@datadog/browser-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { GeneralError } from '@openfeature/web-sdk'
 
@@ -17,12 +18,15 @@ export function assignmentAuthorizationError(): GeneralError {
   return new GeneralError(ASSIGNMENT_AUTHORIZATION_FAILED)
 }
 
-export function validateAssignmentToken(value: unknown): string | undefined {
-  if (value === undefined) return undefined
-  // JWTs are ASCII without whitespace. Reject invalid header values without
-  // letting the browser or a transport wrapper echo the value in an error.
+export function normalizeAssignmentToken(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  // Omit unusable values without exposing them to browser/transport diagnostics.
+  // The endpoint decides whether a credential is required for this environment.
   if (typeof value !== 'string' || !/^[\x21-\x7e]+$/.test(value)) {
-    throw assignmentAuthorizationError()
+    display.warn(
+      'Assignment token omitted: expected a string containing only printable ASCII characters without whitespace. Continuing without an assignment token.'
+    )
+    return undefined
   }
   // Treat JWT contents as opaque: the assignment endpoint validates claims,
   // including expiration, without relying on the customer's device clock.

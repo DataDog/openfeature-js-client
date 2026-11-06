@@ -2,7 +2,7 @@ import { createServer, type IncomingHttpHeaders } from 'node:http'
 import { test as base, expect } from '@playwright/test'
 import response from '../../packages/browser/test/data/precomputed-v1.json' with { type: 'json' }
 
-type Context = { targetingKey: string; country?: string; dd_assignment_token?: string }
+type Context = { targetingKey: string; country?: string; dd_assignment_token?: string | null }
 type State = { status: string; error?: string; events: string[] }
 declare global {
   interface Window {
@@ -294,6 +294,44 @@ test('cold authorization rejection returns defaults and permits recovery', async
   ).toBe('READY')
   await page.evaluate(() => window.authorizationTest.close())
 })
+
+for (const value of [null, '', 'private.jwt.signature\r\n']) {
+  for (const mode of ['success', 'authorization'] as const) {
+    test(`unusable replacement ${JSON.stringify(value)} is omitted and the endpoint decides: ${mode}`, async ({
+      page,
+      origin,
+    }) => {
+      await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [
+        origin.url,
+        { ...context, dd_assignment_token: token() },
+      ] as const)
+      const logs: string[] = []
+      page.on('console', (message) => logs.push(message.text()))
+      origin.mode = mode
+      const state = await page.evaluate((ctx) => window.authorizationTest.update(ctx), {
+        targetingKey: 'user-b',
+        dd_assignment_token: value,
+      })
+      expect(state.status).toBe(mode === 'success' ? 'READY' : 'ERROR')
+      expect(origin.posts).toHaveLength(2)
+      expect(origin.posts[1].headers['dd-assignment-token']).toBeUndefined()
+      expect(JSON.parse(origin.posts[1].body).data.attributes.subject).toEqual({
+        targeting_key: 'user-b',
+        targeting_attributes: { targetingKey: 'user-b' },
+      })
+      const result = (await page.evaluate(() => window.authorizationTest.evaluate())).boolean
+      expect(result.value).toBe(mode === 'success')
+      if (mode === 'authorization') expect(result.errorCode).toBe('GENERAL')
+      expect(logs.some((message) => message.includes('Assignment token omitted'))).toBe(Boolean(value))
+      expect(logs.some((message) => message.includes('ASSIGNMENT_AUTHORIZATION_FAILED'))).toBe(mode === 'authorization')
+      await page.evaluate(() => window.authorizationTest.close())
+      await expect.poll(() => origin.telemetry.length).toBeGreaterThan(0)
+      const captured = JSON.stringify([logs, origin.telemetry, origin.posts.map((request) => request.body)])
+      expect(captured).not.toContain('private.jwt.signature')
+      expect(captured).not.toContain('dd_assignment_token')
+    })
+  }
+}
 
 test('malformed token-bearing responses cannot echo credentials into errors or telemetry', async ({ page, origin }) => {
   const jwt = 'private.jwt.signature'

@@ -167,11 +167,12 @@ Your application obtains a replacement before expiration and submits it with the
 call. Changing only the token triggers a full assignment download. When the response's `createdAt` changes,
 exposure deduplication resets, so the next evaluation of each flag eligible for exposure logging can send another
 exposure. Avoid unnecessary token-only updates while continuing to replace tokens before expiration.
-Omitting `dd_assignment_token` removes the credential; the SDK does not restore old tokens when switching users.
+Omitting `dd_assignment_token`, or setting it to `null` or an empty string, removes the credential;
+the SDK does not restore old tokens when switching users.
 
 The provider sends the token in the reserved `DD-Assignment-Token` header. The context is the only source of this
 header: a `customHeaders` entry with that name, in any letter case, is replaced when a token is supplied and removed
-when it is omitted. It excludes the reserved context field from Datadog targeting attributes, telemetry,
+when the context has no usable token. It excludes the reserved context field from Datadog targeting attributes, telemetry,
 and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
 application hooks can still access the original context. Datadog's tracking hooks remove the token.
 Other providers sharing that context can also read or forward it. Scope token-bearing contexts to a Datadog-only
@@ -199,8 +200,11 @@ customer-provided fetch implementation or other application code.
 
 The SDK forwards the token without parsing JWT claims or checking expiration against the device clock.
 The assignment endpoint validates signatures, expiration, and other claims, including malformed JWTs and missing
-or invalid `exp` values. Non-string, empty, whitespace-containing, or non-ASCII token values still fail locally
-before constructing the request header. Token expiration does not itself clear downloaded assignments.
+or invalid `exp` values. Missing, `null`, or empty token values send no header. Other non-string values or strings
+containing whitespace or non-ASCII characters also omit the header and log a fixed diagnostic without the value.
+The assignment request still proceeds, and the endpoint decides whether authorization is required. An unusable
+replacement never reuses a previous token or a custom assignment header. The reserved field is excluded from
+targeting, telemetry, and assignment-cache data even when unusable. Token expiration does not itself clear downloaded assignments.
 
 ### Exposures in your own data store
 

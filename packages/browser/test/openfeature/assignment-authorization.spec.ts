@@ -466,15 +466,87 @@ describe('assignment authorization', () => {
     }
   )
 
-  it.each([42, null, true, {}, '', 'bad\r\nheader', ' ', 'a b', 't\u00f6ken.payload.signature'])(
-    'rejects unsafe token values locally without echoing them: %p',
-    async (value) => {
-      await expect(provider.initialize({ ...context, dd_assignment_token: value })).rejects.toThrow(
-        ASSIGNMENT_AUTHORIZATION_FAILED
+  it.each([
+    [undefined, false],
+    [null, false],
+    ['', false],
+    [42, true],
+    [true, true],
+    [{ secret: 'private.jwt.signature' }, true],
+    ['bad\r\nheader', true],
+    ['bad\u0000header', true],
+    [' ', true],
+    ['a b', true],
+    ['t\u00f6ken.payload.signature', true],
+    ['\ud83d\udd11', true],
+  ])('downloads without a token when the replacement is %p (warn: %s)', async (value, warn) => {
+    const cacheWrite = jest.spyOn(IndexedDBFlagsCache.prototype, 'set')
+    await provider.initialize({ ...context, dd_assignment_token: token() })
+    cacheWrite.mockClear()
+    const replacement: EvaluationContext = { targetingKey: 'user-b' }
+    if (value !== undefined) replacement.dd_assignment_token = value
+    await provider.onContextChange({}, replacement)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).data.attributes.subject).toEqual({
+      targeting_key: 'user-b',
+      targeting_attributes: { targetingKey: 'user-b' },
+    })
+    expect(cacheWrite).toHaveBeenCalledWith(expect.anything(), { targetingKey: 'user-b' }, false)
+    expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain('dd_assignment_token')
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, replacement, logger).value).toBe(true)
+    expect(display.warn).toHaveBeenCalledTimes(warn ? 1 : 0)
+    if (warn) {
+      expect(display.warn).toHaveBeenCalledWith(
+        'Assignment token omitted: expected a string containing only printable ASCII characters without whitespace. Continuing without an assignment token.'
       )
-      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  })
+
+  it.each([null, '', 'bad\r\nheader'])(
+    'uses the server rejection for an omitted replacement %p and recovers with a usable token',
+    async (value) => {
+      await provider.initialize({ ...context, dd_assignment_token: token() })
+      fetchMock.mockImplementation(rejection)
+      const rejected = { targetingKey: 'user-b', dd_assignment_token: value }
+      await expect(provider.onContextChange({}, rejected)).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(false)
+      expect(provider.status).toBe(ProviderStatus.ERROR)
+      expect(provider.resolveBooleanEvaluation('boolean-flag', false, rejected, logger)).toMatchObject({
+        value: false,
+        errorCode: ErrorCode.GENERAL,
+      })
+      fetchMock.mockImplementation(success)
+      const jwt = token()
+      await provider.onContextChange({}, { ...rejected, dd_assignment_token: jwt })
+      expect(new Headers(fetchMock.mock.calls[2][1].headers).get('DD-Assignment-Token')).toBe(jwt)
+      expect(provider.status).toBe(ProviderStatus.READY)
     }
   )
+
+  it('preserves matching assignments when the server rejects a request with an unusable token omitted', async () => {
+    await provider.initialize({ ...context, dd_assignment_token: token() })
+    fetchMock.mockImplementation(rejection)
+    await provider.onContextChange({}, { ...context, dd_assignment_token: 'bad\r\nheader' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, context, logger).value).toBe(true)
+  })
+
+  it('removes custom assignment headers when standalone fetching receives an unusable token', async () => {
+    const fetcher = createFlagsConfigurationFetcher({
+      ...options,
+      customHeaders: { 'DD-ASSIGNMENT-TOKEN': 'old.jwt.signature' },
+      flagConfigurationFetch: fetchMock,
+    })
+    const config = await fetcher({ ...context, dd_assignment_token: 'bad\r\nheader' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expect(config.precomputed?.context).toEqual(context)
+  })
 
   it.each(['not-a-jwt', 'header.e30.signature', `header.${btoa('{"exp":"yesterday"}')}.signature`])(
     'leaves malformed JWT strings or missing/invalid expiry to Fastly: %s',

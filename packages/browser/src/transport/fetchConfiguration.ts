@@ -18,7 +18,7 @@ import {
   ASSIGNMENT_TOKEN_HEADER,
   assignmentAuthorizationError,
   extractAssignmentToken,
-  validateAssignmentToken,
+  normalizeAssignmentToken,
 } from '../domain/assignment-token'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
@@ -143,7 +143,7 @@ async function requestPrecomputedConfiguration(
 ): Promise<FlagsConfiguration> {
   // Also sanitize the standalone fetch API; it can be used without a provider.
   const extracted = extractAssignmentToken(options.context)
-  const assignmentToken = validateAssignmentToken(
+  const assignmentToken = normalizeAssignmentToken(
     contextAssignmentToken !== undefined ? contextAssignmentToken : extracted.assignmentToken
   )
   options = { ...options, context: extracted.context }
