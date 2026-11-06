@@ -263,12 +263,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isValidFlagEvaluation(value: unknown): value is FlagEvaluation {
-  return (
-    isRecord(value) &&
-    typeof value.key === 'string' &&
-    value.key.length > 0 &&
-    Object.keys(value).every((key) => key === 'key')
-  )
+  // Only `key` is interpreted by this capability version. Ignore additional
+  // fields so a future server-side extension does not invalidate the containing
+  // flag for evaluators that can still evaluate its variant-key dependency.
+  return isRecord(value) && typeof value.key === 'string' && value.key.length > 0
 }
 
 function isFlagEvaluationOperator(operator: string): boolean {

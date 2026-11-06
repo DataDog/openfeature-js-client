@@ -87,6 +87,7 @@ type StagedDependencyTelemetry = PreparedDependencyTelemetry & {
 export class DependencyTelemetrySidecar {
   private readonly batchesByMetadata = new WeakMap<object, StagedDependencyTelemetry>()
   private readonly batchesByContext = new WeakMap<object, StagedDependencyTelemetry>()
+  private readonly evaluationAliases = new WeakMap<object, StagedDependencyTelemetry>()
 
   constructor(readonly collectDependencyEvaluations = true) {}
 
@@ -98,11 +99,26 @@ export class DependencyTelemetrySidecar {
     }
   }
 
-  takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[] {
-    const batch = this.getBatch(metadata, context)
+  associateDependencyEvaluations(alias: object, metadata: object | undefined): void {
+    const batch = metadata === undefined ? undefined : this.batchesByMetadata.get(metadata)
+    if (batch !== undefined && batch.dependencyEvaluations.length > 0) {
+      this.evaluationAliases.set(alias, batch)
+    }
+  }
+
+  takeDependencyEvaluations(
+    metadata: object | undefined,
+    alias?: object,
+    context?: object
+  ): readonly DependencyEvaluation[] {
+    const batch =
+      (metadata === undefined ? undefined : this.batchesByMetadata.get(metadata)) ??
+      (alias === undefined ? undefined : this.evaluationAliases.get(alias)) ??
+      (context === undefined ? undefined : this.batchesByContext.get(context))
     if (batch === undefined) {
       return []
     }
+    if (alias !== undefined) this.evaluationAliases.delete(alias)
     const evaluations = batch.dependencyEvaluations
     batch.dependencyEvaluations = []
     if (batch.dependencyExposures.length === 0) {
@@ -116,14 +132,10 @@ export class DependencyTelemetrySidecar {
       return []
     }
     const batch = this.batchesByMetadata.get(metadata)
-    if (batch === undefined) {
-      return []
-    }
+    if (batch === undefined) return []
     const exposures = batch.dependencyExposures
     batch.dependencyExposures = []
-    if (batch.dependencyEvaluations.length === 0) {
-      this.deleteBatch(batch)
-    }
+    if (batch.dependencyEvaluations.length === 0) this.deleteBatch(batch)
     return exposures
   }
 
@@ -141,20 +153,9 @@ export class DependencyTelemetrySidecar {
     }
   }
 
-  private getBatch(metadata: object | undefined, context: object | undefined): StagedDependencyTelemetry | undefined {
-    return (
-      (metadata === undefined ? undefined : this.batchesByMetadata.get(metadata)) ??
-      (context === undefined ? undefined : this.batchesByContext.get(context))
-    )
-  }
-
   private deleteBatch(batch: StagedDependencyTelemetry): void {
-    if (this.batchesByMetadata.get(batch.rootMetadata) === batch) {
-      this.batchesByMetadata.delete(batch.rootMetadata)
-    }
-    if (this.batchesByContext.get(batch.rootContext) === batch) {
-      this.batchesByContext.delete(batch.rootContext)
-    }
+    if (this.batchesByMetadata.get(batch.rootMetadata) === batch) this.batchesByMetadata.delete(batch.rootMetadata)
+    if (this.batchesByContext.get(batch.rootContext) === batch) this.batchesByContext.delete(batch.rootContext)
   }
 }
 
