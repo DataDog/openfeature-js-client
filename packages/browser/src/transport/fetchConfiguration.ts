@@ -179,31 +179,39 @@ async function requestPrecomputedConfiguration(
   }
 
   const fetchImplementation = options.fetch ?? globalThis.fetch
-  const response = await fetchImplementation(url.toString(), {
-    method: 'POST',
-    headers: defaultHeaders,
-    signal: options.signal,
-    body: serializeRequestBody(
-      {
-        data: {
-          type: 'precompute-assignments-request',
-          attributes: {
-            env: envPayload,
-            source: sourcePayload,
-            ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-            subject: {
-              targeting_key: options.context.targetingKey || '',
-              targeting_attributes: stringifiedContext,
+  let response: Response
+  try {
+    response = await fetchImplementation(url.toString(), {
+      method: 'POST',
+      headers: defaultHeaders,
+      signal: options.signal,
+      body: serializeRequestBody(
+        {
+          data: {
+            type: 'precompute-assignments-request',
+            attributes: {
+              env: envPayload,
+              source: sourcePayload,
+              ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+              subject: {
+                targeting_key: options.context.targetingKey || '',
+                targeting_attributes: stringifiedContext,
+              },
+              ...(flagSelection && {
+                flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+              }),
             },
-            ...(flagSelection && {
-              flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
-            }),
           },
         },
-      },
-      options.signal
-    ),
-  })
+        options.signal
+      ),
+    })
+  } catch (error) {
+    if (assignmentToken === undefined) throw error
+    // Custom transports can include request headers in their message, stack,
+    // cause or extra properties. Never forward the original error object.
+    throw redactAssignmentError(error, new Error('Failed to fetch flag configuration: transport error'))
+  }
   if (await isAssignmentAuthorizationRejection(response)) throw assignmentAuthorizationError()
   if (!response.ok) {
     // A proxy may echo request headers in an error body. Do not expose that body
@@ -211,8 +219,16 @@ async function requestPrecomputedConfiguration(
     const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (flagSelection) reportIgnoredFlagSelection(response)
-  const parsed = parsePrecomputedConfigurationResponse(await response.json())
+  if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
+  let responseBody: unknown
+  try {
+    responseBody = await response.json()
+  } catch (error) {
+    if (assignmentToken === undefined) throw error
+    // JSON parser errors can quote response text, including echoed credentials.
+    throw redactAssignmentError(error, new ParseError('Assignment response is not valid JSON'))
+  }
+  const parsed = parsePrecomputedConfigurationResponse(responseBody)
   if ('error' in parsed) return { precomputedError: parsed.error }
   if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
@@ -225,6 +241,16 @@ async function requestPrecomputedConfiguration(
       fetchedAt,
     },
   }
+}
+
+function redactAssignmentError(error: unknown, fallback: Error): Error {
+  // Preserve cancellation/timeout classification using fixed messages only.
+  // Retry wrappers act inside the transport, before this sanitization boundary.
+  if (error instanceof Error || error instanceof DOMException) {
+    if (error.name === 'AbortError') return new DOMException('Assignment download aborted', 'AbortError')
+    if (error.name === 'TimeoutError') return new DOMException('Assignment download timed out', 'TimeoutError')
+  }
+  return fallback
 }
 
 async function isAssignmentAuthorizationRejection(response: Response): Promise<boolean> {

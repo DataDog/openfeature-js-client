@@ -25,7 +25,7 @@ declare global {
 type RequestRecord = { headers: IncomingHttpHeaders; body: string }
 type Origin = {
   url: string
-  mode: 'success' | 'authorization' | 'unrelated401' | 'unavailable'
+  mode: 'success' | 'authorization' | 'unrelated401' | 'unavailable' | 'malformed'
   allowToken: boolean
   allowError: boolean
   posts: RequestRecord[]
@@ -72,6 +72,7 @@ const test = base.extend<{ origin: Origin }>({
       origin.posts.push({ headers: req.headers, body })
       res.setHeader('Content-Type', 'application/json')
       if (origin.mode === 'success') res.end(JSON.stringify(response))
+      else if (origin.mode === 'malformed') res.end(String(req.headers['dd-assignment-token']))
       else if (origin.mode === 'unavailable') res.writeHead(503).end('temporarily unavailable')
       else
         res.writeHead(401).end(
@@ -262,6 +263,28 @@ test('cold authorization rejection returns defaults and permits recovery', async
       .status
   ).toBe('READY')
   await page.evaluate(() => window.authorizationTest.close())
+})
+
+test('malformed token-bearing responses cannot echo credentials into errors or telemetry', async ({ page, origin }) => {
+  const jwt = 'private.jwt.signature'
+  const logs: string[] = []
+  page.on('console', (message) => logs.push(message.text()))
+  page.on('pageerror', (error) => logs.push(String(error)))
+  origin.mode = 'malformed'
+  const state = await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [
+    origin.url,
+    { ...context, dd_assignment_token: jwt },
+  ] as const)
+  expect(state.status).toBe('ERROR')
+  expect(state.error).toContain('Assignment response is not valid JSON')
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(false)
+  expect(origin.posts).toHaveLength(1)
+  expect(origin.posts[0].headers['dd-assignment-token']).toBe(jwt)
+  await page.evaluate(() => window.authorizationTest.close())
+  await expect.poll(() => origin.telemetry.length).toBeGreaterThan(0)
+  const diagnostics = JSON.stringify([state, logs, origin.telemetry])
+  expect(diagnostics).not.toContain('private.jwt')
+  expect(diagnostics).not.toContain('dd_assignment_token')
 })
 
 test('expired token is rejected locally without invalidating matching assignments', async ({ page, origin }) => {

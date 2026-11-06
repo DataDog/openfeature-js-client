@@ -181,7 +181,11 @@ behavior applies. Supplying a replacement token can recover without recreating t
 reports `ASSIGNMENT_AUTHORIZATION_FAILED` without the token; there is no custom refresh-required event.
 The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
 Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
-the HTTP status in diagnostics to avoid reflecting credentials.
+the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing
+failures use safe messages without retaining the original error object, stack, cause, or attached request metadata.
+Cancellation and timeout classifications are preserved. Server-provided flag-selection diagnostic text is also
+withheld from console and debug telemetry for these requests. This does not redact logging performed inside a
+customer-provided fetch implementation or other application code.
 
 The SDK skips downloads when a numeric JWT `exp` is at least 60 seconds in the past, allowing for client clock skew.
 This check does not verify the signature. Fastly remains authoritative, including for recently expired tokens,
