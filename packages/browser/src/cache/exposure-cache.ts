@@ -22,5 +22,6 @@ export function createExposureCache(
   return assignmentCacheFactory({
     forceMemoryOnly,
     storageKeySuffix: `dd-of-browser-${scope}`,
+    debug: configuration.debug,
   })
 }

@@ -13,11 +13,13 @@ import {
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugForSignal, NO_DEBUG } from '../debug'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
+import { debugFetch } from './debugFetch'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 
@@ -45,7 +47,7 @@ interface ConfigurationRequestOptions {
   signal?: AbortSignal
 }
 
-interface ConfigurationFetchOptions {
+interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
   site?: string
@@ -126,15 +128,24 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
-  return requestPrecomputedConfiguration(options)
+  return requestPrecomputedConfiguration(
+    options,
+    undefined,
+    createDebugLogger(options.debugMode, 'configuration_fetch')
+  )
 }
 
 async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
-  flagSelection?: CanonicalFlagSelection
+  flagSelection?: CanonicalFlagSelection,
+  debug: DebugLogger = NO_DEBUG
 ): Promise<FlagsConfiguration> {
-  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
-  if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+  debug.event('context.received', () => ({ context: options.context }))
+  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options, debug))
+  if (optedOut === undefined) {
+    debug.event('context.invalid', () => ({ context: options.context, reason: INVALID_EXPERIMENTATION_OPT_OUT }))
+    throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+  }
   const requestOptions: ConfigurationRequestOptions = options
   const url = buildConfigurationUrl(requestOptions, 'precomputed')
   const fetchedAt = timeStampNow()
@@ -155,43 +166,88 @@ async function requestPrecomputedConfiguration(
   // Stringify all context values
   const stringifiedContext: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.context)) {
-    stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+    try {
+      stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+    } catch (error) {
+      debug.event('context.encoding_failed', () => ({ key, value, type: typeof value, error }))
+      throw error
+    }
   }
 
   const fetchImplementation = options.fetch ?? globalThis.fetch
-  const response = await fetchImplementation(url.toString(), {
-    method: 'POST',
-    headers: defaultHeaders,
-    signal: options.signal,
-    body: serializeRequestBody(
-      {
-        data: {
-          type: 'precompute-assignments-request',
-          attributes: {
-            env: envPayload,
-            source: sourcePayload,
-            ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-            subject: {
-              targeting_key: options.context.targetingKey || '',
-              targeting_attributes: stringifiedContext,
+  const targetingKey = options.context.targetingKey || ''
+  debug.event('context.normalized', () => ({
+    rawContext: options.context,
+    normalizedContext: stringifiedContext,
+    targetingKey,
+    optedOut,
+    flagSelection,
+    capabilities: capabilitiesHeader,
+  }))
+  const response = await debugFetch(
+    fetchImplementation,
+    url.toString(),
+    {
+      method: 'POST',
+      headers: defaultHeaders,
+      signal: options.signal,
+      body: serializeRequestBody(
+        {
+          data: {
+            type: 'precompute-assignments-request',
+            attributes: {
+              env: envPayload,
+              source: sourcePayload,
+              ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+              subject: {
+                targeting_key: targetingKey,
+                targeting_attributes: stringifiedContext,
+              },
+              ...(flagSelection && {
+                flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+              }),
             },
-            ...(flagSelection && {
-              flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
-            }),
           },
         },
-      },
-      options.signal
-    ),
-  })
+        options.signal
+      ),
+    },
+    debug
+  )
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   if (flagSelection) reportIgnoredFlagSelection(response)
-  const parsed = parsePrecomputedConfigurationResponse(await response.json())
+  const raw = await response.json()
+  const parsed = parsePrecomputedConfigurationResponse(raw)
+  debug.event('configuration.decoded', () => {
+    const receivedFlags = raw?.data?.attributes?.flags
+    const receivedKeys = receivedFlags && typeof receivedFlags === 'object' ? Object.keys(receivedFlags) : []
+    const rejectedKeys = 'error' in parsed ? receivedKeys : Object.keys(parsed.flagErrors ?? {})
+    const rejected = new Set(rejectedKeys)
+    const acceptedKeys =
+      'error' in parsed ? [] : Object.keys(parsed.response.data.attributes.flags).filter((key) => !rejected.has(key))
+    return {
+      raw,
+      parsed,
+      outcome: 'error' in parsed ? 'rejected' : 'decoded',
+      receivedCount: receivedKeys.length,
+      acceptedCount: acceptedKeys.length,
+      rejectedCount: rejectedKeys.length,
+      acceptedKeys,
+      rejectedKeys,
+      flagErrors: 'error' in parsed ? undefined : parsed.flagErrors,
+      rejectionScope: 'error' in parsed ? 'response' : 'individual_flags',
+    }
+  })
   if ('error' in parsed) return { precomputedError: parsed.error }
   if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
+    debug.event('configuration.rejected', () => ({
+      reason: 'experimentation_policy_mismatch',
+      optedOut,
+      response: parsed,
+    }))
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }
 
@@ -204,13 +260,26 @@ async function requestPrecomputedConfiguration(
   }
 }
 
-export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
+export function createFlagsConfigurationFetcher(
+  initConfiguration: FlaggingInitConfiguration,
+  debug: DebugLogger = NO_DEBUG
+) {
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
-  buildConfigurationUrl(initConfiguration, 'precomputed')
+  try {
+    buildConfigurationUrl(initConfiguration, 'precomputed')
+  } catch (error) {
+    debug.event('init.failed', () => ({ error, stage: 'endpoint' }))
+    throw error
+  }
   const { selection: flagSelection, error: flagSelectionError } = canonicalizeFlagSelection(
     initConfiguration.flagSelection
   )
   if (flagSelectionError) reportDroppedFlagSelection(flagSelectionError)
+  debug.event('configuration.selection', () => ({
+    requested: initConfiguration.flagSelection,
+    effective: flagSelection,
+    error: flagSelectionError,
+  }))
   return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
     const configuration = await requestPrecomputedConfiguration(
       {
@@ -220,7 +289,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         fetch: initConfiguration.flagConfigurationFetch,
         signal,
       },
-      flagSelection
+      flagSelection,
+      signal ? debugForSignal(signal) : debug
     )
     // Use the provider's existing context-matched cache fallback. Do not replace
     // a valid snapshot with a malformed response or unsupported encoding.

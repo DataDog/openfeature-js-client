@@ -8,6 +8,13 @@ import type {
   ResolutionDetails,
 } from '@openfeature/web-sdk'
 import { TypeMismatchError } from '@openfeature/web-sdk'
+import {
+  createDebugLogger,
+  type DebugConfiguration,
+  type DebugLogger,
+  getDebugLogger,
+  registerDebugLogger,
+} from '../debug'
 import { inheritEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import { registerTransparentProvider } from './exposure-scope'
 
@@ -24,13 +31,15 @@ interface DDFlagOverride {
   value: boolean | string | number | JsonValue
 }
 
-function readOverrides(): Record<string, DDFlagOverride> {
+function readOverrides(debug: DebugLogger): Record<string, DDFlagOverride> {
   try {
     const parsed = JSON.parse(localStorage.getItem(OVERRIDES_KEY) ?? '{}')
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Record<string, DDFlagOverride>
     }
-  } catch {}
+  } catch (error) {
+    debug.event('override.load_failed', () => ({ error, action: 'delegate_to_inner_provider' }))
+  }
   return {}
 }
 
@@ -64,7 +73,17 @@ export class DatadogDevtools implements Provider {
   private overrides: Record<string, DDFlagOverride> = {}
   private readonly markerOwner = Symbol()
 
-  constructor(private readonly inner: Provider) {
+  private readonly debug: DebugLogger
+
+  constructor(
+    private readonly inner: Provider,
+    options: DebugConfiguration = {}
+  ) {
+    this.debug =
+      options.debugMode === undefined
+        ? getDebugLogger(inner.metadata)
+        : createDebugLogger(options.debugMode, 'devtools')
+    registerDebugLogger(this.metadata, this.debug)
     inheritEvaluationTelemetryPolicy(this.metadata, inner.metadata)
     registerTransparentProvider(this.metadata, inner.metadata)
   }
@@ -82,7 +101,8 @@ export class DatadogDevtools implements Provider {
   }
 
   async initialize(context?: EvaluationContext): Promise<void> {
-    this.overrides = readOverrides()
+    this.overrides = readOverrides(this.debug)
+    this.debug.event('override.loaded', () => ({ overrides: this.overrides, refresh: 'initialize_only' }))
     markerOwners.add(this.markerOwner)
     try {
       localStorage.setItem(DEVTOOLS_MARKER_KEY, 'enabled')
@@ -103,22 +123,45 @@ export class DatadogDevtools implements Provider {
     return this.inner.onContextChange?.(oldContext, newContext)
   }
 
-  private resolveOverride<T>(flagKey: string, expectedTypes: DDFlagOverrideType[]): ResolutionDetails<T> | null {
+  private resolveOverride<T>(
+    flagKey: string,
+    expectedTypes: DDFlagOverrideType[],
+    defaultValue: T,
+    context: EvaluationContext
+  ): ResolutionDetails<T> | null {
     const override = this.overrides[flagKey]
     if (!override || !expectedTypes.includes(override.type)) {
+      this.debug.event('override.decision', () => ({
+        flagKey,
+        override,
+        expectedTypes,
+        outcome: 'delegate_to_inner_provider',
+      }))
       return null
     }
     const actualType = override.value === null ? 'null' : typeof override.value
     if (override.value === null || actualType !== EXPECTED_JS_TYPES[override.type]) {
       const msg = `[DatadogDevtools] override for '${flagKey}' declares type ${override.type} but value is ${actualType} — override ignored`
+      this.debug.event('override.invalid', () => ({ flagKey, override, expectedTypes, error: msg }))
       console.warn(msg)
       throw new TypeMismatchError(msg)
     }
     if (override.type === 'INTEGER' && !Number.isInteger(override.value)) {
       const msg = `[DatadogDevtools] override for '${flagKey}' declares type INTEGER but value ${override.value} is not a whole number — override ignored`
+      this.debug.event('override.invalid', () => ({ flagKey, override, expectedTypes, error: msg }))
       console.warn(msg)
       throw new TypeMismatchError(msg)
     }
+    this.debug.event('evaluation.completed', () => ({
+      flagKey,
+      requestedContext: context,
+      defaultValue,
+      requestedType: expectedTypes,
+      value: override.value,
+      reason: 'STATIC',
+      valueOrigin: 'local_override',
+      runtimeDefaultUsed: false,
+    }))
     return { value: override.value as T, reason: 'STATIC', flagMetadata: { overridden: true } }
   }
 
@@ -129,7 +172,7 @@ export class DatadogDevtools implements Provider {
     logger: Logger
   ): ResolutionDetails<boolean> {
     return (
-      this.resolveOverride<boolean>(flagKey, ['BOOLEAN']) ??
+      this.resolveOverride<boolean>(flagKey, ['BOOLEAN'], defaultValue, context) ??
       this.inner.resolveBooleanEvaluation(flagKey, defaultValue, context, logger)
     )
   }
@@ -141,7 +184,7 @@ export class DatadogDevtools implements Provider {
     logger: Logger
   ): ResolutionDetails<string> {
     return (
-      this.resolveOverride<string>(flagKey, ['STRING']) ??
+      this.resolveOverride<string>(flagKey, ['STRING'], defaultValue, context) ??
       this.inner.resolveStringEvaluation(flagKey, defaultValue, context, logger)
     )
   }
@@ -153,7 +196,7 @@ export class DatadogDevtools implements Provider {
     logger: Logger
   ): ResolutionDetails<number> {
     return (
-      this.resolveOverride<number>(flagKey, ['INTEGER', 'NUMERIC']) ??
+      this.resolveOverride<number>(flagKey, ['INTEGER', 'NUMERIC'], defaultValue, context) ??
       this.inner.resolveNumberEvaluation(flagKey, defaultValue, context, logger)
     )
   }
@@ -165,7 +208,7 @@ export class DatadogDevtools implements Provider {
     logger: Logger
   ): ResolutionDetails<T> {
     return (
-      this.resolveOverride<T>(flagKey, ['JSON']) ??
+      this.resolveOverride<T>(flagKey, ['JSON'], defaultValue, context) ??
       this.inner.resolveObjectEvaluation(flagKey, defaultValue, context, logger)
     )
   }

@@ -2,6 +2,7 @@ import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog
 import { validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugOptions } from '../debug'
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
@@ -18,7 +19,7 @@ export interface EvaluationTelemetryOptOutConfiguration {
 /**
  * Init Configuration for the Flagging SDK.
  */
-export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
+export interface FlaggingTrackingInitConfiguration extends InitConfiguration, DebugConfiguration {
   /**
    * The RUM application ID.
    */
@@ -115,6 +116,8 @@ export interface FlaggingInitConfiguration
 }
 
 export interface FlaggingTrackingConfiguration extends Configuration {
+  /** @internal Local diagnostics, never included in remote payloads. */
+  debug?: DebugLogger
   applicationId?: string
   flagEvaluationTrackingInterval: number
 
@@ -150,30 +153,51 @@ export function resolveTrackExposures(
 }
 
 export function validateAndBuildFlaggingTrackingConfiguration(
-  initConfiguration: FlaggingTrackingInitConfiguration
+  initConfiguration: FlaggingTrackingInitConfiguration,
+  debug = createDebugLogger(initConfiguration.debugMode, 'tracking')
 ): FlaggingTrackingConfiguration | undefined {
-  const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
+  debug.event('init.configuration', () => ({ options: debugOptions(initConfiguration) }))
+  let baseConfiguration: Configuration | undefined
+  try {
+    baseConfiguration = validateAndBuildConfiguration(initConfiguration)
+  } catch (error) {
+    debug.event('init.failed', () => ({ error, stage: 'configuration_validation' }))
+    throw error
+  }
   if (!baseConfiguration) {
+    debug.event('init.failed', () => ({
+      reason: 'invalid_configuration',
+      clientTokenPresent: !!initConfiguration.clientToken,
+    }))
     return
   }
+  debug.event('init.effective_configuration', () => ({
+    site: baseConfiguration.site,
+    env: baseConfiguration.env,
+    service: baseConfiguration.service,
+    applicationId: initConfiguration.applicationId,
+    evaluationIntervalMs: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
+  }))
 
   return {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
     ...baseConfiguration,
+    debug,
   }
 }
 
 export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration
+  initConfiguration: FlaggingInitConfiguration,
+  debug = createDebugLogger(initConfiguration.debugMode)
 ): FlaggingConfiguration | undefined {
-  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration)
+  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)
   if (!trackingConfiguration) {
     return
   }
 
   return {
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration),
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration, debug),
     ...trackingConfiguration,
   }
 }

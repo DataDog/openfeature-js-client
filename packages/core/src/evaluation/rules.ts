@@ -1,4 +1,4 @@
-import type { EvaluationContext, EvaluationContextValue } from '@openfeature/core'
+import type { EvaluationContext, EvaluationContextValue, Logger } from '@openfeature/core'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
 import { compareSemver, parseSemver } from './semver'
 
@@ -163,23 +163,27 @@ function isValidOperatorOperand(operator: string, value: unknown): boolean {
 export function matchesRule(
   rule: Rule,
   subjectAttributes: EvaluationContext,
-  resolveFlagEvaluation?: ResolveFlagEvaluation
+  resolveFlagEvaluation?: ResolveFlagEvaluation,
+  logger?: Logger
 ): boolean {
   const checkpoint = resolveFlagEvaluation?.checkpoint?.()
   for (const condition of rule.conditions) {
-    if (evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation)) {
+    if (evaluateCondition(subjectAttributes, condition, resolveFlagEvaluation, logger)) {
       continue
     }
     resolveFlagEvaluation?.rollback?.(checkpoint)
+    logger?.debug('rule evaluated', { rule, matched: false })
     return false
   }
+  logger?.debug('rule evaluated', { rule, matched: true })
   return true
 }
 
 function evaluateCondition(
   subjectAttributes: EvaluationContext,
   condition: Condition,
-  resolveFlagEvaluation?: ResolveFlagEvaluation
+  resolveFlagEvaluation?: ResolveFlagEvaluation,
+  logger?: Logger
 ): boolean {
   if ('flagEvaluation' in condition) {
     const flagValue = resolveFlagEvaluation?.(condition.flagEvaluation)
@@ -190,6 +194,12 @@ function evaluateCondition(
   }
 
   const value = subjectAttributes[condition.attribute]
+  const matched = evaluateConditionValue(value, condition, logger)
+  logger?.debug('condition evaluated', { condition, rawValue: value, matched })
+  return matched
+}
+
+function evaluateConditionValue(value: EvaluationContextValue, condition: Condition, logger?: Logger): boolean {
   if (condition.operator === OperatorType.IS_NULL) {
     if (condition.value) {
       return value === null || value === undefined
@@ -211,7 +221,7 @@ function evaluateCondition(
               : condition.operator === OperatorType.LTE
                 ? a <= b
                 : a < b
-        return compareNumber(value, condition.value, comparator)
+        return compareNumber(value, condition.value, comparator, logger)
       }
       case OperatorType.MATCHES: {
         const attributeValue = coerceToString(value)
@@ -338,9 +348,11 @@ function isNotOneOf(attributeValue: string, conditionValues: string[]) {
 function compareNumber(
   attributeValue: EvaluationContextValue,
   conditionValue: ConditionValueType,
-  compareFn: (a: number, b: number) => boolean
+  compareFn: (a: number, b: number) => boolean,
+  logger?: Logger
 ): boolean {
   const attribute = coerceToNumber(attributeValue)
   const comparand = coerceToNumber(conditionValue)
+  logger?.debug('numeric condition coercion', { attributeValue, conditionValue, attribute, comparand })
   return attribute !== undefined && comparand !== undefined && compareFn(attribute, comparand)
 }
