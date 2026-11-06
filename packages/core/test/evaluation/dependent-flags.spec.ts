@@ -84,7 +84,14 @@ describe('dependent flag evaluation', () => {
       errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
     })
     expect(trace.dependencyEvaluations).toMatchObject([
-      { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
+      {
+        flagKey: 'missing',
+        details: {
+          reason: 'ERROR',
+          errorCode: 'FLAG_NOT_FOUND',
+          errorMessage: 'prerequisite flag is missing',
+        },
+      },
     ])
     expect(trace.dependencyExposures).toEqual([])
   })
@@ -558,6 +565,14 @@ describe('dependent flag evaluation', () => {
     })
   })
 
+  it('accepts the protobuf maximum dependency depth override of 255', () => {
+    const config = protobufDependentConfiguration(true)
+    config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(255) })
+
+    expect(evaluateProtobuf(roundTrip(config), logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
   it('uses the default depth and logs an error for an invalid protobuf maximum depth', () => {
     const ordinary = protobufDependentConfiguration(true)
     ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
@@ -644,7 +659,14 @@ describe('dependent flag evaluation', () => {
       errorMessage: 'prerequisite flag "missing" failed: prerequisite flag is missing',
     })
     expect(dependencies).toMatchObject([
-      { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
+      {
+        flagKey: 'missing',
+        details: {
+          reason: 'ERROR',
+          errorCode: 'FLAG_NOT_FOUND',
+          errorMessage: 'prerequisite flag is missing',
+        },
+      },
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
     expect(exposures).toEqual([])
@@ -794,6 +816,24 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
   })
 
+  it.each([0, 255])('accepts JSON maximum depth %p', (maximumDepth) => {
+    const config = configuration(
+      {
+        prerequisite: booleanFlag('prerequisite', 'on'),
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+      },
+      maximumDepth
+    )
+
+    const result = evaluate(config, 'root', logger)
+    if (maximumDepth === 0) {
+      expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    } else {
+      expect(result).toMatchObject({ value: true, variant: 'on' })
+    }
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
   it.each([256, -1, 1.5, '10', null, true])(
     'uses the default depth and logs an error for JSON maxDependencyDepth %p',
     (maximumDepth) => {
@@ -831,6 +871,20 @@ describe('dependent flag evaluation', () => {
       undefined
     )
     config.evaluatorParams = params as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
+      flagKey: 'root',
+      defaultMaxDependencyDepth: 10,
+    })
+  })
+
+  it('uses the default depth for a bigint JSON maxDependencyDepth', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = { maxDependencyDepth: BigInt(0) } as never
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
     expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
