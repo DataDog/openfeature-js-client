@@ -95,6 +95,7 @@ function isPrecomputedFlag(value: unknown, encoding?: FlagKeyObfuscation): value
     typeof value.variationKey !== 'string' ||
     typeof value.variationType !== 'string' ||
     typeof value.reason !== 'string' ||
+    value.reason === 'ERROR' ||
     typeof value.doLog !== 'boolean'
   ) {
     return false
@@ -153,9 +154,9 @@ function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyE
   }
   return (
     typeof value.isPresentInAssignment === 'boolean' &&
-    value.reason === undefined &&
-    value.errorCode === undefined &&
-    value.errorMessage === undefined
+    value.reason == null &&
+    value.errorCode == null &&
+    value.errorMessage == null
   )
 }
 

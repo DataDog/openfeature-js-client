@@ -34,6 +34,32 @@ describe('precomputed dependency wire validation', () => {
     })
   })
 
+  it('accepts nullable error fields as absent on a successful dependency', () => {
+    const root = {
+      ...assignment,
+      dependencyEvaluations: [
+        {
+          flagKey: 'parent',
+          isPresentInAssignment: true,
+          reason: null,
+          errorCode: null,
+          errorMessage: null,
+        },
+      ],
+    }
+    expect(parsePrecomputedConfigurationResponse(response({ root, parent: assignment }))).toEqual({
+      response: response({ root, parent: assignment }),
+    })
+  })
+
+  it('quarantines an ERROR assignment in the success map', () => {
+    const malformed = { ...assignment, reason: 'ERROR' }
+    expect(parsePrecomputedConfigurationResponse(response({ malformed }))).toEqual({
+      response: response({ malformed }),
+      flagErrors: { malformed: 'Invalid precomputed flag configuration' },
+    })
+  })
+
   it('rejects a key present in both result maps', () => {
     expect(parsePrecomputedConfigurationResponse(response({ flag: assignment }, { flag: failure }))).toEqual({
       error: 'A precomputed flag cannot have both an assignment and an evaluation error',
