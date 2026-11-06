@@ -14,7 +14,7 @@ import type {
   PrecomputedErrorFlag,
   PrecomputedFlag,
 } from './configuration'
-import { encryptDependencyFlagKey } from './dependency-key-encryption'
+import { createDependencyFlagKeyEncryptor } from './dependency-key-encryption'
 import { encodePrecomputedFlagKey, type FlagKeyObfuscation, readFlagKeyObfuscation } from './flag-key-obfuscation'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
@@ -391,10 +391,11 @@ function encodeDependencies<T extends PrecomputedFlag | PrecomputedErrorFlag>(
   // the evaluator. Obfuscated packets retain structured error codes only.
   if ('errorMessage' in encoded) delete encoded.errorMessage
   if (result.dependencyEvaluations) {
+    const encryptDependencyFlagKey = createDependencyFlagKeyEncryptor(rootKey, obfuscation)
     encoded.dependencyEvaluations = result.dependencyEvaluations.map((dependency) => {
       const encodedDependency = {
         ...dependency,
-        flagKey: encryptDependencyFlagKey(dependency.flagKey, rootKey, obfuscation),
+        flagKey: encryptDependencyFlagKey(dependency.flagKey),
       }
       if ('errorMessage' in encodedDependency) delete encodedDependency.errorMessage
       return encodedDependency

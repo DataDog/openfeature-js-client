@@ -1,4 +1,9 @@
-import { decryptDependencyFlagKey, encryptDependencyFlagKey } from './dependency-key-encryption'
+import {
+  createDependencyFlagKeyDecryptor,
+  createDependencyFlagKeyEncryptor,
+  decryptDependencyFlagKey,
+  encryptDependencyFlagKey,
+} from './dependency-key-encryption'
 
 const encoding = {
   scheme: 'flag-key-sha256-v1',
@@ -17,6 +22,17 @@ describe('dependency flag-key encryption', () => {
     const encrypted = encryptDependencyFlagKey(flagKey, 'root', encoding)
 
     expect(decryptDependencyFlagKey(encrypted, 'root', encoding)).toEqual({ key: flagKey })
+  })
+
+  it('round-trips a dependency batch with one root-relative crypto context', () => {
+    const encrypt = createDependencyFlagKeyEncryptor('root', encoding)
+    const decrypt = createDependencyFlagKeyDecryptor('root', encoding)
+
+    expect(['first', 'second', 'third'].map(encrypt).map(decrypt)).toEqual([
+      { key: 'first' },
+      { key: 'second' },
+      { key: 'third' },
+    ])
   })
 
   it('rejects the wrong root key and modified ciphertext', () => {

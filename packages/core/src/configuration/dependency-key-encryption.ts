@@ -16,11 +16,21 @@ export function encryptDependencyFlagKey(
   rootFlagKey: string,
   encoding: FlagKeyObfuscation
 ): string {
+  return createDependencyFlagKeyEncryptor(rootFlagKey, encoding)(dependencyFlagKey)
+}
+
+/** Create an encryptor that reuses one root-relative key for a dependency batch. @internal */
+export function createDependencyFlagKeyEncryptor(
+  rootFlagKey: string,
+  encoding: FlagKeyObfuscation
+): (dependencyFlagKey: string) => string {
   const key = deriveKey(rootFlagKey, encoding.salt)
-  const plaintext = encodeUtf8(dependencyFlagKey)
-  const nonce = hmacSha256(key, concatenate(NONCE_DOMAIN, plaintext)).subarray(0, NONCE_LENGTH)
-  const ciphertext = gcm(key, nonce, AAD).encrypt(plaintext)
-  return encodeBase64Url(concatenate(nonce, ciphertext))
+  return (dependencyFlagKey) => {
+    const plaintext = encodeUtf8(dependencyFlagKey)
+    const nonce = hmacSha256(key, concatenate(NONCE_DOMAIN, plaintext)).subarray(0, NONCE_LENGTH)
+    const ciphertext = gcm(key, nonce, AAD).encrypt(plaintext)
+    return encodeBase64Url(concatenate(nonce, ciphertext))
+  }
 }
 
 /** Authenticate and decrypt a prerequisite key using its caller-supplied plaintext root key. @internal */
@@ -29,15 +39,26 @@ export function decryptDependencyFlagKey(
   rootFlagKey: string,
   encoding: FlagKeyObfuscation
 ): { key: string } | { error: string } {
-  try {
-    const envelope = decodeBase64Url(encryptedFlagKey)
-    if (envelope.length < NONCE_LENGTH + TAG_LENGTH) throw new Error('Dependency flag-key ciphertext is too short')
-    const nonce = envelope.subarray(0, NONCE_LENGTH)
-    const ciphertext = envelope.subarray(NONCE_LENGTH)
-    const plaintext = gcm(deriveKey(rootFlagKey, encoding.salt), nonce, AAD).decrypt(ciphertext)
-    return { key: decodeUtf8(plaintext) }
-  } catch {
-    return { error: 'Invalid encrypted dependency flag key' }
+  return createDependencyFlagKeyDecryptor(rootFlagKey, encoding)(encryptedFlagKey)
+}
+
+/** Create a decryptor that reuses one root-relative key for a dependency batch. @internal */
+export function createDependencyFlagKeyDecryptor(
+  rootFlagKey: string,
+  encoding: FlagKeyObfuscation
+): (encryptedFlagKey: string) => { key: string } | { error: string } {
+  const key = deriveKey(rootFlagKey, encoding.salt)
+  return (encryptedFlagKey) => {
+    try {
+      const envelope = decodeBase64Url(encryptedFlagKey)
+      if (envelope.length < NONCE_LENGTH + TAG_LENGTH) throw new Error('Dependency flag-key ciphertext is too short')
+      const nonce = envelope.subarray(0, NONCE_LENGTH)
+      const ciphertext = envelope.subarray(NONCE_LENGTH)
+      const plaintext = gcm(key, nonce, AAD).decrypt(ciphertext)
+      return { key: decodeUtf8(plaintext) }
+    } catch {
+      return { error: 'Invalid encrypted dependency flag key' }
+    }
   }
 }
 
