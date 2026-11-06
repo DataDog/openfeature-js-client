@@ -149,6 +149,63 @@ console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
 
+### Subject authorization for assignment downloads
+
+For environments configured to require subject authorization, obtain a JWT from your backend and include it in
+one complete OpenFeature context update:
+
+```javascript
+await OpenFeature.setContext({
+  targetingKey: 'user-123',
+  country: 'US',
+  dd_assignment_token: jwtFromYourBackend,
+})
+```
+
+Your backend signs a token for the requested subject and environment. Keep the signing private key on your backend.
+Your application obtains a replacement before expiration and submits it with the complete context using the same
+call. Changing only the token triggers a full assignment download. When the response's `createdAt` changes,
+exposure deduplication resets, so the next evaluation of each flag eligible for exposure logging can send another
+exposure. Avoid unnecessary token-only updates while continuing to replace tokens before expiration.
+Omitting `dd_assignment_token`, or setting it to `null` or an empty string, removes the credential;
+the SDK does not restore old tokens when switching users.
+
+The provider sends the token in the reserved `DD-Assignment-Token` header. The context is the only source of this
+header: a `customHeaders` entry with that name, in any letter case, is replaced when a token is supplied and removed
+when the context has no usable token. It excludes the reserved context field from Datadog targeting attributes, telemetry,
+and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
+application hooks can still access the original context. Datadog's tracking hooks remove the token.
+Other providers sharing that context can also read or forward it. Scope token-bearing contexts to a Datadog-only
+OpenFeature domain rather than sharing them with other providers.
+Customer proxies must forward `DD-Assignment-Token`, allow it in CORS preflight responses, and include CORS headers
+on error responses. A blocked preflight prevents the assignment request. If the browser cannot read an authorization
+rejection, the SDK treats it as an ordinary network failure: it cannot log `ASSIGNMENT_AUTHORIZATION_FAILED`, retry
+wrappers can retry the request, and previous assignments can remain available during a context change with the
+default `Disabled` experimentation opt-out mode. This does not clear an authorization rejection already recognized
+by the SDK.
+
+Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
+`STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
+behavior applies. Subsequent download failures keep those defaults until matching assignments are available;
+supplying a replacement token alone does not restore another subject's assignments. A successful download can
+recover without recreating the provider. The diagnostic logger reports `ASSIGNMENT_AUTHORIZATION_FAILED` without
+the token; there is no custom refresh-required event.
+The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
+Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
+the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing
+failures use safe messages without retaining the original error object, stack, cause, or attached request metadata.
+Cancellation and timeout classifications are preserved. Server-provided flag-selection diagnostic text is also
+withheld from console and debug telemetry for these requests. This does not redact logging performed inside a
+customer-provided fetch implementation or other application code.
+
+The SDK forwards the token without parsing JWT claims or checking expiration against the device clock.
+The assignment endpoint validates signatures, expiration, and other claims, including malformed JWTs and missing
+or invalid `exp` values. Missing, `null`, or empty token values send no header. Other non-string values or strings
+containing whitespace or non-ASCII characters also omit the header and log a fixed diagnostic without the value.
+The assignment request still proceeds, and the endpoint decides whether authorization is required. An unusable
+replacement never reuses a previous token or a custom assignment header. The reserved field is excluded from
+targeting, telemetry, and assignment-cache data even when unusable. Token expiration does not itself clear downloaded assignments.
+
 ### Exposures in your own data store
 
 Use `ExposureHook` to receive every completed evaluation with the same deduplication decision the SDK uses when
@@ -317,7 +374,8 @@ Immediate responses acknowledge `experimentation_opt_out=true`. Future responses
 The provider rejects unsupported responses and cached assignments from a different subject, mode, or opt-out timestamp.
 With either enabled mode, `DatadogProvider` withholds assignments fetched for a different context, including for
 subjects without an opt-out timestamp. Until usable assignments arrive, evaluations return the application default
-with `PROVIDER_NOT_READY`, including after a failed refresh. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
+with `PROVIDER_NOT_READY`, including after an ordinary failed refresh. A subject-authorization rejection without
+usable assignments returns `GENERAL` instead. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
 With `Disabled`, the previous assignments remain available during a context change.
 For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
 
@@ -445,6 +503,13 @@ if (context !== undefined) {
   await OpenFeature.setProviderAndWait(provider)
 }
 ```
+
+For protected environments, add a current `dd_assignment_token` to the context passed to
+`setProviderAndWait` above; without one, the initial refresh can be rejected even when cached
+assignments remain usable. `precomputeConfiguration()` excludes this reserved field before
+evaluating rules and creating a snapshot. `getPrecomputedContext(configuration)` returns a copy
+of the stored context; it does not sanitize snapshots from older or custom producers, which
+must also exclude the token.
 
 Rules-based configurations contain targeting rules that the SDK evaluates locally
 against the OpenFeature evaluation context, rather than assignments precomputed for one context.
