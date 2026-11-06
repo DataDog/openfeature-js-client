@@ -593,13 +593,18 @@ describe('dependent flag evaluation', () => {
     ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
     ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
 
-    expect(evaluateProtobuf(ordinary, logger).result).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.error).not.toHaveBeenCalled()
+    expect(evaluateProtobuf(roundTrip(ordinary), logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
+      flagKey: 'root',
+      defaultMaxDependencyDepth: 10,
+    })
+    jest.mocked(logger.error).mockClear()
 
     const dependent = protobufDependentConfiguration(true)
     dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    const { result, dependencies, exposures } = evaluateProtobuf(dependent, logger)
-    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({ value: true, variant: 'on' })
+    const prepared = roundTrip(dependent)
+    const { result, dependencies, exposures } = evaluateProtobuf(prepared, logger)
+    expect(evaluateProtobuf(prepared, logger).result).toMatchObject({ value: true, variant: 'on' })
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: true, variant: 'on' } }])
     expect(exposures).toHaveLength(1)

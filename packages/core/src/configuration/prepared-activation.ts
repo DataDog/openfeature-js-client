@@ -1,5 +1,6 @@
 import { type OptOutInstant, parseOptOutInstant } from '../evaluation/experimentation-opt-out'
 import type { Allocation, Flag, UniversalFlagConfigurationV1 } from '../evaluation/ufc-v1'
+import { prepareEvaluatorOptions } from './prepared-evaluator-options'
 
 export type RandomizationActivation =
   { kind: 'missing' } | { kind: 'valid'; instant: OptOutInstant } | { kind: 'invalid' }
@@ -34,6 +35,7 @@ const jsonActivations = new WeakMap<Flag, PreparedAllocations<Allocation>>()
 export function prepareUniversalFlagConfiguration(
   configuration: UniversalFlagConfigurationV1
 ): UniversalFlagConfigurationV1 {
+  prepareEvaluatorOptions(configuration, false)
   // Parsed UFC uses own data properties. Inspect descriptors so preparation does not
   // execute accessors on malformed or instrumented objects before evaluation.
   const flagsDescriptor = Object.getOwnPropertyDescriptor(configuration, 'flags')
