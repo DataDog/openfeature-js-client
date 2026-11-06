@@ -68,6 +68,8 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider extends DatadogProviderBase {
+  /** Runtime feature detection for applications adopting the response-signing draft. */
+  static readonly responseSigningVersion = 1
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
@@ -100,6 +102,8 @@ export class DatadogProvider extends DatadogProviderBase {
   private readonly requestDiagnostics: ReturnType<typeof createRequestDiagnostics>
 
   private flagsConfiguration: FlagsConfiguration | undefined
+  // Separate from observation/bootstrap/persistence: only this provider can establish verification.
+  private verifiedConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined
@@ -145,14 +149,16 @@ export class DatadogProvider extends DatadogProviderBase {
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
 
-    if (hasIndexedDB()) {
+    if (hasIndexedDB() && this.configuration?.responseSigning?.mode !== 'required') {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
-        canonicalizeFlagSelection(options.flagSelection).selection
+        canonicalizeFlagSelection(options.flagSelection).selection,
+        this.configuration?.responseSigning?.cacheNamespace
       )
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration
+    this.flagsConfiguration =
+      this.configuration?.responseSigning?.mode === 'required' ? undefined : options.initialFlagsConfiguration
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -204,7 +210,9 @@ export class DatadogProvider extends DatadogProviderBase {
 
   private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
-    const evaluationContext = { ...effectiveContext }
+    const evaluationContext: EvaluationContext = this.configuration?.responseSigning
+      ? JSON.parse(JSON.stringify(effectiveContext))
+      : { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)
     this.requestedEvaluationContext = evaluationContext
@@ -250,7 +258,18 @@ export class DatadogProvider extends DatadogProviderBase {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          if (
+            this.configuration?.responseSigning?.mode === 'required' &&
+            !this.configuration.responseSigning.isVerified(config, evaluationContext)
+          ) {
+            this.status = ProviderStatus.ERROR
+            const error = new Error('Verified assignments expired before admission')
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            throw error
+          }
           this.flagsConfiguration = config
+          if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
+            this.verifiedConfiguration = config
           this.evaluationContext = evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           // Report fallback errors only after the update survives cache reconciliation.
@@ -301,25 +320,32 @@ export class DatadogProvider extends DatadogProviderBase {
     }
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+    const signing = this.configuration.responseSigning
     const canUse = (config: FlagsConfiguration | undefined) =>
       configMatchesContext(config, context) &&
+      (signing?.mode !== 'required' || signing.isVerified(config, context)) &&
       (!optedOut || config?.precomputed?.context !== undefined) &&
       acknowledgesExperimentationOptOut(config, optedOut)
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = canUse(this.flagsConfiguration)
-      ? Promise.resolve(this.flagsConfiguration)
-      : this.flagsCache?.get(context, optedOut)
+    const cachedConfigPromise =
+      signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+        ? Promise.resolve(this.verifiedConfiguration)
+        : canUse(this.flagsConfiguration)
+          ? Promise.resolve(this.flagsConfiguration)
+          : this.flagsCache?.get(context, optedOut)
 
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       signal.throwIfAborted()
+      if (signing?.mode === 'required' && !signing.isVerified(config, context))
+        throw new Error('Verified assignments unavailable')
       if (config.precomputed) {
         this.lifecycleTelemetry?.configurationReceived()
       } else if (config.precomputedError) {
         this.lifecycleTelemetry?.providerError()
       }
-      this.flagsCache?.set(config, context, optedOut)
+      this.flagsCache?.set(config, context, optedOut, signal)
       return { config, fromCache: false }
     } catch (err) {
       // Try to recover with current/cached config
@@ -364,7 +390,10 @@ export class DatadogProvider extends DatadogProviderBase {
     const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
     const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
     const result = evaluatePrecomputedConfiguration(
-      this.flagsConfiguration,
+      this.configuration?.responseSigning?.mode === 'required' &&
+        !this.configuration.responseSigning.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
+        ? undefined
+        : this.flagsConfiguration,
       type,
       flagKey,
       defaultValue,

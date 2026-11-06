@@ -86,6 +86,79 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Response signing
+
+Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
+Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
+Custom proxies must forward this header and permit it in CORS preflights.
+
+Response signing is opt-in and defaults to `off`. Use `observe` to report verification outcomes while accepting ordinary valid
+assignments, or `required` to admit only verified responses. Existing authentication,
+HTTP errors, JSON validation, and experimentation opt-out checks still apply.
+
+```typescript
+const provider = new DatadogProvider({
+  clientToken: '<client-token>',
+  env: 'production',
+  responseSigning: {
+    mode: 'observe',
+    trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
+    onVerification(outcome) {
+      // Fixed diagnostic codes only; each distinct outcome is emitted once per provider.
+      console.info(outcome)
+    },
+  },
+})
+```
+
+`DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
+`trustedRootCertificates` accepts at most four standard padded base64 DER public
+root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
+approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
+anchors from an assignment response. Required mode rejects missing anchor
+configuration. Observe mode reports `missing-anchor` and accepts an otherwise valid
+response. It also accepts unsigned or invalidly signed responses without calling
+them verified. Diagnostics contain no token, context, response, or certificate data.
+
+For Datadog staging, select `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
+the bundled **public staging root** automatically. Signing still defaults to off.
+The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
+A `flaggingProxy` override takes precedence over `site` for both requests and trust;
+unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
+(including when empty), for custom proxies and tests. Additional Datadog aliases
+and production site roots must be provisioned before they enter the catalog.
+
+A response carries its leaf and intermediate certificates, so rotating either under
+the unchanged trusted root requires no SDK update or prior rotation history. The
+SDK verifies the chain, exact request and response bytes, nonce, effective client
+token and semantic headers, and the original proof lifetime (at most five minutes).
+Signed requests require HTTPS and reject redirects. A custom fetch implementation
+must preserve the generated URL, body and headers and the exact returned bytes.
+Proxies must support the signing request headers and expose the proof headers in
+CORS. The `response-signing-v1` capability and signature version `1` are added only
+when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
+and draft v3 formats are not supported compatibility targets. This protocol number
+is independent of X.509 v3 certificate encoding.
+
+Required mode uses only verified memory for the same provider and full evaluation
+context. It does not read bootstrap or persistent configurations, never retries
+unsigned, and returns defaults after proof expiry or restart until a fresh verified
+response arrives. This includes expiry while offline, without another refresh.
+Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
+its persistent namespace binds the complete token, endpoint, environment, app ID,
+headers, mode, selection and nested context. Upgrading into observe causes a
+one-time cache cold start. An unsigned observation cannot overwrite the separately
+retained verified memory fallback. If WebCrypto is unavailable, observe retains
+ordinary network and in-memory availability but cannot use its scoped persistent
+cache. Required mode fails locally.
+
+Off mode preserves ordinary transport and caching and performs no signing work.
+Signing covers complete buffered JSON responses in the same assignment request;
+it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
+or change the existing unsigned streaming protocol.
+
 ### Flag selection
 
 Use `flagSelection` to load only the flags that match a set of tags or key patterns:
