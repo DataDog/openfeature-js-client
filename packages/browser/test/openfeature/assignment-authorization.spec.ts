@@ -307,21 +307,33 @@ describe('assignment authorization', () => {
     expect(provider.status).toBe(ProviderStatus.ERROR)
   })
 
-  it('keeps downloaded assignments after expiry and skips clearly expired refreshes', async () => {
+  it('forwards expired tokens and retains matching assignments after server rejection', async () => {
     await provider.initialize({ ...context, dd_assignment_token: token() })
-    await provider.onContextChange({}, { ...context, dd_assignment_token: token(Date.now() / 1000 - 120) })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    fetchMock.mockImplementation(rejection)
+    const expiredToken = token(Date.now() / 1000 - 120)
+    await provider.onContextChange({}, { ...context, dd_assignment_token: expiredToken })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get('DD-Assignment-Token')).toBe(expiredToken)
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(provider.resolveBooleanEvaluation('boolean-flag', false, context, logger).value).toBe(true)
   })
 
-  it('skips expired downloads without a cache and reports a recoverable GENERAL error', async () => {
-    await expect(provider.initialize({ ...context, dd_assignment_token: token(1) })).rejects.toMatchObject({
+  it('reports a recoverable GENERAL error when the server rejects an expired token without a cache', async () => {
+    const expiredToken = token(1)
+    fetchMock.mockImplementation(rejection)
+    await expect(provider.initialize({ ...context, dd_assignment_token: expiredToken })).rejects.toMatchObject({
       code: ErrorCode.GENERAL,
       message: ASSIGNMENT_AUTHORIZATION_FAILED,
     })
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(expiredToken)
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, context, logger)).toMatchObject({
+      value: false,
+      errorCode: ErrorCode.GENERAL,
+    })
+    fetchMock.mockImplementation(success)
     await provider.onContextChange({}, { ...context, dd_assignment_token: token() })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(provider.status).toBe(ProviderStatus.READY)
   })
 
@@ -472,25 +484,30 @@ describe('assignment authorization', () => {
     }
   )
 
-  it('allows the expiry clock-skew window and suppresses expired JWTs at its boundary', async () => {
-    const now = Date.now()
-    jest.spyOn(Date, 'now').mockReturnValue(now)
-    await provider.initialize({ ...context, dd_assignment_token: token(now / 1000 - 59) })
-    await provider.onContextChange({}, { ...context, dd_assignment_token: token(now / 1000 - 60) })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(provider.status).toBe(ProviderStatus.STALE)
-  })
+  it.each([-2, 2])(
+    'does not block an assignment request when the device clock is offset by %s hours',
+    async (hours) => {
+      const jwt = token()
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + hours * 60 * 60 * 1000)
+      await provider.initialize({ ...context, dd_assignment_token: jwt })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(new Headers(fetchMock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(jwt)
+      expect(provider.status).toBe(ProviderStatus.READY)
+      expect(display.warn).not.toHaveBeenCalled()
+    }
+  )
 
-  it('decodes base64url JWT payloads when skipping clearly expired tokens', async () => {
+  it('forwards expired JWTs unchanged when the assignment endpoint accepts them', async () => {
     const payload = btoa(JSON.stringify({ sub: 'x???', exp: Math.floor(Date.now() / 1000) - 120 }))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '')
-    expect(payload).toMatch(/[-_]/)
-    await expect(
-      provider.initialize({ ...context, dd_assignment_token: `eyJhbGciOiJQUzI1NiJ9.${payload}.signature` })
-    ).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const jwt = `eyJhbGciOiJQUzI1NiJ9.${payload}.signature`
+    await provider.initialize({ ...context, dd_assignment_token: jwt })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(jwt)
+    expect(provider.status).toBe(ProviderStatus.READY)
+    expect(display.warn).not.toHaveBeenCalled()
   })
 
   it.each([401, 500])(

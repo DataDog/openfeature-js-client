@@ -4,9 +4,6 @@ import { GeneralError } from '@openfeature/web-sdk'
 export const ASSIGNMENT_AUTHORIZATION_FAILED = 'ASSIGNMENT_AUTHORIZATION_FAILED'
 export const ASSIGNMENT_TOKEN_HEADER = 'DD-Assignment-Token'
 
-// This is only a client-side optimization. Fastly enforces the actual expiry.
-const EXPIRATION_CLOCK_SKEW_SECONDS = 60
-
 export function extractAssignmentToken(context: EvaluationContext): {
   context: EvaluationContext
   assignmentToken: unknown
@@ -27,22 +24,7 @@ export function validateAssignmentToken(value: unknown): string | undefined {
   if (typeof value !== 'string' || !/^[\x21-\x7e]+$/.test(value)) {
     throw assignmentAuthorizationError()
   }
-  let expiresAt: unknown
-  try {
-    const parts = value.split('.')
-    if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-      expiresAt = payload?.exp
-    }
-  } catch {
-    // Malformed JWT strings and missing/invalid exp remain Fastly's decision.
-  }
-  if (
-    typeof expiresAt === 'number' &&
-    Number.isFinite(expiresAt) &&
-    expiresAt <= Date.now() / 1000 - EXPIRATION_CLOCK_SKEW_SECONDS
-  ) {
-    throw assignmentAuthorizationError()
-  }
+  // Treat JWT contents as opaque: the assignment endpoint validates claims,
+  // including expiration, without relying on the customer's device clock.
   return value
 }

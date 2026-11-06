@@ -197,10 +197,10 @@ Cancellation and timeout classifications are preserved. Server-provided flag-sel
 withheld from console and debug telemetry for these requests. This does not redact logging performed inside a
 customer-provided fetch implementation or other application code.
 
-The SDK skips downloads when a numeric JWT `exp` is at least 60 seconds in the past, allowing for client clock skew.
-This check does not verify the signature. The assignment endpoint remains authoritative, including for recently expired tokens,
-malformed JWT strings, and missing or invalid `exp` claims. Non-string, empty, whitespace-containing, or non-ASCII
-token values fail locally. Token expiration does not itself clear downloaded assignments.
+The SDK forwards the token without parsing JWT claims or checking expiration against the device clock.
+The assignment endpoint validates signatures, expiration, and other claims, including malformed JWTs and missing
+or invalid `exp` values. Non-string, empty, whitespace-containing, or non-ASCII token values still fail locally
+before constructing the request header. Token expiration does not itself clear downloaded assignments.
 
 ### Exposures in your own data store
 

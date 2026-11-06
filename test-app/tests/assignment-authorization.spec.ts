@@ -317,17 +317,37 @@ test('malformed token-bearing responses cannot echo credentials into errors or t
   expect(diagnostics).not.toContain('dd_assignment_token')
 })
 
-test('expired token is rejected locally without invalidating matching assignments', async ({ page, origin }) => {
+test('expired token reaches the endpoint and server rejection preserves matching assignments', async ({
+  page,
+  origin,
+}) => {
   await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [origin.url, context] as const)
+  const expiredToken = token(-120)
+  origin.mode = 'authorization'
   expect(
     (
       await page.evaluate((ctx) => window.authorizationTest.update(ctx), {
         ...context,
-        dd_assignment_token: token(-120),
+        dd_assignment_token: expiredToken,
       })
     ).status
   ).toBe('STALE')
+  expect(origin.posts).toHaveLength(2)
+  expect(origin.posts[1].headers['dd-assignment-token']).toBe(expiredToken)
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
+  await page.evaluate(() => window.authorizationTest.close())
+})
+
+test('a device clock two hours ahead does not block a token-bearing assignment request', async ({ page, origin }) => {
+  const jwt = token()
+  await page.clock.setFixedTime(new Date(Date.now() + 2 * 60 * 60 * 1000))
+  const state = await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [
+    origin.url,
+    { ...context, dd_assignment_token: jwt },
+  ] as const)
+  expect(state.status).toBe('READY')
   expect(origin.posts).toHaveLength(1)
+  expect(origin.posts[0].headers['dd-assignment-token']).toBe(jwt)
   expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
   await page.evaluate(() => window.authorizationTest.close())
 })
