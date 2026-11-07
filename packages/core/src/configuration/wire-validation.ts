@@ -1,6 +1,11 @@
 import type { EvaluationContext } from '@openfeature/core'
-import type { PrecomputedConfigurationResponse, PrecomputedFlag } from './configuration'
-import { isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
+import type {
+  PrecomputedConfigurationResponse,
+  PrecomputedDependencyEvaluation,
+  PrecomputedErrorFlag,
+  PrecomputedFlag,
+} from './configuration'
+import { type FlagKeyObfuscation, isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
 
 type WireEntry = {
   response: string
@@ -34,21 +39,37 @@ export function parsePrecomputedConfigurationResponse(
   if (!isRecord(value.data.attributes)) {
     return { error: 'Precomputed configuration response is missing attributes' }
   }
-  const { createdAt, flags, obfuscated, obfuscation } = value.data.attributes
+  const { createdAt, flags, flagEvaluationErrors, obfuscated, obfuscation } = value.data.attributes
   const encoding = readFlagKeyObfuscation(obfuscated, obfuscation)
   if ('error' in encoding) return encoding
   if (typeof createdAt !== 'string' && (typeof createdAt !== 'number' || !Number.isFinite(createdAt))) {
     return { error: 'Precomputed configuration createdAt is invalid' }
   }
   if (!isRecord(flags)) return { error: 'Precomputed configuration flags must be an object' }
+  if (flagEvaluationErrors !== undefined && !isRecord(flagEvaluationErrors)) {
+    return { error: 'Precomputed configuration flagEvaluationErrors must be an object' }
+  }
+  for (const key of Object.keys(flagEvaluationErrors ?? {})) {
+    if (Object.getOwnPropertyDescriptor(flags, key) !== undefined) {
+      return { error: 'A precomputed flag cannot have both an assignment and an evaluation error' }
+    }
+  }
 
   const flagErrors: Array<[string, string]> = []
   for (const [key, flag] of Object.entries(flags)) {
     if (encoding.encoding && !isLowercaseHex(key, 32)) {
       return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
     }
-    if (!isPrecomputedFlag(flag)) {
+    if (!isPrecomputedFlag(flag, encoding.encoding)) {
       flagErrors.push([key, 'Invalid precomputed flag configuration'])
+    }
+  }
+  for (const [key, error] of Object.entries(flagEvaluationErrors ?? {})) {
+    if (encoding.encoding && !isLowercaseHex(key, 32)) {
+      return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
+    }
+    if (!isPrecomputedErrorFlag(error, encoding.encoding)) {
+      flagErrors.push([key, 'Invalid precomputed flag evaluation error'])
     }
   }
 
@@ -66,13 +87,15 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
   )
 }
 
-function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
+function isPrecomputedFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedFlag {
   if (
     !isRecord(value) ||
+    !isDependencyEvaluations(value.dependencyEvaluations, encoding) ||
     typeof value.allocationKey !== 'string' ||
     typeof value.variationKey !== 'string' ||
     typeof value.variationType !== 'string' ||
     typeof value.reason !== 'string' ||
+    value.reason === 'ERROR' ||
     typeof value.doLog !== 'boolean'
   ) {
     return false
@@ -87,6 +110,54 @@ function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
     return isJsonValue(value.variationValue)
   }
   return false
+}
+
+function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedErrorFlag {
+  return (
+    isRecord(value) &&
+    value.reason === 'ERROR' &&
+    typeof value.errorCode === 'string' &&
+    (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+    isDependencyEvaluations(value.dependencyEvaluations, encoding)
+  )
+}
+
+function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
+  if (value === undefined) return true
+  if (!Array.isArray(value)) return false
+  const flagKeys = new Set<string>()
+  for (const evaluation of value) {
+    if (
+      !isDependencyEvaluation(evaluation) ||
+      (encoding !== undefined && !isEncryptedDependencyKey(evaluation.flagKey)) ||
+      flagKeys.has(evaluation.flagKey)
+    ) {
+      return false
+    }
+    flagKeys.add(evaluation.flagKey)
+  }
+  return true
+}
+
+function isEncryptedDependencyKey(value: string): boolean {
+  return value.length >= 38 && value.length % 4 !== 1 && /^[A-Za-z0-9_-]+$/.test(value)
+}
+
+function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyEvaluation {
+  if (!isRecord(value) || typeof value.flagKey !== 'string') return false
+  if (value.reason === 'ERROR') {
+    return (
+      typeof value.errorCode === 'string' &&
+      (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+      value.isPresentInAssignment === undefined
+    )
+  }
+  return (
+    typeof value.isPresentInAssignment === 'boolean' &&
+    value.reason == null &&
+    value.errorCode == null &&
+    value.errorMessage == null
+  )
 }
 
 function isJsonValue(value: unknown): boolean {
