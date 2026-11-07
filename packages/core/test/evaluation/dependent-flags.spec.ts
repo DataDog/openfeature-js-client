@@ -24,10 +24,14 @@ import { timeStampNow } from '../../src/time'
 
 describe('dependent flag evaluation', () => {
   let logger: Logger
+  let consoleError: jest.SpyInstance
 
   beforeEach(() => {
     logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() }
+    consoleError = jest.spyOn(console, 'error').mockImplementation()
   })
+
+  afterEach(() => jest.restoreAllMocks())
 
   it('evaluates varying depths with one timestamp', () => {
     const config = configuration({
@@ -594,11 +598,10 @@ describe('dependent flag evaluation', () => {
     ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
 
     expect(evaluateProtobuf(roundTrip(ordinary), logger).result).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
-    jest.mocked(logger.error).mockClear()
+    consoleError.mockClear()
 
     const dependent = protobufDependentConfiguration(true)
     dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
@@ -608,11 +611,10 @@ describe('dependent flag evaluation', () => {
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(dependencies).toMatchObject([{ flagKey: 'prerequisite', details: { value: true, variant: 'on' } }])
     expect(exposures).toHaveLength(1)
-    expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
-    expect(logger.error).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledTimes(1)
   })
 
   it('uses the default depth for invalid protobuf options before detecting self-reference', () => {
@@ -625,8 +627,7 @@ describe('dependent flag evaluation', () => {
     expect(result).toMatchObject({ reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toEqual([])
     expect(exposures).toEqual([])
-    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
   })
@@ -862,7 +863,7 @@ describe('dependent flag evaluation', () => {
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.error).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledTimes(1)
   })
 
   it.each([0, 255])('accepts JSON maximum depth %p', (maximumDepth) => {
@@ -904,8 +905,7 @@ describe('dependent flag evaluation', () => {
         { flagKey: 'prerequisite', details: { value: true, variant: 'on' } },
       ])
       expect(trace.dependencyExposures).toHaveLength(1)
-      expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-        flagKey: 'root',
+      expect(consoleError).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
         defaultMaxDependencyDepth: 10,
       })
     }
@@ -922,8 +922,7 @@ describe('dependent flag evaluation', () => {
     config.evaluatorParams = params as never
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
   })
@@ -936,8 +935,7 @@ describe('dependent flag evaluation', () => {
     config.evaluatorParams = { maxDependencyDepth: BigInt(0) } as never
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.error).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenLastCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
   })
@@ -962,8 +960,7 @@ describe('dependent flag evaluation', () => {
     expect(trace.details).toMatchObject({ reason: 'ERROR', errorCode: 'GENERAL' })
     expect(trace.dependencyEvaluations).toEqual([])
     expect(trace.dependencyExposures).toEqual([])
-    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'root',
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
   })

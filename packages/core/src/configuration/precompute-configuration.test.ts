@@ -185,11 +185,12 @@ describe('precomputeConfiguration', () => {
     expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
-  it('leaves prepared evaluator-option diagnostics for an ordinary evaluation consumer', () => {
+  it('persists normalized evaluator options before precomputation and serialization', () => {
     const input = dependentRules()
     input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
       evaluatorParams: { maxDependencyDepth: 256 },
     }).evaluatorParams
+    const consoleError = jest.spyOn(console, 'error').mockImplementation()
     const configuration = roundTrip(input)
     const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 
@@ -197,11 +198,13 @@ describe('precomputeConfiguration', () => {
     evaluate(configuration, 'boolean', 'child', false, context, logger)
     evaluate(configuration, 'boolean', 'child', false, context, logger)
 
-    expect(logger.error).toHaveBeenCalledTimes(1)
-    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'child',
+    expect(configuration.rules?.response.evaluatorParams?.maxDependencyDepth).toBe(BigInt(10))
+    expect(roundTrip(configuration).rules?.response.evaluatorParams?.maxDependencyDepth).toBe(BigInt(10))
+    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
+    expect(logger.error).not.toHaveBeenCalled()
   })
 
   it('hashes both top-level maps and encrypts dependency keys with the shared fixed vector', () => {

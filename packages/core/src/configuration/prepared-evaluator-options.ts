@@ -1,53 +1,29 @@
-import type { Logger } from '@openfeature/core'
-
 export const DEFAULT_MAX_DEPENDENCY_DEPTH = 10
-
-const PREPARED_EVALUATOR_OPTIONS = Symbol('datadog.prepared-evaluator-options')
 
 export type PreparedEvaluatorOptions = {
   readonly maxDependencyDepth: number
-  readonly diagnostic?: 'invalid_evaluator_params'
-  diagnosticReported: boolean
 }
 
-type ConfigurationWithPreparedEvaluatorOptions = object & {
-  [PREPARED_EVALUATOR_OPTIONS]?: PreparedEvaluatorOptions
-}
-
-/** Resolve evaluator options once while preparing a received UFC snapshot. */
+/**
+ * Normalize evaluator options when a UFC snapshot is received. The canonical value is
+ * retained on the configuration itself so evaluation and later serialization consume
+ * the same well-formed metadata.
+ */
 export function prepareEvaluatorOptions(configuration: object, protobuf: boolean): PreparedEvaluatorOptions {
-  const target = configuration as ConfigurationWithPreparedEvaluatorOptions
-  try {
-    const prepared = target[PREPARED_EVALUATOR_OPTIONS]
-    if (prepared) return prepared
-  } catch {
-    // Resolve malformed or instrumented objects without trusting accessors.
+  const { maxDependencyDepth, invalid } = resolveEvaluatorOptions(configuration, protobuf)
+  if (invalid) {
+    persistEvaluatorOptions(configuration, protobuf, maxDependencyDepth)
+    console.error('invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
+    })
   }
-
-  const prepared = resolveEvaluatorOptions(configuration, protobuf)
-  try {
-    Object.defineProperty(target, PREPARED_EVALUATOR_OPTIONS, { value: prepared })
-  } catch {
-    // Non-extensible low-level inputs can still be evaluated with the resolved value.
-  }
-  return prepared
+  return { maxDependencyDepth }
 }
 
-/** Emit a prepared configuration diagnostic once for the ordinary evaluator consumer. */
-export function reportEvaluatorOptionsDiagnostic(
-  options: PreparedEvaluatorOptions,
-  logger: Logger,
-  rootFlagKey: string
-): void {
-  if (options.diagnostic !== 'invalid_evaluator_params' || options.diagnosticReported) return
-  options.diagnosticReported = true
-  logger.error('invalid evaluatorParams; using default maxDependencyDepth', {
-    flagKey: rootFlagKey,
-    defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
-  })
-}
-
-function resolveEvaluatorOptions(configuration: object, protobuf: boolean): PreparedEvaluatorOptions {
+function resolveEvaluatorOptions(
+  configuration: object,
+  protobuf: boolean
+): PreparedEvaluatorOptions & { invalid: boolean } {
   let evaluatorParams: unknown
   try {
     evaluatorParams = (configuration as { evaluatorParams?: unknown }).evaluatorParams
@@ -72,14 +48,32 @@ function resolveEvaluatorOptions(configuration: object, protobuf: boolean): Prep
     : invalidEvaluatorOptions()
 }
 
-function validEvaluatorOptions(maxDependencyDepth: number): PreparedEvaluatorOptions {
-  return { maxDependencyDepth, diagnosticReported: false }
+function persistEvaluatorOptions(configuration: object, protobuf: boolean, maxDependencyDepth: number): void {
+  const target = configuration as { evaluatorParams?: unknown }
+  try {
+    const existing = target.evaluatorParams
+    if (existing !== null && typeof existing === 'object' && !Array.isArray(existing)) {
+      ;(existing as { maxDependencyDepth?: unknown }).maxDependencyDepth = protobuf
+        ? BigInt(maxDependencyDepth)
+        : maxDependencyDepth
+      return
+    }
+    target.evaluatorParams = protobuf
+      ? {
+          $typeName: 'datadog.ffe.flagging.ufc.v1.EvaluatorParams',
+          maxDependencyDepth: BigInt(maxDependencyDepth),
+        }
+      : { maxDependencyDepth }
+  } catch {
+    // Malformed, accessor-backed, or frozen low-level inputs still evaluate with the
+    // resolved default. Normal decoded UFC snapshots are mutable and persist it.
+  }
 }
 
-function invalidEvaluatorOptions(): PreparedEvaluatorOptions {
-  return {
-    maxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
-    diagnostic: 'invalid_evaluator_params',
-    diagnosticReported: false,
-  }
+function validEvaluatorOptions(maxDependencyDepth: number): PreparedEvaluatorOptions & { invalid: false } {
+  return { maxDependencyDepth, invalid: false }
+}
+
+function invalidEvaluatorOptions(): PreparedEvaluatorOptions & { invalid: true } {
+  return { maxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH, invalid: true }
 }

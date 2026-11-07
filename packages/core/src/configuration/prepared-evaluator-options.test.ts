@@ -1,42 +1,61 @@
-import { prepareEvaluatorOptions, reportEvaluatorOptionsDiagnostic } from './prepared-evaluator-options'
+import { prepareEvaluatorOptions } from './prepared-evaluator-options'
 
 describe('prepared evaluator options', () => {
-  it('resolves and retains JSON evaluator options on the configuration snapshot', () => {
+  let consoleError: jest.SpyInstance
+
+  beforeEach(() => {
+    consoleError = jest.spyOn(console, 'error').mockImplementation()
+  })
+
+  afterEach(() => jest.restoreAllMocks())
+
+  it('retains valid JSON evaluator options on the configuration snapshot', () => {
     const configuration = { evaluatorParams: { maxDependencyDepth: 0 } }
 
-    const prepared = prepareEvaluatorOptions(configuration, false)
-    configuration.evaluatorParams.maxDependencyDepth = 255
-
-    expect(prepared).toMatchObject({ maxDependencyDepth: 0 })
-    expect(prepareEvaluatorOptions(configuration, false)).toBe(prepared)
+    expect(prepareEvaluatorOptions(configuration, false)).toEqual({ maxDependencyDepth: 0 })
+    expect(configuration.evaluatorParams).toEqual({ maxDependencyDepth: 0 })
+    expect(consoleError).not.toHaveBeenCalled()
   })
 
-  it('normalizes protobuf bigint depth while preparing the configuration', () => {
-    expect(prepareEvaluatorOptions({ evaluatorParams: { maxDependencyDepth: BigInt(255) } }, true)).toMatchObject({
-      maxDependencyDepth: 255,
-    })
+  it('uses the default without materializing optional absent evaluator options', () => {
+    const json: { evaluatorParams?: { maxDependencyDepth: number } } = {}
+    const protobuf: { evaluatorParams?: { maxDependencyDepth: bigint } } = {}
+
+    expect(prepareEvaluatorOptions(json, false)).toEqual({ maxDependencyDepth: 10 })
+    expect(json.evaluatorParams).toBeUndefined()
+    expect(prepareEvaluatorOptions(protobuf, true)).toEqual({ maxDependencyDepth: 10 })
+    expect(protobuf.evaluatorParams).toBeUndefined()
+    expect(consoleError).not.toHaveBeenCalled()
   })
 
-  it.each([256, -1, 1.5, '10', null, []])('retains a diagnostic for invalid evaluatorParams %p', (value) => {
+  it.each([256, -1, 1.5, '10', null, []])('replaces invalid JSON evaluatorParams %p with the default', (value) => {
     const evaluatorParams = value === null || Array.isArray(value) ? value : { maxDependencyDepth: value }
+    const configuration = { evaluatorParams }
 
-    expect(prepareEvaluatorOptions({ evaluatorParams }, false)).toMatchObject({
-      maxDependencyDepth: 10,
-      diagnostic: 'invalid_evaluator_params',
-    })
-  })
-
-  it('lets the ordinary evaluator consumer report a prepared diagnostic once', () => {
-    const options = prepareEvaluatorOptions({ evaluatorParams: { maxDependencyDepth: 256 } }, false)
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-
-    reportEvaluatorOptionsDiagnostic(options, logger, 'first')
-    reportEvaluatorOptionsDiagnostic(options, logger, 'second')
-
-    expect(logger.error).toHaveBeenCalledTimes(1)
-    expect(logger.error).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      flagKey: 'first',
+    expect(prepareEvaluatorOptions(configuration, false)).toEqual({ maxDependencyDepth: 10 })
+    expect(configuration.evaluatorParams).toEqual({ maxDependencyDepth: 10 })
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
       defaultMaxDependencyDepth: 10,
     })
+  })
+
+  it('logs an invalid value once because the persisted replacement is canonical', () => {
+    const configuration = { evaluatorParams: { maxDependencyDepth: 256 } }
+
+    prepareEvaluatorOptions(configuration, false)
+    prepareEvaluatorOptions(configuration, false)
+
+    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
+    })
+  })
+
+  it('preserves other evaluator options while replacing an invalid depth', () => {
+    const configuration = { evaluatorParams: { maxDependencyDepth: 256, futureOption: 'retained' } }
+
+    prepareEvaluatorOptions(configuration, false)
+
+    expect(configuration.evaluatorParams).toEqual({ maxDependencyDepth: 10, futureOption: 'retained' })
   })
 })

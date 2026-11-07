@@ -15,7 +15,7 @@ import {
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
 import { prepareUniversalFlagConfiguration } from '../configuration/prepared-activation'
-import { prepareEvaluatorOptions, reportEvaluatorOptionsDiagnostic } from '../configuration/prepared-evaluator-options'
+import { prepareEvaluatorOptions } from '../configuration/prepared-evaluator-options'
 import { type PreparedRulesResponse, prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
@@ -286,7 +286,6 @@ function evaluateRules<T extends FlagValueType>(
 
   if (isProtobufConfiguration(config)) {
     const prepared = prepareRulesResponse(config)
-    reportEvaluatorOptionsDiagnostic(prepareEvaluatorOptions(prepared, true), logger, flagKey)
     const dependencies = createProtobufDependencyResolver(
       prepared,
       flagKey,
@@ -329,7 +328,6 @@ function evaluateRules<T extends FlagValueType>(
 
   prepareUniversalFlagConfiguration(config)
   const evaluatorOptions = prepareEvaluatorOptions(config, false)
-  reportEvaluatorOptionsDiagnostic(evaluatorOptions, logger, flagKey)
 
   const { targetingKey: subjectKey, ...remainingContext } = context
 
