@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import {
+  type ClientCompatibility,
   createExposureEvent,
   evaluate,
-  type PrecomputedClientCompatibility,
   configurationFromString as readPrecomputed,
 } from '@datadog/flagging-core'
 import wire from '../../browser/test/data/rules-v1-wire.json'
@@ -133,7 +133,7 @@ describe('target-client compatibility for precomputation', () => {
   ])('rejects malformed compatibility %j with a typed error', (clientCompatibility) => {
     const run = () =>
       precomputeConfiguration(rules(), context, {
-        clientCompatibility: clientCompatibility as unknown as PrecomputedClientCompatibility,
+        clientCompatibility: clientCompatibility as unknown as ClientCompatibility,
       })
     expect(run).toThrow(ConfigurationPrecomputeError)
     expect(run).toThrow(expect.objectContaining({ code: 'invalid_options' }))
@@ -161,7 +161,7 @@ describe('target-client compatibility for precomputation', () => {
     ]) {
       expect(() =>
         precomputeConfiguration(rules(), context, {
-          clientCompatibility: clientCompatibility as PrecomputedClientCompatibility,
+          clientCompatibility: clientCompatibility as ClientCompatibility,
         })
       ).toThrow(new ConfigurationPrecomputeError('invalid_options'))
     }

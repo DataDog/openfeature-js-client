@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import {
+  type ClientCompatibility,
   encodePrecomputedFlagKey,
   type FlagKeyObfuscation,
   type FlagsConfiguration,
-  type PrecomputedClientCompatibility,
 } from '@datadog/flagging-core'
 import {
   ConfigurationPrecomputeError,
@@ -15,7 +15,7 @@ import { readPrecomputedCapabilities } from './client-compatibility'
 
 export type PrecomputeConfigurationOptions = CorePrecomputeConfigurationOptions & {
   /** Target client's response support. Omitted or empty capabilities preserve plaintext keys. */
-  clientCompatibility?: PrecomputedClientCompatibility
+  clientCompatibility?: ClientCompatibility
 }
 
 /** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */

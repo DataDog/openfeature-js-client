@@ -6,10 +6,10 @@ const {
   precomputeConfiguration,
 } = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
-const { getPrecomputedClientCompatibility } = require('../packages/browser/cjs')
+const { getClientCompatibility } = require('../packages/browser/cjs')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 
-for (const clientCompatibility of [undefined, getPrecomputedClientCompatibility()]) {
+for (const clientCompatibility of [undefined, getClientCompatibility()]) {
   test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientCompatibility}) without requests or tracking`, async () => {
     const originalFetch = globalThis.fetch
     let calls = 0
