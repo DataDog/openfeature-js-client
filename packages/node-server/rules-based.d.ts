@@ -1074,6 +1074,35 @@ export declare function configurationFromString(wire: FlagsConfigurationWire): F
  * `configurationFromString`.
  */
 export declare function configurationToString(configuration: FlagsConfiguration$1): FlagsConfigurationWire;
+export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "decode" | "transport" | "cancelled" | "timeout";
+/** A configuration-loading failure, not an OpenFeature evaluation error. */
+export declare class ConfigurationFetchError extends Error {
+	readonly code: ConfigurationFetchErrorCode;
+	readonly status?: number | undefined;
+	constructor(code: ConfigurationFetchErrorCode, message: string, status?: number | undefined);
+}
+interface ConfigurationTransportOptions {
+	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
+	timeoutMs?: number;
+	signal?: AbortSignal;
+	/** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
+	fetch?: typeof globalThis.fetch;
+}
+export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions {
+	/** Required for now. Only client-distributed flags are supported by this endpoint. */
+	distributionChannel: "client";
+	clientToken: string;
+	apiKey?: never;
+	env: string;
+	/** Datadog site. Defaults to datadoghq.com. */
+	site?: string;
+	applicationId?: string;
+	context: EvaluationContext;
+	/** Target client's response support, not the fetching Node SDK's capabilities. */
+	clientCompatibility?: PrecomputedClientCompatibility;
+}
+/** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
+export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
 interface ConfigurationFetchOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
@@ -1102,13 +1131,6 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
 	clientToken: string;
 	apiKey?: never;
 });
-export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "decode" | "transport" | "cancelled" | "timeout";
-/** A configuration-loading failure, not an OpenFeature evaluation error. */
-export declare class ConfigurationFetchError extends Error {
-	readonly code: ConfigurationFetchErrorCode;
-	readonly status?: number | undefined;
-	constructor(code: ConfigurationFetchErrorCode, message: string, status?: number | undefined);
-}
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.

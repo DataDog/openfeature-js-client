@@ -8,5 +8,9 @@ export {
   type FlagsConfigurationWire,
   type PrecomputeEvaluationError,
 } from '@datadog/flagging-core/rules-based'
+export {
+  fetchPrecomputedConfiguration,
+  type PrecomputedConfigurationFetchOptions,
+} from './configuration/fetch-precomputed-configuration'
 export * from './configuration/fetch-rules-configuration'
 export { type PrecomputeConfigurationOptions, precomputeConfiguration } from './configuration/precompute-configuration'
