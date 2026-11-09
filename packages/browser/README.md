@@ -111,8 +111,9 @@ const provider = new DatadogProvider({
 `trustedRootCertificates` accepts at most four standard padded base64 DER public
 root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
 approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
-anchors from an assignment response. Required mode rejects missing anchor
-configuration. Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
+anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
+if no trusted root is available, before any network request.
+Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
 them verified. Verification error messages contain no token, context, response, or certificate data.
 
 Required-mode verification failures use OpenFeature error code `GENERAL`.
