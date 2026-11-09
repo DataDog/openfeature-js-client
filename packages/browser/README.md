@@ -157,7 +157,9 @@ already in progress keeps its reconciliation status until that update completes.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
 headers, mode, selection and nested context. Upgrading into observe causes a
-one-time cache cold start. An unsigned observation cannot overwrite the separately
+one-time cache cold start. Context snapshots preserve Date values, including nested
+dates. Signing context keys distinguish dates from strings and objects. The updated
+key encoding also causes a one-time cold start for existing observe-mode caches. An unsigned observation cannot overwrite the separately
 retained verified memory fallback. If WebCrypto is unavailable, observe retains
 ordinary network and in-memory availability but cannot use its scoped persistent
 cache. Required mode fails locally.

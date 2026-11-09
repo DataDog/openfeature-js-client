@@ -33,6 +33,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
+import { cloneSigningContext } from '../transport/responseSigning/context'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -219,7 +220,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
     const effectiveContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
     const evaluationContext: EvaluationContext = this.configuration?.responseSigning
-      ? JSON.parse(JSON.stringify(effectiveContext))
+      ? cloneSigningContext(effectiveContext)
       : { ...effectiveContext }
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)

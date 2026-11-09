@@ -1,6 +1,7 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
+import { signingContextKey } from './context'
 import { bundledRootsForEndpoint } from './trustRoots'
 import {
   cryptoProvider,
@@ -19,6 +20,8 @@ import {
   verifyResponse,
 } from './verification'
 
+export { signingContextKey } from './context'
+
 export type ResponseSigningMode = 'off' | 'observe' | 'required'
 export interface ResponseSigningConfiguration {
   /** Default: off. Observe accepts ordinary valid responses even when verification fails. */
@@ -31,20 +34,6 @@ export interface ResponseSigningConfiguration {
   trustedRootCertificates?: readonly string[]
   /** Called at most once per distinct outcome per provider. Contains no request data or certificate contents. */
   onVerification?: (outcome: { status: 'verified' } | { status: 'unverified'; reason: VerificationFailure }) => void
-}
-
-/** A stable full JSON context identity, including nested keys (unlike the historical cache key). */
-export function signingContextKey(context: EvaluationContext): string {
-  function canonical(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(canonical)
-    if (value && typeof value === 'object') {
-      const sorted: Record<string, unknown> = Object.create(null)
-      for (const key of Object.keys(value).sort()) sorted[key] = canonical((value as Record<string, unknown>)[key])
-      return sorted
-    }
-    return value
-  }
-  return JSON.stringify(canonical(context))
 }
 
 export function createResponseSigningController(

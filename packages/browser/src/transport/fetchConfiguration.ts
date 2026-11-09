@@ -21,6 +21,7 @@ import { buildConfigurationUrl } from './configurationEndpoint'
 
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
+import { cloneSigningContext } from './responseSigning/context'
 import {
   createResponseSigningController,
   type ResponseSigningConfiguration,
@@ -132,7 +133,7 @@ async function requestPrecomputedConfiguration(
   signing?: ResponseSigningController
 ): Promise<FlagsConfiguration> {
   // Bind both the serialized request and admitted response to one snapshot, including direct API callers.
-  if (signing) options = { ...options, context: JSON.parse(JSON.stringify(options.context)) }
+  if (signing) options = { ...options, context: cloneSigningContext(options.context) }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options

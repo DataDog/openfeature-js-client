@@ -9,7 +9,7 @@ import {
   createFlagsConfigurationFetcher,
   fetchPrecomputedConfiguration,
 } from '../../../src/transport/fetchConfiguration'
-import { createResponseSigningController } from '../../../src/transport/responseSigning/controller'
+import { createResponseSigningController, signingContextKey } from '../../../src/transport/responseSigning/controller'
 import {
   buildSigningTranscript,
   decodeBase64,
@@ -782,5 +782,129 @@ describe('required response stream reads', () => {
     await expect(signing.read(streamed(body), request)).rejects.toBe(error)
     expect(body.locked).toBe(false)
     expect(onVerification).not.toHaveBeenCalled()
+  })
+})
+
+describe('Date-valued signing contexts', () => {
+  const dateContext = () => ({
+    targetingKey: 'date-user',
+    joined: new Date(0),
+    nested: { renewed: new Date(1000) },
+    dates: [new Date(2000)],
+    text: new Date(0).toISOString(),
+  })
+  const expectedAttributes = () =>
+    Object.fromEntries(
+      Object.entries(dateContext()).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? value : JSON.stringify(value),
+      ])
+    )
+
+  describe.each(['provider', 'direct fetch'] as const)('%s request compatibility', (entry) => {
+    test.each(['off', 'observe', 'required'] as const)('%s preserves Date request values', async (mode) => {
+      global.fetch = mode === 'off' ? jest.fn().mockResolvedValue(unsigned()) : jest.fn(signed)
+      const input = dateContext()
+      if (entry === 'provider') {
+        await provider(mode).initialize(input)
+      } else {
+        await fetchPrecomputedConfiguration({
+          ...defaultOptions,
+          env: 'production',
+          context: input,
+          responseSigning: { mode, trustedRootCertificates: roots },
+        })
+      }
+      const init = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+      const attributes = JSON.parse(init.body as string).data.attributes.subject.targeting_attributes
+      expect(attributes).toEqual(expectedAttributes())
+      expect(attributes.joined).not.toBe(attributes.text)
+    })
+  })
+
+  test.each(['observe', 'required'] as const)(
+    '%s retains a detached Date snapshot during direct fetch',
+    async (mode) => {
+      const input = dateContext()
+      let release: () => void = () => {}
+      let entered: () => void = () => {}
+      const started = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      global.fetch = jest.fn(async (url, init) => {
+        entered()
+        await gate
+        return signed(url, init)
+      })
+      const pending = fetchPrecomputedConfiguration({
+        ...defaultOptions,
+        env: 'production',
+        context: input,
+        responseSigning: { mode, trustedRootCertificates: roots },
+      })
+      await started
+      input.joined.setTime(10000)
+      input.nested.renewed.setTime(11000)
+      input.dates[0].setTime(12000)
+      release()
+      const result = await pending
+      const snapshot = result.precomputed?.context
+      if (!snapshot) throw new Error('Expected precomputed context')
+      expect(snapshot).toEqual(dateContext())
+      expect(snapshot.joined).not.toBe(input.joined)
+      expect((snapshot.nested as { renewed: Date }).renewed).not.toBe(input.nested.renewed)
+      expect((snapshot.dates as Date[])[0]).not.toBe(input.dates[0])
+      const init = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+      expect(JSON.parse(init.body as string).data.attributes.subject.targeting_attributes).toEqual(expectedAttributes())
+    }
+  )
+
+  test.each(['observe', 'required'] as const)('%s provider keeps in-flight Date values detached', async (mode) => {
+    const input = dateContext()
+    let release: () => void = () => {}
+    let entered: () => void = () => {}
+    const started = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    global.fetch = jest.fn(async (url, init) => {
+      entered()
+      await gate
+      return signed(url, init)
+    })
+    const subject = provider(mode)
+    const pending = subject.initialize(input)
+    await started
+    input.joined.setTime(10000)
+    input.nested.renewed.setTime(11000)
+    input.dates[0].setTime(12000)
+    release()
+    await pending
+    expect(evaluation(subject)).toBe(true)
+    const init = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string).data.attributes.subject.targeting_attributes).toEqual(expectedAttributes())
+  })
+
+  test.each([
+    ['top-level', { d: new Date(0) }, { d: new Date(1) }],
+    ['nested', { n: { d: new Date(0) } }, { n: { d: new Date(1) } }],
+    ['array', { dates: [new Date(0)] }, { dates: [new Date(1)] }],
+    ['Date versus string', { d: new Date(0) }, { d: new Date(0).toISOString() }],
+    ['Date versus object', { d: new Date(0) }, { d: {} }],
+    ['Date versus tag-shaped array', { d: new Date(0) }, { d: ['date', 0] }],
+    ['invalid Date versus null', { d: new Date(Number.NaN) }, { d: null }],
+  ])('context identity distinguishes %s values', (_name, first, second) => {
+    expect(signingContextKey(first)).not.toBe(signingContextKey(second))
+  })
+
+  test('context identity is stable for equal Date values and reordered keys', () => {
+    expect(signingContextKey({ d: new Date(0), n: { b: 2, a: new Date(1) } })).toBe(
+      signingContextKey({ n: { a: new Date(1), b: 2 }, d: new Date(0) })
+    )
   })
 })
