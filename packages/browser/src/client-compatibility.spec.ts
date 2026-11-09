@@ -14,6 +14,21 @@ describe('getClientCompatibility', () => {
     expect(JSON.parse(JSON.stringify(compatibility))).toEqual(compatibility)
   })
 
+  it('sorts capabilities without changing their source order', () => {
+    const capabilities = ['z-test-capability', 'a-test-capability']
+    jest.doMock('@datadog/flagging-core', () => ({ SUPPORTED_FLAGS_CAPABILITIES: capabilities }))
+    try {
+      jest.isolateModules(() => {
+        const { getClientCompatibility: getIsolatedCompatibility } =
+          require('./client-compatibility') as typeof import('./client-compatibility')
+        expect(getIsolatedCompatibility().capabilities).toEqual(['a-test-capability', 'z-test-capability'])
+      })
+      expect(capabilities).toEqual(['z-test-capability', 'a-test-capability'])
+    } finally {
+      jest.dontMock('@datadog/flagging-core')
+    }
+  })
+
   it('does not allow callers to change subsequent results or SDK capabilities', () => {
     const compatibility = getClientCompatibility()
     expect(Object.isFrozen(compatibility)).toBe(true)
@@ -22,6 +37,6 @@ describe('getClientCompatibility', () => {
     expect(() => {
       ;(compatibility as { capabilities: string[] }).capabilities = []
     }).toThrow(TypeError)
-    expect(getClientCompatibility().capabilities).toEqual(SUPPORTED_FLAGS_CAPABILITIES)
+    expect(getClientCompatibility().capabilities).toEqual([...SUPPORTED_FLAGS_CAPABILITIES].sort())
   })
 })
