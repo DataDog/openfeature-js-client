@@ -85,12 +85,29 @@ You can also pass rules parsed with `configurationFromString()` or `configuratio
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
 
-To prepare output for a particular browser SDK, pass the complete object returned
-by its `getClientCompatibility()` getter:
+To prepare output for a particular browser SDK, send the complete object returned
+by its `getClientCompatibility()` getter to your application server. For example,
+in the browser:
 
 ```typescript
-const precomputed = precomputeConfiguration(rules, context, { clientCompatibility })
+import { getClientCompatibility } from '@datadog/openfeature-browser'
+
+const requestBody = JSON.stringify({ clientCompatibility: getClientCompatibility() })
 ```
+
+On the Node server, read that object from the request and pass it to the helper.
+Using a Web `Request` with the JSON body above:
+
+```typescript
+async function precomputeForClient(request: Request) {
+  const { clientCompatibility } = await request.json()
+  const precomputed = precomputeConfiguration(rules, context, { clientCompatibility })
+  return configurationToString(precomputed)
+}
+```
+
+Your application chooses its own client-server transport. Read compatibility from
+the target browser SDK, not from a browser SDK installed on the Node server.
 
 Omitted compatibility, an empty capability list, or only unknown capabilities
 preserve plaintext output. With `assignment-encoding-flag-key-256-v1`, the Node

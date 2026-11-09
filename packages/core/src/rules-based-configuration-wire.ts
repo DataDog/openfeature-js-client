@@ -1,6 +1,7 @@
 // Initialization belongs to the entrypoint, not a second list in the bundler configuration.
 import './configuration/protobuf-text-encoding'
 
+export { encodePrecomputedFlagKey, type FlagKeyObfuscation } from './configuration/flag-key-obfuscation'
 export {
   ConfigurationPrecomputeError,
   type ConfigurationPrecomputeErrorCode,
