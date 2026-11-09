@@ -956,3 +956,75 @@ test('OpenFeature clients receive verification failure details after a context c
     await OpenFeature.clearProviders()
   }
 })
+
+describe('response signing with assignment authorization', () => {
+  test.each(['provider', 'standalone'] as const)('%s keeps tokens out of signed context snapshots', async (entry) => {
+    const token = 'assignment.jwt.signature'
+    const tokenContext = { ...context, dd_assignment_token: token, joined: new Date('2026-01-01T00:00:00Z') }
+    const fetchMock = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('DD-Assignment-Token')).toBe(token)
+      expect(init?.body).not.toContain(token)
+      expect(init?.body).not.toContain('dd_assignment_token')
+      expect(init?.body).toContain('2026-01-01T00:00:00.000Z')
+      return signed(url, init)
+    })
+    global.fetch = fetchMock
+    if (entry === 'provider') {
+      const subject = provider('required')
+      await subject.initialize(tokenContext)
+      expect(evaluation(subject)).toBe(true)
+    } else {
+      const config = await fetchPrecomputedConfiguration({
+        ...defaultOptions,
+        env: 'production',
+        context: tokenContext,
+        responseSigning: { mode: 'required', trustedRootCertificates: roots },
+      })
+      expect(config.precomputed?.context).not.toHaveProperty('dd_assignment_token')
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(tokenContext.dd_assignment_token).toBe(token)
+  })
+
+  test('required verification rejects same-subject fallback when signed attributes change', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required')
+    const initial = { ...context, dd_assignment_token: 'first.jwt.signature' }
+    await subject.initialize(initial)
+    global.fetch = jest.fn().mockRejectedValue(new Error('transport failure'))
+    await subject.onContextChange(initial, { ...initial, dd_assignment_token: 'second.jwt.signature' })
+    expect(evaluation(subject)).toBe(true)
+    const changed = { ...initial, nested: { plan: 'other' } }
+    await expect(subject.onContextChange(initial, changed)).rejects.toThrow('transport error')
+    expect(evaluation(subject)).toBe(false)
+  })
+
+  test('token-bearing missing proofs retain canonical signing errors', async () => {
+    global.fetch = jest.fn().mockResolvedValue(unsigned())
+    const subject = provider('required')
+    const events = jest.fn()
+    subject.events.addHandler(ProviderEvents.Error, events)
+    await expect(subject.initialize({ ...context, dd_assignment_token: 'assignment.jwt.signature' })).rejects.toThrow(
+      'Response signing: missing-proof'
+    )
+    expect(events).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: ErrorCode.GENERAL,
+        message: 'Response signing: missing-proof',
+      })
+    )
+  })
+
+  test('signed transport parsing errors do not expose echoed assignment credentials', async () => {
+    const token = 'assignment.jwt.signature'
+    global.fetch = jest.fn().mockResolvedValue(response(`invalid JSON ${token}`))
+    await expect(
+      fetchPrecomputedConfiguration({
+        ...defaultOptions,
+        env: 'production',
+        context: { ...context, dd_assignment_token: token },
+        responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+      })
+    ).rejects.toThrow('Assignment response is not valid JSON')
+  })
+})

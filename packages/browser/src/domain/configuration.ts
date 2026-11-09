@@ -135,7 +135,7 @@ export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
   responseSigning?: ResponseSigningController
   fetchFlagsConfiguration: (
     context: EvaluationContext,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; assignmentToken?: unknown }
   ) => Promise<FlagsConfiguration>
 }
 

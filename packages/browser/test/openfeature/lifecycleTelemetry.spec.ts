@@ -56,7 +56,7 @@ describe('lifecycle diagnostic transport', () => {
       payload: {
         event_type: 'sdk_initialization',
         timestamp: Date.now(),
-        sdk_name: 'dd-openfeature-browser',
+        sdk_name: 'browser',
         sdk_version: '1.0.0-test',
         application_id: 'app-1',
         environment: 'staging',

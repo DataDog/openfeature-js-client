@@ -6,6 +6,7 @@ export default defineConfig({
     target: 'es2015',
     rollupOptions: {
       input: {
+        assignmentAuthorization: fileURLToPath(new URL('./assignment-authorization.html', import.meta.url)),
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         provider: fileURLToPath(new URL('./provider.html', import.meta.url)),
         coreProvider: fileURLToPath(new URL('./core-provider.html', import.meta.url)),
