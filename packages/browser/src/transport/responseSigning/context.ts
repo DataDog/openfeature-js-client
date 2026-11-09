@@ -11,14 +11,27 @@ function dateTime(value: object): number | undefined {
 
 /** Copy supported context values without converting dates to strings or sharing mutable values. */
 export function cloneSigningContext(context: EvaluationContext): EvaluationContext {
+  function cloneObject(value: Record<string, EvaluationContextValue>): Record<string, EvaluationContextValue> {
+    const copy: Record<string, EvaluationContextValue> = {}
+    for (const key of Object.keys(value)) {
+      // Define own properties so a context key named __proto__ cannot change the prototype.
+      Object.defineProperty(copy, key, {
+        value: clone(value[key]),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+    }
+    return copy
+  }
   function clone(value: EvaluationContextValue): EvaluationContextValue {
     if (value === null || typeof value !== 'object') return value
     const time = dateTime(value)
     if (time !== undefined) return new Date(time)
     if (Array.isArray(value)) return value.map(clone)
-    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, clone(nested)]))
+    return cloneObject(value as Record<string, EvaluationContextValue>)
   }
-  return Object.fromEntries(Object.entries(context).map(([key, value]) => [key, clone(value)]))
+  return cloneObject(context)
 }
 
 /** A full context identity with distinct encodings for dates, arrays and objects. */

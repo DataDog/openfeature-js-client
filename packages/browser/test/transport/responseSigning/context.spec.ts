@@ -1,6 +1,17 @@
 import { runInNewContext } from 'node:vm'
 import { cloneSigningContext, signingContextKey } from '../../../src/transport/responseSigning/context'
 
+test('copies __proto__ as an ordinary own context property', () => {
+  const input = JSON.parse('{"__proto__":{"plan":"team"},"nested":{"__proto__":{"active":true}}}')
+  const copy = cloneSigningContext(input)
+  expect(copy).toEqual(input)
+  expect(Object.getPrototypeOf(copy)).toBe(Object.prototype)
+  expect(Object.getPrototypeOf(copy.nested)).toBe(Object.prototype)
+  expect(signingContextKey(copy)).toBe(signingContextKey(input))
+  input.__proto__.plan = 'changed'
+  expect(signingContextKey(copy)).not.toBe(signingContextKey(input))
+})
+
 test('copies dates from another realm and gives them the same identity as local dates', () => {
   const foreign = runInNewContext('new Date(1234)') as Date
   expect(foreign instanceof Date).toBe(false)
