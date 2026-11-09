@@ -15,6 +15,7 @@ import {
 } from '../src/rules-based'
 
 const capability = 'assignment-encoding-flag-key-256-v1'
+const optOutAt = '2026-11-06T12:00:00.123456789Z'
 const context = {
   targetingKey: 'subject',
   country: 'US',
@@ -45,7 +46,11 @@ const encodedKey = createHash('sha256')
   .update('test-flag')
   .digest('hex')
 
-function response(encoded = false, headers: Record<string, string> = {}): Response {
+function response(
+  encoded = false,
+  headers: Record<string, string> = {},
+  evaluationOptions?: Record<string, unknown>
+): Response {
   return new Response(
     JSON.stringify({
       data: {
@@ -54,6 +59,7 @@ function response(encoded = false, headers: Record<string, string> = {}): Respon
           format: 'PRECOMPUTED',
           obfuscated: encoded,
           ...(encoded && { obfuscation: { scheme: 'flag-key-sha256-v1', salt } }),
+          ...(evaluationOptions && { evaluation_options: evaluationOptions }),
           flags: { [encoded ? encodedKey : 'test-flag']: assignment },
         },
       },
@@ -149,6 +155,157 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(evaluate(restored, 'boolean', 'test-flag', false, context)).toMatchObject({ value: true, variant: 'on' })
   })
 
+  it('omits etag when a successful response has none', async () => {
+    const withoutEtag = response()
+    withoutEtag.headers.delete('etag')
+    requestFetch.mockResolvedValue(withoutEtag)
+    const result = await fetchPrecomputedConfiguration({ ...options, fetch: requestFetch })
+    expect(result.precomputed).not.toHaveProperty('etag')
+  })
+
+  describe.each(['immediate', 'future_experiments_only'] as const)('experimentation opt-out: %s', (mode) => {
+    const optedOutContext = { ...context, dd_experimentation_opt_out_at: optOutAt }
+    const optedOutOptions = { ...options, context: optedOutContext, experimentationOptOutMode: mode }
+
+    it('sends the effective policy and preserves acknowledged snapshots through serialization', async () => {
+      requestFetch.mockResolvedValue(
+        response(
+          false,
+          {},
+          {
+            experimentation_opt_out: true,
+            experimentation_opt_out_mode: mode,
+            dd_experimentation_opt_out_at: optOutAt,
+          }
+        )
+      )
+      const result = await fetchPrecomputedConfiguration({ ...optedOutOptions, fetch: requestFetch })
+      const request = JSON.parse(requestFetch.mock.calls[0][1]!.body as string).data.attributes
+      expect(request.evaluation_options).toEqual({ experimentation_opt_out_mode: mode })
+      expect(request.subject.targeting_attributes.dd_experimentation_opt_out_at).toBe(optOutAt)
+      const restored = configurationFromString(configurationToString(result))
+      expect(evaluate(restored, 'boolean', 'test-flag', false, optedOutContext, undefined, mode)).toMatchObject({
+        value: true,
+        variant: 'on',
+      })
+    })
+
+    it('omits the policy when the context has no opt-out timestamp', async () => {
+      await fetchPrecomputedConfiguration({ ...options, experimentationOptOutMode: mode, fetch: requestFetch })
+      expect(JSON.parse(requestFetch.mock.calls[0][1]!.body as string).data.attributes).not.toHaveProperty(
+        'evaluation_options'
+      )
+    })
+
+    it.each([null, 'private invalid timestamp', '2026-02-30T00:00:00Z'])(
+      'rejects an invalid opt-out timestamp before fetching: %j',
+      async (timestamp) => {
+        await expect(
+          fetchPrecomputedConfiguration({
+            ...optedOutOptions,
+            context: { ...context, dd_experimentation_opt_out_at: timestamp },
+            fetch: requestFetch,
+          })
+        ).rejects.toMatchObject({ code: 'invalid_options', message: expect.not.stringContaining('private') })
+        expect(requestFetch).not.toHaveBeenCalled()
+      }
+    )
+
+    it('rejects a missing response acknowledgment', async () => {
+      await expect(fetchPrecomputedConfiguration({ ...optedOutOptions, fetch: requestFetch })).rejects.toMatchObject({
+        code: 'decode',
+        message: 'The assignment response did not acknowledge experimentation opt-out',
+      })
+    })
+  })
+
+  it.each([undefined, 'disabled'] as const)('does not apply opt-out in mode %s', async (mode) => {
+    await fetchPrecomputedConfiguration({
+      ...options,
+      context: { ...context, dd_experimentation_opt_out_at: 'ignored invalid timestamp' },
+      experimentationOptOutMode: mode,
+      fetch: requestFetch,
+    })
+    expect(JSON.parse(requestFetch.mock.calls[0][1]!.body as string).data.attributes).not.toHaveProperty(
+      'evaluation_options'
+    )
+  })
+
+  it('accepts the legacy immediate opt-out acknowledgment', async () => {
+    requestFetch.mockResolvedValue(response(false, {}, { experimentation_opt_out: true }))
+    await expect(
+      fetchPrecomputedConfiguration({
+        ...options,
+        context: { ...context, dd_experimentation_opt_out_at: optOutAt },
+        experimentationOptOutMode: 'immediate',
+        fetch: requestFetch,
+      })
+    ).resolves.toHaveProperty('precomputed')
+  })
+
+  it.each([false, 'true', 1])('rejects an invalid immediate opt-out acknowledgment: %j', async (acknowledgment) => {
+    requestFetch.mockResolvedValue(response(false, {}, { experimentation_opt_out: acknowledgment }))
+    await expect(
+      fetchPrecomputedConfiguration({
+        ...options,
+        context: { ...context, dd_experimentation_opt_out_at: optOutAt },
+        experimentationOptOutMode: 'immediate',
+        fetch: requestFetch,
+      })
+    ).rejects.toMatchObject({ code: 'decode' })
+  })
+
+  it.each([
+    {
+      experimentation_opt_out_mode: 'future_experiments_only',
+      dd_experimentation_opt_out_at: '2026-11-06T12:00:00.123456788Z',
+    },
+    {
+      experimentation_opt_out_mode: 'immediate',
+      experimentation_opt_out: true,
+      dd_experimentation_opt_out_at: optOutAt,
+    },
+  ])('rejects a mismatched future-only opt-out acknowledgment: %j', async (acknowledgment) => {
+    requestFetch.mockResolvedValue(response(false, {}, acknowledgment))
+    await expect(
+      fetchPrecomputedConfiguration({
+        ...options,
+        context: { ...context, dd_experimentation_opt_out_at: optOutAt },
+        experimentationOptOutMode: 'future_experiments_only',
+        fetch: requestFetch,
+      })
+    ).rejects.toMatchObject({ code: 'decode' })
+  })
+
+  it('accepts an equivalent normalized future-only cutoff and snapshots the requested policy', async () => {
+    const inputContext = { ...context, dd_experimentation_opt_out_at: '2026-11-06T08:00:00.123456789-04:00' }
+    requestFetch.mockImplementation(async () => {
+      inputContext.dd_experimentation_opt_out_at = '2026-11-07T00:00:00Z'
+      return response(
+        false,
+        {},
+        {
+          experimentation_opt_out_mode: 'future_experiments_only',
+          dd_experimentation_opt_out_at: optOutAt,
+        }
+      )
+    })
+    const result = await fetchPrecomputedConfiguration({
+      ...options,
+      context: inputContext,
+      experimentationOptOutMode: 'future_experiments_only',
+      fetch: requestFetch,
+    })
+    expect(result.precomputed!.context!.dd_experimentation_opt_out_at).toBe('2026-11-06T08:00:00.123456789-04:00')
+  })
+
+  it('rejects an opt-out acknowledgment when exclusion was not requested', async () => {
+    requestFetch.mockResolvedValue(response(false, {}, { experimentation_opt_out: true }))
+    await expect(fetchPrecomputedConfiguration({ ...options, fetch: requestFetch })).rejects.toMatchObject({
+      code: 'decode',
+    })
+  })
+
   it.each([undefined, { capabilities: [] }, { capabilities: ['unknown-v1', 'dependent-flag-variant-key-v1'] }])(
     'does not substitute Node capabilities for %j',
     async (clientCompatibility) => {
@@ -242,6 +399,9 @@ describe('fetchPrecomputedConfiguration', () => {
     { clientCompatibility: {} },
     { clientCompatibility: { capabilities: 'private' } },
     { clientCompatibility: { capabilities: [3] } },
+    { experimentationOptOutMode: null },
+    { experimentationOptOutMode: true },
+    { experimentationOptOutMode: 'invalid' },
   ])('rejects invalid options before sending a request: %p', async (override) => {
     const input = { ...options, fetch: requestFetch, ...override } as unknown as PrecomputedConfigurationFetchOptions
     await expect(fetchPrecomputedConfiguration(input)).rejects.toBeInstanceOf(ConfigurationFetchError)
@@ -338,6 +498,20 @@ describe('fetchPrecomputedConfiguration', () => {
       })
     ).rejects.toMatchObject({ code: 'decode' })
   })
+
+  it.each(['true', 1, 'false', 0])(
+    'rejects non-boolean obfuscation markers before accepting the encoding: %j',
+    async (obfuscated) => {
+      const json = await response(true).json()
+      json.data.attributes.obfuscated = obfuscated
+      requestFetch.mockResolvedValue(
+        new Response(JSON.stringify(json), { headers: { 'Content-Type': 'application/json' } })
+      )
+      await expect(fetchPrecomputedConfiguration({ ...options, fetch: requestFetch })).rejects.toMatchObject({
+        code: 'decode',
+      })
+    }
+  )
 
   it('sanitizes transport failures while preserving allowlisted diagnostic codes', async () => {
     requestFetch.mockRejectedValue(Object.assign(new Error('private data'), { cause: { code: 'ECONNRESET' } }))

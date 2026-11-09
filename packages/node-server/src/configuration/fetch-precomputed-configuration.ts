@@ -1,6 +1,9 @@
 import {
+  acknowledgesExperimentationOptOut,
   buildEndpointHost,
   type ClientCompatibility,
+  type ExperimentationOptOutModeValue,
+  experimentationOptOutPolicy,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
@@ -19,6 +22,7 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
   /** Required for now. Only client-distributed flags are supported by this endpoint. */
   distributionChannel: 'client'
   clientToken: string
+  /** Reserved. API-key authentication is not supported for client distribution. */
   apiKey?: never
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
@@ -27,6 +31,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
   context: EvaluationContext
   /** Target client's response support, not the fetching Node SDK's capabilities. */
   clientCompatibility?: ClientCompatibility
+  /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
+  experimentationOptOutMode?: ExperimentationOptOutModeValue
 }
 
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
@@ -40,13 +46,15 @@ export async function fetchPrecomputedConfiguration(
     if (error instanceof ConfigurationFetchError) throw error
     throw invalidOption('precomputed configuration')
   }
-  const { url, clientToken, applicationId, env, context, capabilities, requestFetch, timeoutMs, signal } = validated
+  const { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal } =
+    validated
   const body = JSON.stringify({
     data: {
       type: 'precompute-assignments-request',
       attributes: {
         env: { dd_env: env },
         source: { sdk_name: 'nodejs', sdk_version: __BUILD_ENV__SDK_VERSION__ },
+        ...(optOut && { evaluation_options: { experimentation_opt_out_mode: optOut.mode } }),
         subject: {
           targeting_key: context.targetingKey || '',
           targeting_attributes: Object.fromEntries(
@@ -93,6 +101,12 @@ export async function fetchPrecomputedConfiguration(
       }
       const parsed = parsePrecomputedConfigurationResponse(json)
       if ('error' in parsed) throw new ConfigurationFetchError('decode', 'Invalid precomputed configuration response')
+      if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optOut)) {
+        throw new ConfigurationFetchError(
+          'decode',
+          'The assignment response did not acknowledge experimentation opt-out'
+        )
+      }
       if (
         parsed.response.data.attributes.obfuscated === true &&
         !capabilities.includes('assignment-encoding-flag-key-256-v1')
@@ -115,12 +129,20 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     applicationId,
     context: inputContext,
     clientCompatibility,
+    experimentationOptOutMode = 'disabled',
     timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
   } = options ?? {}
   if (distributionChannel !== 'client') throw invalidOption('distributionChannel')
   if (apiKey !== undefined) throw invalidOption('apiKey with client distribution channel')
+  if (
+    experimentationOptOutMode !== 'disabled' &&
+    experimentationOptOutMode !== 'immediate' &&
+    experimentationOptOutMode !== 'future_experiments_only'
+  ) {
+    throw invalidOption('experimentationOptOutMode')
+  }
   if (typeof clientToken !== 'string' || !clientToken.trim() || /[\r\n]/.test(clientToken))
     throw invalidOption('clientToken')
   if (typeof env !== 'string' || !env.trim()) throw invalidOption('env')
@@ -152,9 +174,11 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   } catch {
     throw invalidOption('context')
   }
+  const optOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
+  if (optOut === undefined) throw invalidOption('context.dd_experimentation_opt_out_at')
   const url = new URL(`https://${host}/precompute-assignments`)
   url.searchParams.set('dd_env', env)
-  return { url, clientToken, applicationId, env, context, capabilities, requestFetch, timeoutMs, signal }
+  return { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
