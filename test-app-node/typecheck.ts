@@ -20,10 +20,10 @@
 
 import diagnostics_channel from 'node:diagnostics_channel'
 import {
+  type ClientCompatibility,
   DatadogNodeServerProvider,
   type DatadogNodeServerProviderOptions,
   fetchPrecomputedConfiguration,
-  type PrecomputedClientCompatibility,
   type PrecomputedConfigurationFetchOptions,
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
@@ -169,7 +169,7 @@ const conflictingCredentials: RulesConfigurationFetchOptions = {
 provider.setConfiguration(restored)
 void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflictingCredentials]
 
-const clientCompatibility: PrecomputedClientCompatibility = {
+const clientCompatibility: ClientCompatibility = {
   capabilities: ['assignment-encoding-flag-key-256-v1'],
 }
 const precomputedFetchOptions: PrecomputedConfigurationFetchOptions = {

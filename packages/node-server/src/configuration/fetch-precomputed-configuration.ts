@@ -1,7 +1,7 @@
 import {
   buildEndpointHost,
+  type ClientCompatibility,
   type FlagsConfiguration,
-  type PrecomputedClientCompatibility,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, JsonValue } from '@openfeature/core'
@@ -26,7 +26,7 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
   applicationId?: string
   context: EvaluationContext
   /** Target client's response support, not the fetching Node SDK's capabilities. */
-  clientCompatibility?: PrecomputedClientCompatibility
+  clientCompatibility?: ClientCompatibility
 }
 
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */

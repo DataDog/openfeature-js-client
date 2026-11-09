@@ -1,4 +1,4 @@
-export type { FlagsConfiguration, FlagsConfigurationWire, PrecomputedClientCompatibility } from '@datadog/flagging-core'
+export type { ClientCompatibility, FlagsConfiguration, FlagsConfigurationWire } from '@datadog/flagging-core'
 export { configurationFromString, configurationToString, getPrecomputedContext } from '@datadog/flagging-core'
 export { ConfigurationFetchError, type ConfigurationFetchErrorCode } from './configuration/configuration-fetch'
 export {
