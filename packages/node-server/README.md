@@ -56,8 +56,10 @@ const configuration = await fetchPrecomputedConfiguration({
 const wire = configurationToString(configuration)
 ```
 
-The helper is also exported from `/rules-based`. The root parser and serializer
-handle only precomputed configurations; use `/rules-based` to retain rules.
+The helper is also exported from `/rules-based`. Both entry points export the same
+`ConfigurationFetchError` class, so `instanceof` works with either import.
+The root parser and serializer handle only precomputed configurations; use
+`/rules-based` to retain rules.
 
 `distributionChannel: 'client'` is required in this draft. The endpoint does not
 support server-distributed flags or API-key authentication. Whether to add that
@@ -76,6 +78,15 @@ The helper snapshots a JSON-compatible context and binds the returned assignment
 to it. Malformed context, compatibility or options fail with `invalid_options`
 before any request. Use the same context when initializing the receiving provider.
 There is no polling, retry, tracking or automatic server fallback.
+
+`experimentationOptOutMode` accepts `disabled` (default), `immediate`, or
+`future_experiments_only`, matching local precomputation. For an opted-out context,
+the helper sends the effective policy and requires the response to acknowledge it;
+future-only mode also requires a matching cutoff timestamp. With opt-out enabled,
+an invalid timestamp fails with `invalid_options` before fetching, and a missing or
+mismatched acknowledgment fails with `decode`. Initialize the receiving provider with the same
+context and opt-out mode. This option does not change the existing Node provider's
+supported modes.
 
 ### Rules Fetch Options and Errors
 

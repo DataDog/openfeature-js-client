@@ -178,6 +178,7 @@ const precomputedFetchOptions: PrecomputedConfigurationFetchOptions = {
   env: 'prod',
   context: {},
   clientCompatibility,
+  experimentationOptOutMode: 'future_experiments_only',
 }
 void fetchPrecomputedConfiguration(precomputedFetchOptions)
 void precomputeConfiguration(decoded, {}, { clientCompatibility })
@@ -185,3 +186,5 @@ void precomputeConfiguration(decoded, {}, { clientCompatibility })
 void fetchPrecomputedConfiguration({ clientToken: 'token', env: 'prod', context: {} })
 // @ts-expect-error: Server-distributed precomputed fetching is not implemented.
 void fetchPrecomputedConfiguration({ distributionChannel: 'server', apiKey: 'key', env: 'prod', context: {} })
+// @ts-expect-error: Opt-out mode must be one of the supported policy names.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, experimentationOptOutMode: true })

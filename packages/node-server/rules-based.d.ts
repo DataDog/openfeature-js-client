@@ -1092,6 +1092,7 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	/** Required for now. Only client-distributed flags are supported by this endpoint. */
 	distributionChannel: "client";
 	clientToken: string;
+	/** Reserved. API-key authentication is not supported for client distribution. */
 	apiKey?: never;
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
@@ -1100,6 +1101,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	context: EvaluationContext;
 	/** Target client's response support, not the fetching Node SDK's capabilities. */
 	clientCompatibility?: ClientCompatibility;
+	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
+	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 }
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
 export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
