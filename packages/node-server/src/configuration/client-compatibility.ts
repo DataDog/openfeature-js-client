@@ -1,6 +1,6 @@
 import { SUPPORTED_FLAGS_CAPABILITIES } from '@datadog/flagging-core'
 
-/** Snapshot supported capabilities without forwarding unknown formats or caller-owned arrays. */
+/** Snapshot supported capabilities in stable header order, without unknown formats or caller-owned arrays. */
 export function readPrecomputedCapabilities(input: unknown): readonly string[] {
   if (input === undefined) return []
   if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new Error('Invalid compatibility')

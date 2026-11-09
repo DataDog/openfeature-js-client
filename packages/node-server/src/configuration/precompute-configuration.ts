@@ -1,13 +1,10 @@
 import { randomBytes } from 'node:crypto'
-import {
-  type ClientCompatibility,
-  encodePrecomputedFlagKey,
-  type FlagKeyObfuscation,
-  type FlagsConfiguration,
-} from '@datadog/flagging-core'
+import type { ClientCompatibility, FlagsConfiguration } from '@datadog/flagging-core'
 import {
   ConfigurationPrecomputeError,
   type PrecomputeConfigurationOptions as CorePrecomputeConfigurationOptions,
+  encodePrecomputedFlagKey,
+  type FlagKeyObfuscation,
   precomputeConfiguration as precompute,
 } from '@datadog/flagging-core/rules-based'
 import type { EvaluationContext } from '@openfeature/core'
