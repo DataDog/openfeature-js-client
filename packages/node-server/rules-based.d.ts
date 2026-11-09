@@ -1051,8 +1051,10 @@ export type PrecomputeEvaluationError = {
 export type PrecomputeConfigurationOptions = {
 	/**
 	 * Include only assignments whose whole key matches any pattern; only `*` is special.
-	 * Tags are unsupported because source rules contain no tag metadata. Invalid selections throw invalid_options.
-	 * Omitted or empty selections include all flags. Dependencies can use any flag in the source rules.
+	 * Tags are unsupported: any defined tags value, including [] or null, throws invalid_options.
+	 * Malformed or over-limit selections also throw invalid_options. With tags absent, omitted selections or no
+	 * nonempty keyPatterns include all assignments; a null selection is treated as absent at runtime.
+	 * Dependencies can use any flag in the source rules.
 	 */
 	flagSelection?: Pick<FlagSelection, "keyPatterns"> & {
 		tags?: never;

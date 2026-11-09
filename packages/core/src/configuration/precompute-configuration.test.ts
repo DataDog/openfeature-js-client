@@ -84,6 +84,7 @@ describe('precomputeConfiguration', () => {
       ['checkout-v2', 'checkout-*', true],
       ['checkout', 'Checkout', false],
       ['my-checkout', '*checkout', true],
+      ['my-checkout', 'checkout*', false],
       ['my-checkout-v2', '*checkout*', true],
       ['checkout-v2', '*checkout', false],
       ['checkout', 'check*out', true],
@@ -93,6 +94,10 @@ describe('precomputeConfiguration', () => {
       ['a', 'a*a', false],
       ['ab', '*ab*b', false],
       ['ab', '*a*b', true],
+      ['ab', 'a*a*b', false],
+      ['xbyaz', '*a*b*', false],
+      ['abxb', 'a*b*b', true],
+      ['a-b-c', 'a*-*c', true],
       ['a\nb', 'a*b', true],
       ['a\nb\n', 'a*b', false],
       ['😀-checkout', '😀-*', true],
@@ -119,10 +124,10 @@ describe('precomputeConfiguration', () => {
       expect(flagSelection.keyPatterns).toEqual(['\u0085checkout\u3000', '*-v2', 'checkout'])
     })
 
-    it.each([undefined, {}, { keyPatterns: [] }, { keyPatterns: [' ', '\u0085'] }])(
+    it.each([undefined, null, {}, { keyPatterns: [] }, { keyPatterns: [' ', '\u0085'] }])(
       'includes all assignments for an absent or empty selection: %j',
       (flagSelection) => {
-        expect(precomputeConfiguration(rules(), context, { flagSelection })).toEqual(
+        expect(precomputeConfiguration(rules(), context, { flagSelection } as PrecomputeConfigurationOptions)).toEqual(
           precomputeConfiguration(rules(), context)
         )
       }
@@ -172,6 +177,7 @@ describe('precomputeConfiguration', () => {
       { keyPatterns: Array.from({ length: 32 }, (_, index) => `flag-${index}`) },
       { keyPatterns: ['é'.repeat(101)] },
       { tags: [] },
+      { tags: null },
       { tags: ['checkout'], keyPatterns: ['checkout'] },
     ])('rejects invalid or unsupported selections with invalid_options: %j', (flagSelection) => {
       expect(() =>

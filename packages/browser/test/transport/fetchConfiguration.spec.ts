@@ -673,6 +673,24 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     describe('standalone precompute POST', () => {
+      it('redacts a reflected ignored reason when the context carries an assignment token', async () => {
+        const token = 'private.jwt.signature'
+        const headers = new Headers({ 'DD-Flag-Selection-Ignored': `DD-Assignment-Token=${token}` })
+        mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
+
+        await fetchPrecomputedConfiguration({
+          ...baseFetchOptions,
+          context: { ...mockContext, dd_assignment_token: token },
+          flagSelection: { tags: ['beta'] },
+        })
+
+        expect(new Headers(mockFetch.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(token)
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError.mock.calls[0][0]).not.toContain(token)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'redacted' })
+        expectNoTelemetryValues(token)
+      })
+
       it('accepts readonly tags and key patterns and sends their canonical selection', async () => {
         await fetchPrecomputedConfiguration({
           ...baseFetchOptions,

@@ -38,9 +38,10 @@ The helper follows the Rust assignment-only precomputation contract: successful 
 
 Pass `options.flagSelection: { keyPatterns: ['checkout-*'] }` to include only matching assignments. Patterns are
 case-sensitive whole-key globs with only `*` special and use the shared selection normalization and limits. Omitted
-or empty selections include all assignments. Source rules remain available for dependencies and can be reused for
-other selections. Tags are unsupported because rules contain no tag metadata. Unsupported tags, malformed selections,
-and selections over a limit throw `ConfigurationPrecomputeError` with `invalid_options`.
+selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated
+as absent at runtime. Tags are unsupported because rules contain no tag metadata: any defined `tags` value, including
+`[]` or `null`, throws `ConfigurationPrecomputeError` with `invalid_options`, as do malformed selections and selections
+over a limit. Source rules remain available for dependencies and can be reused for other selections.
 
 ## Preparing activation timestamps
 

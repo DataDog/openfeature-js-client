@@ -112,7 +112,9 @@ may return the full configuration without a warning. Caller-supplied `initialFla
 locally.
 
 Both standalone fetch helpers, `fetchPrecomputedConfiguration` and `fetchRulesConfiguration`, accept the same
-`flagSelection` option and use the same matching rules, limits, and fallback behavior. For example:
+`flagSelection` option with the same matching rules, normalization, per-value limits, and fallback behavior.
+`fetchRulesConfiguration` sends selection in the URL, so it also drops a selection that would make the URL longer
+than 8,192 bytes. For example, to fetch precomputed assignments with selection:
 
 ```javascript
 const configuration = await fetchPrecomputedConfiguration({
