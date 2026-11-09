@@ -197,7 +197,9 @@ the token; there is no custom refresh-required event.
 
 Ordinary no-token flows retain their previous behavior, including serving the last successful subject's assignments
 during a context switch or network failure, unless a subject boundary has already been established. Missing or unusable
-token values do not establish one themselves. This release does not add a strict context-switching option.
+token values do not establish one themselves. The boundary ends when the provider accepts assignments, including
+from a `STALE` fallback. A later context change without a token, such as a logout, uses the ordinary behavior above.
+This release does not add a strict context-switching option.
 The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
 Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
 the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing

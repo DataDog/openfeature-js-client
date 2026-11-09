@@ -341,6 +341,18 @@ describe('assignment authorization', () => {
     })
   })
 
+  it('retains same-subject assignments when a no-token attribute change is rejected', async () => {
+    await provider.initialize(context)
+    fetchMock.mockImplementation(rejection)
+    const changed = { ...context, country: 'CA' }
+    await provider.onContextChange({}, changed)
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(false)
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    const result = provider.resolveBooleanEvaluation('boolean-flag', false, changed, logger)
+    expect(result.value).toBe(true)
+    expect(getEvaluationTrackingContext(result, () => ({}))).toEqual(context)
+  })
+
   it('retains the downloaded context for same-subject attribute changes after rejection', async () => {
     await provider.initialize({ ...context, dd_assignment_token: token() })
     fetchMock.mockImplementation(rejection)
