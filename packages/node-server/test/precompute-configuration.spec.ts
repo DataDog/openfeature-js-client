@@ -60,4 +60,17 @@ describe('standalone precomputation', () => {
       expect.objectContaining({ code: 'invalid_configuration' })
     )
   })
+
+  it('reuses parsed rules for selected snapshots through the public Node entrypoint', () => {
+    const rules = configurationFromString(JSON.stringify(wire))
+    const context = { targetingKey: 'subject', country: 'US' }
+    const selected = configurationFromString(
+      configurationToString(precomputeConfiguration(rules, context, { flagSelection: { keyPatterns: ['test-*'] } }))
+    )
+    expect(Object.keys(selected.precomputed!.response.data.attributes.flags)).toEqual(['test-flag'])
+    expect(evaluate(selected, 'boolean', 'test-flag', false, context).value).toBe(true)
+    const empty = precomputeConfiguration(rules, context, { flagSelection: { keyPatterns: ['missing-*'] } })
+    expect(empty.precomputed!.response.data.attributes.flags).toEqual({})
+    expect(evaluate(rules, 'boolean', 'test-flag', false, context).value).toBe(true)
+  })
 })

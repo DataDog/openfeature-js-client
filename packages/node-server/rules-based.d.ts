@@ -1049,6 +1049,14 @@ export type PrecomputeEvaluationError = {
 	errorCode: ErrorCode;
 };
 export type PrecomputeConfigurationOptions = {
+	/**
+	 * Include only assignments whose whole key matches any pattern; only `*` is special.
+	 * Tags are unsupported because source rules contain no tag metadata. Invalid selections throw invalid_options.
+	 * Omitted or empty selections include all flags. Dependencies can use any flag in the source rules.
+	 */
+	flagSelection?: Pick<FlagSelection, "keyPatterns"> & {
+		tags?: never;
+	};
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 	/**

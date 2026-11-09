@@ -672,6 +672,70 @@ describe('createFlagsConfigurationFetcher', () => {
       })
     })
 
+    describe('standalone precompute POST', () => {
+      it('accepts readonly tags and key patterns and sends their canonical selection', async () => {
+        await fetchPrecomputedConfiguration({
+          ...baseFetchOptions,
+          context: mockContext,
+          flagSelection: { tags: [' beta ', 'beta'], keyPatterns: ['checkout-*'] } as const,
+        })
+        expect(requestBody().data.attributes.flag_selection).toEqual({ tags: ['beta'], key_patterns: ['checkout-*'] })
+        expect(displayError).not.toHaveBeenCalled()
+        expect(addTelemetryDebug).not.toHaveBeenCalled()
+      })
+
+      it.each([undefined, { tags: [' '], keyPatterns: [] }])(
+        'preserves requests with no effective selection: %j',
+        async (flagSelection) => {
+          await fetchPrecomputedConfiguration({ ...baseFetchOptions, context: mockContext, flagSelection })
+          await fetchPrecomputedConfiguration({ ...baseFetchOptions, context: mockContext })
+          expect(mockFetch.mock.calls[0]).toEqual(mockFetch.mock.calls[1])
+          expect(requestBody().data.attributes).not.toHaveProperty('flag_selection')
+          expect(displayError).not.toHaveBeenCalled()
+        }
+      )
+
+      it.each([
+        ['too_many_values', { tags: Array.from({ length: 32 }, (_, index) => `tag-${index}`) }],
+        ['invalid_tag', { tags: ['t'.repeat(201)] }],
+        ['invalid_key_pattern', { keyPatterns: ['k'.repeat(201)] }],
+        ['malformed_selection', { tags: 'secret-tag' }],
+      ])('drops %s selections and reports once per standalone call', async (reason, flagSelection) => {
+        const options = {
+          ...baseFetchOptions,
+          context: mockContext,
+          flagSelection: flagSelection as FlaggingInitConfiguration['flagSelection'],
+        }
+        await expect(fetchPrecomputedConfiguration(options)).resolves.toHaveProperty('precomputed')
+        await fetchPrecomputedConfiguration(options)
+        expect(requestBody(0).data.attributes).not.toHaveProperty('flag_selection')
+        expect(requestBody(1).data.attributes).not.toHaveProperty('flag_selection')
+        expect(displayError).toHaveBeenCalledTimes(2)
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(2)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection dropped', { reason })
+        expectNoTelemetryValues('tag-0', 'secret-tag', 't'.repeat(201), 'k'.repeat(201))
+      })
+
+      it.each([true, false])('reports an ignored selection only when one was sent: %s', async (selected) => {
+        const headers = new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+        const getHeader = jest.spyOn(headers, 'get')
+        mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
+        const result = await fetchPrecomputedConfiguration({
+          ...baseFetchOptions,
+          context: mockContext,
+          flagSelection: selected ? { tags: ['beta'] } : undefined,
+        })
+        expect(result.precomputed?.response).toEqual(validPrecomputedResponse)
+        expect(displayError).toHaveBeenCalledTimes(selected ? 1 : 0)
+        if (selected) {
+          expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
+        } else {
+          expect(getHeader).not.toHaveBeenCalledWith('DD-Flag-Selection-Ignored')
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        }
+      })
+    })
+
     describe('rules-based GET', () => {
       it('appends repeated selection params to the existing query string', async () => {
         const customFetch = jest.fn().mockResolvedValue(rulesResponse())

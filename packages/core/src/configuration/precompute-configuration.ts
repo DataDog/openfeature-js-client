@@ -5,6 +5,7 @@ import { createProtobufDependencyResolver } from '../evaluation/evaluation'
 import { type ExperimentationOptOutModeValue, experimentationOptOutPolicy } from '../evaluation/experimentation-opt-out'
 import { timeStampNow } from '../time'
 import type { FlagsConfiguration, PrecomputedFlag } from './configuration'
+import { canonicalizeFlagSelection, type FlagSelection } from './flag-selection'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
 export type ConfigurationPrecomputeErrorCode = 'invalid_configuration' | 'invalid_context' | 'invalid_options'
@@ -31,6 +32,12 @@ export type PrecomputeEvaluationError = {
 }
 
 export type PrecomputeConfigurationOptions = {
+  /**
+   * Include only assignments whose whole key matches any pattern; only `*` is special.
+   * Tags are unsupported because source rules contain no tag metadata. Invalid selections throw invalid_options.
+   * Omitted or empty selections include all flags. Dependencies can use any flag in the source rules.
+   */
+  flagSelection?: Pick<FlagSelection, 'keyPatterns'> & { tags?: never }
   /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
   experimentationOptOutMode?: ExperimentationOptOutModeValue
   /**
@@ -58,7 +65,8 @@ export function precomputeConfiguration(
   options: PrecomputeConfigurationOptions = {}
 ): FlagsConfiguration {
   const rules = validateRules(configuration)
-  const { experimentationOptOutMode, onEvaluationError } = validateOptions(options)
+  const { experimentationOptOutMode, onEvaluationError, keyPatterns } = validateOptions(options)
+  const patterns = keyPatterns?.map((pattern) => pattern.split('*'))
   const snapshotContext = snapshotEvaluationContext(context)
   const optOut = experimentationOptOutPolicy(snapshotContext, experimentationOptOutMode)
   if (optOut === undefined) throw new ConfigurationPrecomputeError('invalid_context')
@@ -69,6 +77,7 @@ export function precomputeConfiguration(
   const flags: Array<[string, PrecomputedFlag]> = []
   const errors: PrecomputeEvaluationError[] = []
   for (const flagKey of Object.keys(rules.flags)) {
+    if (patterns && !patterns.some((parts) => matchesKeyPattern(flagKey, parts))) continue
     let result: ReturnType<typeof resolveProtobufAssignment>
     try {
       const dependencies = createProtobufDependencyResolver(
@@ -179,20 +188,39 @@ function validateRules(configuration: FlagsConfiguration): PreparedRulesResponse
   throw new ConfigurationPrecomputeError('invalid_configuration')
 }
 
-function validateOptions(options: PrecomputeConfigurationOptions): PrecomputeConfigurationOptions {
+function validateOptions(
+  options: PrecomputeConfigurationOptions
+): Omit<PrecomputeConfigurationOptions, 'flagSelection'> & { keyPatterns?: readonly string[] } {
   try {
     if (isPlainRecord(options)) {
-      const { experimentationOptOutMode = 'disabled', onEvaluationError } = options
+      const { experimentationOptOutMode = 'disabled', onEvaluationError, flagSelection } = options
+      if (flagSelection?.tags !== undefined) throw new ConfigurationPrecomputeError('invalid_options')
+      const { selection, error } = canonicalizeFlagSelection(flagSelection)
       if (
         ['disabled', 'immediate', 'future_experiments_only'].includes(experimentationOptOutMode) &&
-        (onEvaluationError === undefined || typeof onEvaluationError === 'function')
+        (onEvaluationError === undefined || typeof onEvaluationError === 'function') &&
+        !error
       )
-        return { experimentationOptOutMode, onEvaluationError }
+        return { experimentationOptOutMode, onEvaluationError, keyPatterns: selection?.keyPatterns }
     }
   } catch {
     // Do not expose values from malformed options.
   }
   throw new ConfigurationPrecomputeError('invalid_options')
+}
+
+/** Match literal segments in order, anchored at both ends, without interpreting regex syntax. */
+function matchesKeyPattern(key: string, parts: readonly string[]): boolean {
+  if (parts.length === 1) return key === parts[0]
+  if (!key.startsWith(parts[0])) return false
+  let offset = parts[0].length
+  for (let index = 1; index < parts.length - 1; index++) {
+    const position = key.indexOf(parts[index], offset)
+    if (position === -1) return false
+    offset = position + parts[index].length
+  }
+  const last = parts[parts.length - 1]
+  return key.endsWith(last) && key.length - last.length >= offset
 }
 
 function snapshotEvaluationContext(context: EvaluationContext): EvaluationContext {
