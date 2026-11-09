@@ -170,6 +170,83 @@ describe('DatadogNodeServerProvider', () => {
     expect(readReplacement).toHaveBeenCalledTimes(1)
   })
 
+  it('resolves evaluator parameters once when a configuration is received', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const dependentConfiguration = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, '../../core/test/ffe-system-test-data/evaluation-suites/dependent-flags/ufc-config.json'),
+        'utf8'
+      )
+    ) as UniversalFlagConfigurationV1
+    dependentConfiguration.evaluatorParams = { maxDependencyDepth: 256 }
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    provider.setConfiguration(dependentConfiguration)
+    provider.setConfiguration(dependentConfiguration)
+
+    expect(warning).toHaveBeenCalledTimes(1)
+    expect(warning).toHaveBeenCalledWith('Invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
+    })
+    Object.defineProperty(dependentConfiguration, 'evaluatorParams', {
+      get() {
+        throw new Error('evaluatorParams read during evaluation')
+      },
+    })
+
+    await expect(
+      provider.resolveStringEvaluation('dependent-direct-root', 'coded-default', { targetingKey: 'subject' }, logger)
+    ).resolves.toMatchObject({ value: 'direct-match', variant: 'matched' })
+    expect(provider.getConfiguration()).toBe(dependentConfiguration)
+
+    warning.mockRestore()
+  })
+
+  it('retains a zero dependency depth override across provider evaluations', async () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const dependentConfiguration = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, '../../core/test/ffe-system-test-data/evaluation-suites/dependent-flags/ufc-config.json'),
+        'utf8'
+      )
+    ) as UniversalFlagConfigurationV1
+    const readEvaluatorParams = jest.fn(() => ({ maxDependencyDepth: 0 }))
+    Object.defineProperty(dependentConfiguration, 'evaluatorParams', { get: readEvaluatorParams })
+
+    provider.setConfiguration(dependentConfiguration)
+    provider.setConfiguration(dependentConfiguration)
+    expect(readEvaluatorParams).toHaveBeenCalledTimes(1)
+    readEvaluatorParams.mockImplementation(() => {
+      throw new Error('evaluatorParams read during evaluation')
+    })
+
+    for (const targetingKey of ['first', 'second']) {
+      await expect(
+        provider.resolveStringEvaluation('dependent-direct-root', 'coded-default', { targetingKey }, logger)
+      ).resolves.toMatchObject({
+        value: 'coded-default',
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        errorMessage: 'maximum flag dependency depth exceeded',
+      })
+    }
+    expect(readEvaluatorParams).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the default when the evaluator parameters block is an accessor', () => {
+    const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
+    const malformedConfiguration = Object.defineProperty(structuredClone(configuration), 'evaluatorParams', {
+      get() {
+        throw new Error('broken evaluatorParams')
+      },
+    })
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(() => provider.setConfiguration(malformedConfiguration)).not.toThrow()
+    expect(provider.getConfiguration()).toBe(malformedConfiguration)
+    expect(warning).toHaveBeenCalledTimes(1)
+  })
+
   it('uses protected consent before a provider configuration is available', async () => {
     const provider = new DatadogNodeServerProvider({ exposureChannel: mockExposureChannel })
     const result = await provider.resolveBooleanEvaluation('kill-switch', false, {}, logger)

@@ -1,5 +1,7 @@
+import type { Logger } from '@openfeature/core'
 import { type OptOutInstant, parseOptOutInstant } from '../evaluation/experimentation-opt-out'
 import type { Allocation, Flag, UniversalFlagConfigurationV1 } from '../evaluation/ufc-v1'
+import { EvaluatorParams } from './evaluator-params'
 
 export type RandomizationActivation =
   { kind: 'missing' } | { kind: 'valid'; instant: OptOutInstant } | { kind: 'invalid' }
@@ -26,6 +28,45 @@ export function prepareAllocations<T>(
 }
 
 const jsonActivations = new WeakMap<Flag, PreparedAllocations<Allocation>>()
+const preparedUniversalFlagConfiguration = Symbol('preparedUniversalFlagConfiguration')
+
+/** @internal Runtime view of a JSON configuration prepared once when it is received. */
+export type PreparedUniversalFlagConfiguration = {
+  readonly [preparedUniversalFlagConfiguration]: true
+  readonly source: UniversalFlagConfigurationV1
+  readonly evaluatorParams: EvaluatorParams
+}
+
+/** @internal Prepare evaluator state without adding runtime-only values to the serializable source. */
+export function prepareUniversalFlagConfigurationForEvaluation(
+  configuration: UniversalFlagConfigurationV1,
+  logger: Pick<Logger, 'warn'> = console
+): PreparedUniversalFlagConfiguration {
+  prepareUniversalFlagConfiguration(configuration)
+  return prepareUniversalFlagConfigurationEvaluatorParams(configuration, logger)
+}
+
+/** @internal Prepare only evaluator parameters for the raw compatibility entrypoint. */
+export function prepareUniversalFlagConfigurationEvaluatorParams(
+  configuration: UniversalFlagConfigurationV1,
+  logger: Pick<Logger, 'warn'> = console
+): PreparedUniversalFlagConfiguration {
+  return Object.freeze({
+    [preparedUniversalFlagConfiguration]: true,
+    source: configuration,
+    evaluatorParams: EvaluatorParams.fromJsonConfiguration(configuration, logger),
+  })
+}
+
+/** @internal */
+export function isPreparedUniversalFlagConfiguration(value: unknown): value is PreparedUniversalFlagConfiguration {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, preparedUniversalFlagConfiguration) &&
+    Reflect.get(value, preparedUniversalFlagConfiguration) === true
+  )
+}
 
 /**
  * Prepare a received JSON configuration. Configurations are snapshots: replace changed

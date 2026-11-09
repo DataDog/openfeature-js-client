@@ -5,7 +5,7 @@ import { createProtobufDependencyResolver } from '../evaluation/evaluation'
 import { type ExperimentationOptOutModeValue, experimentationOptOutPolicy } from '../evaluation/experimentation-opt-out'
 import { timeStampNow } from '../time'
 import type { FlagsConfiguration, PrecomputedFlag } from './configuration'
-import type { PreparedRulesResponse } from './prepared-rules-response'
+import { type PreparedRulesResponse, prepareRulesResponse } from './prepared-rules-response'
 
 export type ConfigurationPrecomputeErrorCode = 'invalid_configuration' | 'invalid_context' | 'invalid_options'
 
@@ -172,7 +172,7 @@ function validateRules(configuration: FlagsConfiguration): PreparedRulesResponse
       rules.evaluationRegexCache instanceof Map &&
       rules.evaluationJsonCache instanceof Map
     )
-      return rules
+      return prepareRulesResponse(rules, NOOP_LOGGER)
   } catch {
     // Keep malformed input and accessor failures out of diagnostics.
   }

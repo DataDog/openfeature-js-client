@@ -92,6 +92,12 @@ declare enum ErrorCode {
 	 */
 	GENERAL = "GENERAL"
 }
+interface Logger {
+	error(...args: unknown[]): void;
+	warn(...args: unknown[]): void;
+	info(...args: unknown[]): void;
+	debug(...args: unknown[]): void;
+}
 type TimeStamp = number & {
 	t: "Epoch time";
 };
@@ -931,6 +937,15 @@ declare enum Reason {
 	 */
 	DEFAULT = 4
 }
+declare class EvaluatorParams$1 {
+	readonly effectiveMaxDependencyDepth: number;
+	private constructor();
+	static fromJson(value: unknown, logger: Pick<Logger, "warn">): EvaluatorParams$1;
+	static fromJsonConfiguration(value: unknown, logger: Pick<Logger, "warn">): EvaluatorParams$1;
+	static fromProtobuf(value: EvaluatorParams | undefined, logger: Pick<Logger, "warn">): EvaluatorParams$1;
+	static fromProtobufConfiguration(value: unknown, logger: Pick<Logger, "warn">): EvaluatorParams$1;
+	private static fromParsed;
+}
 type ExperimentationOptOutModeValue = "disabled" | "immediate" | "future_experiments_only";
 interface OptOutInstant {
 	readonly seconds: number;
@@ -959,6 +974,7 @@ type CachedJsonValue = {
 	valid: false;
 };
 type PreparedRulesResponse = FlagsConfiguration & {
+	preparedEvaluatorParams: EvaluatorParams$1;
 	evaluationRegexCache: Map<number, RegExp | null>;
 	evaluationJsonCache: Map<number, CachedJsonValue>;
 	/** Validated once at decode time; evaluation must not read raw activation timestamps. */

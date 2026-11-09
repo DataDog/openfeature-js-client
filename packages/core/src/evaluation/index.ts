@@ -6,6 +6,7 @@ export {
   type EvaluationTrace,
   type EvaluationTraceOptions,
   evaluate,
+  evaluatePreparedRulesBasedConfigurationWithTrace,
   evaluateRulesBasedConfiguration,
   evaluateRulesBasedConfigurationWithTrace,
   type FlagsConfigurationError,

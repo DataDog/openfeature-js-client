@@ -71,6 +71,20 @@ describe('dependent flag evaluation', () => {
     expect(reads).toBe(2)
   })
 
+  it('does not prepare unrelated flags through the raw compatibility entrypoint', () => {
+    const unrelated = booleanFlag('unrelated', 'on')
+    Object.defineProperty(unrelated, 'allocations', {
+      get() {
+        throw new Error('unrelated flag was inspected')
+      },
+    })
+
+    expect(evaluate(configuration({ root: booleanFlag('root', 'on'), unrelated }), 'root', logger)).toMatchObject({
+      value: true,
+      variant: 'on',
+    })
+  })
+
   it('applies experimentation opt-out to dependency evaluations', () => {
     const prerequisite = booleanFlag('prerequisite', 'on')
     const root = dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])])
@@ -113,6 +127,20 @@ describe('dependent flag evaluation', () => {
     expect(trace.dependencyExposures).toEqual([
       expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
     ])
+  })
+
+  it.each(['inherited', 'own'])('does not misclassify protobuf configuration through an %s wrapper marker', (kind) => {
+    const config = protobufDependentConfiguration(true)
+    if (kind === 'own') {
+      Object.assign(config, { kind: 'prepared-universal-flag-configuration' })
+    } else {
+      const inheritedMarker = Object.assign(Object.create(Object.getPrototypeOf(config)), {
+        kind: 'prepared-universal-flag-configuration',
+      })
+      Object.setPrototypeOf(config, inheritedMarker)
+    }
+
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
   })
 
   it('returns equivalent JSON and protobuf dependency evaluation batches', () => {
@@ -521,25 +549,22 @@ describe('dependent flag evaluation', () => {
     })
   })
 
-  it('validates an invalid protobuf maximum depth only when a dependency is reached', () => {
+  it('uses the default and warns while preparing an invalid protobuf maximum depth', () => {
     const ordinary = protobufDependentConfiguration(true)
     ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
     ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
 
-    expect(evaluateProtobuf(ordinary, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(evaluateProtobuf(roundTrip(ordinary, logger), logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
+    })
 
     const dependent = protobufDependentConfiguration(true)
     dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    expect(evaluateProtobuf(roundTrip(dependent, logger), logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
   })
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
@@ -735,11 +760,34 @@ describe('dependent flag evaluation', () => {
     }
 
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+
+    flags['depth-10'] = dependentBooleanFlag('depth-10', [flagCondition('root', OperatorType.ONE_OF, ['on'])])
+    expect(evaluate(configuration(flags), 'depth-10', logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorMessage: 'maximum flag dependency depth exceeded',
+    })
   })
 
-  it.each([256, -1, 1.5])('validates JSON maximum depth %p only when a dependency is reached', (maximumDepth) => {
+  it.each([
+    [10, true],
+    [11, false],
+  ])('enforces the hard-coded protobuf maximum at depth %i', (depth, succeeds) => {
+    const result = evaluateProtobuf(protobufDependencyChain(depth), logger).result
+
+    expect(result).toMatchObject(
+      succeeds
+        ? { value: true, variant: 'on' }
+        : { value: false, reason: 'ERROR', errorMessage: 'maximum flag dependency depth exceeded' }
+    )
+  })
+
+  it.each([256, -1, 1.5])('uses the default and warns while preparing JSON maximum depth %p', (maximumDepth) => {
     const ordinary = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
     expect(evaluate(ordinary, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
+    })
 
     const dependent = configuration(
       {
@@ -748,16 +796,10 @@ describe('dependent flag evaluation', () => {
       },
       maximumDepth
     )
-    expect(evaluate(dependent, 'root', logger)).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    expect(evaluate(dependent, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams; using default maxDependencyDepth', {
+      defaultMaxDependencyDepth: 10,
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
@@ -1136,8 +1178,53 @@ function protobufDependentConfiguration(prerequisiteHasAllocation: boolean) {
   return decodeFlagsConfiguration(encodeFlagsConfiguration(configuration))
 }
 
-function roundTrip(configuration: Parameters<typeof encodeFlagsConfiguration>[0]) {
-  return decodeFlagsConfiguration(encodeFlagsConfiguration(configuration))
+function protobufDependencyChain(depth: number) {
+  const keys = Array.from({ length: depth + 1 }, (_, index) => (index === 0 ? 'root' : `depth-${index}`))
+  const strings = ['on', ...keys]
+  const variation = { keyStringIndex: 0, value: { case: 'booleanValue' as const, value: true } }
+  const flags = Object.fromEntries(
+    keys.map((key, index) => [
+      key,
+      {
+        variationType: VariationType.BOOLEAN,
+        variations: [variation],
+        allocations: [
+          {
+            key: `${key}-allocation`,
+            ...(index < depth ? { targetingConditionIndex: index } : {}),
+            partitionKey: [],
+            splits: [
+              {
+                ranges: [],
+                variationIndex: 0,
+                serialId: index,
+                reason: index < depth ? Reason.TARGETING_MATCH : Reason.STATIC,
+              },
+            ],
+          },
+        ],
+      },
+    ])
+  )
+  const conditions = keys.slice(1).map((key) => ({
+    kind: {
+      case: 'flagEvaluationStringMembership' as const,
+      value: { flagKeyStringIndex: strings.indexOf(key), variantKeyStringIndexes: [0], negate: false },
+    },
+  }))
+
+  return roundTrip(
+    create(FlagsConfigurationSchema, {
+      environmentName: 'test',
+      strings,
+      conditions,
+      flags,
+    })
+  )
+}
+
+function roundTrip(configuration: Parameters<typeof encodeFlagsConfiguration>[0], logger?: Pick<Logger, 'warn'>) {
+  return decodeFlagsConfiguration(encodeFlagsConfiguration(configuration), logger)
 }
 
 function evaluateProtobuf(configuration: ReturnType<typeof decodeFlagsConfiguration>, logger: Logger) {

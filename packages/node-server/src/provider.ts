@@ -9,8 +9,9 @@ import {
   featuresWithPrefix,
   LRUInMemoryAssignmentCache,
   METADATA_EXPOSURE_FEATURE_PREFIX,
+  type PreparedUniversalFlagConfiguration,
   prepareExposureDecision,
-  prepareUniversalFlagConfiguration,
+  prepareUniversalFlagConfigurationForEvaluation,
   timeStampNow,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, FlagMetadata, ServerProviderEvents } from '@openfeature/core'
@@ -170,7 +171,7 @@ export class DatadogNodeServerProvider implements Provider {
   private readonly exposureCache: AssignmentCache | undefined
   private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecar
 
-  private configuration?: UniversalFlagConfigurationV1 | undefined
+  private configuration?: PreparedUniversalFlagConfiguration | undefined
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
@@ -190,20 +191,18 @@ export class DatadogNodeServerProvider implements Provider {
    * Used by dd-source-js
    */
   getConfiguration() {
-    return this.configuration
+    return this.configuration?.source
   }
 
   /**
    * Used by dd-source-js. Pass null or undefined to withdraw the configuration.
    */
   setConfiguration(configuration: UniversalFlagConfigurationV1 | null | undefined) {
-    if (configuration) {
-      prepareUniversalFlagConfiguration(configuration)
-    }
-    const previousConfiguration = this.configuration
-    const prevCreatedAt = this.configuration?.createdAt
+    const previousConfiguration = this.configuration?.source
+    if (configuration != null && configuration === previousConfiguration) return
+    const prevCreatedAt = previousConfiguration?.createdAt
     const hadConfiguration = !!this.configuration
-    this.configuration = configuration ?? undefined
+    this.configuration = configuration ? prepareUniversalFlagConfigurationForEvaluation(configuration) : undefined
 
     if (!configuration) {
       if (hadConfiguration) {

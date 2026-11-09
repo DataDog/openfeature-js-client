@@ -11,9 +11,14 @@ import {
   type FlagsConfiguration,
   type FlagTypeToValue,
   type PrecomputedConfiguration,
+  type PreparedUniversalFlagConfiguration,
   type RulesConfiguration,
 } from '../configuration'
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
+import {
+  isPreparedUniversalFlagConfiguration,
+  prepareUniversalFlagConfigurationEvaluatorParams,
+} from '../configuration/prepared-activation'
 import { type PreparedRulesResponse, prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
@@ -34,8 +39,6 @@ import {
 import { evaluatePrecomputedConfiguration } from './precomputed-evaluation'
 import type { FlagEvaluation, ResolveFlagEvaluation } from './rules'
 import { type Flag, type UniversalFlagConfigurationV1, variantTypeToFlagValueType } from './ufc-v1'
-
-const DEFAULT_MAX_DEPENDENCY_DEPTH = 10
 
 const NOOP_LOGGER: Logger = {
   debug: () => {},
@@ -210,10 +213,50 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
   experimentationOptOutMode: ExperimentationOptOutOption = false,
   options: EvaluationTraceOptions = {}
 ): EvaluationTrace<FlagTypeToValue<T>> {
+  const prepared =
+    config === undefined
+      ? undefined
+      : isProtobufConfiguration(config)
+        ? prepareRulesResponse(config, logger)
+        : // Raw compatibility callers did not previously scan every flag. Production providers
+          // use the prepared entrypoint after resolving the complete snapshot on receipt.
+          prepareUniversalFlagConfigurationEvaluatorParams(config, logger)
+  return evaluatePreparedRulesBasedConfigurationWithTrace(
+    prepared,
+    type,
+    flagKey,
+    defaultValue,
+    context,
+    logger,
+    experimentationOptOutMode,
+    options
+  )
+}
+
+/** @internal Evaluates a configuration whose evaluator parameters were resolved on receipt. */
+export function evaluatePreparedRulesBasedConfigurationWithTrace<T extends FlagValueType>(
+  config: PreparedUniversalFlagConfiguration | PreparedRulesResponse | undefined,
+  type: T,
+  flagKey: string,
+  defaultValue: FlagTypeToValue<T>,
+  context: EvaluationContext,
+  logger: Logger,
+  experimentationOptOutMode: ExperimentationOptOutOption = false,
+  options: EvaluationTraceOptions = {}
+): EvaluationTrace<FlagTypeToValue<T>> {
   const evaluationTimestampMs = timeStampNow()
+  let source: UniversalFlagConfigurationV1 | PreparedRulesResponse | undefined
+  let maxDependencyDepth: number | undefined
+  if (isPreparedUniversalFlagConfiguration(config)) {
+    source = config.source
+    maxDependencyDepth = config.evaluatorParams.effectiveMaxDependencyDepth
+  } else {
+    source = config
+    maxDependencyDepth = config?.preparedEvaluatorParams.effectiveMaxDependencyDepth
+  }
   // Snapshot consent once at the start of this evaluation. The provider can receive a new
   // configuration later, but hooks must see the consent from the configuration that produced this result.
-  const observeFullEvaluationData = config?.observeFullEvaluationData === true
+  const observeFullEvaluationData = source?.observeFullEvaluationData === true
   const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
   const excludeExperiments = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (excludeExperiments === undefined) {
@@ -232,7 +275,7 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
   let trace: EvaluationTrace<FlagTypeToValue<T>>
   try {
     trace = evaluateRules(
-      config,
+      source,
       type,
       flagKey,
       defaultValue,
@@ -242,7 +285,8 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
       excludeExperiments,
       observeFullEvaluationData,
       options.collectDependencyEvaluations !== false,
-      options.collectDependencyExposures !== false
+      options.collectDependencyExposures !== false,
+      maxDependencyDepth
     )
   } catch (error) {
     logger.error('Error evaluating flag', { error })
@@ -269,7 +313,8 @@ function evaluateRules<T extends FlagValueType>(
   excludeExperiments: ExperimentationOptOutPolicy,
   observeFullEvaluationData: boolean,
   collectDependencyEvaluations: boolean,
-  collectDependencyExposures: boolean
+  collectDependencyExposures: boolean,
+  maxDependencyDepth: number | undefined
 ): EvaluationTrace<FlagTypeToValue<T>> {
   if (!config) {
     return {
@@ -285,7 +330,7 @@ function evaluateRules<T extends FlagValueType>(
   }
 
   if (isProtobufConfiguration(config)) {
-    const prepared = prepareRulesResponse(config)
+    const prepared = config as PreparedRulesResponse
     const dependencies = createProtobufDependencyResolver(
       prepared,
       flagKey,
@@ -353,7 +398,7 @@ function evaluateRules<T extends FlagValueType>(
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
       dependencySession ??= new DependencyEvaluationSession(
         flagKey,
-        getMaxDependencyDepth(config, flagKey),
+        maxDependencyDepth!,
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -443,7 +488,7 @@ export function createProtobufDependencyResolver(
   const resolve = ((dependencyFlagKey: string) => {
     dependencySession ??= new DependencyEvaluationSession(
       flagKey,
-      getMaxDependencyDepth(config, flagKey),
+      config.preparedEvaluatorParams.effectiveMaxDependencyDepth,
       observeFullEvaluationData,
       (key) => {
         const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -844,25 +889,6 @@ function asFlagEvaluationResolver(resolveDependency: ResolveDependency): Resolve
   resolve.checkpoint = resolveDependency.checkpoint
   resolve.rollback = resolveDependency.rollback
   return resolve
-}
-
-function getMaxDependencyDepth(
-  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
-  rootFlagKey: string
-): number {
-  const configuredDepth = config.evaluatorParams?.maxDependencyDepth
-  if (configuredDepth === undefined) {
-    return DEFAULT_MAX_DEPENDENCY_DEPTH
-  }
-  const numericDepth = typeof configuredDepth === 'bigint' ? Number(configuredDepth) : configuredDepth
-  if (Number.isInteger(numericDepth) && numericDepth >= 0 && numericDepth <= 255) {
-    return numericDepth
-  }
-  throw new DependencyGraphError(
-    rootFlagKey,
-    'PARSE_ERROR' as ErrorCode,
-    'maxDependencyDepth must be an integer from 0 through 255'
-  )
 }
 
 function defaultValueForType(type: FlagValueType): FlagValue {

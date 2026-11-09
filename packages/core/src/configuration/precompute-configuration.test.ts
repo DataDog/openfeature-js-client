@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { fromJson, type JsonObject } from '@bufbuild/protobuf'
+import { fromBinary, fromJson, type JsonObject } from '@bufbuild/protobuf'
 import type { EvaluationContext } from '@openfeature/core'
 import { evaluate } from '../evaluation/evaluation'
 import * as clock from '../time'
@@ -12,6 +12,8 @@ import {
   precomputeConfiguration,
 } from './precompute-configuration'
 import { getPrecomputedContext } from './precomputed-context'
+import { prepareAllocations } from './prepared-activation'
+import type { PreparedRulesResponse } from './prepared-rules-response'
 import { configurationFromRulesBinary } from './rules-wire'
 import { encodeFlagsConfiguration } from './ufc-protobuf'
 import { configurationFromString, configurationToString } from './wire'
@@ -115,7 +117,6 @@ describe('precomputeConfiguration', () => {
     ['invalid parent', 'PARSE_ERROR'],
     ['cycle', 'GENERAL'],
     ['depth limit', 'GENERAL'],
-    ['invalid depth', 'PARSE_ERROR'],
   ])('omits a child with %s, reports its error, and continues precomputing', (failure, errorCode) => {
     const input = dependentRules()
     const source = input.rules!.response
@@ -123,9 +124,9 @@ describe('precomputeConfiguration', () => {
     if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
     if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
     if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
-    if (failure === 'depth limit' || failure === 'invalid depth') {
+    if (failure === 'depth limit') {
       source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-        evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
+        evaluatorParams: { maxDependencyDepth: 0 },
       }).evaluatorParams
     }
     const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
@@ -143,6 +144,64 @@ describe('precomputeConfiguration', () => {
         .map(([error]) => error)
         .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
     ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
+  })
+
+  it('uses the default depth when precomputing a configuration with an invalid override', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+      evaluatorParams: { maxDependencyDepth: 256 },
+    }).evaluatorParams
+    const warning = jest.spyOn(console, 'warn').mockImplementation()
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+    const onEvaluationError = jest.fn()
+
+    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+
+    expect(warning).toHaveBeenCalledTimes(1)
+    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
+      'child',
+      'parent',
+      'unrelated',
+    ])
+    expect(onEvaluationError).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['the default depth', undefined, true],
+    ['an explicit zero depth', 0, undefined],
+  ] as const)('repairs legacy prepared rules and uses %s', (_name, maxDependencyDepth, childExpected) => {
+    const input = dependentRules()
+    const current = input.rules!.response
+    const raw = fromBinary(FlagsConfigurationSchema, encodeFlagsConfiguration(current))
+    if (maxDependencyDepth !== undefined) {
+      raw.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+        evaluatorParams: { maxDependencyDepth },
+      }).evaluatorParams
+    }
+    const randomizationActivations = new Map(
+      Object.values(raw.flags).map((entry) => [
+        entry,
+        prepareAllocations(entry.allocations, () => ({ kind: 'missing' as const })),
+      ])
+    )
+    Object.defineProperties(raw, {
+      evaluationRegexCache: { value: new Map() },
+      evaluationJsonCache: { value: new Map() },
+      randomizationActivations: { value: randomizationActivations },
+    })
+    input.rules!.response = raw as PreparedRulesResponse
+
+    const result = precomputeConfiguration(input, context)
+
+    expect(result.precomputed?.response.data.attributes.flags.child?.variationValue).toBe(childExpected)
+    expect((raw as PreparedRulesResponse).preparedEvaluatorParams.effectiveMaxDependencyDepth).toBe(
+      maxDependencyDepth ?? 10
+    )
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
