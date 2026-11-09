@@ -419,6 +419,32 @@ or response signing. Values, variation names, allocation names, telemetry,
 and application code can still reveal a feature's purpose. Do not put sensitive
 information in client-facing variant values, including JSON objects.
 
+## Precomputed client compatibility
+
+When your server generates or fetches a precomputed configuration for the browser,
+send it the response formats supported by the browser SDK:
+
+```typescript
+import { getPrecomputedClientCompatibility } from '@datadog/openfeature-browser'
+
+const response = await fetch('/api/flags/precomputed', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    clientCompatibility: getPrecomputedClientCompatibility(),
+  }),
+})
+if (!response.ok) throw new Error('Cannot load flag configuration')
+const wire = await response.text()
+```
+
+The getter returns a read-only, JSON-serializable object. Forward the whole object
+so future optional compatibility fields do not require changes to your request code.
+Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
+supported; a capability does not require the server to use that format or provide
+an authorization boundary. Your application chooses its own client-server transport.
+The getter is available from the root entry point without protobuf.
+
 ## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
