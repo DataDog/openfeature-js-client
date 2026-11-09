@@ -146,6 +146,14 @@ Required mode uses only verified memory for the same provider and full evaluatio
 context. It does not read bootstrap or persistent configurations, never retries
 unsigned, and returns defaults after proof expiry or restart until a fresh verified
 response arrives. This includes expiry while offline, without another refresh.
+The first evaluation that detects expiry returns the default with reason `ERROR`,
+error code `GENERAL`, and an explicit proof-expiry message. The provider changes
+from `READY` or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event
+per expiry episode. Repeated evaluations do not repeat that event. A fresh verified
+response restores `READY` and emits `PROVIDER_READY` after expiry recovery.
+Expiry does not invoke `onVerification` or start a refresh. There is no expiry timer;
+an idle provider signals expiry when its next evaluation detects it. An update
+already in progress keeps its reconciliation status until that update completes.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
 headers, mode, selection and nested context. Upgrading into observe causes a

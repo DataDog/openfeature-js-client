@@ -17,7 +17,14 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { ErrorCode, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import {
+  ErrorCode,
+  GeneralError,
+  InvalidContextError,
+  ProviderEvents,
+  ProviderStatus,
+  StandardResolutionReasons,
+} from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
@@ -83,6 +90,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private flagEvaluationTransport?: FlagEvaluationTransport
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
   private initializationStarted = false
+  private proofExpirySignaled = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -267,6 +275,8 @@ export class DatadogProvider extends DatadogProviderBase {
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
+          const recoveredFromExpiry = this.proofExpirySignaled
+          this.proofExpirySignaled = false
           this.flagsConfiguration = config
           if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
             this.verifiedConfiguration = config
@@ -276,6 +286,7 @@ export class DatadogProvider extends DatadogProviderBase {
           if (fromCache) this.lifecycleTelemetry?.providerError()
           this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
+          if (recoveredFromExpiry && !fromCache) this.events.emit(ProviderEvents.Ready)
 
           if (this.status === ProviderStatus.STALE) {
             // HACK: returning from onContextChange causes the OF SDK
@@ -389,18 +400,36 @@ export class DatadogProvider extends DatadogProviderBase {
   ): ResolutionDetails<FlagTypeToValue<T>> {
     const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
     const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
-    const result = evaluatePrecomputedConfiguration(
-      this.configuration?.responseSigning?.mode === 'required' &&
-        !this.configuration.responseSigning.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
-        ? undefined
-        : this.flagsConfiguration,
-      type,
-      flagKey,
-      defaultValue,
-      context,
-      this.experimentationOptOutMode,
-      _logger
-    )
+    const signing = this.configuration?.responseSigning
+    const unverified =
+      signing?.mode === 'required' && !signing.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
+    const expired = unverified && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+    const expiryMessage = 'The verified flag configuration proof has expired'
+    if (
+      expired &&
+      !this.proofExpirySignaled &&
+      (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
+    ) {
+      this.proofExpirySignaled = true
+      this.status = ProviderStatus.ERROR
+      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
+    }
+    const result: ResolutionDetails<FlagTypeToValue<T>> = expired
+      ? {
+          value: defaultValue,
+          reason: StandardResolutionReasons.ERROR,
+          errorCode: ErrorCode.GENERAL,
+          errorMessage: expiryMessage,
+        }
+      : evaluatePrecomputedConfiguration(
+          unverified ? undefined : this.flagsConfiguration,
+          type,
+          flagKey,
+          defaultValue,
+          context,
+          this.experimentationOptOutMode,
+          _logger
+        )
     // A well-formed context is waiting for usable assignments, not invalid.
     const awaitingAssignments =
       optOutEnabled &&

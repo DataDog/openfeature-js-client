@@ -1,7 +1,7 @@
 import { createPrivateKey, sign, webcrypto } from 'node:crypto'
 import { ReadableStream } from 'node:stream/web'
 import { TextDecoder, TextEncoder } from 'node:util'
-import { ProviderStatus } from '@openfeature/web-sdk'
+import { ErrorCode, OpenFeature, ProviderEvents, ProviderStatus, StandardResolutionReasons } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../../src/cache/indexeddb-flags-cache'
 import type { FlaggingInitConfiguration } from '../../../src/domain/configuration'
 import { DatadogProvider } from '../../../src/openfeature/provider'
@@ -112,8 +112,15 @@ function response(body: string, headers: Headers = new Headers(), status = 200):
 function unsigned(value = true) {
   return response(JSON.stringify(payload(value)))
 }
-async function signed(url: RequestInfo | URL, init: RequestInit = {}, value = true): Promise<Response> {
+async function signed(
+  url: RequestInfo | URL,
+  init: RequestInit = {},
+  value = true,
+  issuedAt = vector.now
+): Promise<Response> {
   const headers = new Headers(vector.response.headers as [string, string][])
+  headers.set('x-datadog-feature-flags-issued-at', String(issuedAt))
+  headers.set('x-datadog-feature-flags-expires-at', String(issuedAt + 300))
   const body = new TextEncoder().encode(JSON.stringify(payload(value)))
   const request = {
     url: String(url),
@@ -124,8 +131,8 @@ async function signed(url: RequestInfo | URL, init: RequestInit = {}, value = tr
   const transcript = await buildSigningTranscript(
     request,
     { status: 200, headers, body },
-    vector.now,
-    vector.now + 300,
+    issuedAt,
+    issuedAt + 300,
     decodeBase64(headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
     decodeBase64(headers.get('x-datadog-feature-flags-signing-intermediate')!, 4096)
   )
@@ -329,6 +336,151 @@ test('required uses matching verified memory until original expiry, including ev
   jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
   expect(evaluation(subject)).toBe(false)
   await expect(subject.onContextChange(context, context)).rejects.toThrow('network unavailable')
+})
+test.each(['required', 'observe'] as const)(
+  '%s proof expiry: evaluation and OpenFeature lifecycle signals',
+  async (mode) => {
+    const onVerification = jest.fn()
+    global.fetch = jest.fn(signed)
+    const subject = provider(mode, {
+      responseSigning: { mode, trustedRootCertificates: roots, onVerification },
+    })
+    await subject.initialize(context)
+    const resolve = () => subject.resolveBooleanEvaluation('critical', false, {}, logger)
+    expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(onVerification.mock.calls).toEqual([[{ status: 'verified' }]])
+
+    // Subscribe after successful admission so initialization events do not mask expiry behavior.
+    const stale = jest.fn()
+    const error = jest.fn()
+    const changed = jest.fn()
+    subject.events.addHandler(ProviderEvents.Stale, stale)
+    subject.events.addHandler(ProviderEvents.Error, error)
+    subject.events.addHandler(ProviderEvents.ConfigurationChanged, changed)
+    onVerification.mockClear()
+    const requestsAfterAdmission = (global.fetch as jest.Mock).mock.calls.length
+
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000 - 1)
+    expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+
+    // The proof is invalid at expiresAt, not one second later. Repeat reads after that boundary.
+    for (const seconds of [300, 301]) {
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + seconds) * 1000)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (mode === 'required') {
+          expect(resolve()).toMatchObject({
+            value: false,
+            reason: StandardResolutionReasons.ERROR,
+            errorCode: ErrorCode.GENERAL,
+            errorMessage: 'The verified flag configuration proof has expired',
+          })
+        } else {
+          expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+        }
+      }
+    }
+    // Flush asynchronous handlers. Only Date.now is controlled; this does not simulate browser timer scheduling.
+    await flush()
+    expect(subject.status).toBe(mode === 'required' ? ProviderStatus.ERROR : ProviderStatus.READY)
+    expect(stale).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledTimes(mode === 'required' ? 1 : 0)
+    if (mode === 'required') {
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorCode: ErrorCode.GENERAL,
+          message: 'The verified flag configuration proof has expired',
+        })
+      )
+    }
+    expect(changed).not.toHaveBeenCalled()
+    expect(onVerification).not.toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalledTimes(requestsAfterAdmission)
+
+    // A fresh proof restores usability and permits another expiry episode to signal once.
+    const ready = jest.fn()
+    subject.events.addHandler(ProviderEvents.Ready, ready)
+    global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 301))
+    await subject.onContextChange(context, context)
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+    expect(ready).toHaveBeenCalledTimes(mode === 'required' ? 1 : 0)
+    expect(changed).toHaveBeenCalledTimes(1)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 601) * 1000)
+    resolve()
+    resolve()
+    await flush()
+    expect(error).toHaveBeenCalledTimes(mode === 'required' ? 2 : 0)
+    expect(onVerification).not.toHaveBeenCalled()
+  }
+)
+test('OpenFeature clients receive expiry errors and recovery events', async () => {
+  const domain = 'response-signing-expiry'
+  const subject = provider('required')
+  global.fetch = jest.fn(signed)
+  await OpenFeature.setProviderAndWait(domain, subject, context)
+  const client = OpenFeature.getClient(domain)
+  const errors = jest.fn()
+  const ready = jest.fn()
+  client.addHandler(ProviderEvents.Error, errors)
+  client.addHandler(ProviderEvents.Ready, ready)
+  try {
+    expect(client.getBooleanDetails('critical', false)).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    for (let i = 0; i < 2; i++) {
+      expect(client.getBooleanDetails('critical', false)).toMatchObject({
+        value: false,
+        reason: StandardResolutionReasons.ERROR,
+        errorCode: ErrorCode.GENERAL,
+        errorMessage: 'The verified flag configuration proof has expired',
+      })
+    }
+    await flush()
+    expect(client.providerStatus).toBe(ProviderStatus.ERROR)
+    expect(errors).toHaveBeenCalledTimes(1)
+    ready.mockClear()
+    global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 300))
+    await OpenFeature.setContext(domain, { ...context, refreshed: true })
+    await flush()
+    expect(client.providerStatus).toBe(ProviderStatus.READY)
+    expect(client.getBooleanDetails('critical', false)).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    expect(ready).toHaveBeenCalledTimes(1)
+  } finally {
+    client.removeHandler(ProviderEvents.Error, errors)
+    client.removeHandler(ProviderEvents.Ready, ready)
+    await OpenFeature.clearProviders()
+  }
+})
+
+test('expiry does not overwrite an in-flight context reconciliation', async () => {
+  const subject = provider('required')
+  global.fetch = jest.fn(signed)
+  await subject.initialize(context)
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  global.fetch = jest.fn(async (url, init) => {
+    await gate
+    return signed(url, init, true, vector.now + 300)
+  })
+  const errors = jest.fn()
+  subject.events.addHandler(ProviderEvents.Error, errors)
+  const update = subject.onContextChange(context, context)
+  jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+  expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
+    value: false,
+    errorCode: ErrorCode.GENERAL,
+    errorMessage: 'The verified flag configuration proof has expired',
+  })
+  expect(subject.status).toBe(ProviderStatus.RECONCILING)
+  release()
+  await update
+  await flush()
+  expect(subject.status).toBe(ProviderStatus.READY)
+  expect(evaluation(subject)).toBe(true)
+  expect(errors).not.toHaveBeenCalled()
 })
 test('required rejects bootstrap, legacy persistence and verified data after restart', async () => {
   const bootstrap = { precomputed: { response: payload(), context, fetchedAt: 1 as any } }
@@ -563,7 +715,6 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
     ).toThrow('valid provider configuration')
   }
 })
-
 
 describe('required response stream reads', () => {
   function setup() {

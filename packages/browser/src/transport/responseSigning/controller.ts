@@ -196,6 +196,10 @@ export function createResponseSigningController(
         report()
       }
     },
+    isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
+      const proof = config && verified.get(config)
+      return !!proof && proof.expiresAt <= Date.now() / 1000 && proof.context === signingContextKey(context)
+    },
     isVerified(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false
       const proof = verified.get(config)
