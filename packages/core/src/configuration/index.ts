@@ -1,3 +1,4 @@
+export type { ClientCompatibility } from './client-compatibility'
 export * from './configuration'
 export * from './exposure-decision'
 export * from './exposureEvent'
@@ -7,7 +8,6 @@ export * from './flag-selection'
 export * from './flagEvaluationAggregator'
 export * from './flagEvaluationEvent'
 export * from './flagEvaluationEvent.types'
-export type { PrecomputedClientCompatibility } from './precomputed-client-compatibility'
 export * from './precomputed-context'
 export {
   configurationFromPrecomputedString as configurationFromString,

@@ -1,7 +1,7 @@
 import {
   configurationFromString,
   configurationToString,
-  getPrecomputedClientCompatibility,
+  getClientCompatibility,
 } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
@@ -35,10 +35,10 @@ const restored = configurationFromString(serialized)
 const flag = configuration.precomputed?.response.data.attributes.flags['precomputed-flag']
 const restoredFlag = restored.precomputed?.response.data.attributes.flags['precomputed-flag']
 
-const compatibility = JSON.parse(JSON.stringify(getPrecomputedClientCompatibility()))
+const compatibility = JSON.parse(JSON.stringify(getClientCompatibility()))
 assert(
   compatibility.capabilities.includes('assignment-encoding-flag-key-256-v1'),
-  'root entrypoint did not expose precomputed client compatibility'
+  'root entrypoint did not expose client compatibility'
 )
 
 assert(flag?.variationValue === true, 'precomputed flag was not parsed')

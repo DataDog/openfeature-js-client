@@ -419,19 +419,19 @@ or response signing. Values, variation names, allocation names, telemetry,
 and application code can still reveal a feature's purpose. Do not put sensitive
 information in client-facing variant values, including JSON objects.
 
-## Precomputed client compatibility
+## Client compatibility
 
 When your server generates or fetches a precomputed configuration for the browser,
 send it the response formats supported by the browser SDK:
 
 ```typescript
-import { getPrecomputedClientCompatibility } from '@datadog/openfeature-browser'
+import { getClientCompatibility } from '@datadog/openfeature-browser'
 
 const response = await fetch('/api/flags/precomputed', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    clientCompatibility: getPrecomputedClientCompatibility(),
+    clientCompatibility: getClientCompatibility(),
   }),
 })
 if (!response.ok) throw new Error('Cannot load flag configuration')
