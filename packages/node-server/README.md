@@ -86,7 +86,7 @@ You can also pass rules parsed with `configurationFromString()` or `configuratio
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
 
 To prepare output for a particular browser SDK, pass the complete object returned
-by its `getPrecomputedClientCompatibility()` getter:
+by its `getClientCompatibility()` getter:
 
 ```typescript
 const precomputed = precomputeConfiguration(rules, context, { clientCompatibility })

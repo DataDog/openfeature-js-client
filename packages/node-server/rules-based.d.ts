@@ -1,3 +1,7 @@
+/** Compatibility information advertised by a target client SDK. */
+export type ClientCompatibility = {
+	readonly capabilities: readonly string[];
+};
 type PrimitiveValue = null | boolean | string | number;
 type JsonObject = {
 	[key: string]: JsonValue;
@@ -1037,10 +1041,6 @@ export interface FlagSelection {
 	tags?: readonly string[];
 	keyPatterns?: readonly string[];
 }
-/** Response formats a target client can read. Plaintext is always supported. */
-export type PrecomputedClientCompatibility = {
-	readonly capabilities: readonly string[];
-};
 export type FlagsConfigurationWire = string;
 export type ConfigurationPrecomputeErrorCode = "invalid_configuration" | "invalid_context" | "invalid_options";
 /** A top-level input error. Individual flag failures are reported separately. */
@@ -1116,7 +1116,7 @@ export declare class ConfigurationFetchError extends Error {
 export declare function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
 type PrecomputeConfigurationOptions$1 = PrecomputeConfigurationOptions & {
 	/** Target client's response support. Omitted or empty capabilities preserve plaintext keys. */
-	clientCompatibility?: PrecomputedClientCompatibility;
+	clientCompatibility?: ClientCompatibility;
 };
 /** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */
 export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions$1): FlagsConfiguration$1;
