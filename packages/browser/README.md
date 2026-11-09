@@ -144,6 +144,10 @@ when signing is enabled. Public v1 is the first release format; earlier POC v1/v
 and draft v3 formats are not supported compatibility targets. This protocol number
 is independent of X.509 v3 certificate encoding.
 
+Verification requires an accurate device clock and uses the browser's `Date.now()`.
+Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
+Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+
 Required mode uses only verified memory for the same provider and full evaluation
 context. It does not read bootstrap or persistent configurations, never retries
 unsigned, and returns defaults after proof expiry or restart until a fresh verified
