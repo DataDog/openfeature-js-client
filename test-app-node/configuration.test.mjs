@@ -8,6 +8,7 @@ import {
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
+  fetchPrecomputedConfiguration,
   fetchRulesConfiguration,
   precomputeConfiguration,
 } from '@datadog/openfeature-node-server/rules-based'
@@ -31,7 +32,8 @@ for (const mode of ['require', 'import']) {
           const root = await load('@datadog/openfeature-node-server')
           assert.equal(typeof root.DatadogNodeServerProvider, 'function')
           assert.equal('fetchRulesConfiguration' in root, false)
-          assert.equal('configurationFromString' in root, false)
+          assert.equal(typeof root.configurationFromString, 'function')
+          assert.equal(typeof root.fetchPrecomputedConfiguration, 'function')
           assert.equal('precomputeConfiguration' in root, false)
           // The Node package consumes core through CommonJS in both loading modes.
           const core = require('@datadog/flagging-core')
@@ -40,9 +42,19 @@ for (const mode of ['require', 'import']) {
             /@bufbuild[/\\\\]protobuf|configuration[/\\\\](generated|protobuf-text-encoding|rules-wire|ufc-protobuf)/.test(file)
           )
           assert.deepEqual(protobufModules(), [])
+          const fetched = await root.fetchPrecomputedConfiguration({
+            distributionChannel: 'client', clientToken: 'token', env: 'prod', context: {},
+            fetch: async () => new Response(JSON.stringify({ data: { attributes: { createdAt: 'now', flags: {} } } }), {
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          })
+          assert.deepEqual(root.getPrecomputedContext(root.configurationFromString(root.configurationToString(fetched))), {})
+          assert.deepEqual(protobufModules(), [])
           const helpers = await load('@datadog/openfeature-node-server/rules-based')
           assert.equal(typeof helpers.fetchRulesConfiguration, 'function')
           assert.equal(typeof helpers.configurationFromString, 'function')
+          assert.equal(helpers.fetchPrecomputedConfiguration, root.fetchPrecomputedConfiguration)
+          assert.equal(helpers.ConfigurationFetchError, root.ConfigurationFetchError)
           const emptyRules = helpers.configurationFromRulesBinary(new Uint8Array())
           const snapshot = helpers.precomputeConfiguration(emptyRules, { targetingKey: 'subject' })
           const restored = helpers.configurationFromString(helpers.configurationToString(snapshot))
@@ -68,6 +80,7 @@ test('native ESM and CommonJS expose identical standalone helpers without OpenFe
     ConfigurationPrecomputeError,
     configurationToString,
     fetchRulesConfiguration,
+    fetchPrecomputedConfiguration,
     precomputeConfiguration,
   })) {
     assert.equal(typeof value, 'function')

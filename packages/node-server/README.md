@@ -38,7 +38,46 @@ await OpenFeature.setProviderAndWait(provider, context)
 
 The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `DatadogNodeServerProvider.setConfiguration()`. The existing Node provider is unchanged, and importing it from the root entrypoint does not load the protobuf decoder.
 
-### Fetch Options and Errors
+### Precomputed Fetching
+
+Fetch client-distributed assignments from Datadog for one context without loading
+the protobuf decoder, initializing a provider, or recording tracking events:
+
+```typescript
+import { configurationToString, fetchPrecomputedConfiguration } from '@datadog/openfeature-node-server'
+
+const configuration = await fetchPrecomputedConfiguration({
+  distributionChannel: 'client',
+  clientToken,
+  env: 'production',
+  context,
+  clientCompatibility,
+})
+const wire = configurationToString(configuration)
+```
+
+The helper is also exported from `/rules-based`. The root parser and serializer
+handle only precomputed configurations; use `/rules-based` to retain rules.
+
+`distributionChannel: 'client'` is required in this draft. The endpoint does not
+support server-distributed flags or API-key authentication. Whether to add that
+support or a default channel is a separate API decision before release.
+
+Forward the browser's complete `getPrecomputedClientCompatibility()` result as
+`clientCompatibility`. Missing compatibility or an empty list uses the plaintext
+baseline, not the Node SDK's capabilities. Unknown or unimplemented capabilities
+are ignored. Datadog controls its encoding rollout: an encoding-capable client can
+receive plaintext. A response using an encoding the target did not advertise is
+rejected with `ConfigurationFetchError` (`decode`).
+
+`site`, `fetch`, `timeoutMs` and `signal` follow the rules-fetch transport
+conventions below. Optional `applicationId` maps to `dd-application-id`.
+The helper snapshots a JSON-compatible context and binds the returned assignments
+to it. Malformed context, compatibility or options fail with `invalid_options`
+before any request. Use the same context when initializing the receiving provider.
+There is no polling, retry, tracking or automatic server fallback.
+
+### Rules Fetch Options and Errors
 
 - `distributionChannel` selects the configuration channel to fetch, not where the helper runs. It defaults to `server`; use `client` when preparing configuration for browser or mobile SDKs.
 - `flagSelection` optionally requests flags matching any of the `tags` or whole-key glob `keyPatterns`. Both distribution channels support selection; omitting it requests the full configuration.

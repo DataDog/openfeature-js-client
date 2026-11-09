@@ -7,7 +7,43 @@ const {
 } = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
 const { getClientFingerprint } = require('../packages/browser/cjs')
+const { fetchPrecomputedConfiguration } = require('@datadog/openfeature-node-server')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
+
+for (const clientFingerprint of [undefined, getClientFingerprint()]) {
+  test(`the browser consumes Node-fetched assignments (compatibility=${!!clientFingerprint})`, async () => {
+    const context = { targetingKey: 'user-1', country: 'US' }
+    const prepared = precomputeConfiguration(configurationFromString(JSON.stringify(fixture)), context, {
+      clientFingerprint,
+    })
+    let calls = 0
+    const result = await fetchPrecomputedConfiguration({
+      distributionChannel: 'client',
+      clientToken: 'token',
+      env: 'prod',
+      context,
+      clientFingerprint,
+      fetch: async () => {
+        calls++
+        return new Response(JSON.stringify(prepared.precomputed.response), {
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    })
+    const provider = new DatadogCoreProvider()
+    provider.setConfiguration(configurationFromString(configurationToString(result)))
+    await provider.initialize(context)
+    const details = provider.resolveBooleanEvaluation('test-flag', false, context, {
+      debug() {},
+      info() {},
+      warn() {},
+      error() {},
+    })
+    assert.equal(details.value, true)
+    assert.equal(details.variant, 'on')
+    assert.equal(calls, 1)
+  })
+}
 
 for (const clientFingerprint of [undefined, getClientFingerprint()]) {
   test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientFingerprint}) without requests or tracking`, async () => {
