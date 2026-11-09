@@ -1099,7 +1099,7 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	applicationId?: string;
 	context: EvaluationContext;
 	/** Target client's response support, not the fetching Node SDK's capabilities. */
-	clientCompatibility?: PrecomputedClientCompatibility;
+	clientCompatibility?: ClientCompatibility;
 }
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
 export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;

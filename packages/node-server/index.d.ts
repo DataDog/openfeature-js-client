@@ -1,5 +1,9 @@
 import { Channel } from 'node:diagnostics_channel';
 
+/** Compatibility information advertised by a target client SDK. */
+export type ClientCompatibility = {
+	readonly capabilities: readonly string[];
+};
 type Metadata = Record<string, string>;
 type Paradigm = "server" | "client";
 type PrimitiveValue = null | boolean | string | number;
@@ -1501,10 +1505,6 @@ interface ExposureEvent {
 		};
 	};
 }
-/** Response formats a target client can read. Plaintext is always supported. */
-export type PrecomputedClientCompatibility = {
-	readonly capabilities: readonly string[];
-};
 /**
  * Return a detached copy of the context from a precomputed configuration.
  *
@@ -1553,7 +1553,7 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	applicationId?: string;
 	context: EvaluationContext;
 	/** Target client's response support, not the fetching Node SDK's capabilities. */
-	clientCompatibility?: PrecomputedClientCompatibility;
+	clientCompatibility?: ClientCompatibility;
 }
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
 export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;

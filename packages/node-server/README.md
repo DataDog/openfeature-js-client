@@ -63,7 +63,7 @@ handle only precomputed configurations; use `/rules-based` to retain rules.
 support server-distributed flags or API-key authentication. Whether to add that
 support or a default channel is a separate API decision before release.
 
-Forward the browser's complete `getPrecomputedClientCompatibility()` result as
+Forward the browser's complete `getClientCompatibility()` result as
 `clientCompatibility`. Missing compatibility or an empty list uses the plaintext
 baseline, not the Node SDK's capabilities. Unknown or unimplemented capabilities
 are ignored. Datadog controls its encoding rollout: an encoding-capable client can
