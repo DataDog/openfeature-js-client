@@ -14,7 +14,6 @@ import {
   type SigningRequest,
   sha256,
   utf8,
-  type VerificationFailure,
   type VerifiedResponse,
   validateSigningRequest,
   verifyResponse,
@@ -32,8 +31,6 @@ export interface ResponseSigningConfiguration {
    * These public anchors are fixed for the lifetime of the provider; never populate them from a response.
    */
   trustedRootCertificates?: readonly string[]
-  /** Called at most once per distinct outcome per provider. Contains no request data or certificate contents. */
-  onVerification?: (outcome: { status: 'verified' } | { status: 'unverified'; reason: VerificationFailure }) => void
 }
 
 export function createResponseSigningController(
@@ -50,24 +47,11 @@ export function createResponseSigningController(
     throw new Error('Invalid response signing trust anchors')
   if (mode === 'required' && !roots.length)
     throw new Error('Required response signing needs a locally trusted root certificate')
-  const notify = options?.onVerification
-  const reported = new Set<string>()
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()
   const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
-  function report(reason?: VerificationFailure) {
-    const key = reason ?? 'verified'
-    if (reported.has(key)) return
-    reported.add(key)
-    try {
-      notify?.(reason ? { status: 'unverified', reason } : { status: 'verified' })
-    } catch {
-      /* Diagnostics cannot change admission. */
-    }
-  }
   function failure(error: unknown): undefined {
     const reason = error instanceof ResponseVerificationError ? error.reason : 'invalid-proof'
-    report(reason)
     if (mode === 'required')
       throw error instanceof ResponseVerificationError ? error : new ResponseVerificationError(reason)
     return undefined
@@ -182,7 +166,6 @@ export function createResponseSigningController(
           return
         }
         verified.set(config, { ...proof, acceptedAt: proof.verifiedAt, context: signingContextKey(context) })
-        report()
       }
     },
     isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {

@@ -34,6 +34,7 @@ import {
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { cloneSigningContext } from '../transport/responseSigning/context'
+import { ResponseVerificationError } from '../transport/responseSigning/verification'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -91,6 +92,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private flagEvaluationTransport?: FlagEvaluationTransport
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
   private initializationStarted = false
+  private verificationError: ResponseVerificationError | undefined
   private proofExpirySignaled = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
@@ -225,6 +227,7 @@ export class DatadogProvider extends DatadogProviderBase {
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(effectiveContext)
     this.requestedEvaluationContext = evaluationContext
+    this.verificationError = undefined
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -272,7 +275,8 @@ export class DatadogProvider extends DatadogProviderBase {
             !this.configuration.responseSigning.isVerified(config, evaluationContext)
           ) {
             this.status = ProviderStatus.ERROR
-            const error = new Error('Verified assignments expired before admission')
+            const error = new ResponseVerificationError('expired-proof')
+            this.verificationError = error
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
@@ -308,6 +312,7 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            this.verificationError = error instanceof ResponseVerificationError ? error : undefined
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -351,7 +356,7 @@ export class DatadogProvider extends DatadogProviderBase {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
       signal.throwIfAborted()
       if (signing?.mode === 'required' && !signing.isVerified(config, context))
-        throw new Error('Verified assignments unavailable')
+        throw new ResponseVerificationError('expired-proof')
       if (config.precomputed) {
         this.lifecycleTelemetry?.configurationReceived()
       } else if (config.precomputedError) {
@@ -415,12 +420,13 @@ export class DatadogProvider extends DatadogProviderBase {
       this.status = ProviderStatus.ERROR
       this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
     }
-    const result: ResolutionDetails<FlagTypeToValue<T>> = expired
+    const verificationMessage = expired ? expiryMessage : unverified ? this.verificationError?.message : undefined
+    const result: ResolutionDetails<FlagTypeToValue<T>> = verificationMessage
       ? {
           value: defaultValue,
           reason: StandardResolutionReasons.ERROR,
           errorCode: ErrorCode.GENERAL,
-          errorMessage: expiryMessage,
+          errorMessage: verificationMessage,
         }
       : evaluatePrecomputedConfiguration(
           unverified ? undefined : this.flagsConfiguration,

@@ -92,7 +92,7 @@ Signing-enabled requests set `X-stream: false` because whole-body proofs require
 Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
 Custom proxies must forward this header and permit it in CORS preflights.
 
-Response signing is opt-in and defaults to `off`. Use `observe` to report verification outcomes while accepting ordinary valid
+Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
 assignments, or `required` to admit only verified responses. Existing authentication,
 HTTP errors, JSON validation, and experimentation opt-out checks still apply.
 
@@ -103,10 +103,6 @@ const provider = new DatadogProvider({
   responseSigning: {
     mode: 'observe',
     trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
-    onVerification(outcome) {
-      // Fixed diagnostic codes only; each distinct outcome is emitted once per provider.
-      console.info(outcome)
-    },
   },
 })
 ```
@@ -116,9 +112,15 @@ const provider = new DatadogProvider({
 root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
 approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
 anchors from an assignment response. Required mode rejects missing anchor
-configuration. Observe mode reports `missing-anchor` and accepts an otherwise valid
-response. It also accepts unsigned or invalidly signed responses without calling
-them verified. Diagnostics contain no token, context, response, or certificate data.
+configuration. Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
+them verified. Verification error messages contain no token, context, response, or certificate data.
+
+Required-mode verification failures use OpenFeature error code `GENERAL`.
+`PROVIDER_ERROR` events include the failure message, such as `Response signing: missing-proof`.
+When no usable verified configuration remains, evaluation details return the default value,
+reason `ERROR`, error code `GENERAL`, and the verification failure message.
+Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
+There is no separate verification callback.
 
 For Datadog staging, select `site: 'datad0g.com'` and
 `responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
@@ -151,7 +153,7 @@ error code `GENERAL`, and an explicit proof-expiry message. The provider changes
 from `READY` or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event
 per expiry episode. Repeated evaluations do not repeat that event. A fresh verified
 response restores `READY` and emits `PROVIDER_READY` after expiry recovery.
-Expiry does not invoke `onVerification` or start a refresh. There is no expiry timer;
+Expiry does not start a refresh. There is no expiry timer;
 an idle provider signals expiry when its next evaluation detects it. An update
 already in progress keeps its reconciliation status until that update completes.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;

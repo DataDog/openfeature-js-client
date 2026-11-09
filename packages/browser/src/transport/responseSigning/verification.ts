@@ -1,3 +1,4 @@
+import { GeneralError } from '@openfeature/web-sdk'
 import { AsnConvert } from '@peculiar/asn1-schema'
 import {
   AuthorityKeyIdentifier,
@@ -54,9 +55,10 @@ export interface VerifiedResponse {
 }
 
 // Errors contain only fixed diagnostic codes, never request or certificate contents.
-export class ResponseVerificationError extends Error {
+export class ResponseVerificationError extends GeneralError {
   constructor(readonly reason: VerificationFailure) {
     super(`Response signing: ${reason}`)
+    Object.setPrototypeOf(this, new.target.prototype)
     this.name = 'ResponseVerificationError'
   }
 }

@@ -209,40 +209,36 @@ test('automatic trust cannot be reused for a different request origin', () => {
 test.each(['provider', 'fetch', 'factory'] as const)(
   '%s selects staging trust from the resolved endpoint without another option',
   async (entry) => {
-    const onVerification = jest.fn()
     global.fetch = jest.fn().mockResolvedValue(unsigned())
     const options = {
       ...defaultOptions,
       site: 'datad0g.com' as const,
       env: 'staging',
-      responseSigning: { mode: 'observe' as const, onVerification },
+      responseSigning: { mode: 'observe' as const },
     }
     if (entry === 'provider') await provider('observe', options).initialize(context)
     else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
     else await fetchPrecomputedConfiguration({ ...options, context })
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBe('1')
-    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
   }
 )
 test.each(['provider', 'fetch', 'factory'] as const)(
   '%s uses the proxy destination even when site is production',
   async (entry) => {
-    const onVerification = jest.fn()
     global.fetch = jest.fn().mockResolvedValue(unsigned())
     const options = {
       ...defaultOptions,
       site: 'datadoghq.com' as const,
       env: 'staging',
       flaggingProxy: 'https://preview.ff-cdn.datad0g.com/precompute-assignments',
-      responseSigning: { mode: 'observe' as const, onVerification },
+      responseSigning: { mode: 'observe' as const },
     }
     if (entry === 'provider') await provider('observe', options).initialize(context)
     else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
     else await fetchPrecomputedConfiguration({ ...options, context })
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain('https://preview.ff-cdn.datad0g.com/')
-    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
   }
 )
 test('the standalone fetcher honors a proxy override when selecting trust', () => {
@@ -258,12 +254,11 @@ test('the standalone fetcher honors a proxy override when selecting trust', () =
 test.each(['observe', 'required'] as const)(
   '%s verifies the actual normalized request, token override, query and response before provider admission',
   async (mode) => {
-    const outcomes = jest.fn()
     global.fetch = jest.fn(signed)
     const subject = provider(mode, {
       customHeaders: { 'dd-client-token': 'effective-token' },
       flaggingProxy: 'https://proxy.test/assign?marker=a%2Fb',
-      responseSigning: { mode, trustedRootCertificates: roots, onVerification: outcomes },
+      responseSigning: { mode, trustedRootCertificates: roots },
     })
     await subject.initialize(context)
     expect(evaluation(subject)).toBe(true)
@@ -279,36 +274,37 @@ test.each(['observe', 'required'] as const)(
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(DatadogProvider.responseSigningVersion).toBe(1)
     expect(init.redirect).toBe('error')
-    expect(outcomes).toHaveBeenCalledWith({ status: 'verified' })
   }
 )
-test('observe accepts unsigned and tampered ordinary responses with bounded diagnostics', async () => {
-  const outcomes = jest.fn()
+test('observe accepts unsigned and tampered ordinary responses without evaluation errors', async () => {
   global.fetch = jest.fn().mockResolvedValue(unsigned())
   const subject = provider('observe', {
-    responseSigning: { mode: 'observe', trustedRootCertificates: roots, onVerification: outcomes },
+    responseSigning: { mode: 'observe', trustedRootCertificates: roots },
   })
+  const errors = jest.fn()
+  subject.events.addHandler(ProviderEvents.Error, errors)
   await subject.initialize(context)
   await subject.onContextChange(context, context)
   expect(evaluation(subject)).toBe(true)
-  expect(outcomes).toHaveBeenCalledTimes(1)
-  expect(outcomes).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-proof' })
   global.fetch = jest.fn(async (url, init) => {
     const valid = await signed(String(url), init!)
     return response(JSON.stringify(payload(false)), valid.headers)
   })
   await subject.onContextChange(context, context)
   expect(evaluation(subject)).toBe(false)
-  expect(outcomes).toHaveBeenLastCalledWith({ status: 'unverified', reason: 'invalid-signature' })
+  await flush()
+  expect(errors).not.toHaveBeenCalled()
+  const details = subject.resolveBooleanEvaluation('critical', true, {}, logger)
+  expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
+  expect(details.errorCode).toBeUndefined()
+  expect(details.errorMessage).toBeUndefined()
 })
 test.each([401, 403, 500])('observe does not turn HTTP %i into a signing success', async (status) => {
-  const outcomes = jest.fn()
   global.fetch = jest.fn().mockResolvedValue(response('{}', new Headers(), status))
   const subject = provider('observe', {
-    responseSigning: { mode: 'observe', trustedRootCertificates: roots, onVerification: outcomes },
+    responseSigning: { mode: 'observe', trustedRootCertificates: roots },
   })
   await expect(subject.initialize(context)).rejects.toThrow('Failed to fetch flag configuration')
-  expect(outcomes).not.toHaveBeenCalled()
 })
 test('observe parser failure is not an optional verification failure', async () => {
   global.fetch = jest.fn().mockResolvedValue(response('invalid JSON'))
@@ -340,16 +336,14 @@ test('required uses matching verified memory until original expiry, including ev
 test.each(['required', 'observe'] as const)(
   '%s proof expiry: evaluation and OpenFeature lifecycle signals',
   async (mode) => {
-    const onVerification = jest.fn()
     global.fetch = jest.fn(signed)
     const subject = provider(mode, {
-      responseSigning: { mode, trustedRootCertificates: roots, onVerification },
+      responseSigning: { mode, trustedRootCertificates: roots },
     })
     await subject.initialize(context)
     const resolve = () => subject.resolveBooleanEvaluation('critical', false, {}, logger)
     expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
     expect(subject.status).toBe(ProviderStatus.READY)
-    expect(onVerification.mock.calls).toEqual([[{ status: 'verified' }]])
 
     // Subscribe after successful admission so initialization events do not mask expiry behavior.
     const stale = jest.fn()
@@ -358,7 +352,6 @@ test.each(['required', 'observe'] as const)(
     subject.events.addHandler(ProviderEvents.Stale, stale)
     subject.events.addHandler(ProviderEvents.Error, error)
     subject.events.addHandler(ProviderEvents.ConfigurationChanged, changed)
-    onVerification.mockClear()
     const requestsAfterAdmission = (global.fetch as jest.Mock).mock.calls.length
 
     jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000 - 1)
@@ -394,7 +387,6 @@ test.each(['required', 'observe'] as const)(
       )
     }
     expect(changed).not.toHaveBeenCalled()
-    expect(onVerification).not.toHaveBeenCalled()
     expect(global.fetch).toHaveBeenCalledTimes(requestsAfterAdmission)
 
     // A fresh proof restores usability and permits another expiry episode to signal once.
@@ -412,7 +404,6 @@ test.each(['required', 'observe'] as const)(
     resolve()
     await flush()
     expect(error).toHaveBeenCalledTimes(mode === 'required' ? 2 : 0)
-    expect(onVerification).not.toHaveBeenCalled()
   }
 )
 test('OpenFeature clients receive expiry errors and recovery events', async () => {
@@ -587,24 +578,20 @@ test('direct fetch opt-in verifies and rejects unsupported HTTP requests locally
 test('observe retains network availability without WebCrypto; required fails before fetch', async () => {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined })
   global.fetch = jest.fn().mockResolvedValue(unsigned())
-  const outcomes = jest.fn()
-  const observer = provider('observe', { responseSigning: { mode: 'observe', onVerification: outcomes } })
+  const observer = provider('observe', { responseSigning: { mode: 'observe' } })
   await observer.initialize(context)
   expect(evaluation(observer)).toBe(true)
-  expect(outcomes).toHaveBeenCalledWith({ status: 'unverified', reason: 'unavailable-crypto' })
   expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBeNull()
   ;(global.fetch as jest.Mock).mockClear()
   await expect(provider('required').initialize(context)).rejects.toThrow('unavailable-crypto')
   expect(global.fetch).not.toHaveBeenCalled()
 })
 
-test('observe without a provisioned anchor reports unverified and required never promotes its cached entry', async () => {
+test('observe without a provisioned anchor accepts responses and required never promotes its cached entry', async () => {
   global.fetch = jest.fn(signed)
-  const outcomes = jest.fn()
-  const observer = provider('observe', { responseSigning: { mode: 'observe', onVerification: outcomes } })
+  const observer = provider('observe', { responseSigning: { mode: 'observe' } })
   await observer.initialize(context)
   expect(evaluation(observer)).toBe(true)
-  expect(outcomes).toHaveBeenCalledWith({ status: 'unverified', reason: 'missing-anchor' })
   await flush()
   global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
   await expect(provider('required').initialize(context)).rejects.toThrow('network unavailable')
@@ -675,17 +662,15 @@ test.each(['observe', 'required'] as const)(
   '%s rejects a redirected custom-transport response without unsigned retry',
   async (mode) => {
     global.fetch = jest.fn().mockResolvedValue({ ...unsigned(), redirected: true })
-    const outcomes = jest.fn()
     await expect(
       fetchPrecomputedConfiguration({
         ...defaultOptions,
         env: 'production',
         context,
-        responseSigning: { mode, trustedRootCertificates: roots, onVerification: outcomes },
+        responseSigning: { mode, trustedRootCertificates: roots },
       })
     ).rejects.toThrow('redirects')
     expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(outcomes).not.toHaveBeenCalled()
   }
 )
 
@@ -718,22 +703,20 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
 
 describe('required response stream reads', () => {
   function setup() {
-    const onVerification = jest.fn()
     const signing = createResponseSigningController({
       mode: 'required',
       trustedRootCertificates: roots,
-      onVerification,
     })!
     const request = signing.prepare('https://example.test/assign', { 'dd-client-token': 'test' }, '{}')!
-    return { signing, request, onVerification }
+    return { signing, request }
   }
 
   function streamed(body: ReadableStream<Uint8Array>, headers = new Headers()): Response {
     return { ...response('', headers), body } as unknown as Response
   }
 
-  test.each([false, true])('reports overflow once and handles cancellation (rejects: %s)', async (rejectCancel) => {
-    const { signing, request, onVerification } = setup()
+  test.each([false, true])('rejects overflow and handles cancellation (rejects: %s)', async (rejectCancel) => {
+    const { signing, request } = setup()
     for (let attempt = 0; attempt < 2; attempt++) {
       const cancel = jest.fn(() => (rejectCancel ? Promise.reject(new Error('cancel failed')) : Promise.resolve()))
       const body = new ReadableStream<Uint8Array>({
@@ -749,8 +732,6 @@ describe('required response stream reads', () => {
       // Give rejected cleanup promises a turn to surface as unhandled rejections in Jest.
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
-    expect(onVerification).toHaveBeenCalledTimes(1)
-    expect(onVerification).toHaveBeenCalledWith({ status: 'unverified', reason: 'response-too-large' })
   })
 
   test('verifies a valid signed response delivered in chunks', async () => {
@@ -771,8 +752,8 @@ describe('required response stream reads', () => {
     expect(body.locked).toBe(false)
   })
 
-  test('preserves ordinary stream failures without verification diagnostics', async () => {
-    const { signing, request, onVerification } = setup()
+  test('preserves ordinary stream failures without replacing the error', async () => {
+    const { signing, request } = setup()
     const error = new Error('stream failed')
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -781,7 +762,6 @@ describe('required response stream reads', () => {
     })
     await expect(signing.read(streamed(body), request)).rejects.toBe(error)
     expect(body.locked).toBe(false)
-    expect(onVerification).not.toHaveBeenCalled()
   })
 })
 
@@ -907,4 +887,72 @@ describe('Date-valued signing contexts', () => {
       signingContextKey({ n: { a: new Date(1), b: 2 }, d: new Date(0) })
     )
   })
+})
+
+test.each(['missing-proof', 'invalid-signature', 'response-too-large'])(
+  'required exposes %s through OpenFeature errors and evaluation details',
+  async (reason) => {
+    global.fetch = jest.fn(async (url, init) => {
+      if (reason === 'missing-proof') return unsigned()
+      if (reason === 'response-too-large') return response(' '.repeat(MAX_SIGNED_RESPONSE + 1))
+      const valid = await signed(String(url), init!)
+      return response(JSON.stringify(payload(false)), valid.headers)
+    })
+    const subject = provider('required')
+    const errors = jest.fn()
+    subject.events.addHandler(ProviderEvents.Error, errors)
+    await expect(subject.initialize(context)).rejects.toMatchObject({
+      code: ErrorCode.GENERAL,
+      message: `Response signing: ${reason}`,
+    })
+    await flush()
+    expect(errors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: ErrorCode.GENERAL,
+        message: `Response signing: ${reason}`,
+      })
+    )
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
+      value: false,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.GENERAL,
+      errorMessage: `Response signing: ${reason}`,
+    })
+    global.fetch = jest.fn(signed)
+    await subject.onContextChange(context, context)
+    const recovered = subject.resolveBooleanEvaluation('critical', false, {}, logger)
+    expect(recovered).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+    expect(recovered.errorCode).toBeUndefined()
+    expect(recovered.errorMessage).toBeUndefined()
+  }
+)
+
+test('OpenFeature clients receive verification failure details after a context change', async () => {
+  const domain = 'response-signing-failure'
+  global.fetch = jest.fn(signed)
+  const subject = provider('required')
+  await OpenFeature.setProviderAndWait(domain, subject, context)
+  const client = OpenFeature.getClient(domain)
+  const errors = jest.fn()
+  client.addHandler(ProviderEvents.Error, errors)
+  try {
+    global.fetch = jest.fn().mockResolvedValue(unsigned())
+    await OpenFeature.setContext(domain, { targetingKey: 'new-user' }).catch(() => undefined)
+    await flush()
+    expect(errors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: ErrorCode.GENERAL,
+        message: 'Response signing: missing-proof',
+      })
+    )
+    expect(client.getBooleanDetails('critical', false)).toMatchObject({
+      value: false,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.GENERAL,
+      errorMessage: 'Response signing: missing-proof',
+    })
+  } finally {
+    client.removeHandler(ProviderEvents.Error, errors)
+    await OpenFeature.clearProviders()
+  }
 })
