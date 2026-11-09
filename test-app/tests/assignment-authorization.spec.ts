@@ -31,6 +31,8 @@ type Origin = {
   posts: RequestRecord[]
   preflights: IncomingHttpHeaders[]
   telemetry: string[]
+  hold: boolean
+  releases: Array<() => void>
 }
 // Use actual HTTP on another origin: Playwright route interception can bypass
 // the browser's CORS enforcement and cannot validate the header allowlist.
@@ -45,6 +47,8 @@ const test = base.extend<{ origin: Origin }>({
       posts: [],
       preflights: [],
       telemetry: [],
+      hold: false,
+      releases: [],
     }
     const server = createServer(async (req, res) => {
       const intake = req.url?.startsWith('/intake')
@@ -70,6 +74,7 @@ const test = base.extend<{ origin: Origin }>({
         return
       }
       origin.posts.push({ headers: req.headers, body })
+      if (origin.hold) await new Promise<void>((resolve) => origin.releases.push(resolve))
       res.setHeader('Content-Type', 'application/json')
       if (origin.mode === 'success') res.end(JSON.stringify(response))
       else if (origin.mode === 'malformed') res.end(String(req.headers['dd-assignment-token']))
@@ -104,6 +109,60 @@ const token = (offset = 3600) =>
 test.beforeEach(async ({ page }) => {
   await page.goto('/assignment-authorization.html')
   await page.waitForFunction(() => Boolean(window.authorizationTest))
+})
+
+for (const withToken of [false, true]) {
+  test(`subject switch pending and 503: token=${withToken}`, async ({ page, origin }) => {
+    await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [origin.url, context] as const)
+    origin.mode = 'unavailable'
+    origin.hold = true
+    const next = { targetingKey: 'user-b', ...(withToken ? { dd_assignment_token: token() } : {}) }
+    const updating = page.evaluate((ctx) => window.authorizationTest.update(ctx), next)
+    try {
+      await expect.poll(() => origin.releases.length).toBe(1)
+      expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(!withToken)
+    } finally {
+      origin.hold = false
+      for (const release of origin.releases) release()
+    }
+    expect((await updating).status).toBe('ERROR')
+    expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(!withToken)
+    // Removing a token after an isolated request must not resurrect user A.
+    await page.evaluate(() => window.authorizationTest.update({ targetingKey: 'user-b' }))
+    expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(!withToken)
+    origin.mode = 'success'
+    await page.evaluate((ctx) => window.authorizationTest.update(ctx), next)
+    expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
+    await page.evaluate(() => window.authorizationTest.close())
+  })
+}
+
+test('same-subject attribute changes preserve assignments and their telemetry identity after rejection', async ({
+  page,
+  origin,
+}) => {
+  await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [origin.url, context] as const)
+  origin.mode = 'authorization'
+  const changed = { ...context, country: 'CA', dd_assignment_token: token() }
+  expect((await page.evaluate((ctx) => window.authorizationTest.update(ctx), changed)).status).toBe('STALE')
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(true)
+  await page.evaluate(() => window.authorizationTest.close())
+  await expect.poll(() => origin.telemetry.length).toBeGreaterThan(0)
+  expect(origin.telemetry.join('\n')).not.toContain('dd_assignment_token')
+  expect(origin.telemetry.join('\n')).not.toContain('"CA"')
+})
+
+test('a CORS-blocked token-bearing subject switch cannot serve the previous subject', async ({ page, origin }) => {
+  await page.evaluate(([url, ctx]) => window.authorizationTest.initialize(url, ctx), [origin.url, context] as const)
+  origin.allowToken = false
+  const state = await page.evaluate((ctx) => window.authorizationTest.update(ctx), {
+    targetingKey: 'user-b',
+    dd_assignment_token: token(),
+  })
+  expect(state.status).toBe('ERROR')
+  expect(origin.posts).toHaveLength(1)
+  expect((await page.evaluate(() => window.authorizationTest.evaluate())).boolean.value).toBe(false)
+  await page.evaluate(() => window.authorizationTest.close())
 })
 
 for (const mode of ['success', 'unrelated401', 'unavailable'] as const) {

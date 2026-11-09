@@ -21,7 +21,11 @@ import type {
 import { ErrorCode, GeneralError, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
-import { ASSIGNMENT_AUTHORIZATION_FAILED, extractAssignmentToken } from '../domain/assignment-token'
+import {
+  ASSIGNMENT_AUTHORIZATION_FAILED,
+  extractAssignmentToken,
+  normalizeAssignmentToken,
+} from '../domain/assignment-token'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
@@ -101,9 +105,9 @@ export class DatadogProvider extends DatadogProviderBase {
 
   private readonly requestDiagnostics: ReturnType<typeof createRequestDiagnostics>
 
-  // OpenFeature still evaluates providers in ERROR. After an authorization
-  // rejection without matching cache, do not serve a previous subject's flags.
-  private assignmentAuthorizationRejected = false
+  // Token-bearing requests and explicit rejections require subject matching.
+  // Retain this boundary across failures/close while the old assignments remain.
+  private assignmentSubjectIsolationRequired = false
   private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
@@ -200,7 +204,6 @@ export class DatadogProvider extends DatadogProviderBase {
       this.lifecycleTelemetry = undefined
       this.initializationStarted = false
     }
-    this.assignmentAuthorizationRejected = false
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -209,7 +212,8 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
-    const { context: targetingContext, assignmentToken } = extractAssignmentToken(context)
+    const { context: targetingContext, assignmentToken: suppliedToken } = extractAssignmentToken(context)
+    const assignmentToken = normalizeAssignmentToken(suppliedToken)
     const effectiveContext = this.isRumIntegrationEnabled
       ? enrichEvaluationContextWithRumUser(targetingContext)
       : targetingContext
@@ -218,11 +222,9 @@ export class DatadogProvider extends DatadogProviderBase {
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
     this.requestedEvaluationContext = evaluationContext
-    // Returning to a matching downloaded configuration need not wait for the
-    // new download to finish, even after another subject was rejected.
-    if (this.canUseConfiguration(this.flagsConfiguration, evaluationContext)) {
-      this.assignmentAuthorizationRejected = false
-    }
+    // Missing/unusable tokens preserve ordinary no-token behavior, but must not
+    // remove a boundary already established by a request or server rejection.
+    this.assignmentSubjectIsolationRequired ||= assignmentToken !== undefined
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -266,8 +268,10 @@ export class DatadogProvider extends DatadogProviderBase {
           // scheduling).
 
           this.flagsConfiguration = config
-          this.assignmentAuthorizationRejected = false
-          this.evaluationContext = evaluationContext
+          this.assignmentSubjectIsolationRequired = false
+          // Same-subject fallback can have older attributes. Keep its original
+          // context for evaluation and telemetry; do not relabel or re-cache it.
+          this.evaluationContext = fromCache ? (config.precomputed?.context ?? evaluationContext) : evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
           // Report fallback errors only after the update survives cache reconciliation.
           if (fromCache) this.lifecycleTelemetry?.providerError()
@@ -293,13 +297,8 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
-            // A failed retry cannot make another context's retained assignments usable.
-            // Preserve rejection until matching assignments are available; invalid context
-            // errors still use the ordinary context-validation result below.
-            this.assignmentAuthorizationRejected =
-              !(error instanceof InvalidContextError) &&
-              (this.assignmentAuthorizationRejected ||
-                (error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED))
+            this.assignmentSubjectIsolationRequired ||=
+              error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -324,11 +323,14 @@ export class DatadogProvider extends DatadogProviderBase {
     }
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
-    const canUse = (config: FlagsConfiguration | undefined) => this.canUseConfiguration(config, context)
+    let allowSameSubject = this.assignmentSubjectIsolationRequired
+    const canUse = (config: FlagsConfiguration | undefined) =>
+      this.canUseConfiguration(config, context, allowSameSubject)
+    const retainedConfig = this.flagsConfiguration
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = canUse(this.flagsConfiguration)
-      ? Promise.resolve(this.flagsConfiguration)
+    const cachedConfigPromise = canUse(retainedConfig)
+      ? Promise.resolve(retainedConfig)
       : this.flagsCache?.get(context, optedOut)
 
     try {
@@ -344,10 +346,11 @@ export class DatadogProvider extends DatadogProviderBase {
     } catch (err) {
       if (!signal.aborted && err instanceof GeneralError && err.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
         display.warn(`Assignment download failed: ${ASSIGNMENT_AUTHORIZATION_FAILED}`)
+        allowSameSubject = true
       }
       // Try to recover with current/cached config
       try {
-        const config = await waitWithAbort(signal, cachedConfigPromise)
+        const config = await waitWithAbort(signal, canUse(retainedConfig) ? retainedConfig : cachedConfigPromise)
         if (config && canUse(config)) {
           return { config, fromCache: true }
         }
@@ -358,11 +361,21 @@ export class DatadogProvider extends DatadogProviderBase {
     }
   }
 
-  private canUseConfiguration(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
+  private canUseConfiguration(
+    config: FlagsConfiguration | undefined,
+    context: EvaluationContext,
+    allowSameSubject = false
+  ): boolean {
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
+    const storedContext = config?.precomputed?.context
+    const matches = allowSameSubject
+      ? typeof storedContext?.targetingKey === 'string' &&
+        storedContext.targetingKey === context.targetingKey &&
+        (this.experimentationOptOutMode === ExperimentationOptOutMode.Disabled || configMatchesContext(config, context))
+      : configMatchesContext(config, context)
     return (
       optedOut !== undefined &&
-      configMatchesContext(config, context) &&
+      matches &&
       (!optedOut || config?.precomputed?.context !== undefined) &&
       acknowledgesExperimentationOptOut(config, optedOut)
     )
@@ -394,7 +407,11 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    if (this.assignmentAuthorizationRejected) {
+    if (
+      this.assignmentSubjectIsolationRequired &&
+      experimentationOptOutPolicy(this.requestedEvaluationContext, this.experimentationOptOutMode) !== undefined &&
+      !this.canUseConfiguration(this.flagsConfiguration, this.requestedEvaluationContext, true)
+    ) {
       return bindEvaluationTelemetryResult(
         { value: defaultValue, reason: 'ERROR', errorCode: ErrorCode.GENERAL },
         this.telemetryPolicy,

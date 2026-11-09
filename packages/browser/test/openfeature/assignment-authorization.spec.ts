@@ -11,6 +11,7 @@ import { openDB, STORE_NAME } from '../../src/cache/indexeddb-store'
 import { ASSIGNMENT_AUTHORIZATION_FAILED } from '../../src/domain/assignment-token'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
+import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
 import { getEvaluationTrackingContext } from '../../src/openfeature/evaluation-telemetry-policy'
 import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { DatadogProvider } from '../../src/openfeature/provider'
@@ -340,16 +341,175 @@ describe('assignment authorization', () => {
     })
   })
 
-  it('does not use another subject or attribute set as matching fallback', async () => {
+  it('retains the downloaded context for same-subject attribute changes after rejection', async () => {
     await provider.initialize({ ...context, dd_assignment_token: token() })
     fetchMock.mockImplementation(rejection)
-    await expect(
-      provider.onContextChange({}, { ...context, country: 'CA', dd_assignment_token: token() })
-    ).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
+    const changed = { ...context, country: 'CA', dd_assignment_token: token() }
+    await provider.onContextChange({}, changed)
+    expect(provider.status).toBe(ProviderStatus.STALE)
+    const result = provider.resolveBooleanEvaluation('boolean-flag', false, changed, logger)
+    expect(result.value).toBe(true)
+    expect(getEvaluationTrackingContext(result, () => ({}))).toEqual(context)
     await expect(
       provider.onContextChange({}, { targetingKey: 'user-b', dd_assignment_token: token() })
     ).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
     expect(provider.status).toBe(ProviderStatus.ERROR)
+  })
+
+  describe.each([undefined, null, '', 'unsafe token', 'opaque.jwt.token'])('subject switch with token %p', (jwt) => {
+    it.each(['503', 'network', 'authorization'])('gates pending and failed assignments for %s', async (failure) => {
+      provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
+      await provider.initialize(context)
+      let finish!: (response: Response) => void
+      let fail!: (error: Error) => void
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve, reject) => {
+            finish = resolve
+            fail = reject
+          })
+      )
+      const requested = { targetingKey: 'user-b', ...(jwt === undefined ? {} : { dd_assignment_token: jwt }) }
+      const update = provider.onContextChange({}, requested)
+      const completed = expect(update).rejects.toThrow()
+      const pending = provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger)
+      expect(pending.value).toBe(jwt !== 'opaque.jwt.token')
+      expect(new Headers(fetchMock.mock.calls[1][1].headers).has('DD-Assignment-Token')).toBe(
+        jwt === 'opaque.jwt.token'
+      )
+      if (failure === 'network') fail(new TypeError('Failed to fetch'))
+      else finish(failure === 'authorization' ? rejection() : new Response('', { status: 503 }))
+      await completed
+      const protectedRequest = jwt === 'opaque.jwt.token' || failure === 'authorization'
+      const result = provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger)
+      expect(result.value).toBe(!protectedRequest)
+      expect(getEvaluationTrackingContext(result, () => ({}))).toEqual(
+        protectedRequest ? { targetingKey: 'user-b' } : context
+      )
+      if (protectedRequest) {
+        fetchMock.mockImplementation(() => new Response('', { status: 503 }))
+        await expect(provider.onContextChange({}, { targetingKey: 'user-b' })).rejects.toThrow()
+        expect(provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger).value).toBe(false)
+      }
+    })
+  })
+
+  it.each(['503', 'authorization'])(
+    'keeps same-subject assignments during attribute refresh and %s failure',
+    async (failure) => {
+      provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
+      await provider.initialize(context)
+      const cacheWrite = jest.spyOn(IndexedDBFlagsCache.prototype, 'set')
+      let finish!: (response: Response) => void
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve
+          })
+      )
+      const requested = { ...context, country: 'CA', dd_assignment_token: token() }
+      const update = provider.onContextChange({}, requested)
+      expect(provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger).value).toBe(true)
+      finish(failure === 'authorization' ? rejection() : new Response('', { status: 503 }))
+      await update
+      expect(provider.status).toBe(ProviderStatus.STALE)
+      const result = provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger)
+      expect(result.value).toBe(true)
+      expect(getEvaluationTrackingContext(result, () => ({}))).toEqual(context)
+      expect(cacheWrite).not.toHaveBeenCalled()
+      fetchMock.mockImplementation(success)
+      await provider.onContextChange({}, requested)
+      expect(
+        getEvaluationTrackingContext(
+          provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger),
+          () => ({})
+        )
+      ).toEqual({ ...context, country: 'CA' })
+    }
+  )
+
+  it.each(['close', 'reuse', 'devtools'])('preserves the subject boundary across %s', async (lifecycle) => {
+    provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
+    await OpenFeature.setProviderAndWait(provider, context)
+    fetchMock.mockImplementation(rejection)
+    await OpenFeature.setContext({ targetingKey: 'user-b', dd_assignment_token: token() })
+    fetchMock.mockImplementation(() => new Response('', { status: 503 }))
+    if (lifecycle === 'close') await OpenFeature.close()
+    else if (lifecycle === 'reuse') {
+      await OpenFeature.clearProviders()
+      await expect(OpenFeature.setProviderAndWait(provider, { targetingKey: 'user-b' })).rejects.toThrow()
+    } else {
+      // Replacing the live provider can close/abort the forwarded initialization.
+      await OpenFeature.setProviderAndWait(new DatadogDevtools(provider)).catch(() => undefined)
+    }
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(false)
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, { targetingKey: 'user-b' }, logger)).toMatchObject({
+      value: false,
+      errorCode: ErrorCode.GENERAL,
+    })
+    fetchMock.mockImplementation(success)
+    await provider.initialize({ targetingKey: 'user-b' })
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, { targetingKey: 'user-b' }, logger).value).toBe(
+      true
+    )
+  })
+
+  it.each([ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.FutureExperimentsOnly])(
+    'does not relax same-subject context matching in %s mode',
+    async (mode) => {
+      provider = new DatadogProvider({ ...options, experimentationOptOutMode: mode, flagConfigurationFetch: fetchMock })
+      await provider.initialize(context)
+      fetchMock.mockImplementation(rejection)
+      const changed = { ...context, country: 'CA', dd_assignment_token: token() }
+      await expect(provider.onContextChange({}, changed)).rejects.toThrow(ASSIGNMENT_AUTHORIZATION_FAILED)
+      expect(provider.resolveBooleanEvaluation('boolean-flag', false, changed, logger).value).toBe(false)
+    }
+  )
+
+  it('does not let a late no-token response undo an isolated subject switch', async () => {
+    provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetchMock })
+    await provider.initialize(context)
+    let finish!: (response: Response) => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve
+        })
+    )
+    const oldUpdate = provider.onContextChange({}, { ...context, country: 'CA' })
+    const oldCompletion = expect(oldUpdate).rejects.toThrow()
+    fetchMock.mockImplementation(() => new Response('', { status: 503 }))
+    const requested = { targetingKey: 'user-b', dd_assignment_token: token() }
+    await expect(provider.onContextChange({}, requested)).rejects.toThrow()
+    finish(success())
+    await oldCompletion
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger).value).toBe(false)
+    await provider.onClose()
+    await expect(provider.initialize({ targetingKey: 'user-b' })).rejects.toThrow()
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, requested, logger).value).toBe(false)
+  })
+
+  it.each([
+    ExperimentationOptOutMode.Disabled,
+    ExperimentationOptOutMode.Immediate,
+    ExperimentationOptOutMode.FutureExperimentsOnly,
+  ])('requires a known subject for token-bearing initial snapshot fallback in %s mode', async (mode) => {
+    const configuration = await fetchPrecomputedConfiguration({
+      clientToken: 'client-token',
+      env: 'test',
+      context,
+      fetch: fetchMock,
+    })
+    delete configuration.precomputed!.context
+    provider = new DatadogProvider({
+      ...options,
+      experimentationOptOutMode: mode,
+      initialFlagsConfiguration: configuration,
+      flagConfigurationFetch: fetchMock,
+    })
+    fetchMock.mockImplementation(() => new Response('', { status: 503 }))
+    await expect(provider.initialize({ ...context, dd_assignment_token: token() })).rejects.toThrow('HTTP 503')
+    expect(provider.resolveBooleanEvaluation('boolean-flag', false, context, logger).value).toBe(false)
   })
 
   it('forwards expired tokens and retains matching assignments after server rejection', async () => {

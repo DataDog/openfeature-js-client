@@ -179,17 +179,25 @@ Other providers sharing that context can also read or forward it. Scope token-be
 OpenFeature domain rather than sharing them with other providers.
 Customer proxies must forward `DD-Assignment-Token`, allow it in CORS preflight responses, and include CORS headers
 on error responses. A blocked preflight prevents the assignment request. If the browser cannot read an authorization
-rejection, the SDK treats it as an ordinary network failure: it cannot log `ASSIGNMENT_AUTHORIZATION_FAILED`, retry
-wrappers can retry the request, and previous assignments can remain available during a context change with the
-default `Disabled` experimentation opt-out mode. This does not clear an authorization rejection already recognized
-by the SDK.
+rejection, the SDK treats it as an ordinary network failure: it cannot log `ASSIGNMENT_AUTHORIZATION_FAILED`, and retry
+wrappers can retry the request. The subject boundary described below still applies to token-bearing requests,
+including when CORS prevents the request from reaching the endpoint.
 
-Authorization controls new downloads. A rejected download preserves usable matching assignments and reports
-`STALE`; without usable matching assignments the provider reports `ERROR` with `GENERAL`, and normal default-value
-behavior applies. Subsequent download failures keep those defaults until matching assignments are available;
-supplying a replacement token alone does not restore another subject's assignments. A successful download can
+Authorization controls new downloads. A usable assignment token requires retained assignments to match the requested
+targeting key, starting when the context update is accepted. A switch to another targeting key serves application
+defaults while fetching and after failure. Token refreshes and ordinary attribute changes for the same targeting key
+can retain downloaded assignments; fallback reports `STALE` and keeps the original downloaded context for evaluation
+and telemetry. Existing experimentation opt-out checks can require stricter matching.
+
+An explicit authorization rejection also establishes this subject boundary when no token was sent. Without usable
+assignments, the provider reports `ERROR` with `GENERAL`. Removing the token, retrying, or closing/reusing the provider
+does not restore another subject's retained assignments. Returning to eligible assignments or a successful download can
 recover without recreating the provider. The diagnostic logger reports `ASSIGNMENT_AUTHORIZATION_FAILED` without
 the token; there is no custom refresh-required event.
+
+Ordinary no-token flows retain their previous behavior, including serving the last successful subject's assignments
+during a context switch or network failure, unless a subject boundary has already been established. Missing or unusable
+token values do not establish one themselves. This release does not add a strict context-switching option.
 The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
 Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
 the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing
