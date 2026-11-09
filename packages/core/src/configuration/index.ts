@@ -3,7 +3,11 @@ export * from './configuration'
 export * from './exposure-decision'
 export * from './exposureEvent'
 export * from './exposureEvent.types'
-export { SUPPORTED_FLAGS_CAPABILITIES } from './flag-key-obfuscation'
+export {
+  encodePrecomputedFlagKey,
+  type FlagKeyObfuscation,
+  SUPPORTED_FLAGS_CAPABILITIES,
+} from './flag-key-obfuscation'
 export * from './flag-selection'
 export * from './flagEvaluationAggregator'
 export * from './flagEvaluationEvent'

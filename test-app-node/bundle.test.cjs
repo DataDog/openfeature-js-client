@@ -1,11 +1,24 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
+const { evaluate } = require('@datadog/flagging-core')
 const { configurationFromString, configurationToString } = require('@datadog/openfeature-node-server/rules-based')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 const providerConfiguration = require('../packages/core/test/ffe-system-test-data/ufc-config.json')
 const logger = { debug() {}, info() {}, warn() {}, error() {} }
 
 for (const name of ['precompute', 'provider-with-precompute']) {
+  test(`${name} bundle encodes keys for a compatible client`, () => {
+    const { precomputeConfiguration } = require(`./dist/bundles/${name}/index.cjs`)
+    const context = { targetingKey: 'user-1', country: 'US' }
+    const configuration = configurationFromString(JSON.stringify(fixture))
+    const result = precomputeConfiguration(configuration, context, {
+      clientCompatibility: { capabilities: ['assignment-encoding-flag-key-256-v1'] },
+    })
+    assert.equal(result.precomputed.response.data.attributes.obfuscated, true)
+    const restored = configurationFromString(configurationToString(result))
+    assert.equal(evaluate(restored, 'boolean', 'test-flag', false, context).value, true)
+  })
+
   test(`${name} bundle precomputes nonempty assignments without rules or a source ETag`, () => {
     const { precomputeConfiguration } = require(`./dist/bundles/${name}/index.cjs`)
     const context = { targetingKey: 'user-1', country: 'US' }
