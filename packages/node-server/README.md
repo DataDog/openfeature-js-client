@@ -85,6 +85,24 @@ You can also pass rules parsed with `configurationFromString()` or `configuratio
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
 
+To prepare output for a particular browser SDK, pass the complete object returned
+by its `getPrecomputedClientCompatibility()` getter:
+
+```typescript
+const precomputed = precomputeConfiguration(rules, context, { clientCompatibility })
+```
+
+Omitted compatibility, an empty capability list, or only unknown capabilities
+preserve plaintext output. With `assignment-encoding-flag-key-256-v1`, the Node
+helper uses the shared core encoder to hash flag-map keys with a fresh random
+salt and records `obfuscated: true` and the encoding descriptor. Values and
+telemetry metadata are unchanged. The browser still evaluates the original keys.
+Malformed compatibility throws `ConfigurationPrecomputeError` with
+`invalid_options`. Unknown capability strings and future optional object fields
+are ignored. The Node SDK's own capabilities are never substituted for the client's.
+This option is specific to the Node helper; the runtime-agnostic core helper
+continues to return plaintext assignments.
+
 **Precomputation is not an access-control boundary.** For client-directed SSR output, use client-distributed rules or an explicitly reviewed client-safe policy. Do not expose server-only flags or private context attributes merely because the rules were removed. Select a context that is safe to send to that client.
 
 ### Flag Selection

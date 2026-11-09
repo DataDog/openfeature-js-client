@@ -1037,6 +1037,10 @@ export interface FlagSelection {
 	tags?: readonly string[];
 	keyPatterns?: readonly string[];
 }
+/** Response formats a target client can read. Plaintext is always supported. */
+export type PrecomputedClientCompatibility = {
+	readonly capabilities: readonly string[];
+};
 export type FlagsConfigurationWire = string;
 export type ConfigurationPrecomputeErrorCode = "invalid_configuration" | "invalid_context" | "invalid_options";
 /** A top-level input error. Individual flag failures are reported separately. */
@@ -1048,7 +1052,7 @@ export type PrecomputeEvaluationError = {
 	flagKey: string;
 	errorCode: ErrorCode;
 };
-export type PrecomputeConfigurationOptions = {
+type PrecomputeConfigurationOptions = {
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 	/**
@@ -1057,12 +1061,6 @@ export type PrecomputeConfigurationOptions = {
 	 */
 	onEvaluationError?: (error: PrecomputeEvaluationError) => void;
 };
-/**
- * Locally resolve rules for one context, without defaults, tracking, or network calls.
- * Returns a context-bound, precomputed-only snapshot. Failed and unassigned flags are omitted.
- * Recompute when the context or rules change; client-directed output requires client-safe source rules.
- */
-export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions): FlagsConfiguration$1;
 /**
  * Decode a binary flags configuration response.
  */
@@ -1116,9 +1114,16 @@ export declare class ConfigurationFetchError extends Error {
  * Only client-distributed configurations are suitable for forwarding to a browser.
  */
 export declare function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
+type PrecomputeConfigurationOptions$1 = PrecomputeConfigurationOptions & {
+	/** Target client's response support. Omitted or empty capabilities preserve plaintext keys. */
+	clientCompatibility?: PrecomputedClientCompatibility;
+};
+/** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */
+export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions$1): FlagsConfiguration$1;
 
 export {
 	FlagsConfiguration$1 as FlagsConfiguration,
+	PrecomputeConfigurationOptions$1 as PrecomputeConfigurationOptions,
 };
 
 export {};

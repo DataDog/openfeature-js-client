@@ -1,4 +1,4 @@
-export type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
+export type { FlagSelection, FlagsConfiguration, PrecomputedClientCompatibility } from '@datadog/flagging-core'
 export {
   ConfigurationPrecomputeError,
   type ConfigurationPrecomputeErrorCode,
@@ -6,8 +6,7 @@ export {
   configurationFromString,
   configurationToString,
   type FlagsConfigurationWire,
-  type PrecomputeConfigurationOptions,
   type PrecomputeEvaluationError,
-  precomputeConfiguration,
 } from '@datadog/flagging-core/rules-based'
 export * from './configuration/fetch-rules-configuration'
+export { type PrecomputeConfigurationOptions, precomputeConfiguration } from './configuration/precompute-configuration'
