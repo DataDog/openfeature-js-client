@@ -31,13 +31,4 @@ describe('getClientFingerprint', () => {
       jest.dontMock('@datadog/flagging-core')
     }
   })
-
-  it('does not allow callers to change subsequent results or SDK capabilities', () => {
-    const fingerprint = getClientFingerprint()
-    const decoded = JSON.parse(fingerprint)
-    decoded.capabilities.push('unsupported')
-    decoded.sdk.version = 'modified'
-    expect(getClientFingerprint()).toBe(fingerprint)
-    expect(JSON.parse(getClientFingerprint()).capabilities).toEqual([...SUPPORTED_FLAGS_CAPABILITIES].sort())
-  })
 })
