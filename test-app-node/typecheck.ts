@@ -25,6 +25,7 @@ import {
   type DatadogNodeServerProviderOptions,
   fetchPrecomputedConfiguration,
   type PrecomputedConfigurationFetchOptions,
+  type FlagSelection as RootFlagSelection,
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
 import {
@@ -171,12 +172,18 @@ void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflicting
 
 // Forwarded unchanged from the target SDK's getClientFingerprint() result.
 declare const clientFingerprint: ClientFingerprint
+const precomputedSelection: RootFlagSelection = {
+  tags: ['team:checkout'] as const,
+  keyPatterns: ['checkout-*'] as const,
+}
 const precomputedFetchOptions: PrecomputedConfigurationFetchOptions = {
   distributionChannel: 'client',
   clientToken: 'token',
   env: 'prod',
   context: {},
   clientFingerprint,
+  flagSelection: precomputedSelection,
+  logger: { error: (_message: string) => {} },
   experimentationOptOutMode: 'future_experiments_only',
 }
 void fetchPrecomputedConfiguration(precomputedFetchOptions)
@@ -191,3 +198,7 @@ void fetchPrecomputedConfiguration({ clientToken: 'token', env: 'prod', context:
 void fetchPrecomputedConfiguration({ distributionChannel: 'server', apiKey: 'key', env: 'prod', context: {} })
 // @ts-expect-error: Opt-out mode must be one of the supported policy names.
 void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, experimentationOptOutMode: true })
+// @ts-expect-error: Selection lists contain strings, not numbers.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, flagSelection: { tags: [42] } })
+// @ts-expect-error: Selection diagnostics require an error method.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, logger: {} })

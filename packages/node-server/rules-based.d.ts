@@ -1086,7 +1086,18 @@ interface ConfigurationTransportOptions {
 	/** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
 	fetch?: typeof globalThis.fetch;
 }
-export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions {
+interface ConfigurationSelectionOptions {
+	/**
+	 * Request flags matching any of these tags or key patterns.
+	 * Best-effort: an invalid or over-limit selection is not sent.
+	 */
+	flagSelection?: FlagSelection;
+	/** Reports dropped or server-ignored selections. Defaults to console. */
+	logger?: {
+		error(message: string): void;
+	};
+}
+export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions, ConfigurationSelectionOptions {
 	/** Required for now. Only client-distributed flags are supported by this endpoint. */
 	distributionChannel: "client";
 	clientToken: string;
@@ -1104,19 +1115,10 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 }
 /** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
 export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
-interface ConfigurationFetchOptions {
+interface ConfigurationFetchOptions extends ConfigurationSelectionOptions {
 	env: string;
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
-	/**
-	 * Request flags matching any of these tags or key patterns.
-	 * Best-effort: an invalid or over-limit selection is not sent.
-	 */
-	flagSelection?: FlagSelection;
-	/** Reports dropped or server-ignored selections. Defaults to console. */
-	logger?: {
-		error(message: string): void;
-	};
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;
 	signal?: AbortSignal;

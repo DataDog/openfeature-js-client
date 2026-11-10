@@ -1504,6 +1504,10 @@ interface ExposureEvent {
 		};
 	};
 }
+export interface FlagSelection {
+	tags?: readonly string[];
+	keyPatterns?: readonly string[];
+}
 /**
  * Return a detached copy of the context from a precomputed configuration.
  *
@@ -1541,7 +1545,18 @@ interface ConfigurationTransportOptions {
 	/** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
 	fetch?: typeof globalThis.fetch;
 }
-export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions {
+interface ConfigurationSelectionOptions {
+	/**
+	 * Request flags matching any of these tags or key patterns.
+	 * Best-effort: an invalid or over-limit selection is not sent.
+	 */
+	flagSelection?: FlagSelection;
+	/** Reports dropped or server-ignored selections. Defaults to console. */
+	logger?: {
+		error(message: string): void;
+	};
+}
+export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions, ConfigurationSelectionOptions {
 	/** Required for now. Only client-distributed flags are supported by this endpoint. */
 	distributionChannel: "client";
 	clientToken: string;

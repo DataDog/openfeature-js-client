@@ -30,8 +30,13 @@ for (const clientFingerprint of [undefined, getClientFingerprint()]) {
         context,
         clientFingerprint,
         experimentationOptOutMode,
+        flagSelection: { tags: [' test '], keyPatterns: [' test-* ', 'test-*'] },
         fetch: async (_url, request) => {
           calls++
+          assert.deepEqual(JSON.parse(request.body).data.attributes.flag_selection, {
+            tags: ['test'],
+            key_patterns: ['test-*'],
+          })
           assert.deepEqual(
             JSON.parse(request.body).data.attributes.evaluation_options,
             experimentationOptOutMode ? { experimentation_opt_out_mode: experimentationOptOutMode } : undefined

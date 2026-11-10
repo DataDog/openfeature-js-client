@@ -1,7 +1,9 @@
 import {
   acknowledgesExperimentationOptOut,
   buildEndpointHost,
+  type CanonicalFlagSelection,
   type ClientFingerprint,
+  canonicalizeFlagSelection,
   type ExperimentationOptOutModeValue,
   experimentationOptOutPolicy,
   type FlagsConfiguration,
@@ -17,8 +19,14 @@ import {
   transportError,
   validateTransportOptions,
 } from './configuration-fetch'
+import {
+  type ConfigurationSelectionOptions,
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+} from './flag-selection'
 
-export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions {
+export interface PrecomputedConfigurationFetchOptions
+  extends ConfigurationTransportOptions, ConfigurationSelectionOptions {
   /** Required for now. Only client-distributed flags are supported by this endpoint. */
   distributionChannel: 'client'
   clientToken: string
@@ -46,8 +54,20 @@ export async function fetchPrecomputedConfiguration(
     if (error instanceof ConfigurationFetchError) throw error
     throw invalidOption('precomputed configuration')
   }
-  const { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal } =
-    validated
+  const {
+    url,
+    clientToken,
+    applicationId,
+    env,
+    context,
+    capabilities,
+    optOut,
+    flagSelection,
+    logger,
+    requestFetch,
+    timeoutMs,
+    signal,
+  } = validated
   const body = JSON.stringify({
     data: {
       type: 'precompute-assignments-request',
@@ -55,6 +75,9 @@ export async function fetchPrecomputedConfiguration(
         env: { dd_env: env },
         source: { sdk_name: 'nodejs', sdk_version: __BUILD_ENV__SDK_VERSION__ },
         ...(optOut && { evaluation_options: { experimentation_opt_out_mode: optOut.mode } }),
+        ...(flagSelection && {
+          flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+        }),
         subject: {
           targeting_key: context.targetingKey || '',
           targeting_attributes: Object.fromEntries(
@@ -82,6 +105,7 @@ export async function fetchPrecomputedConfiguration(
     },
     { fetch: requestFetch, timeoutMs, signal },
     async (response, fetchedAt, checkAborted) => {
+      if (flagSelection) reportIgnoredFlagSelection(logger, response)
       const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
       if (contentType !== 'application/json' && contentType !== 'application/vnd.api+json') {
         throw new ConfigurationFetchError('invalid_response', 'Expected a JSON configuration response')
@@ -130,6 +154,8 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     context: inputContext,
     clientFingerprint,
     experimentationOptOutMode = 'disabled',
+    flagSelection: inputSelection,
+    logger = console,
     timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
@@ -153,6 +179,7 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     throw invalidOption('applicationId')
   }
   validateTransportOptions(timeoutMs, signal, requestFetch)
+  if (!logger || typeof logger.error !== 'function') throw invalidOption('logger')
   let host: string
   try {
     host = buildEndpointHost(site, 'preview')
@@ -176,9 +203,31 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   }
   const optOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optOut === undefined) throw invalidOption('context.dd_experimentation_opt_out_at')
+  let flagSelection: CanonicalFlagSelection | undefined
+  try {
+    const { selection, error } = canonicalizeFlagSelection(inputSelection)
+    if (error) reportDroppedFlagSelection(logger, error)
+    else flagSelection = selection
+  } catch {
+    // Getters and proxies can expose caller data through raw errors.
+    reportDroppedFlagSelection(logger, 'malformed_selection')
+  }
   const url = new URL(`https://${host}/precompute-assignments`)
   url.searchParams.set('dd_env', env)
-  return { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal }
+  return {
+    url,
+    clientToken,
+    applicationId,
+    env,
+    context,
+    capabilities,
+    optOut,
+    flagSelection,
+    logger,
+    requestFetch,
+    timeoutMs,
+    signal,
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
