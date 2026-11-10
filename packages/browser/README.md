@@ -445,7 +445,8 @@ Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
 supported; a capability does not require the server to use that format or provide
 an authorization boundary. The fingerprint identifies the SDK, not a user or device,
 and is not authentication. Your application chooses its own client-server transport.
-The getter is available from the root entry point without protobuf.
+The getter and `ClientFingerprint` type are available from both the root and
+`/rules-based` entry points. The root import does not load protobuf.
 
 ## Portable configuration parsing
 

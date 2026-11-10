@@ -1,10 +1,18 @@
 import { evaluateRulesBasedConfiguration } from '@datadog/flagging-core'
 import {
+  type ClientFingerprint,
   configurationFromString,
   configurationToString,
   DatadogProvider,
+  getClientFingerprint,
 } from '@datadog/openfeature-browser/rules-based'
 import { assert, reportSuccess } from './smoke'
+
+const fingerprint: ClientFingerprint = getClientFingerprint()
+assert(
+  typeof fingerprint === 'string' && fingerprint.length > 0,
+  'rules-based entrypoint did not expose a client fingerprint'
+)
 
 const protobufRulesResponse =
   'EgRwcm9kGigKDGJyb3dzZXItZmxhZxIYEAQaAigBIhAKCmFsbG9jYXRpb24iAiADGigKDGludGVnZXItZmxhZxIYEAIaAhgqIhAKCmFsbG9jYXRpb24iAiADKgJvbg=='
