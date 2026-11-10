@@ -22,6 +22,7 @@ import {
   type DebugConfiguration,
   registerDebugLogger,
 } from '../debug'
+import { extractAssignmentToken } from '../domain/assignment-token'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
@@ -143,6 +144,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    context = extractAssignmentToken(context).context
     this.debug.event('init.started', () => ({ context }))
     this.telemetryPolicy.setContext(context)
     this.context = context
@@ -162,8 +164,9 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   }
 
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
+    newContext = extractAssignmentToken(newContext).context
     this.debug.event('context.accepted', () => ({
-      oldContext: _oldContext,
+      oldContext: extractAssignmentToken(_oldContext).context,
       newContext,
       assignmentContext: this.flagsConfiguration?.precomputed?.context,
     }))
@@ -185,6 +188,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
+    context = extractAssignmentToken(context).context
     const result = withCoreConfigurationId(
       evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger, this.experimentationOptOutMode),
       this.flagsConfigurationId

@@ -86,8 +86,8 @@ describe('browser debug-mode scenarios', () => {
         outcomes.push({ reads, subject: request.data.attributes.subject })
       }
       expect(outcomes[1]).toEqual(outcomes[0])
-      expect(outcomes[0].reads).toBe(mode === 'provider' ? 1 : 2)
-      expect(outcomes[0].subject.targeting_key).toBe(mode === 'provider' ? 'subject-1' : 'subject-2')
+      expect(outcomes[0].reads).toBe(1)
+      expect(outcomes[0].subject.targeting_key).toBe('subject-1')
     }
   )
 

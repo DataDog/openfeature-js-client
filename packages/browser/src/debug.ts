@@ -147,6 +147,8 @@ function snapshot(value: unknown, ancestors = new Set<object>()): unknown {
       })
     const descriptors = Object.getOwnPropertyDescriptors(value)
     for (const key of Object.keys(descriptors)) {
+      // This reserved context member is a transport credential, never a targeting attribute.
+      if (key === 'dd_assignment_token' || key.toLowerCase() === 'dd-assignment-token') continue
       if (Array.isArray(value) && key === 'length') continue
       const descriptor = descriptors[key]
       Object.defineProperty(output, key, {
