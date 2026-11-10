@@ -11,3 +11,5 @@ export {
   precomputeConfiguration,
 } from '@datadog/flagging-core/rules-based'
 export * from './configuration/fetch-rules-configuration'
+export { DatadogCoreProvider, type DatadogCoreProviderOptions } from './core-provider'
+export { ExperimentationOptOutMode } from './experimentation-opt-out'
