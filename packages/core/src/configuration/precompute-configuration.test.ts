@@ -115,7 +115,6 @@ describe('precomputeConfiguration', () => {
     ['invalid parent', 'PARSE_ERROR'],
     ['cycle', 'GENERAL'],
     ['depth limit', 'GENERAL'],
-    ['invalid depth', 'PARSE_ERROR'],
   ])('omits a child with %s, reports its error, and continues precomputing', (failure, errorCode) => {
     const input = dependentRules()
     const source = input.rules!.response
@@ -123,9 +122,9 @@ describe('precomputeConfiguration', () => {
     if (failure === 'unassigned parent') source.flags.parent.allocations.length = 0
     if (failure === 'invalid parent') source.flags.parent.minimumFeatureLevel = 999
     if (failure === 'cycle') source.flags.parent.allocations[0].targetingConditionIndex = 0
-    if (failure === 'depth limit' || failure === 'invalid depth') {
+    if (failure === 'depth limit') {
       source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-        evaluatorParams: { maxDependencyDepth: failure === 'depth limit' ? 0 : 256 },
+        evaluatorParams: { maxDependencyDepth: 0 },
       }).evaluatorParams
     }
     const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
@@ -143,6 +142,29 @@ describe('precomputeConfiguration', () => {
         .map(([error]) => error)
         .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
     ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
+  })
+
+  it('uses the default depth when precomputing an invalid override', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+      evaluatorParams: { maxDependencyDepth: 256 },
+    }).evaluatorParams
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
+    const onEvaluationError = jest.fn()
+
+    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+
+    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
+    expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
+      'child',
+      'parent',
+      'unrelated',
+    ])
+    expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {

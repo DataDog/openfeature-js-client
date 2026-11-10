@@ -521,25 +521,15 @@ describe('dependent flag evaluation', () => {
     })
   })
 
-  it('validates an invalid protobuf maximum depth only when a dependency is reached', () => {
-    const ordinary = protobufDependentConfiguration(true)
-    ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
+  it('uses the default for an invalid protobuf maximum depth', () => {
+    const source = protobufDependentConfiguration(true)
+    source.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
+    const config = roundTrip(source)
 
-    expect(evaluateProtobuf(ordinary, logger).result).toMatchObject({ value: true, variant: 'on' })
-
-    const dependent = protobufDependentConfiguration(true)
-    dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+      defaultMaxDependencyDepth: 10,
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
   })
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
@@ -737,9 +727,54 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
   })
 
-  it.each([256, -1, 1.5])('validates JSON maximum depth %p only when a dependency is reached', (maximumDepth) => {
+  it('leaves an extensible evaluator parameters block without a depth override untouched', () => {
+    const evaluatorParams = { futureParameter: { enabled: true } }
+    const config = configuration({ root: booleanFlag('root', 'on') })
+    config.evaluatorParams = evaluatorParams as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(config.evaluatorParams).toBe(evaluatorParams)
+    expect(config.evaluatorParams).toEqual({ futureParameter: { enabled: true } })
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('reads the maximum depth once for each root evaluation without caching it', () => {
+    const config = configuration({ root: booleanFlag('root', 'on') })
+    let reads = 0
+    const evaluatorParams = Object.defineProperty({}, 'maxDependencyDepth', {
+      get: () => {
+        reads += 1
+        return 10
+      },
+    })
+    config.evaluatorParams = evaluatorParams as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(1)
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(2)
+  })
+
+  it.each([null, [], 'invalid', { maxDependencyDepth: '10' }])(
+    'uses the default for a malformed evaluator parameters value %#',
+    (evaluatorParams) => {
+      const config = configuration({ root: booleanFlag('root', 'on') })
+      config.evaluatorParams = evaluatorParams as never
+
+      expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+      expect(logger.warn).toHaveBeenCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+        defaultMaxDependencyDepth: 10,
+      })
+    }
+  )
+
+  it.each([256, -1, 1.5])('uses the default for an invalid JSON maximum depth %p', (maximumDepth) => {
     const ordinary = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
     expect(evaluate(ordinary, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+      defaultMaxDependencyDepth: 10,
+    })
+    jest.mocked(logger.warn).mockClear()
 
     const dependent = configuration(
       {
@@ -748,16 +783,10 @@ describe('dependent flag evaluation', () => {
       },
       maximumDepth
     )
-    expect(evaluate(dependent, 'root', logger)).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    expect(evaluate(dependent, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.warn).toHaveBeenLastCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+      defaultMaxDependencyDepth: 10,
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
