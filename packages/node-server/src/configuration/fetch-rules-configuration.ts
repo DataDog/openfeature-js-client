@@ -4,9 +4,6 @@ import {
   type FlagSelection,
   type FlagSelectionError,
   type FlagsConfiguration,
-  MAX_FLAG_SELECTION_KEY_PATTERN_BYTES,
-  MAX_FLAG_SELECTION_TAG_BYTES,
-  MAX_FLAG_SELECTION_VALUES,
 } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
 import {
@@ -16,20 +13,18 @@ import {
   transportError,
   validateTransportOptions,
 } from './configuration-fetch'
+import {
+  type ConfigurationSelectionOptions,
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+} from './flag-selection'
 
 export { ConfigurationFetchError, type ConfigurationFetchErrorCode } from './configuration-fetch'
 
-interface ConfigurationFetchOptions {
+interface ConfigurationFetchOptions extends ConfigurationSelectionOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
-  /**
-   * Request flags matching any of these tags or key patterns.
-   * Best-effort: an invalid or over-limit selection is not sent.
-   */
-  flagSelection?: FlagSelection
-  /** Reports dropped or server-ignored selections. Defaults to console. */
-  logger?: { error(message: string): void }
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
   signal?: AbortSignal
@@ -47,31 +42,13 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions &
 // Keep URL encoding and this limit in sync with packages/browser/src/transport/flagSelection.ts.
 const MAX_RULES_URL_BYTES = 8192
 
-const SELECTION_LIMIT_DESCRIPTIONS: Record<FlagSelectionError, string> = {
-  malformed_selection: 'flagSelection must be an object with optional tags and keyPatterns string arrays',
-  too_many_values: `each list accepts at most ${MAX_FLAG_SELECTION_VALUES} values`,
-  invalid_key_pattern: `each key pattern is at most ${MAX_FLAG_SELECTION_KEY_PATTERN_BYTES} UTF-8 bytes`,
-  invalid_tag: `each tag is at most ${MAX_FLAG_SELECTION_TAG_BYTES} UTF-8 bytes`,
-}
-
-function reportSelectionError(logger: NonNullable<ConfigurationFetchOptions['logger']>, message: string): void {
-  try {
-    logger.error(message)
-  } catch {
-    // Diagnostics must not prevent configuration loading or replace a fetch error.
-  }
-}
-
 function applyFlagSelection(
   url: URL,
   input: FlagSelection | undefined,
   logger: NonNullable<ConfigurationFetchOptions['logger']>
 ): { url: URL; selected: boolean } {
-  const drop = (reason: FlagSelectionError, limit = SELECTION_LIMIT_DESCRIPTIONS[reason]) => {
-    reportSelectionError(
-      logger,
-      `flagSelection was not sent (${reason}: ${limit}). Loading the full flag configuration.`
-    )
+  const drop = (reason: FlagSelectionError, limit?: string) => {
+    reportDroppedFlagSelection(logger, reason, limit)
     return { url, selected: false }
   }
   try {
@@ -154,15 +131,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     },
     { fetch: requestFetch, timeoutMs, signal },
     async (response, fetchedAt, checkAborted) => {
-      if (selected) {
-        const reason = response.headers.get('DD-Flag-Selection-Ignored')
-        if (reason) {
-          reportSelectionError(
-            logger,
-            `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
-          )
-        }
-      }
+      if (selected) reportIgnoredFlagSelection(logger, response)
       const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
       if (contentType !== 'application/protobuf') {
         throw new ConfigurationFetchError('invalid_response', 'Expected a protobuf configuration response')

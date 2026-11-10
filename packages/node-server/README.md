@@ -51,7 +51,8 @@ const configuration = await fetchPrecomputedConfiguration({
   clientToken,
   env: 'production',
   context,
-  clientCompatibility,
+  clientFingerprint,
+  flagSelection: { tags: ['team:checkout'], keyPatterns: ['checkout-*'] },
 })
 const wire = configurationToString(configuration)
 ```
@@ -62,20 +63,39 @@ The root parser and serializer handle only precomputed configurations; use
 `/rules-based` to retain rules.
 
 `distributionChannel: 'client'` is required in this draft. The endpoint does not
-support server-distributed flags or API-key authentication. Whether to add that
-support or a default channel is a separate API decision before release.
+support server-distributed flags or API-key authentication; those are deferred.
 
-Forward the browser's complete `getClientCompatibility()` result as
-`clientCompatibility`. Missing compatibility or an empty list uses the plaintext
+Forward the browser's opaque `getClientFingerprint()` string unchanged as
+`clientFingerprint`. Omission or a valid fingerprint with no supported capabilities uses the plaintext
 baseline, not the Node SDK's capabilities. Unknown or unimplemented capabilities
 are ignored. Datadog controls its encoding rollout: an encoding-capable client can
 receive plaintext. A response using an encoding the target did not advertise is
 rejected with `ConfigurationFetchError` (`decode`).
 
+The helper decodes the SDK-owned wire internally. It sends supported assignment
+encoding capabilities in `X-DD-FEATURE-FLAGS-CAPABILITIES`, not the whole fingerprint.
+The request source still identifies the requesting Node SDK. Dependent-flag query
+negotiation is a separate follow-up.
+
+`flagSelection` optionally requests flags matching any of the `tags` or whole-key
+glob `keyPatterns`. The helper trims, deduplicates, and sorts each list, then sends
+it in the JSON body's `data.attributes.flag_selection` (`tags` and `key_patterns`).
+Each list accepts at most 31 distinct nonempty values of at most 200 UTF-8 bytes each.
+An empty selection requests all flags. An invalid or over-limit selection is not
+sent; the full configuration is requested and `logger.error()` reports why.
+`logger` defaults to `console` and also reports a server-ignored selection through
+the `DD-Flag-Selection-Ignored` response header. Logger failures do not stop fetching.
+The rules-fetch URL size limit does not apply to this POST-body selection.
+
+Selection is best-effort, not an access-control boundary. The helper preserves
+the server's returned assignments without filtering them locally. When selection
+is applied, omitted flags return the receiving provider's default value with
+`FLAG_NOT_FOUND`; select every flag the client evaluates.
+
 `site`, `fetch`, `timeoutMs` and `signal` follow the rules-fetch transport
 conventions below. Optional `applicationId` maps to `dd-application-id`.
 The helper snapshots a JSON-compatible context and binds the returned assignments
-to it. Malformed context, compatibility or options fail with `invalid_options`
+to it. Malformed context, fingerprints (including unsupported wire versions), or other options fail with `invalid_options`
 before any request. Use the same context when initializing the receiving provider.
 There is no polling, retry, tracking or automatic server fallback.
 

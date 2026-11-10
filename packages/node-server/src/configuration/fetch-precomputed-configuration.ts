@@ -1,14 +1,17 @@
 import {
   acknowledgesExperimentationOptOut,
   buildEndpointHost,
-  type ClientCompatibility,
+  type CanonicalFlagSelection,
+  type ClientFingerprint,
+  canonicalizeFlagSelection,
   type ExperimentationOptOutModeValue,
   experimentationOptOutPolicy,
+  FLAG_KEY_SHA256_CAPABILITY,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, JsonValue } from '@openfeature/core'
-import { readPrecomputedCapabilities } from './client-compatibility'
+import { readPrecomputedCapabilities } from './client-fingerprint'
 import {
   ConfigurationFetchError,
   type ConfigurationTransportOptions,
@@ -17,8 +20,14 @@ import {
   transportError,
   validateTransportOptions,
 } from './configuration-fetch'
+import {
+  type ConfigurationSelectionOptions,
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+} from './flag-selection'
 
-export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions {
+export interface PrecomputedConfigurationFetchOptions
+  extends ConfigurationTransportOptions, ConfigurationSelectionOptions {
   /** Required for now. Only client-distributed flags are supported by this endpoint. */
   distributionChannel: 'client'
   clientToken: string
@@ -28,9 +37,14 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
   applicationId?: string
+  /**
+   * A detached snapshot is bound to the returned assignments. Only plain JSON values are accepted:
+   * no Date, undefined, non-finite numbers, class instances, or cycles, including nested values.
+   * Convert dates to strings before calling and use the same context in the receiving provider.
+   */
   context: EvaluationContext
-  /** Target client's response support, not the fetching Node SDK's capabilities. */
-  clientCompatibility?: ClientCompatibility
+  /** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+  clientFingerprint?: ClientFingerprint
   /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
   experimentationOptOutMode?: ExperimentationOptOutModeValue
 }
@@ -46,8 +60,20 @@ export async function fetchPrecomputedConfiguration(
     if (error instanceof ConfigurationFetchError) throw error
     throw invalidOption('precomputed configuration')
   }
-  const { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal } =
-    validated
+  const {
+    url,
+    clientToken,
+    applicationId,
+    env,
+    context,
+    capabilities,
+    optOut,
+    flagSelection,
+    logger,
+    requestFetch,
+    timeoutMs,
+    signal,
+  } = validated
   const body = JSON.stringify({
     data: {
       type: 'precompute-assignments-request',
@@ -55,6 +81,9 @@ export async function fetchPrecomputedConfiguration(
         env: { dd_env: env },
         source: { sdk_name: 'nodejs', sdk_version: __BUILD_ENV__SDK_VERSION__ },
         ...(optOut && { evaluation_options: { experimentation_opt_out_mode: optOut.mode } }),
+        ...(flagSelection && {
+          flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+        }),
         subject: {
           targeting_key: context.targetingKey || '',
           targeting_attributes: Object.fromEntries(
@@ -82,6 +111,7 @@ export async function fetchPrecomputedConfiguration(
     },
     { fetch: requestFetch, timeoutMs, signal },
     async (response, fetchedAt, checkAborted) => {
+      if (flagSelection) reportIgnoredFlagSelection(logger, response)
       const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
       if (contentType !== 'application/json' && contentType !== 'application/vnd.api+json') {
         throw new ConfigurationFetchError('invalid_response', 'Expected a JSON configuration response')
@@ -107,10 +137,7 @@ export async function fetchPrecomputedConfiguration(
           'The assignment response did not acknowledge experimentation opt-out'
         )
       }
-      if (
-        parsed.response.data.attributes.obfuscated === true &&
-        !capabilities.includes('assignment-encoding-flag-key-256-v1')
-      ) {
+      if (parsed.response.data.attributes.obfuscated === true && !capabilities.includes(FLAG_KEY_SHA256_CAPABILITY)) {
         throw new ConfigurationFetchError('decode', 'Configuration encoding was not advertised by the target client')
       }
       const etag = response.headers.get('etag')
@@ -128,8 +155,10 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     site = 'datadoghq.com',
     applicationId,
     context: inputContext,
-    clientCompatibility,
+    clientFingerprint,
     experimentationOptOutMode = 'disabled',
+    flagSelection: inputSelection,
+    logger = console,
     timeoutMs = 5000,
     signal,
     fetch: requestFetch = globalThis.fetch,
@@ -153,6 +182,7 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     throw invalidOption('applicationId')
   }
   validateTransportOptions(timeoutMs, signal, requestFetch)
+  if (!logger || typeof logger.error !== 'function') throw invalidOption('logger')
   let host: string
   try {
     host = buildEndpointHost(site, 'preview')
@@ -161,24 +191,46 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   }
   let capabilities: readonly string[]
   try {
-    capabilities = readPrecomputedCapabilities(clientCompatibility)
+    capabilities = readPrecomputedCapabilities(clientFingerprint)
   } catch {
-    throw invalidOption('clientCompatibility')
+    throw invalidOption('clientFingerprint')
   }
   let context: EvaluationContext
   try {
     if (!isRecord(inputContext)) throw new Error('Invalid context')
     context = cloneJson(inputContext) as EvaluationContext
-    if (context.targetingKey !== undefined && typeof context.targetingKey !== 'string')
-      throw new Error('Invalid targeting key')
   } catch {
-    throw invalidOption('context')
+    throw invalidOption('context (must contain only plain JSON values; convert dates to strings)')
   }
+  if (context.targetingKey !== undefined && typeof context.targetingKey !== 'string')
+    throw invalidOption('context.targetingKey (must be a string)')
   const optOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optOut === undefined) throw invalidOption('context.dd_experimentation_opt_out_at')
+  let flagSelection: CanonicalFlagSelection | undefined
+  try {
+    const { selection, error } = canonicalizeFlagSelection(inputSelection)
+    if (error) reportDroppedFlagSelection(logger, error)
+    else flagSelection = selection
+  } catch {
+    // Getters and proxies can expose caller data through raw errors.
+    reportDroppedFlagSelection(logger, 'malformed_selection')
+  }
   const url = new URL(`https://${host}/precompute-assignments`)
   url.searchParams.set('dd_env', env)
-  return { url, clientToken, applicationId, env, context, capabilities, optOut, requestFetch, timeoutMs, signal }
+  return {
+    url,
+    clientToken,
+    applicationId,
+    env,
+    context,
+    capabilities,
+    optOut,
+    flagSelection,
+    logger,
+    requestFetch,
+    timeoutMs,
+    signal,
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
