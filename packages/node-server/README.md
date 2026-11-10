@@ -51,7 +51,7 @@ const configuration = await fetchPrecomputedConfiguration({
   clientToken,
   env: 'production',
   context,
-  clientCompatibility,
+  clientFingerprint,
 })
 const wire = configurationToString(configuration)
 ```
@@ -62,20 +62,24 @@ The root parser and serializer handle only precomputed configurations; use
 `/rules-based` to retain rules.
 
 `distributionChannel: 'client'` is required in this draft. The endpoint does not
-support server-distributed flags or API-key authentication. Whether to add that
-support or a default channel is a separate API decision before release.
+support server-distributed flags or API-key authentication; those are deferred.
 
-Forward the browser's complete `getClientCompatibility()` result as
-`clientCompatibility`. Missing compatibility or an empty list uses the plaintext
+Forward the browser's opaque `getClientFingerprint()` string unchanged as
+`clientFingerprint`. Omission or a valid fingerprint with no supported capabilities uses the plaintext
 baseline, not the Node SDK's capabilities. Unknown or unimplemented capabilities
 are ignored. Datadog controls its encoding rollout: an encoding-capable client can
 receive plaintext. A response using an encoding the target did not advertise is
 rejected with `ConfigurationFetchError` (`decode`).
 
+The helper decodes the SDK-owned wire internally. It sends supported assignment
+encoding capabilities in `X-DD-FEATURE-FLAGS-CAPABILITIES`, not the whole fingerprint.
+The request source still identifies the requesting Node SDK. Dependent-flag query
+negotiation and flag selection are separate follow-ups.
+
 `site`, `fetch`, `timeoutMs` and `signal` follow the rules-fetch transport
 conventions below. Optional `applicationId` maps to `dd-application-id`.
 The helper snapshots a JSON-compatible context and binds the returned assignments
-to it. Malformed context, compatibility or options fail with `invalid_options`
+to it. Malformed context, fingerprints (including unsupported wire versions), or options fail with `invalid_options`
 before any request. Use the same context when initializing the receiving provider.
 There is no polling, retry, tracking or automatic server fallback.
 
@@ -135,23 +139,23 @@ You can also pass rules parsed with `configurationFromString()` or `configuratio
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
 
-To prepare output for a particular browser SDK, send the complete object returned
-by its `getClientCompatibility()` getter to your application server. For example,
+To prepare output for a particular browser SDK, send the opaque string returned
+by its `getClientFingerprint()` getter to your application server. For example,
 in the browser:
 
 ```typescript
-import { getClientCompatibility } from '@datadog/openfeature-browser'
+import { getClientFingerprint } from '@datadog/openfeature-browser'
 
-const requestBody = JSON.stringify({ clientCompatibility: getClientCompatibility() })
+const requestBody = JSON.stringify({ clientFingerprint: getClientFingerprint() })
 ```
 
-On the Node server, read that object from the request and pass it to the helper.
+On the Node server, read that string from the request and pass it unchanged to the helper.
 Using a Web `Request` with the JSON body above:
 
 ```typescript
 async function precomputeForClient(request: Request) {
-  const { clientCompatibility } = await request.json()
-  const precomputed = precomputeConfiguration(rules, context, { clientCompatibility })
+  const { clientFingerprint } = await request.json()
+  const precomputed = precomputeConfiguration(rules, context, { clientFingerprint })
   return configurationToString(precomputed)
 }
 ```
@@ -159,14 +163,17 @@ async function precomputeForClient(request: Request) {
 Your application chooses its own client-server transport. Read compatibility from
 the target browser SDK, not from a browser SDK installed on the Node server.
 
-Omitted compatibility, an empty capability list, or only unknown capabilities
+Omitting the fingerprint, or providing a valid fingerprint with no supported capabilities,
 preserve plaintext output. With `assignment-encoding-flag-key-256-v1`, the Node
 helper uses the shared core encoder to hash flag-map keys with a fresh random
 salt and records `obfuscated: true` and the encoding descriptor. Values and
 telemetry metadata are unchanged. The browser still evaluates the original keys.
-Malformed compatibility throws `ConfigurationPrecomputeError` with
-`invalid_options`. Unknown capability strings and future optional object fields
-are ignored. The Node SDK's own capabilities are never substituted for the client's.
+The SDK-owned wire includes a format version, SDK name/version, and capabilities.
+Do not parse or construct it in application code. Malformed fingerprints and
+unsupported wire versions throw `ConfigurationPrecomputeError` with `invalid_options`.
+Unknown capability strings and future optional wire fields are ignored. SDK identity
+is metadata, not authentication or a substitute for capability negotiation.
+The Node SDK's own capabilities are never substituted for the client's.
 This option is specific to the Node helper; the runtime-agnostic core helper
 continues to return plaintext assignments.
 

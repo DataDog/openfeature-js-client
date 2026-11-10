@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { ClientCompatibility, FlagsConfiguration } from '@datadog/flagging-core'
+import type { ClientFingerprint, FlagsConfiguration } from '@datadog/flagging-core'
 import {
   ConfigurationPrecomputeError,
   type PrecomputeConfigurationOptions as CorePrecomputeConfigurationOptions,
@@ -8,11 +8,11 @@ import {
   precomputeConfiguration as precompute,
 } from '@datadog/flagging-core/rules-based'
 import type { EvaluationContext } from '@openfeature/core'
-import { readPrecomputedCapabilities } from './client-compatibility'
+import { readPrecomputedCapabilities } from './client-fingerprint'
 
 export type PrecomputeConfigurationOptions = CorePrecomputeConfigurationOptions & {
-  /** Target client's response support. Omitted or empty capabilities preserve plaintext keys. */
-  clientCompatibility?: ClientCompatibility
+  /** Opaque target SDK fingerprint. Forward unchanged from its getter; omission preserves plaintext keys. */
+  clientFingerprint?: ClientFingerprint
 }
 
 /** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */
@@ -23,7 +23,7 @@ export function precomputeConfiguration(
 ): FlagsConfiguration {
   let capabilities: readonly string[]
   try {
-    capabilities = readPrecomputedCapabilities(options.clientCompatibility)
+    capabilities = readPrecomputedCapabilities(options.clientFingerprint)
   } catch {
     throw new ConfigurationPrecomputeError('invalid_options')
   }

@@ -13,6 +13,7 @@ import {
   ConfigurationFetchError as RulesFetchError,
   fetchPrecomputedConfiguration as rulesFetch,
 } from '../src/rules-based'
+import { fingerprint } from './client-fingerprint-fixture'
 
 const capability = 'assignment-encoding-flag-key-256-v1'
 const optOutAt = '2026-11-06T12:00:00.123456789Z'
@@ -111,7 +112,7 @@ describe('fetchPrecomputedConfiguration', () => {
       env: 'test & preview',
       site: 'datad0g.com',
       applicationId: 'app',
-      clientCompatibility: { capabilities: [capability, 'unknown-v1', capability] },
+      clientFingerprint: fingerprint([capability, 'unknown-v1', capability]),
       fetch: requestFetch,
     })
     expect(requestFetch).toHaveBeenCalledTimes(1)
@@ -306,10 +307,10 @@ describe('fetchPrecomputedConfiguration', () => {
     })
   })
 
-  it.each([undefined, { capabilities: [] }, { capabilities: ['unknown-v1', 'dependent-flag-variant-key-v1'] }])(
+  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'dependent-flag-variant-key-v1'])])(
     'does not substitute Node capabilities for %j',
-    async (clientCompatibility) => {
-      await fetchPrecomputedConfiguration({ ...options, clientCompatibility, fetch: requestFetch })
+    async (clientFingerprint) => {
+      await fetchPrecomputedConfiguration({ ...options, clientFingerprint, fetch: requestFetch })
       expect(requestFetch.mock.calls[0][1]!.headers).not.toHaveProperty('X-DD-FEATURE-FLAGS-CAPABILITIES')
     }
   )
@@ -320,7 +321,7 @@ describe('fetchPrecomputedConfiguration', () => {
     )
     const result = await fetchPrecomputedConfiguration({
       ...options,
-      clientCompatibility: { capabilities: [capability] },
+      clientFingerprint: fingerprint([capability]),
       fetch: requestFetch,
     })
     const restored = configurationFromString(configurationToString(result))
@@ -332,12 +333,12 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(result.precomputed!.response.data.attributes.obfuscated).toBe(encoded)
   })
 
-  it.each([undefined, { capabilities: [] }, { capabilities: ['future-v1'] }])(
+  it.each([undefined, fingerprint(), fingerprint(['future-v1'])])(
     'rejects a response encoding the target did not advertise: %j',
-    async (clientCompatibility) => {
+    async (clientFingerprint) => {
       requestFetch.mockImplementation(async () => response(true))
       await expect(
-        fetchPrecomputedConfiguration({ ...options, clientCompatibility, fetch: requestFetch })
+        fetchPrecomputedConfiguration({ ...options, clientFingerprint, fetch: requestFetch })
       ).rejects.toMatchObject({ code: 'decode' })
     }
   )
@@ -348,21 +349,21 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('snapshots compatibility and context before fetching', async () => {
+  it('reads the fingerprint and snapshots context before fetching', async () => {
     const inputContext = { targetingKey: 'subject', nested: { tags: ['a'] } }
-    const clientCompatibility = { capabilities: [capability] }
+    const input = {
+      ...options,
+      context: inputContext,
+      clientFingerprint: fingerprint([capability]),
+      fetch: requestFetch,
+    }
     requestFetch.mockImplementation(async () => {
       inputContext.targetingKey = 'changed'
       inputContext.nested.tags.push('changed')
-      clientCompatibility.capabilities.length = 0
+      input.clientFingerprint = fingerprint()
       return response(true)
     })
-    const result = await fetchPrecomputedConfiguration({
-      ...options,
-      context: inputContext,
-      clientCompatibility,
-      fetch: requestFetch,
-    })
+    const result = await fetchPrecomputedConfiguration(input)
     expect(getPrecomputedContext(result)).toEqual({ targetingKey: 'subject', nested: { tags: ['a'] } })
   })
 
@@ -395,17 +396,29 @@ describe('fetchPrecomputedConfiguration', () => {
     { context: { value: Infinity } },
     { context: { value: new Date() } },
     { context: { value: BigInt(1) } },
-    { clientCompatibility: null },
-    { clientCompatibility: {} },
-    { clientCompatibility: { capabilities: 'private' } },
-    { clientCompatibility: { capabilities: [3] } },
+    { clientFingerprint: null },
+    { clientFingerprint: {} },
+    { clientFingerprint: { capabilities: 'private' } },
+    { clientFingerprint: { capabilities: [3] } },
+    { clientFingerprint: '' },
+    { clientFingerprint: 'private malformed wire' },
+    { clientFingerprint: 'null' },
+    { clientFingerprint: '[]' },
+    { clientFingerprint: '{}' },
+    { clientFingerprint: fingerprint([], { version: 2 }) },
+    { clientFingerprint: fingerprint([], { sdk: { name: 'browser' } }) },
+    { clientFingerprint: fingerprint([], { capabilities: null }) },
+    { clientFingerprint: fingerprint([], { capabilities: [3] }) },
     { experimentationOptOutMode: null },
     { experimentationOptOutMode: true },
     { experimentationOptOutMode: 'invalid' },
   ])('rejects invalid options before sending a request: %p', async (override) => {
     const input = { ...options, fetch: requestFetch, ...override } as unknown as PrecomputedConfigurationFetchOptions
     await expect(fetchPrecomputedConfiguration(input)).rejects.toBeInstanceOf(ConfigurationFetchError)
-    await expect(fetchPrecomputedConfiguration(input)).rejects.toMatchObject({ code: 'invalid_options' })
+    await expect(fetchPrecomputedConfiguration(input)).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.not.stringContaining('private'),
+    })
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
@@ -416,9 +429,9 @@ describe('fetchPrecomputedConfiguration', () => {
     proxy.revoke()
     for (const override of [
       { context: cycle },
-      { clientCompatibility: proxy.proxy },
+      { clientFingerprint: proxy.proxy },
       {
-        clientCompatibility: {
+        clientFingerprint: {
           get capabilities() {
             throw new Error('private data')
           },
@@ -442,15 +455,19 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
-  it('accepts future compatibility fields without reading them', async () => {
-    const clientCompatibility = {
-      capabilities: [capability],
-      get future() {
-        throw new Error('must not read unknown fields')
-      },
-    }
-    await fetchPrecomputedConfiguration({ ...options, clientCompatibility, fetch: requestFetch })
+  it('accepts future fingerprint fields without forwarding them or replacing the requesting SDK identity', async () => {
+    const clientFingerprint = fingerprint([capability], {
+      sdk: { name: 'other-sdk', version: '999.0.0' },
+      future: { private: 'not sent upstream' },
+    })
+    await fetchPrecomputedConfiguration({ ...options, clientFingerprint, fetch: requestFetch })
     expect(requestFetch).toHaveBeenCalledTimes(1)
+    const [url, request] = requestFetch.mock.calls[0]
+    expect(JSON.stringify([url, request])).not.toMatch(/other-sdk|not sent upstream/)
+    expect(JSON.parse(request!.body as string).data.attributes.source).toEqual({
+      sdk_name: 'nodejs',
+      sdk_version: '1.0.0-test',
+    })
   })
 
   it.each([301, 302, 307, 400, 401, 429, 500])('rejects HTTP %i without exposing the body', async (status) => {
@@ -493,7 +510,7 @@ describe('fetchPrecomputedConfiguration', () => {
     await expect(
       fetchPrecomputedConfiguration({
         ...options,
-        clientCompatibility: { capabilities: [capability] },
+        clientFingerprint: fingerprint([capability]),
         fetch: requestFetch,
       })
     ).rejects.toMatchObject({ code: 'decode' })

@@ -1,7 +1,5 @@
-/** Compatibility information advertised by a target client SDK. */
-export type ClientCompatibility = {
-	readonly capabilities: readonly string[];
-};
+/** Opaque SDK identity and capabilities. Forward unchanged; this is not user or device identity. */
+export type ClientFingerprint = string;
 type PrimitiveValue = null | boolean | string | number;
 type JsonObject = {
 	[key: string]: JsonValue;
@@ -1099,8 +1097,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	site?: string;
 	applicationId?: string;
 	context: EvaluationContext;
-	/** Target client's response support, not the fetching Node SDK's capabilities. */
-	clientCompatibility?: ClientCompatibility;
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+	clientFingerprint?: ClientFingerprint;
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 }
@@ -1140,8 +1138,8 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
  */
 export declare function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
 type PrecomputeConfigurationOptions$1 = PrecomputeConfigurationOptions & {
-	/** Target client's response support. Omitted or empty capabilities preserve plaintext keys. */
-	clientCompatibility?: ClientCompatibility;
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission preserves plaintext keys. */
+	clientFingerprint?: ClientFingerprint;
 };
 /** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */
 export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions$1): FlagsConfiguration$1;

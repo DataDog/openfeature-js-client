@@ -1,9 +1,7 @@
 import { Channel } from 'node:diagnostics_channel';
 
-/** Compatibility information advertised by a target client SDK. */
-export type ClientCompatibility = {
-	readonly capabilities: readonly string[];
-};
+/** Opaque SDK identity and capabilities. Forward unchanged; this is not user or device identity. */
+export type ClientFingerprint = string;
 type Metadata = Record<string, string>;
 type Paradigm = "server" | "client";
 type PrimitiveValue = null | boolean | string | number;
@@ -1554,8 +1552,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	site?: string;
 	applicationId?: string;
 	context: EvaluationContext;
-	/** Target client's response support, not the fetching Node SDK's capabilities. */
-	clientCompatibility?: ClientCompatibility;
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+	clientFingerprint?: ClientFingerprint;
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 }

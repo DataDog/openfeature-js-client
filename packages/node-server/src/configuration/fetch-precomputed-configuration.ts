@@ -1,14 +1,14 @@
 import {
   acknowledgesExperimentationOptOut,
   buildEndpointHost,
-  type ClientCompatibility,
+  type ClientFingerprint,
   type ExperimentationOptOutModeValue,
   experimentationOptOutPolicy,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, JsonValue } from '@openfeature/core'
-import { readPrecomputedCapabilities } from './client-compatibility'
+import { readPrecomputedCapabilities } from './client-fingerprint'
 import {
   ConfigurationFetchError,
   type ConfigurationTransportOptions,
@@ -29,8 +29,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
   site?: string
   applicationId?: string
   context: EvaluationContext
-  /** Target client's response support, not the fetching Node SDK's capabilities. */
-  clientCompatibility?: ClientCompatibility
+  /** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+  clientFingerprint?: ClientFingerprint
   /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
   experimentationOptOutMode?: ExperimentationOptOutModeValue
 }
@@ -128,7 +128,7 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
     site = 'datadoghq.com',
     applicationId,
     context: inputContext,
-    clientCompatibility,
+    clientFingerprint,
     experimentationOptOutMode = 'disabled',
     timeoutMs = 5000,
     signal,
@@ -161,9 +161,9 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   }
   let capabilities: readonly string[]
   try {
-    capabilities = readPrecomputedCapabilities(clientCompatibility)
+    capabilities = readPrecomputedCapabilities(clientFingerprint)
   } catch {
-    throw invalidOption('clientCompatibility')
+    throw invalidOption('clientFingerprint')
   }
   let context: EvaluationContext
   try {

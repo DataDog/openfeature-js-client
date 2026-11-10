@@ -6,20 +6,20 @@ const {
   precomputeConfiguration,
 } = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
-const { getClientCompatibility } = require('../packages/browser/cjs')
+const { getClientFingerprint } = require('../packages/browser/cjs')
 const { fetchPrecomputedConfiguration } = require('@datadog/openfeature-node-server')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 
-for (const clientCompatibility of [undefined, getClientCompatibility()]) {
+for (const clientFingerprint of [undefined, getClientFingerprint()]) {
   for (const experimentationOptOutMode of [undefined, 'immediate', 'future_experiments_only']) {
-    test(`the browser consumes Node-fetched assignments (compatibility=${!!clientCompatibility}, opt-out=${experimentationOptOutMode})`, async () => {
+    test(`the browser consumes Node-fetched assignments (compatibility=${!!clientFingerprint}, opt-out=${experimentationOptOutMode})`, async () => {
       const context = {
         targetingKey: 'user-1',
         country: 'US',
         ...(experimentationOptOutMode && { dd_experimentation_opt_out_at: '2026-11-06T12:00:00.123456789Z' }),
       }
       const prepared = precomputeConfiguration(configurationFromString(JSON.stringify(fixture)), context, {
-        clientCompatibility,
+        clientFingerprint,
         experimentationOptOutMode,
       })
       let calls = 0
@@ -28,7 +28,7 @@ for (const clientCompatibility of [undefined, getClientCompatibility()]) {
         clientToken: 'token',
         env: 'prod',
         context,
-        clientCompatibility,
+        clientFingerprint,
         experimentationOptOutMode,
         fetch: async (_url, request) => {
           calls++
@@ -57,8 +57,8 @@ for (const clientCompatibility of [undefined, getClientCompatibility()]) {
   }
 }
 
-for (const clientCompatibility of [undefined, getClientCompatibility()]) {
-  test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientCompatibility}) without requests or tracking`, async () => {
+for (const clientFingerprint of [undefined, getClientFingerprint()]) {
+  test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientFingerprint}) without requests or tracking`, async () => {
     const originalFetch = globalThis.fetch
     let calls = 0
     globalThis.fetch = async () => {
@@ -69,7 +69,9 @@ for (const clientCompatibility of [undefined, getClientCompatibility()]) {
       const rules = configurationFromString(JSON.stringify(fixture))
       const context = { targetingKey: 'user-1', country: 'US' }
       const snapshot = configurationFromString(
-        configurationToString(precomputeConfiguration(rules, context, { clientCompatibility }))
+        configurationToString(
+          precomputeConfiguration(rules, context, JSON.parse(JSON.stringify({ clientFingerprint })))
+        )
       )
       assert.equal(snapshot.rules, undefined)
       const provider = new DatadogCoreProvider()

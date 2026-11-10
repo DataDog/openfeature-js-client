@@ -20,7 +20,7 @@
 
 import diagnostics_channel from 'node:diagnostics_channel'
 import {
-  type ClientCompatibility,
+  type ClientFingerprint,
   DatadogNodeServerProvider,
   type DatadogNodeServerProviderOptions,
   fetchPrecomputedConfiguration,
@@ -169,19 +169,22 @@ const conflictingCredentials: RulesConfigurationFetchOptions = {
 provider.setConfiguration(restored)
 void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflictingCredentials]
 
-const clientCompatibility: ClientCompatibility = {
-  capabilities: ['assignment-encoding-flag-key-256-v1'],
-}
+// Forwarded unchanged from the target SDK's getClientFingerprint() result.
+declare const clientFingerprint: ClientFingerprint
 const precomputedFetchOptions: PrecomputedConfigurationFetchOptions = {
   distributionChannel: 'client',
   clientToken: 'token',
   env: 'prod',
   context: {},
-  clientCompatibility,
+  clientFingerprint,
   experimentationOptOutMode: 'future_experiments_only',
 }
 void fetchPrecomputedConfiguration(precomputedFetchOptions)
-void precomputeConfiguration(decoded, {}, { clientCompatibility })
+void precomputeConfiguration(decoded, {}, { clientFingerprint })
+// @ts-expect-error: Fingerprints are opaque strings, not application-constructed capability objects.
+void precomputeConfiguration(decoded, {}, { clientFingerprint: { capabilities: [] } })
+// @ts-expect-error: The fetch helper takes the same opaque string contract.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, clientFingerprint: { capabilities: [] } })
 // @ts-expect-error: Precomputed fetching requires an explicit client channel.
 void fetchPrecomputedConfiguration({ clientToken: 'token', env: 'prod', context: {} })
 // @ts-expect-error: Server-distributed precomputed fetching is not implemented.
