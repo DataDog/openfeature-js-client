@@ -4,23 +4,9 @@ This package provides OpenFeature integration for Node.js server environments an
 
 ## Offline Initialization and Local Evaluation
 
-`DatadogCoreProvider` initializes from locally supplied rules or precomputed assignments. Rules evaluate each call's context independently; context-bound precomputed assignments require a matching context. The provider does not fetch configuration, start polling, or initialize a tracer or uploader. This is an internal building block; customer-facing `dd-trace` exports and optional tracking factories are follow-up work.
+`DatadogCoreProvider` evaluates locally supplied rules or precomputed assignments without fetching, polling, or initializing a tracer or uploader. It is exported from `/rules-based`; the root entry point remains protobuf-free.
 
-Fetch server-distributed rules in a deployment job and store the wire with the application:
-
-```javascript
-import { writeFile } from 'node:fs/promises'
-import { configurationToString, fetchRulesConfiguration } from '@datadog/openfeature-node-server/rules-based'
-
-const configuration = await fetchRulesConfiguration({
-  distributionChannel: 'server',
-  apiKey: process.env.DD_API_KEY,
-  env: 'production',
-})
-await writeFile('flags.json', configurationToString(configuration))
-```
-
-At runtime, register the provider with that local snapshot. Registration is synchronous and immediately ready; the OpenFeature server SDK's evaluation methods still return promises.
+Use the [configuration helpers](#standalone-configuration-helpers) to fetch and serialize server-distributed rules as `flags.json`. With a valid local snapshot, registration is synchronous and immediately ready; OpenFeature evaluation methods return promises.
 
 ```javascript
 import { readFileSync } from 'node:fs'
@@ -39,46 +25,31 @@ const client = OpenFeature.getClient()
 const enabled = await client.getBooleanValue('checkout-enabled', false, { targetingKey: 'user-123' })
 ```
 
-Refresh is caller-controlled and does not block evaluations against the active snapshot:
+Refresh server-distributed rules without blocking evaluations against the active snapshot:
 
 ```javascript
-try {
-  const next = await fetchRulesConfiguration({
-    distributionChannel: 'server',
-    apiKey: process.env.DD_API_KEY,
-    env: 'production',
-  })
-  provider.setConfiguration(next)
-} catch {
-  console.warn('Flag refresh failed; retaining the active configuration')
-}
+const next = await fetchRulesConfiguration({ apiKey: process.env.DD_API_KEY, env: 'production' })
+provider.setConfiguration(next)
 ```
 
-The constructor and `setConfiguration()` require usable parsed rules or precomputed assignments and take a detached snapshot. Invalid replacements throw without changing the active configuration or provider status. `getConfiguration()` returns a detached copy. Mixed configurations use only their rules, not context-bound precomputed assignments. There is no implicit expiry; applications own freshness and refresh ordering. Missing flags and ordinary evaluation errors still use the caller's default.
+The constructor and `setConfiguration()` validate and copy the configuration; `getConfiguration()` returns a detached copy. Failed fetches or invalid replacements leave the active configuration and provider status unchanged. Mixed configurations use their rules. Applications own refresh timing and ordering; snapshots do not expire automatically. Evaluation errors use the caller's default.
 
-You can also precompute server-distributed rules locally and use the result in the Node provider:
+To use a [locally precomputed snapshot](#local-precomputation) instead:
 
 ```javascript
 import { precomputeConfiguration } from '@datadog/openfeature-node-server/rules-based'
 
 const context = { targetingKey: 'user-123' }
-const snapshot = precomputeConfiguration(configuration, context)
-const provider = new DatadogCoreProvider(snapshot)
-OpenFeature.setProvider(provider)
-const client = OpenFeature.getClient()
-
-const enabled = await client.getBooleanValue('checkout-enabled', false, context)
+provider.setConfiguration(precomputeConfiguration(configuration, context))
 ```
 
-Here `configuration` is the server rules snapshot loaded above. You can serialize and restore the precomputed snapshot with the same wire helpers. Helper-generated snapshots retain their evaluation context: a different context returns the caller's default with `INVALID_CONTEXT`, without making the provider unavailable for matching calls. Use rules for an application-wide provider serving different users concurrently, rather than swapping per-user snapshots into it. Precomputing server-distributed rules does not make them safe to send to a browser.
+Helper-generated snapshots require the same evaluation context; a mismatch returns the caller's default with `INVALID_CONTEXT`. Use rules for a shared provider serving multiple users, not per-user snapshot swaps. Keep server-distributed rules and their precomputed results on the server.
 
-No Datadog tracking is installed by default. Applications can register OpenFeature hooks with `client.addHooks()`. Internal tracer integrations can supply an `exposureChannel` and `dependencyTelemetrySidecar`; these reuse the existing provider's exposure deduplication and dependency tracing without creating writers. The tracer integration owns evaluation telemetry opt-out, delivery, and writer cleanup. Experiment exclusion uses the existing Node `experimentationOptOutMode` option (`Disabled` or `Immediate`), independently of telemetry.
-
-Keep server-distributed rules on the server. Offline initialization avoids a startup configuration request; optional refresh and telemetry still require their own network access. The provider is exported only from `/rules-based`, so the root entry point remains protobuf-free.
+Tracking is off by default. Register OpenFeature hooks with `client.addHooks()`. Internal tracer integrations can supply `exposureChannel` and `dependencyTelemetrySidecar` and own telemetry opt-out, delivery, and writer cleanup.
 
 ## Standalone Configuration Helpers
 
-Requires Node.js 18 or newer. Fetch and parse rules without initializing a tracer or provider. The customer-facing `dd-trace/openfeature` entrypoint is a separate follow-up; these examples use the internal package.
+Requires Node.js 18 or newer. Fetch and parse rules without initializing a tracer or provider.
 
 ```javascript
 import { fetchRulesConfiguration, configurationToString } from '@datadog/openfeature-node-server/rules-based'
