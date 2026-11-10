@@ -220,7 +220,7 @@ describe('DatadogCoreProvider offline initialization', () => {
     { rulesError: 'Invalid rules' },
     configurationFromString('invalid wire'),
     configurationFromString(JSON.stringify({ version: 1, rules: { response: 'invalid protobuf' } })),
-    precomputeConfiguration(rules(), context),
+    { precomputed: {} },
   ])('rejects unusable bootstrap data and preserves the active snapshot on an invalid update: %j', async (invalid) => {
     expect(() => new DatadogCoreProvider(invalid as FlagsConfiguration)).toThrow(TypeError)
     const provider = new DatadogCoreProvider(rules())
@@ -281,8 +281,10 @@ describe('DatadogCoreProvider offline initialization', () => {
     const provider = new DatadogCoreProvider(rules())
     const client = clientFor(provider)
 
-    expect(() => new DatadogCoreProvider(invalid)).toThrow('requires a valid rules-based configuration')
-    expect(() => provider.setConfiguration(invalid)).toThrow('requires a valid rules-based configuration')
+    expect(() => new DatadogCoreProvider(invalid)).toThrow('requires a valid rules-based or precomputed configuration')
+    expect(() => provider.setConfiguration(invalid)).toThrow(
+      'requires a valid rules-based or precomputed configuration'
+    )
     await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
   })
 

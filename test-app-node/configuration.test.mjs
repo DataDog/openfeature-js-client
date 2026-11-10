@@ -98,37 +98,38 @@ test('packed core provider evaluates and replaces local rules without OpenFeatur
   await provider.onClose()
 })
 
-test(
-  'installed OpenFeature supports synchronous core registration and optional exposures',
-  { skip: !OpenFeature },
-  async () => {
-    const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
-    const rules = configurationFromString(JSON.stringify(fixture))
-    const sink = channel('test:offline-core:exposures')
-    const exposures = []
-    const record = (event) => exposures.push(event)
-    sink.subscribe(record)
-    try {
-      const provider = new DatadogCoreProvider(rules, { exposureChannel: sink })
-      OpenFeature.setProvider('offline-core', provider)
-      const client = OpenFeature.getClient('offline-core')
-      assert.equal(client.providerStatus, 'READY')
+for (const format of ['rules', 'precomputed']) {
+  test(
+    `installed OpenFeature supports synchronous core registration and optional exposures with ${format}`,
+    { skip: !OpenFeature },
+    async () => {
+      const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
+      const rules = configurationFromString(JSON.stringify(fixture))
       const context = { targetingKey: 'subject', country: 'US' }
-      const results = await Promise.all([
-        client.getBooleanDetails('test-flag', false, context),
-        client.getBooleanDetails('test-flag', false, context),
-      ])
-      assert.deepEqual(
-        results.map((result) => result.value),
-        [true, true]
-      )
-      assert.deepEqual(results.map((result) => result.flagMetadata.__dd_exposure_cache_hit).sort(), [false, true])
-      assert.equal(exposures.length, 1)
-      const failed = await client.getBooleanDetails(
-        'test-flag',
-        false,
-        { ...context, targetingKey: 'retry-subject' },
-        {
+      const sink = channel('test:offline-core:exposures')
+      const exposures = []
+      const record = (event) => exposures.push(event)
+      sink.subscribe(record)
+      try {
+        const provider = new DatadogCoreProvider(format === 'rules' ? rules : precomputeConfiguration(rules, context), {
+          exposureChannel: sink,
+        })
+        OpenFeature.setProvider('offline-core', provider)
+        const client = OpenFeature.getClient('offline-core')
+        assert.equal(client.providerStatus, 'READY')
+        const results = await Promise.all([
+          client.getBooleanDetails('test-flag', false, context),
+          client.getBooleanDetails('test-flag', false, context),
+        ])
+        assert.deepEqual(
+          results.map((result) => result.value),
+          [true, true]
+        )
+        assert.deepEqual(results.map((result) => result.flagMetadata.__dd_exposure_cache_hit).sort(), [false, true])
+        assert.equal(exposures.length, 1)
+        const retryContext = { ...context, targetingKey: 'retry-subject' }
+        if (format === 'precomputed') provider.setConfiguration(precomputeConfiguration(rules, retryContext))
+        const failed = await client.getBooleanDetails('test-flag', false, retryContext, {
           hooks: [
             {
               after() {
@@ -136,20 +137,50 @@ test(
               },
             },
           ],
-        }
-      )
-      assert.equal(failed.errorCode, 'GENERAL')
-      assert.equal(exposures.length, 1)
-      await client.getBooleanValue('test-flag', false, { ...context, targetingKey: 'retry-subject' })
-      assert.equal(exposures.length, 2)
-      const changed = []
-      client.addHandler('PROVIDER_CONFIGURATION_CHANGED', () => changed.push(true))
-      provider.setConfiguration(configurationFromRulesBinary(new Uint8Array()))
-      assert.deepEqual(changed, [true])
-      assert.equal((await client.getBooleanDetails('test-flag', false, context)).errorCode, 'FLAG_NOT_FOUND')
-    } finally {
-      sink.unsubscribe(record)
-      await OpenFeature.clearProviders()
+        })
+        assert.equal(failed.errorCode, 'GENERAL')
+        assert.equal(exposures.length, 1)
+        await client.getBooleanValue('test-flag', false, retryContext)
+        assert.equal(exposures.length, 2)
+        const changed = []
+        client.addHandler('PROVIDER_CONFIGURATION_CHANGED', () => changed.push(true))
+        provider.setConfiguration(configurationFromRulesBinary(new Uint8Array()))
+        assert.deepEqual(changed, [true])
+        assert.equal((await client.getBooleanDetails('test-flag', false, context)).errorCode, 'FLAG_NOT_FOUND')
+      } finally {
+        sink.unsubscribe(record)
+        await OpenFeature.clearProviders()
+      }
     }
-  }
-)
+  )
+}
+
+test('packed helpers fetch server rules and precompute a snapshot for the Node provider', async () => {
+  const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
+  let requests = 0
+  const rules = await fetchRulesConfiguration({
+    distributionChannel: 'server',
+    apiKey: 'test-key',
+    env: 'test',
+    fetch: async (url, options) => {
+      requests++
+      assert.equal(new URL(url).pathname, '/api/v2/feature-flagging/config/rules-based/server')
+      assert.equal(options.headers['dd-api-key'], 'test-key')
+      return new Response(Buffer.from(fixture.rules.response, 'base64'), {
+        headers: { 'Content-Type': 'application/protobuf' },
+      })
+    },
+  })
+  const context = { targetingKey: 'subject', country: 'US' }
+  const snapshot = precomputeConfiguration(rules, context)
+  const provider = new DatadogCoreProvider(configurationFromString(configurationToString(snapshot)))
+  const logger = { debug() {}, info() {}, warn() {}, error() {} }
+  assert.equal(provider.getConfiguration().rules, undefined)
+  assert.equal((await provider.resolveBooleanEvaluation('test-flag', false, context, logger)).value, true)
+  assert.equal(
+    (await provider.resolveBooleanEvaluation('test-flag', false, { ...context, country: 'CA' }, logger)).errorCode,
+    'INVALID_CONTEXT'
+  )
+  assert.equal(requests, 1)
+  await provider.onClose()
+})

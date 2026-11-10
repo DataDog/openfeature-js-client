@@ -1536,7 +1536,7 @@ export interface DatadogCoreProviderOptions {
 	/** Consumed by the integration's root evaluation hook. @internal */
 	dependencyTelemetrySidecar?: DependencyTelemetrySidecarApi;
 }
-/** Locally initialized, rules-only provider. Fetching and event delivery are caller-owned. */
+/** Locally initialized provider. Fetching and event delivery are caller-owned. */
 export declare class DatadogCoreProvider implements Provider {
 	readonly metadata: {
 		name: string;
