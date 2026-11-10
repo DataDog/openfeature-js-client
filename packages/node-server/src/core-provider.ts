@@ -1,10 +1,13 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
+  createEvaluationMetadata,
   type ExposureEvent,
+  evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
   type FlagTypeToValue,
   LRUInMemoryAssignmentCache,
+  timeStampNow,
 } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -38,7 +41,7 @@ export interface DatadogCoreProviderOptions {
   dependencyTelemetrySidecar?: DependencyTelemetrySidecarApi
 }
 
-/** Locally initialized, rules-only provider. Fetching and event delivery are caller-owned. */
+/** Locally initialized provider. Fetching and event delivery are caller-owned. */
 export class DatadogCoreProvider implements Provider {
   readonly metadata = { name: 'datadog-core' }
   readonly runsOn = 'server' as const
@@ -49,10 +52,10 @@ export class DatadogCoreProvider implements Provider {
   private readonly exposureCache: AssignmentCache | undefined
   private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecarApi
 
-  // No initialize(): valid rules are required before OpenFeature registration.
+  // No initialize(): a valid configuration is required before OpenFeature registration.
   constructor(configuration: FlagsConfiguration, options: DatadogCoreProviderOptions = {}) {
     this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
-    this.configuration = snapshotRules(configuration)
+    this.configuration = snapshotConfiguration(configuration)
     this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
     if (options.exposureChannel) {
       this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
@@ -64,16 +67,15 @@ export class DatadogCoreProvider implements Provider {
 
   /** Return a detached copy; apply replacements with setConfiguration(). */
   getConfiguration(): FlagsConfiguration {
-    return snapshotRules(this.configuration)
+    return snapshotConfiguration(this.configuration)
   }
 
   /** Validate before replacing the active snapshot. Failure leaves it unchanged. */
   setConfiguration(configuration: FlagsConfiguration): void {
-    const next = snapshotRules(configuration)
-    const previousCreatedAt = this.configuration.rules!.response.createdAt
-    const nextCreatedAt = next.rules!.response.createdAt
+    const next = snapshotConfiguration(configuration)
+    const previousGeneration = configurationGeneration(this.configuration)
     this.configuration = next
-    if (previousCreatedAt?.seconds !== nextCreatedAt?.seconds || previousCreatedAt?.nanos !== nextCreatedAt?.nanos) {
+    if (previousGeneration !== configurationGeneration(next)) {
       this.exposureCache?.clear()
     }
     this.events.emit('PROVIDER_CONFIGURATION_CHANGED' as ServerProviderEvents.ConfigurationChanged)
@@ -117,7 +119,7 @@ export class DatadogCoreProvider implements Provider {
     logger: Logger
   ): Promise<ResolutionDetails<T>> {
     const result = this.resolve('object', flagKey, defaultValue, context, logger)
-    // The evaluator caches decoded JSON values. Do not share them between requests.
+    // Rules cache decoded JSON, and precomputed assignments retain their values. Do not share either between requests.
     return {
       ...result,
       value: result.variant === undefined ? result.value : structuredClone(result.value),
@@ -131,48 +133,79 @@ export class DatadogCoreProvider implements Provider {
     context: EvaluationContext,
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    const trace = evaluateWithTrace(
-      this.configuration.rules!.response,
-      type,
-      flagKey,
-      defaultValue,
-      context,
-      logger,
-      this.experimentationOptOutMode,
-      {
-        collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations,
-        collectDependencyExposures: this.exposureCache !== undefined,
-      }
-    )
-    stageDependencyTelemetry(
-      context,
-      trace.details,
-      trace.dependencyEvaluations,
-      trace.dependencyExposures,
-      this.exposureCache,
-      this.dependencyTelemetrySidecar
-    )
+    const configuration = this.configuration
+    let details: ResolutionDetails<FlagTypeToValue<T>>
+    if (configuration.rules) {
+      const trace = evaluateWithTrace(
+        configuration.rules.response,
+        type,
+        flagKey,
+        defaultValue,
+        context,
+        logger,
+        this.experimentationOptOutMode,
+        {
+          collectDependencyEvaluations: this.dependencyTelemetrySidecar.collectDependencyEvaluations,
+          collectDependencyExposures: this.exposureCache !== undefined,
+        }
+      )
+      stageDependencyTelemetry(
+        context,
+        trace.details,
+        trace.dependencyEvaluations,
+        trace.dependencyExposures,
+        this.exposureCache,
+        this.dependencyTelemetrySidecar
+      )
+      details = trace.details
+    } else {
+      const metadata = createEvaluationMetadata(
+        timeStampNow(),
+        configuration.precomputed!.response.data.attributes.observeFullEvaluationData
+      )
+      const result = evaluatePrecomputedConfiguration(
+        configuration,
+        type,
+        flagKey,
+        defaultValue,
+        context,
+        this.experimentationOptOutMode,
+        logger
+      )
+      details = { ...result, flagMetadata: { ...result.flagMetadata, ...metadata } }
+    }
     if (this.exposureCache) {
       prepareExposure(
         context,
-        { flagKey, variant: trace.details.variant, flagMetadata: trace.details.flagMetadata ?? {} },
+        { flagKey, variant: details.variant, flagMetadata: details.flagMetadata ?? {} },
         this.exposureCache
       )
     }
-    return trace.details
+    return details
   }
 }
 
-function snapshotRules(configuration: FlagsConfiguration): FlagsConfiguration {
+function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfiguration {
   try {
     const rules = configuration.rules
     if (rules?.response.$typeName === 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration') {
       // Reuse the wire codec for validation and ownership. Ignore context-bound precomputed entries.
       const snapshot = configurationFromString(configurationToString({ rules }))
       if (snapshot.rules) return snapshot
+    } else if (rules === undefined) {
+      const snapshot = configurationFromString(configurationToString({ precomputed: configuration.precomputed }))
+      if (snapshot.precomputed) return snapshot
     }
   } catch {
     // Caller-controlled configuration and accessor errors must not leak into diagnostics.
   }
-  throw new TypeError('DatadogCoreProvider requires a valid rules-based configuration')
+  throw new TypeError('DatadogCoreProvider requires a valid rules-based or precomputed configuration')
+}
+
+function configurationGeneration(configuration: FlagsConfiguration): string {
+  if (configuration.rules) {
+    const createdAt = configuration.rules.response.createdAt
+    return `rules:${createdAt?.seconds}:${createdAt?.nanos}`
+  }
+  return `precomputed:${configuration.precomputed!.response.data.attributes.createdAt}`
 }

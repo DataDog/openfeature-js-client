@@ -4,7 +4,7 @@ This package provides OpenFeature integration for Node.js server environments an
 
 ## Offline Initialization and Local Evaluation
 
-`DatadogCoreProvider` initializes from a local rules configuration and evaluates each call's context independently. It does not fetch configuration, start polling, or initialize a tracer or uploader. This is an internal building block; customer-facing `dd-trace` exports and optional tracking factories are follow-up work.
+`DatadogCoreProvider` initializes from locally supplied rules or precomputed assignments. Rules evaluate each call's context independently; context-bound precomputed assignments require a matching context. The provider does not fetch configuration, start polling, or initialize a tracer or uploader. This is an internal building block; customer-facing `dd-trace` exports and optional tracking factories are follow-up work.
 
 Fetch server-distributed rules in a deployment job and store the wire with the application:
 
@@ -33,8 +33,8 @@ import {
 
 const configuration = configurationFromString(readFileSync('flags.json', 'utf8'))
 const provider = new DatadogCoreProvider(configuration)
-OpenFeature.setProvider('offline', provider)
-const client = OpenFeature.getClient('offline')
+OpenFeature.setProvider(provider)
+const client = OpenFeature.getClient()
 
 const enabled = await client.getBooleanValue('checkout-enabled', false, { targetingKey: 'user-123' })
 ```
@@ -54,7 +54,23 @@ try {
 }
 ```
 
-The constructor and `setConfiguration()` require usable parsed rules and take a detached snapshot. Invalid replacements throw without changing the active rules or provider status. `getConfiguration()` returns a detached copy. Mixed configurations use only their rules, not context-bound precomputed assignments. There is no implicit expiry; applications own freshness and refresh ordering. Missing flags and ordinary evaluation errors still use the caller's default.
+The constructor and `setConfiguration()` require usable parsed rules or precomputed assignments and take a detached snapshot. Invalid replacements throw without changing the active configuration or provider status. `getConfiguration()` returns a detached copy. Mixed configurations use only their rules, not context-bound precomputed assignments. There is no implicit expiry; applications own freshness and refresh ordering. Missing flags and ordinary evaluation errors still use the caller's default.
+
+You can also precompute server-distributed rules locally and use the result in the Node provider:
+
+```javascript
+import { precomputeConfiguration } from '@datadog/openfeature-node-server/rules-based'
+
+const context = { targetingKey: 'user-123' }
+const snapshot = precomputeConfiguration(configuration, context)
+const provider = new DatadogCoreProvider(snapshot)
+OpenFeature.setProvider(provider)
+const client = OpenFeature.getClient()
+
+const enabled = await client.getBooleanValue('checkout-enabled', false, context)
+```
+
+Here `configuration` is the server rules snapshot loaded above. You can serialize and restore the precomputed snapshot with the same wire helpers. Helper-generated snapshots retain their evaluation context: a different context returns the caller's default with `INVALID_CONTEXT`, without making the provider unavailable for matching calls. Use rules for an application-wide provider serving different users concurrently, rather than swapping per-user snapshots into it. Precomputing server-distributed rules does not make them safe to send to a browser.
 
 No Datadog tracking is installed by default. Applications can register OpenFeature hooks with `client.addHooks()`. Internal tracer integrations can supply an `exposureChannel` and `dependencyTelemetrySidecar`; these reuse the existing provider's exposure deduplication and dependency tracing without creating writers. The tracer integration owns evaluation telemetry opt-out, delivery, and writer cleanup. Experiment exclusion uses the existing Node `experimentationOptOutMode` option (`Disabled` or `Immediate`), independently of telemetry.
 
