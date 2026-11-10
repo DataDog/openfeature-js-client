@@ -881,6 +881,22 @@ describe('dependent flag evaluation', () => {
     })
   })
 
+  it('ignores an inherited maximum depth while preserving own future parameters', () => {
+    const evaluatorParams = Object.assign(Object.create({ maxDependencyDepth: 0 }), {
+      futureParameter: { enabled: true },
+    })
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = evaluatorParams
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(config.evaluatorParams).toBe(evaluatorParams)
+    expect(Object.keys(evaluatorParams)).toEqual(['futureParameter'])
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
   it('reads the maximum depth once for each root evaluation without caching it', () => {
     const config = configuration({ root: booleanFlag('root', 'on') })
     let reads = 0

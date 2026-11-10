@@ -866,6 +866,9 @@ function getMaxDependencyDepth(
       warnInvalidMaxDependencyDepth(logger)
       return DEFAULT_MAX_DEPENDENCY_DEPTH
     }
+    if (!Object.prototype.hasOwnProperty.call(evaluatorParams, 'maxDependencyDepth')) {
+      return DEFAULT_MAX_DEPENDENCY_DEPTH
+    }
     configuredDepth = Reflect.get(evaluatorParams, 'maxDependencyDepth')
   } catch {
     warnInvalidMaxDependencyDepth(logger)
