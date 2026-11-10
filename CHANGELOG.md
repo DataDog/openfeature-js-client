@@ -10,8 +10,8 @@
 
 **Features:**
 
-- Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#463](https://github.com/DataDog/openfeature-js-client/pull/463)) [BROWSER]
-- Support `flagSelection.keyPatterns` in `precomputeConfiguration` to produce selected assignments from reusable source rules while retaining dependency evaluation. Tags are unsupported; invalid selections throw `invalid_options` ([#463](https://github.com/DataDog/openfeature-js-client/pull/463)) [CORE] [NODE-SERVER]
+- Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [BROWSER]
+- Support `flagSelection.keyPatterns` in `precomputeConfiguration` to produce selected assignments from reusable source rules while retaining dependency evaluation. Tags are unsupported; invalid selections throw `invalid_options` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [CORE] [NODE-SERVER]
 
 ## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
 
