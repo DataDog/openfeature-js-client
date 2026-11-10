@@ -112,8 +112,8 @@ async function precomputeForClient(request: Request) {
 Your application chooses its own client-server transport. Read compatibility from
 the target browser SDK, not from a browser SDK installed on the Node server.
 
-Omitted compatibility, an empty capability list, or only unknown capabilities
-preserve plaintext output. With `assignment-encoding-flag-key-256-v1`, the Node
+Omitting the fingerprint, or providing a valid fingerprint with no supported capabilities,
+preserves plaintext output. With `assignment-encoding-flag-key-256-v1`, the Node
 helper uses the shared core encoder to hash flag-map keys with a fresh random
 salt and records `obfuscated: true` and the encoding descriptor. Values and
 telemetry metadata are unchanged. The browser still evaluates the original keys.
