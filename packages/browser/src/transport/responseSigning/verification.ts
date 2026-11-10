@@ -270,7 +270,10 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
     for (const extension of tbs.extensions || []) {
       checkDer(new Uint8Array(extension.extnValue.buffer))
       requireCondition(!extensions.has(extension.extnID), 'invalid-certificate')
-      requireCondition(!['2.5.29.30', '2.5.29.36', '2.5.29.54'].includes(extension.extnID), 'invalid-certificate')
+      requireCondition(
+        !['2.5.29.30', '2.5.29.33', '2.5.29.36', '2.5.29.54'].includes(extension.extnID),
+        'invalid-certificate'
+      )
       requireCondition(
         !extension.critical ||
           ['2.5.29.19', '2.5.29.15', '2.5.29.37', '2.5.29.14', '2.5.29.35'].includes(extension.extnID),
@@ -309,6 +312,7 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
     const ski = skiExtension
       ? new Uint8Array(parseDer(new Uint8Array(skiExtension.extnValue.buffer), SubjectKeyIdentifier).buffer)
       : undefined
+    requireCondition(!skiExtension || (ski !== undefined && ski.length > 0), 'invalid-certificate')
     let aki: Uint8Array | undefined
     if (akiExtension) {
       const identifier = parseDer(new Uint8Array(akiExtension.extnValue.buffer), AuthorityKeyIdentifier)
@@ -317,6 +321,7 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
         'invalid-certificate'
       )
       aki = identifier.keyIdentifier ? new Uint8Array(identifier.keyIdentifier.buffer) : undefined
+      requireCondition(aki !== undefined && aki.length > 0, 'invalid-certificate')
     }
     return { certificate, notBefore, notAfter, ski, aki }
   } catch {

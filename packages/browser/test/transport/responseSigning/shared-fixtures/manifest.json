@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "files": {
+    "subject-der.json": {
+      "sha256": "c3cc9c3992ddb9b77892d0230212c9e6b383dbf7aeab705af6132125245afc59",
+      "response_cases": 2,
+      "accepted": 1,
+      "signing_cases": 2
+    },
+    "near-expiry.json": {
+      "sha256": "f0de3afa5ed0083ddb9d687238431286fc025d9a72c29ba7eb0c4dc304d7914f",
+      "response_cases": 6,
+      "accepted": 4,
+      "signing_cases": 6
+    },
+    "extension-profile.json": {
+      "sha256": "2b7dbba4bb3e4149a5e7af75f5e32c37bd1c43e6e6f5c279cb635df63b3d54c4",
+      "response_cases": 6,
+      "accepted": 2,
+      "signing_cases": 6
+    }
+  }
+}

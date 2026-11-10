@@ -165,3 +165,47 @@ test.each(isolated.cases)('$id', async (vector) => {
     await expect(verifyResponse(request, response, [isolated.anchor_der_base64], vector.now)).rejects.toThrow()
   }
 })
+
+const supplementDirectory = join(__dirname, 'shared-fixtures')
+const manifest = JSON.parse(readFileSync(join(supplementDirectory, 'manifest.json'), 'utf8')) as {
+  files: Record<string, { sha256: string; response_cases: number }>
+}
+for (const name of ['subject-der', 'near-expiry', 'extension-profile']) {
+  const filename = `${name}.json`
+  const bytes = readFileSync(join(supplementDirectory, filename))
+  const supplement = JSON.parse(bytes.toString()) as typeof corpus
+  test(`shared ${name} fixture integrity`, () => {
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(manifest.files[filename].sha256)
+    expect(supplement.cases).toHaveLength(manifest.files[filename].response_cases)
+  })
+  test.each(supplement.cases)(`${name}: $id`, async (vector) => {
+    const request = {
+      ...vector.request,
+      headers: new Headers(vector.request.headers),
+      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
+    }
+    const response = {
+      ...vector.response,
+      headers: new Headers(vector.response.headers),
+      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
+    }
+    const result = verifyResponse(request, response, [supplement.anchor_der_base64], vector.now)
+    if (!vector.expected_accept) {
+      await expect(result).rejects.toThrow()
+      return
+    }
+    const issued = Number(response.headers.get('x-datadog-feature-flags-issued-at'))
+    const expires = Number(response.headers.get('x-datadog-feature-flags-expires-at'))
+    await expect(result).resolves.toEqual({ expiresAt: expires, verifiedAt: vector.now })
+    const transcript = await buildSigningTranscript(
+      request,
+      response,
+      issued,
+      expires,
+      decodeBase64(response.headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
+      decodeBase64(response.headers.get('x-datadog-feature-flags-signing-intermediate')!, 4096)
+    )
+    expect(Buffer.from(transcript).toString('base64')).toBe(vector.transcript_base64)
+    await expect(verifyResponse(request, response, [supplement.anchor_der_base64], expires)).rejects.toThrow()
+  })
+}
