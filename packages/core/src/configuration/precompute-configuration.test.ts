@@ -171,10 +171,9 @@ describe('precomputeConfiguration', () => {
     input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
       evaluatorParams: { maxDependencyDepth: 256 },
     }).evaluatorParams
-    const configuration = roundTrip(input)
     const onEvaluationError = jest.fn()
 
-    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
 
     expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
       'child',
@@ -183,28 +182,6 @@ describe('precomputeConfiguration', () => {
     ])
     expect(result.precomputed?.response.data.attributes.flagEvaluationErrors).toBeUndefined()
     expect(onEvaluationError).not.toHaveBeenCalled()
-  })
-
-  it('persists normalized evaluator options before precomputation and serialization', () => {
-    const input = dependentRules()
-    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
-      evaluatorParams: { maxDependencyDepth: 256 },
-    }).evaluatorParams
-    const consoleError = jest.spyOn(console, 'error').mockImplementation()
-    const configuration = roundTrip(input)
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-
-    precomputeConfiguration(configuration, context)
-    evaluate(configuration, 'boolean', 'child', false, context, logger)
-    evaluate(configuration, 'boolean', 'child', false, context, logger)
-
-    expect(configuration.rules?.response.evaluatorParams?.maxDependencyDepth).toBe(BigInt(10))
-    expect(roundTrip(configuration).rules?.response.evaluatorParams?.maxDependencyDepth).toBe(BigInt(10))
-    expect(consoleError).toHaveBeenCalledTimes(1)
-    expect(consoleError).toHaveBeenCalledWith('invalid evaluatorParams; using default maxDependencyDepth', {
-      defaultMaxDependencyDepth: 10,
-    })
-    expect(logger.error).not.toHaveBeenCalled()
   })
 
   it('hashes both top-level maps and encrypts dependency keys with the shared fixed vector', () => {

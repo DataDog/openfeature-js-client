@@ -123,6 +123,7 @@ describe('Exposures End-to-End', () => {
     await OpenFeature.setContext({
       targetingKey: 'test-user-123',
       customAttribute: 'test-value',
+      dd_assignment_token: 'private-assignment-token',
     })
 
     // Wait for provider to initialize and fetch configuration
@@ -161,6 +162,8 @@ describe('Exposures End-to-End', () => {
 
     // Parse and verify payload (newline-delimited JSON)
     const exposureEvents = parseExposureEvents(exposuresRequest.body)
+    expect(exposuresRequest.body).not.toContain('private-assignment-token')
+    expect(exposuresRequest.body).not.toContain('dd_assignment_token')
 
     // Expected exposure events (order matches evaluation order)
     const expectedEvents = [

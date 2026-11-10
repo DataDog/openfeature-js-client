@@ -109,6 +109,7 @@ describe('createFlagEvalEVPHook', () => {
     const effectiveContext = {
       targetingKey: 'rum-user',
       user_email: 'rum@example.com',
+      dd_assignment_token: 'private-assignment-token',
     }
     const addEvaluationSpy = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
     hook = createFlagEvalEVPHook(mockConfiguration, () => effectiveContext)
@@ -117,6 +118,11 @@ describe('createFlagEvalEVPHook', () => {
       hook?.finally?.(mockContext, mockDetails)
     }).not.toThrow()
     expect(addEvaluationSpy).toHaveBeenCalledTimes(1)
-    expect(addEvaluationSpy).toHaveBeenCalledWith(effectiveContext, mockDetails, expectedError)
+    expect(addEvaluationSpy).toHaveBeenCalledWith(
+      { targetingKey: 'rum-user', user_email: 'rum@example.com' },
+      mockDetails,
+      expectedError
+    )
+    expect(JSON.stringify(addEvaluationSpy.mock.calls)).not.toContain('private-assignment-token')
   })
 })
