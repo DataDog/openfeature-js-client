@@ -1609,25 +1609,6 @@ interface Provider extends CommonProvider<ServerProviderStatus> {
 	 */
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 }
-export interface DatadogNodeServerProviderOptions {
-	/**
-	 * Log experiment exposures
-	 */
-	exposureChannel: Channel<ExposureEvent>;
-	/**
-	 * Internal sidecar consumed by the integration's root evaluation hook.
-	 * @internal
-	 */
-	dependencyTelemetrySidecar?: DependencyTelemetrySidecar;
-	/**
-	 * Timeout in milliseconds for provider initialization.
-	 * If the configuration is not set within this time, initialization will fail.
-	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
-	 */
-	initializationTimeoutMs?: number;
-	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
-	experimentationOptOutMode?: ExperimentationOptOutMode;
-}
 type PreparedDependencyExposure = {
 	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
 		value?: FlagValue;
@@ -1655,6 +1636,25 @@ export declare class DependencyTelemetrySidecar {
 	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
 	discardDependencyExposures(metadata: object | undefined): void;
 	private deleteBatch;
+}
+export interface DatadogNodeServerProviderOptions {
+	/**
+	 * Log experiment exposures
+	 */
+	exposureChannel: Channel<ExposureEvent>;
+	/**
+	 * Internal sidecar consumed by the integration's root evaluation hook.
+	 * @internal
+	 */
+	dependencyTelemetrySidecar?: DependencyTelemetrySidecar;
+	/**
+	 * Timeout in milliseconds for provider initialization.
+	 * If the configuration is not set within this time, initialization will fail.
+	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
+	 */
+	initializationTimeoutMs?: number;
+	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
+	experimentationOptOutMode?: ExperimentationOptOutMode;
 }
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
@@ -1694,10 +1694,6 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
-	private stageDependencyTelemetry;
-	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
-	private handleExposure;
-	private prepareExposure;
 }
 
 export {
