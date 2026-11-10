@@ -73,7 +73,9 @@ function toEvaluationDetails(
   flagErrors: Record<string, string> | undefined,
   logger: Logger
 ): PrecomputedDependencyEvaluationDetails | { bindingError: string } {
-  const decrypted = decryptDependencyFlagKey ? decryptDependencyFlagKey(dependency.flagKey) : { key: dependency.flagKey }
+  const decrypted = decryptDependencyFlagKey
+    ? decryptDependencyFlagKey(dependency.flagKey)
+    : { key: dependency.flagKey }
   if ('error' in decrypted) {
     return { bindingError: decrypted.error }
   }

@@ -78,6 +78,27 @@ Recurring checks keep these contracts visible:
 
 The sticky PR comment combines browser and Node reports after package-install checks. If only one report was generated, it identifies the missing report. The comment is only created or updated when the PR changes a bundle-relevant path. The allowlist in `scripts/comment-entrypoint-bundle-sizes.js` covers `packages/browser/**`, `packages/core/**`, `packages/node-server/**`, `test-app/**`, `test-app-node/**`, `scripts/build/**`, `scripts/lib/**`, the package-install/report/webpack-runner scripts, root dependency and build configuration, `.yarn/**`, and `.github/workflows/ci.yaml`. Markdown files are excluded. The filter checks the full PR diff, including deletions and both paths of renames, and publishes conservatively if GitHub's 3,000-file listing limit is reached. Report generation, the CI summary, smoke tests, and dependency checks still run regardless of the changed paths. `yarn test:build` covers the reports, filter, and comment creation/update behavior with mocked GitHub responses.
 
+## Assignment authorization browser validation
+
+`yarn test:browser-install` also runs `test-app/tests/assignment-authorization.spec.ts`
+against the packed SDK in Chromium. These tests start a real local HTTP server on a
+second origin, exercising CORS preflights and readable/unreadable error responses
+without Playwright network interception. They cover no-token evaluations, ordinary
+fetch failures, token refresh/removal, authorization rejection and recovery, and
+credential exclusion from request bodies, telemetry, logs, and browser storage.
+
+After packaging, rerun only these scenarios with:
+
+```bash
+cd test-app
+yarn test:browser assignment-authorization
+```
+
+The endpoint returns controlled responses; these tests do not verify JWT signatures,
+Fastly deployment configuration, or public-key rotation. Live integration validation
+must additionally confirm that Fastly allows `DD-Assignment-Token` in CORS and includes
+CORS response headers on authorization errors.
+
 ## Release Process
 
 ### Prerequisites

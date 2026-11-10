@@ -1,7 +1,6 @@
 import type { FlagValue } from '@openfeature/core'
 import type { Allocation, Flag, FlagsConfiguration as ProtobufFlagsConfiguration } from './generated/ufc_pb'
 import { type PreparedAllocations, prepareAllocations } from './prepared-activation'
-import { prepareEvaluatorOptions } from './prepared-evaluator-options'
 
 export type CachedJsonValue = { valid: true; value: FlagValue } | { valid: false }
 
@@ -14,7 +13,6 @@ export type PreparedRulesResponse = ProtobufFlagsConfiguration & {
 
 export function prepareRulesResponse(response: ProtobufFlagsConfiguration): PreparedRulesResponse {
   const prepared = response as PreparedRulesResponse
-  prepareEvaluatorOptions(response, true)
   if (prepared.evaluationRegexCache && prepared.evaluationJsonCache && prepared.randomizationActivations)
     return prepared
 

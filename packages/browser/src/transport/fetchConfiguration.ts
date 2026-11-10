@@ -13,6 +13,13 @@ import {
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
+import {
+  ASSIGNMENT_AUTHORIZATION_FAILED,
+  ASSIGNMENT_TOKEN_HEADER,
+  assignmentAuthorizationError,
+  extractAssignmentToken,
+  normalizeAssignmentToken,
+} from '../domain/assignment-token'
 import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
@@ -135,8 +142,15 @@ export async function fetchPrecomputedConfiguration(
 
 async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
-  flagSelection?: CanonicalFlagSelection
+  flagSelection?: CanonicalFlagSelection,
+  contextAssignmentToken?: unknown
 ): Promise<FlagsConfiguration> {
+  // Also sanitize the standalone fetch API; it can be used without a provider.
+  const extracted = extractAssignmentToken(options.context)
+  const assignmentToken = normalizeAssignmentToken(
+    contextAssignmentToken !== undefined ? contextAssignmentToken : extracted.assignmentToken
+  )
+  options = { ...options, context: extracted.context }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
@@ -152,6 +166,12 @@ async function requestPrecomputedConfiguration(
     'precomputed'
   )
 
+  // Context is the sole source of this reserved header, including on removal.
+  for (const name of Object.keys(defaultHeaders)) {
+    if (name.toLowerCase() === ASSIGNMENT_TOKEN_HEADER.toLowerCase()) delete defaultHeaders[name]
+  }
+  if (assignmentToken !== undefined) defaultHeaders[ASSIGNMENT_TOKEN_HEADER] = assignmentToken
+
   const envPayload = {
     dd_env: options.env || '',
   }
@@ -163,37 +183,56 @@ async function requestPrecomputedConfiguration(
   }
 
   const fetchImplementation = options.fetch ?? globalThis.fetch
-  const response = await fetchImplementation(url.toString(), {
-    method: 'POST',
-    headers: defaultHeaders,
-    signal: options.signal,
-    body: serializeRequestBody(
-      {
-        data: {
-          type: 'precompute-assignments-request',
-          attributes: {
-            env: envPayload,
-            source: sourcePayload,
-            ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-            subject: {
-              targeting_key: options.context.targetingKey || '',
-              targeting_attributes: stringifiedContext,
+  let response: Response
+  try {
+    response = await fetchImplementation(url.toString(), {
+      method: 'POST',
+      headers: defaultHeaders,
+      signal: options.signal,
+      body: serializeRequestBody(
+        {
+          data: {
+            type: 'precompute-assignments-request',
+            attributes: {
+              env: envPayload,
+              source: sourcePayload,
+              ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+              subject: {
+                targeting_key: options.context.targetingKey || '',
+                targeting_attributes: stringifiedContext,
+              },
+              ...(flagSelection && {
+                flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+              }),
             },
-            ...(flagSelection && {
-              flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
-            }),
           },
         },
-      },
-      options.signal
-    ),
-  })
+        options.signal
+      ),
+    })
+  } catch (error) {
+    if (assignmentToken === undefined) throw error
+    // Custom transports can include request headers in their message, stack,
+    // cause or extra properties. Never forward the original error object.
+    throw redactAssignmentError(error, new Error('Failed to fetch flag configuration: transport error'))
+  }
+  if (await isAssignmentAuthorizationRejection(response)) throw assignmentAuthorizationError()
   if (!response.ok) {
-    const errorMessage = await getErrorMessage(response)
+    // A proxy may echo request headers in an error body. Do not expose that body
+    // through OpenFeature errors when a credential was supplied.
+    const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (flagSelection) reportIgnoredFlagSelection(response)
-  const parsed = parsePrecomputedConfigurationResponse(await response.json())
+  if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
+  let responseBody: unknown
+  try {
+    responseBody = await response.json()
+  } catch (error) {
+    if (assignmentToken === undefined) throw error
+    // JSON parser errors can quote response text, including echoed credentials.
+    throw redactAssignmentError(error, new ParseError('Assignment response is not valid JSON'))
+  }
+  const parsed = parsePrecomputedConfigurationResponse(responseBody)
   if ('error' in parsed) return { precomputedError: parsed.error }
   if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
@@ -208,6 +247,39 @@ async function requestPrecomputedConfiguration(
   }
 }
 
+function redactAssignmentError(error: unknown, fallback: Error): Error {
+  // Preserve cancellation/timeout classification using fixed messages only.
+  // Retry wrappers act inside the transport, before this sanitization boundary.
+  if (error instanceof Error || error instanceof DOMException) {
+    if (error.name === 'AbortError') return new DOMException('Assignment download aborted', 'AbortError')
+    if (error.name === 'TimeoutError') return new DOMException('Assignment download timed out', 'TimeoutError')
+  }
+  return fallback
+}
+
+async function isAssignmentAuthorizationRejection(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false
+  try {
+    const body: unknown = await response.clone().json()
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'errors' in body &&
+      Array.isArray(body.errors) &&
+      body.errors.some(
+        (error: unknown) =>
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === ASSIGNMENT_AUTHORIZATION_FAILED
+      )
+    )
+  } catch {
+    // An unrelated or malformed error must retain ordinary HTTP error handling.
+    return false
+  }
+}
+
 export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
@@ -215,7 +287,10 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
     initConfiguration.flagSelection
   )
   if (flagSelectionError) reportDroppedFlagSelection(flagSelectionError)
-  return async (context: EvaluationContext, { signal }: { signal?: AbortSignal } = {}): Promise<FlagsConfiguration> => {
+  return async (
+    context: EvaluationContext,
+    { signal, assignmentToken }: { signal?: AbortSignal; assignmentToken?: unknown } = {}
+  ): Promise<FlagsConfiguration> => {
     const configuration = await requestPrecomputedConfiguration(
       {
         ...initConfiguration,
@@ -224,7 +299,8 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         fetch: initConfiguration.flagConfigurationFetch,
         signal,
       },
-      flagSelection
+      flagSelection,
+      assignmentToken
     )
     // Use the provider's existing context-matched cache fallback. Do not replace
     // a valid snapshot with a malformed response or unsupported encoding.

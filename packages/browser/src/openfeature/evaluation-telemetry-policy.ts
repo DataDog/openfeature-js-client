@@ -6,6 +6,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
+import { extractAssignmentToken } from '../domain/assignment-token'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 
 const attribute = 'dd_evaluation_telemetry_opt_out'
@@ -79,7 +80,9 @@ export function getEvaluationTrackingContext(
   result: ResolutionDetails<FlagValue>,
   fallback: () => EvaluationContext
 ): EvaluationContext {
-  return (result.flagMetadata && resultContexts.get(result.flagMetadata)) ?? fallback()
+  // Standalone Datadog hooks may receive the original OpenFeature context,
+  // including on error paths where no provider-bound result exists.
+  return extractAssignmentToken((result.flagMetadata && resultContexts.get(result.flagMetadata)) ?? fallback()).context
 }
 
 function getPolicies(metadata: ProviderMetadata | undefined, visited = new Set<object>()): EvaluationTelemetryPolicy[] {
