@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import {
-  type ClientCompatibility,
+  type ClientFingerprint,
   createExposureEvent,
   evaluate,
   configurationFromString as readPrecomputed,
@@ -12,9 +12,11 @@ import {
   configurationToString,
   precomputeConfiguration,
 } from '../src/rules-based'
+import { fingerprint } from './client-fingerprint-fixture'
 
 const context = { targetingKey: 'subject', country: 'US' }
-const compatible = { capabilities: ['assignment-encoding-flag-key-256-v1'] }
+const capability = 'assignment-encoding-flag-key-256-v1'
+const compatible = fingerprint([capability])
 const rules = () => configurationFromString(JSON.stringify(wire))
 
 beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-11-06T12:00:00Z')))
@@ -24,11 +26,11 @@ afterEach(() => {
 })
 
 describe('target-client compatibility for precomputation', () => {
-  it.each([undefined, { capabilities: [] }, { capabilities: ['unknown-v1', 'dependent-flag-variant-key-v1'] }])(
+  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'dependent-flag-variant-key-v1'])])(
     'keeps the plaintext baseline for %j',
-    (clientCompatibility) => {
+    (clientFingerprint) => {
       const random = jest.spyOn(crypto, 'randomBytes')
-      const result = precomputeConfiguration(rules(), context, { clientCompatibility })
+      const result = precomputeConfiguration(rules(), context, { clientFingerprint })
       expect(result.precomputed!.response.data.attributes.obfuscated).toBe(false)
       expect(result.precomputed!.response.data.attributes.obfuscation).toBeUndefined()
       expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toContain('test-flag')
@@ -42,7 +44,7 @@ describe('target-client compatibility for precomputation', () => {
     for (const allocation of input.rules!.response.flags['test-flag'].allocations) allocation.logExposureEvent = true
     const before = configurationToString(input)
     const plaintext = precomputeConfiguration(input, context)
-    const encoded = precomputeConfiguration(input, context, { clientCompatibility: compatible })
+    const encoded = precomputeConfiguration(input, context, { clientFingerprint: compatible })
     const attributes = encoded.precomputed!.response.data.attributes
     expect(attributes.obfuscated).toBe(true)
     expect(attributes.obfuscation).toEqual({
@@ -93,7 +95,7 @@ describe('target-client compatibility for precomputation', () => {
     const input = rules()
     const flag = input.rules!.response.flags['test-flag']
     input.rules!.response.flags = Object.fromEntries(vectors.map(([key]) => [key, flag]))
-    const result = precomputeConfiguration(input, context, { clientCompatibility: compatible })
+    const result = precomputeConfiguration(input, context, { clientFingerprint: compatible })
     expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual(
       vectors.map(([, hash]) => hash).sort()
     )
@@ -102,8 +104,8 @@ describe('target-client compatibility for precomputation', () => {
   it('uses a new salt for each snapshot, including empty snapshots', () => {
     const input = rules()
     input.rules!.response.flags = {}
-    const first = precomputeConfiguration(input, context, { clientCompatibility: compatible })
-    const second = precomputeConfiguration(input, context, { clientCompatibility: compatible })
+    const first = precomputeConfiguration(input, context, { clientFingerprint: compatible })
+    const second = precomputeConfiguration(input, context, { clientFingerprint: compatible })
     expect(first.precomputed!.response.data.attributes.obfuscation!.salt).not.toEqual(
       second.precomputed!.response.data.attributes.obfuscation!.salt
     )
@@ -111,13 +113,9 @@ describe('target-client compatibility for precomputation', () => {
   })
 
   it('ignores unknown capabilities and future optional fields', () => {
-    const clientCompatibility = {
-      capabilities: [...compatible.capabilities, 'future-v1', ...compatible.capabilities],
-      future: {},
-    }
+    const clientFingerprint = fingerprint([capability, 'future-v1', capability], { future: {} })
     expect(
-      precomputeConfiguration(rules(), context, { clientCompatibility }).precomputed!.response.data.attributes
-        .obfuscated
+      precomputeConfiguration(rules(), context, { clientFingerprint }).precomputed!.response.data.attributes.obfuscated
     ).toBe(true)
   })
 
@@ -130,10 +128,20 @@ describe('target-client compatibility for precomputation', () => {
     { capabilities: 'secret' },
     { capabilities: [42] },
     { capabilities: [undefined] },
-  ])('rejects malformed compatibility %j with a typed error', (clientCompatibility) => {
+    '',
+    'null',
+    '[]',
+    '{}',
+    fingerprint([], { version: 2 }),
+    fingerprint([], { version: '1' }),
+    fingerprint([], { sdk: null }),
+    fingerprint([], { sdk: { name: 'browser' } }),
+    fingerprint([], { capabilities: null }),
+    fingerprint([], { capabilities: [42] }),
+  ])('rejects malformed compatibility %j with a typed error', (clientFingerprint) => {
     const run = () =>
       precomputeConfiguration(rules(), context, {
-        clientCompatibility: clientCompatibility as unknown as ClientCompatibility,
+        clientFingerprint: clientFingerprint as unknown as ClientFingerprint,
       })
     expect(run).toThrow(ConfigurationPrecomputeError)
     expect(run).toThrow(expect.objectContaining({ code: 'invalid_options' }))
@@ -142,7 +150,7 @@ describe('target-client compatibility for precomputation', () => {
   it('sanitizes accessor and revoked-proxy failures', () => {
     const proxy = Proxy.revocable({}, {})
     proxy.revoke()
-    for (const clientCompatibility of [
+    for (const clientFingerprint of [
       {
         get capabilities() {
           throw new Error('private input')
@@ -161,22 +169,22 @@ describe('target-client compatibility for precomputation', () => {
     ]) {
       expect(() =>
         precomputeConfiguration(rules(), context, {
-          clientCompatibility: clientCompatibility as ClientCompatibility,
+          clientFingerprint: clientFingerprint as ClientFingerprint,
         })
       ).toThrow(new ConfigurationPrecomputeError('invalid_options'))
     }
   })
 
-  it('snapshots compatibility before user diagnostics run', () => {
+  it('reads the fingerprint before user diagnostics run', () => {
     const input = rules()
     input.rules!.response.flags.broken = { ...input.rules!.response.flags['test-flag'], minimumFeatureLevel: 999 }
-    const clientCompatibility = { capabilities: [...compatible.capabilities] }
-    const result = precomputeConfiguration(input, context, {
-      clientCompatibility,
+    const options = {
+      clientFingerprint: compatible,
       onEvaluationError: () => {
-        clientCompatibility.capabilities.length = 0
+        options.clientFingerprint = fingerprint()
       },
-    })
+    }
+    const result = precomputeConfiguration(input, context, options)
     expect(result.precomputed!.response.data.attributes.obfuscated).toBe(true)
   })
 })

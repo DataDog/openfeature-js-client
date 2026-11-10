@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 const { evaluate } = require('@datadog/flagging-core')
+const { getClientFingerprint } = require('../packages/browser/cjs')
 const { configurationFromString, configurationToString } = require('@datadog/openfeature-node-server/rules-based')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 const providerConfiguration = require('../packages/core/test/ffe-system-test-data/ufc-config.json')
@@ -12,7 +13,7 @@ for (const name of ['precompute', 'provider-with-precompute']) {
     const context = { targetingKey: 'user-1', country: 'US' }
     const configuration = configurationFromString(JSON.stringify(fixture))
     const result = precomputeConfiguration(configuration, context, {
-      clientCompatibility: { capabilities: ['assignment-encoding-flag-key-256-v1'] },
+      clientFingerprint: getClientFingerprint(),
     })
     assert.equal(result.precomputed.response.data.attributes.obfuscated, true)
     const restored = configurationFromString(configurationToString(result))

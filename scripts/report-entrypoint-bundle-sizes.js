@@ -26,7 +26,7 @@ const smokeEntrypoints = [
     expectNoProtobuf: true,
   },
   {
-    label: 'Precomputed parsing/serialization + client compatibility (no provider)',
+    label: 'Precomputed parsing/serialization + client fingerprint (no provider)',
     html: 'precomputed.html',
     expectNoProtobuf: true,
   },
