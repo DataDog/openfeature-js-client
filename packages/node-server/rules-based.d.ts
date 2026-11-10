@@ -1107,6 +1107,11 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	/** Datadog site. Defaults to datadoghq.com. */
 	site?: string;
 	applicationId?: string;
+	/**
+	 * A detached snapshot is bound to the returned assignments. Only plain JSON values are accepted:
+	 * no Date, undefined, non-finite numbers, class instances, or cycles, including nested values.
+	 * Convert dates to strings before calling and use the same context in the receiving provider.
+	 */
 	context: EvaluationContext;
 	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
 	clientFingerprint?: ClientFingerprint;

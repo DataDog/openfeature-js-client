@@ -455,6 +455,57 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(requestFetch).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['nested Date', { profile: { privateValue: new Date(0) } }],
+    ['Date in array', { privateValues: [new Date(0)] }],
+    ['nested undefined', { profile: { privateValue: undefined } }],
+    ['undefined in array', { privateValues: [undefined] }],
+    ['nested non-finite number', { profile: { privateValue: Infinity } }],
+    ['non-finite number in array', { privateValues: [NaN] }],
+    [
+      'nested class instance',
+      {
+        profile: {
+          privateValue: new (class {
+            value = 'private-data'
+          })(),
+        },
+      },
+    ],
+  ])('explains the JSON-only context requirement for a %s before fetching', async (_, inputContext) => {
+    await expect(
+      fetchPrecomputedConfiguration({
+        ...options,
+        context: inputContext as unknown as PrecomputedConfigurationFetchOptions['context'],
+        fetch: requestFetch,
+      })
+    ).rejects.toMatchObject({
+      code: 'invalid_options',
+      message:
+        'Invalid configuration fetch options: context (must contain only plain JSON values; convert dates to strings)',
+    })
+    expect(requestFetch).not.toHaveBeenCalled()
+  })
+
+  it('reports an invalid targeting key separately from non-JSON values', async () => {
+    await expect(
+      fetchPrecomputedConfiguration({ ...options, context: { targetingKey: 3 } as never, fetch: requestFetch })
+    ).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: 'Invalid configuration fetch options: context.targetingKey (must be a string)',
+    })
+    expect(requestFetch).not.toHaveBeenCalled()
+  })
+
+  it('preserves dates explicitly converted to strings in the request and bound context', async () => {
+    const inputContext = { ...context, startedAt: new Date(0).toISOString() }
+    const result = await fetchPrecomputedConfiguration({ ...options, context: inputContext, fetch: requestFetch })
+    expect(
+      JSON.parse(requestFetch.mock.calls[0][1]!.body as string).data.attributes.subject.targeting_attributes.startedAt
+    ).toBe(inputContext.startedAt)
+    expect(getPrecomputedContext(result)).toEqual(inputContext)
+  })
+
   it('accepts future fingerprint fields without forwarding them or replacing the requesting SDK identity', async () => {
     const clientFingerprint = fingerprint([capability], {
       sdk: { name: 'other-sdk', version: '999.0.0' },

@@ -6,6 +6,7 @@ import {
   canonicalizeFlagSelection,
   type ExperimentationOptOutModeValue,
   experimentationOptOutPolicy,
+  FLAG_KEY_SHA256_CAPABILITY,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
@@ -36,6 +37,11 @@ export interface PrecomputedConfigurationFetchOptions
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
   applicationId?: string
+  /**
+   * A detached snapshot is bound to the returned assignments. Only plain JSON values are accepted:
+   * no Date, undefined, non-finite numbers, class instances, or cycles, including nested values.
+   * Convert dates to strings before calling and use the same context in the receiving provider.
+   */
   context: EvaluationContext
   /** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
   clientFingerprint?: ClientFingerprint
@@ -131,10 +137,7 @@ export async function fetchPrecomputedConfiguration(
           'The assignment response did not acknowledge experimentation opt-out'
         )
       }
-      if (
-        parsed.response.data.attributes.obfuscated === true &&
-        !capabilities.includes('assignment-encoding-flag-key-256-v1')
-      ) {
+      if (parsed.response.data.attributes.obfuscated === true && !capabilities.includes(FLAG_KEY_SHA256_CAPABILITY)) {
         throw new ConfigurationFetchError('decode', 'Configuration encoding was not advertised by the target client')
       }
       const etag = response.headers.get('etag')
@@ -196,11 +199,11 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   try {
     if (!isRecord(inputContext)) throw new Error('Invalid context')
     context = cloneJson(inputContext) as EvaluationContext
-    if (context.targetingKey !== undefined && typeof context.targetingKey !== 'string')
-      throw new Error('Invalid targeting key')
   } catch {
-    throw invalidOption('context')
+    throw invalidOption('context (must contain only plain JSON values; convert dates to strings)')
   }
+  if (context.targetingKey !== undefined && typeof context.targetingKey !== 'string')
+    throw invalidOption('context.targetingKey (must be a string)')
   const optOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optOut === undefined) throw invalidOption('context.dd_experimentation_opt_out_at')
   let flagSelection: CanonicalFlagSelection | undefined
