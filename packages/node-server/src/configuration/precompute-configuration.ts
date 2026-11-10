@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { ClientFingerprint, FlagsConfiguration } from '@datadog/flagging-core'
+import { type ClientFingerprint, FLAG_KEY_SHA256_CAPABILITY, type FlagsConfiguration } from '@datadog/flagging-core'
 import {
   ConfigurationPrecomputeError,
   type PrecomputeConfigurationOptions as CorePrecomputeConfigurationOptions,
@@ -28,7 +28,7 @@ export function precomputeConfiguration(
     throw new ConfigurationPrecomputeError('invalid_options')
   }
   const result = precompute(configuration, context, options)
-  if (!capabilities.includes('assignment-encoding-flag-key-256-v1')) return result
+  if (!capabilities.includes(FLAG_KEY_SHA256_CAPABILITY)) return result
 
   const encoding: FlagKeyObfuscation = { scheme: 'flag-key-sha256-v1', salt: randomBytes(16).toString('hex') }
   const attributes = result.precomputed!.response.data.attributes
