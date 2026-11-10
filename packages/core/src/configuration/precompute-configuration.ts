@@ -198,7 +198,11 @@ function validateOptions(options: PrecomputeConfigurationOptions): PrecomputeCon
 function snapshotEvaluationContext(context: EvaluationContext): EvaluationContext {
   try {
     if (isPlainRecord(context)) {
-      const snapshot = cloneJson(context) as EvaluationContext
+      // Assignment credentials are transport-only, not targeting or portable context.
+      const targetingContext = Object.fromEntries(
+        Object.entries(context).filter(([key]) => key !== 'dd_assignment_token')
+      )
+      const snapshot = cloneJson(targetingContext) as EvaluationContext
       if (snapshot.targetingKey === undefined || typeof snapshot.targetingKey === 'string') return snapshot
     }
   } catch {

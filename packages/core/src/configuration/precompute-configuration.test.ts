@@ -152,15 +152,21 @@ describe('precomputeConfiguration', () => {
     }
   )
 
-  it('uses the default depth when precomputing malformed evaluator options', () => {
+  it('uses the default depth when precomputing an invalid override', () => {
     const input = dependentRules()
-    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+    const source = input.rules!.response
+    source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
       evaluatorParams: { maxDependencyDepth: 256 },
     }).evaluatorParams
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
     const onEvaluationError = jest.fn()
 
-    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
+    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
 
+    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
+      value: true,
+      reason: 'TARGETING_MATCH',
+    })
     expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
       'child',
       'parent',

@@ -326,6 +326,8 @@ function evaluateRules<T extends FlagValueType>(
     return dependencies.complete(details)
   }
 
+  const maxDependencyDepth = getMaxDependencyDepth(config, logger)
+
   const { targetingKey: subjectKey, ...remainingContext } = context
 
   // Include the subjectKey as an "id" attribute for rule matching only when present
@@ -377,7 +379,7 @@ function evaluateRules<T extends FlagValueType>(
         collectDependencyEvaluations
       )
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
-      dependencySession ??= createDependencySession(getMaxDependencyDepth(config, flagKey, logger))
+      dependencySession ??= createDependencySession(maxDependencyDepth)
       return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
     }) as ResolveFlagEvaluation
     resolveDependency.checkpoint = () => dependencySession?.checkpoint()
@@ -441,6 +443,7 @@ export function createProtobufDependencyResolver(
   collectDependencyExposures = false,
   collectDependencyEvaluations = false
 ) {
+  const maxDependencyDepth = getMaxDependencyDepth(config, logger)
   let dependencySession: DependencyEvaluationSession | undefined
   const createDependencySession = (maxDependencyDepth: number) =>
     new DependencyEvaluationSession(
@@ -470,7 +473,7 @@ export function createProtobufDependencyResolver(
       collectDependencyEvaluations
     )
   const resolve = ((dependencyFlagKey: string) => {
-    dependencySession ??= createDependencySession(getMaxDependencyDepth(config, flagKey, logger))
+    dependencySession ??= createDependencySession(maxDependencyDepth)
     return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
   }) as ResolveProtobufFlagEvaluation
   // Hook presence tells the protobuf evaluator to retain and replay dependency keys.
@@ -853,55 +856,40 @@ function asFlagEvaluationResolver(resolveDependency: ResolveDependency): Resolve
 
 function getMaxDependencyDepth(
   config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
-  rootFlagKey: string,
-  logger: Logger
+  logger: Pick<Logger, 'warn'>
 ): number {
-  let evaluatorParams: unknown
-  try {
-    evaluatorParams = config.evaluatorParams
-  } catch {
-    logInvalidEvaluatorParams(config, logger, rootFlagKey)
-    return DEFAULT_MAX_DEPENDENCY_DEPTH
-  }
-  if (evaluatorParams === undefined) {
-    return DEFAULT_MAX_DEPENDENCY_DEPTH
-  }
-  if (evaluatorParams === null || typeof evaluatorParams !== 'object' || Array.isArray(evaluatorParams)) {
-    logInvalidEvaluatorParams(config, logger, rootFlagKey)
-    return DEFAULT_MAX_DEPENDENCY_DEPTH
-  }
   let configuredDepth: unknown
   try {
-    configuredDepth = (evaluatorParams as { maxDependencyDepth?: unknown }).maxDependencyDepth
+    const evaluatorParams: unknown = config.evaluatorParams
+    if (evaluatorParams === undefined) return DEFAULT_MAX_DEPENDENCY_DEPTH
+    if (typeof evaluatorParams !== 'object' || evaluatorParams === null || Array.isArray(evaluatorParams)) {
+      warnInvalidMaxDependencyDepth(logger)
+      return DEFAULT_MAX_DEPENDENCY_DEPTH
+    }
+    configuredDepth = Reflect.get(evaluatorParams, 'maxDependencyDepth')
   } catch {
-    logInvalidEvaluatorParams(config, logger, rootFlagKey)
+    warnInvalidMaxDependencyDepth(logger)
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
-  if (configuredDepth === undefined) {
-    return DEFAULT_MAX_DEPENDENCY_DEPTH
-  }
-  const numericDepth =
-    typeof configuredDepth === 'bigint' && isProtobufConfiguration(config) ? Number(configuredDepth) : configuredDepth
+  if (configuredDepth === undefined) return DEFAULT_MAX_DEPENDENCY_DEPTH
+
+  const numericDepth = typeof configuredDepth === 'bigint' ? Number(configuredDepth) : configuredDepth
   if (typeof numericDepth === 'number' && Number.isInteger(numericDepth) && numericDepth >= 0 && numericDepth <= 255) {
     return numericDepth
   }
-  logInvalidEvaluatorParams(config, logger, rootFlagKey)
+
+  warnInvalidMaxDependencyDepth(logger)
   return DEFAULT_MAX_DEPENDENCY_DEPTH
 }
 
-const invalidEvaluatorParamsLogged = new WeakSet<object>()
-
-function logInvalidEvaluatorParams(
-  config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
-  logger: Logger,
-  rootFlagKey: string
-): void {
-  if (invalidEvaluatorParamsLogged.has(config)) return
-  invalidEvaluatorParamsLogged.add(config)
-  logger.error('invalid evaluatorParams; using default maxDependencyDepth', {
-    flagKey: rootFlagKey,
-    defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
-  })
+function warnInvalidMaxDependencyDepth(logger: Pick<Logger, 'warn'>): void {
+  try {
+    logger.warn('Invalid evaluatorParams.maxDependencyDepth; using default', {
+      defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
+    })
+  } catch {
+    // Diagnostics must not affect flag evaluation.
+  }
 }
 
 function defaultValueForType(type: FlagValueType): FlagValue {
