@@ -419,30 +419,32 @@ or response signing. Values, variation names, allocation names, telemetry,
 and application code can still reveal a feature's purpose. Do not put sensitive
 information in client-facing variant values, including JSON objects.
 
-## Client compatibility
+## Client fingerprint
 
 When your server generates or fetches a precomputed configuration for the browser,
-send it the response formats supported by the browser SDK:
+forward the browser SDK's fingerprint with your application's bootstrap request:
 
 ```typescript
-import { getClientCompatibility } from '@datadog/openfeature-browser'
+import { getClientFingerprint } from '@datadog/openfeature-browser'
 
-const response = await fetch('/api/flags/precomputed', {
+const response = await fetch('/api/bootstrap', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    clientCompatibility: getClientCompatibility(),
+    clientFingerprint: getClientFingerprint(),
   }),
 })
-if (!response.ok) throw new Error('Cannot load flag configuration')
-const wire = await response.text()
+if (!response.ok) throw new Error('Cannot load bootstrap data')
+const { appData, flags: wire } = await response.json()
 ```
 
-The getter returns a read-only, JSON-serializable object. Forward the whole object
-so future optional compatibility fields do not require changes to your request code.
+The getter returns an opaque, versioned string containing the SDK name, version,
+and supported capabilities. Forward it unchanged; do not parse or construct it in
+application code. The SDK-owned format can grow without changes to your request code.
 Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
 supported; a capability does not require the server to use that format or provide
-an authorization boundary. Your application chooses its own client-server transport.
+an authorization boundary. The fingerprint identifies the SDK, not a user or device,
+and is not authentication. Your application chooses its own client-server transport.
 The getter is available from the root entry point without protobuf.
 
 ## Portable configuration parsing

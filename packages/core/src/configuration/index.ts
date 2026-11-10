@@ -1,4 +1,4 @@
-export type { ClientCompatibility } from './client-compatibility'
+export type { ClientFingerprint } from './client-fingerprint'
 export * from './configuration'
 export * from './exposure-decision'
 export * from './exposureEvent'
