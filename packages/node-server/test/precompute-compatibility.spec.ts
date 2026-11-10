@@ -101,6 +101,24 @@ describe('target-client compatibility for precomputation', () => {
     )
   })
 
+  it.each(['\ud800', '\udc00'])(
+    'rejects the whole encoded snapshot for malformed key %j without mutating rules',
+    (key) => {
+      const input = rules()
+      const flag = input.rules!.response.flags['test-flag']
+      input.rules!.response.flags = { 'test-flag': flag, [key]: flag }
+      const before = structuredClone(input)
+
+      const plaintext = precomputeConfiguration(input, context)
+      expect(Object.keys(plaintext.precomputed!.response.data.attributes.flags)).toEqual(['test-flag', key])
+
+      const run = () => precomputeConfiguration(input, context, { clientFingerprint: compatible })
+      expect(run).toThrow(ConfigurationPrecomputeError)
+      expect(run).toThrow(expect.objectContaining({ code: 'invalid_configuration' }))
+      expect(input).toEqual(before)
+    }
+  )
+
   it('uses a new salt for each snapshot, including empty snapshots', () => {
     const input = rules()
     input.rules!.response.flags = {}
