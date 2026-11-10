@@ -201,6 +201,8 @@ describe('DatadogCoreProvider precomputed configuration', () => {
     [ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.Immediate, false],
     [ExperimentationOptOutMode.Disabled, ExperimentationOptOutMode.Immediate, true],
     [ExperimentationOptOutMode.Immediate, ExperimentationOptOutMode.Disabled, true],
+    ['future_experiments_only', ExperimentationOptOutMode.Disabled, true],
+    ['future_experiments_only', ExperimentationOptOutMode.Immediate, true],
   ] as const)(
     'requires the precomputed policy %s to match the provider policy %s',
     async (precomputeMode, providerMode, error) => {
