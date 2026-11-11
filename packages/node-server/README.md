@@ -42,9 +42,10 @@ The returned `FlagsConfiguration` is **not** the legacy UFC JSON accepted by `Da
 
 - `distributionChannel` selects the configuration channel to fetch, not where the helper runs. It defaults to `server`; use `client` when preparing configuration for browser or mobile SDKs.
 - `flagSelection` optionally requests flags matching any of the `tags` or whole-key glob `keyPatterns`. Both distribution channels support selection; omitting it requests the full configuration.
+- `service` optionally names the calling service, sent as the `DD-Service` header so Feature Flags usage can be broken down by service. Only the server distribution channel sends it. A name that doesn't match `^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$` is not sent, and the configuration still loads.
 - `site` defaults to `datadoghq.com`.
 - `fetch` overrides global Fetch. Custom transports must honor `signal` and `redirect: 'manual'`; redirects are rejected to protect credentials.
-- `logger` reports dropped or server-ignored selections through `error(message)`. It defaults to `console`; provide your application's logger to route these diagnostics elsewhere.
+- `logger` reports a dropped `service` and dropped or server-ignored selections through `error(message)`. It defaults to `console`; provide your application's logger to route these diagnostics elsewhere.
 - `timeoutMs` defaults to `5000` and covers the request and response-body read. `signal` supports caller cancellation and earlier deadlines.
 - Failures throw `ConfigurationFetchError` with a `code` and, for HTTP errors, `status`. Timeouts use `timeout`; other caller cancellations use `cancelled`.
 

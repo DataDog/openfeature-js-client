@@ -109,6 +109,99 @@ describe('fetchRulesConfiguration', () => {
     )
   })
 
+  describe('service', () => {
+    const serverHeaders = {
+      Accept: 'application/protobuf',
+      'dd-api-key': options.apiKey,
+      'DD-Client-Library-Language': 'nodejs',
+      'DD-Client-Library-Version': '1.0.0-test',
+    }
+    const logger = { error: jest.fn() }
+
+    beforeEach(() => {
+      logger.error.mockReset()
+    })
+
+    it('sends the service in DD-Service on every server channel request', async () => {
+      await fetchRulesConfiguration({ ...options, service: 'checkout', logger, fetch: requestFetch })
+      await fetchRulesConfiguration({ ...options, service: 'checkout', logger, fetch: requestFetch })
+
+      expect(requestFetch).toHaveBeenCalledTimes(2)
+      for (const [, request] of requestFetch.mock.calls) {
+        expect(request?.headers).toStrictEqual({ ...serverHeaders, 'DD-Service': 'checkout' })
+      }
+      expect(logger.error).not.toHaveBeenCalled()
+    })
+
+    it.each(['checkout', 'my service'])('does not send DD-Service on the client channel: %j', async (service) => {
+      await fetchRulesConfiguration({
+        distributionChannel: 'client',
+        clientToken: 'client-token',
+        env: 'prod',
+        service,
+        logger,
+        fetch: requestFetch,
+      })
+
+      expect(requestFetch.mock.calls[0][1]?.headers).toStrictEqual({
+        Accept: 'application/protobuf',
+        'dd-client-token': 'client-token',
+        'DD-Client-Library-Language': 'nodejs',
+        'DD-Client-Library-Version': '1.0.0-test',
+      })
+      expect(logger.error).not.toHaveBeenCalled()
+    })
+
+    it.each([undefined, null, ''])('omits DD-Service without a service (%j)', async (service) => {
+      await fetchRulesConfiguration({
+        ...options,
+        service: service as string | undefined,
+        logger,
+        fetch: requestFetch,
+      })
+
+      expect(requestFetch.mock.calls[0][1]?.headers).not.toHaveProperty('DD-Service')
+      expect(requestFetch.mock.calls[0][1]?.headers).toStrictEqual(serverHeaders)
+      expect(logger.error).not.toHaveBeenCalled()
+    })
+
+    it.each(['a', 'svc_name.v2:api/edge-1', `a${'b'.repeat(99)}`])(
+      'sends a service at the edges of the format the CDN accepts: %s',
+      async (service) => {
+        await fetchRulesConfiguration({ ...options, service, logger, fetch: requestFetch })
+
+        expect(requestFetch.mock.calls[0][1]?.headers).toStrictEqual({ ...serverHeaders, 'DD-Service': service })
+        expect(logger.error).not.toHaveBeenCalled()
+      }
+    )
+
+    // The CDN drops any other value, and fetch throws on header values with CR/LF or characters outside Latin-1.
+    it.each<unknown>([`a${'b'.repeat(100)}`, '_svc', 'my service', ' ', '支付', 'bad\nvalue', 123])(
+      'loads the configuration without a service the CDN would drop or fetch cannot send: %j',
+      async (service) => {
+        // Validate headers the way global fetch does.
+        requestFetch.mockImplementation(async (_url, request) => {
+          new Headers(request?.headers)
+          return response()
+        })
+
+        const configuration = await fetchRulesConfiguration({
+          ...options,
+          service: service as string,
+          logger,
+          fetch: requestFetch,
+        })
+
+        expect(configuration.rules?.response.environmentName).toBe('prod')
+        expect(requestFetch.mock.calls[0][1]?.headers).toStrictEqual(serverHeaders)
+        expect(logger.error).toHaveBeenCalledTimes(1)
+        expect(logger.error).toHaveBeenCalledWith(
+          'service does not match the format the CDN attributes usage to; DD-Service header not sent.'
+        )
+      }
+    )
+  })
+
   it('uses global fetch by default and a custom transport when supplied', async () => {
     const globalFetch = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => response())
     await fetchRulesConfiguration(options)

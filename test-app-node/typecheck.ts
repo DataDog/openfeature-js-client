@@ -119,7 +119,12 @@ void [providerName, runsOn, events, hooks, initPromise]
 
 // Standalone configuration helpers do not require OpenFeature or browser types.
 const flagSelection: FlagSelection = { tags: ['checkout'], keyPatterns: ['ffe-*'] } as const
-const serverOptions: RulesConfigurationFetchOptions = { apiKey: 'server-key', env: 'prod', flagSelection }
+const serverOptions: RulesConfigurationFetchOptions = {
+  apiKey: 'server-key',
+  env: 'prod',
+  flagSelection,
+  service: 'checkout',
+}
 const clientOptions: RulesConfigurationFetchOptions = {
   logger: { error: (message: string) => console.error(message) },
   distributionChannel: 'client',

@@ -1085,7 +1085,12 @@ interface ConfigurationFetchOptions {
 	 * Best-effort: an invalid or over-limit selection is not sent.
 	 */
 	flagSelection?: FlagSelection;
-	/** Reports dropped or server-ignored selections. Defaults to console. */
+	/**
+	 * Service to attribute Feature Flags usage to, sent as DD-Service with the server distribution channel only.
+	 * Best-effort: a name outside the format Datadog accepts is not sent.
+	 */
+	service?: string;
+	/** Reports a dropped service and dropped or server-ignored selections. Defaults to console. */
 	logger?: {
 		error(message: string): void;
 	};

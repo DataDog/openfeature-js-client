@@ -20,7 +20,12 @@ interface ConfigurationFetchOptions {
    * Best-effort: an invalid or over-limit selection is not sent.
    */
   flagSelection?: FlagSelection
-  /** Reports dropped or server-ignored selections. Defaults to console. */
+  /**
+   * Service to attribute Feature Flags usage to, sent as DD-Service with the server distribution channel only.
+   * Best-effort: a name outside the format Datadog accepts is not sent.
+   */
+  service?: string
+  /** Reports a dropped service and dropped or server-ignored selections. Defaults to console. */
   logger?: { error(message: string): void }
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
@@ -100,12 +105,30 @@ const SELECTION_LIMIT_DESCRIPTIONS: Record<FlagSelectionError, string> = {
   invalid_tag: `each tag is at most ${MAX_FLAG_SELECTION_TAG_BYTES} UTF-8 bytes`,
 }
 
-function reportSelectionError(logger: NonNullable<ConfigurationFetchOptions['logger']>, message: string): void {
+function reportDiagnostic(logger: NonNullable<ConfigurationFetchOptions['logger']>, message: string): void {
   try {
     logger.error(message)
   } catch {
     // Diagnostics must not prevent configuration loading or replace a fetch error.
   }
+}
+
+// The CDN attributes usage to a DD-Service value only in this format, and drops any other.
+const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
+
+/**
+ * Selects the service sent as DD-Service. A value the CDN would drop is not sent: fetch also rejects header
+ * values with CR/LF or characters outside Latin-1, which would fail the whole configuration request.
+ */
+function usageService(service: unknown, logger: NonNullable<ConfigurationFetchOptions['logger']>): string | undefined {
+  if (typeof service === 'string' && USAGE_SERVICE_PATTERN.test(service)) return service
+  if (service !== undefined && service !== null && service !== '') {
+    reportDiagnostic(
+      logger,
+      'service does not match the format the CDN attributes usage to; DD-Service header not sent.'
+    )
+  }
+  return undefined
 }
 
 function applyFlagSelection(
@@ -114,10 +137,7 @@ function applyFlagSelection(
   logger: NonNullable<ConfigurationFetchOptions['logger']>
 ): { url: URL; selected: boolean } {
   const drop = (reason: FlagSelectionError, limit = SELECTION_LIMIT_DESCRIPTIONS[reason]) => {
-    reportSelectionError(
-      logger,
-      `flagSelection was not sent (${reason}: ${limit}). Loading the full flag configuration.`
-    )
+    reportDiagnostic(logger, `flagSelection was not sent (${reason}: ${limit}). Loading the full flag configuration.`)
     return { url, selected: false }
   }
   try {
@@ -158,6 +178,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     env,
     site = 'datadoghq.com',
     flagSelection,
+    service,
     logger = console,
     timeoutMs = 5000,
     signal,
@@ -197,6 +218,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
   const { url: requestUrl, selected } = applyFlagSelection(url, flagSelection, logger)
+  const serviceHeader = distributionChannel === 'server' ? usageService(service, logger) : undefined
   if (signal?.aborted) throw abortError(signal)
 
   const controller = new AbortController()
@@ -217,6 +239,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
           [distributionChannel === 'client' ? 'dd-client-token' : 'dd-api-key']: credential,
           'DD-Client-Library-Language': 'nodejs',
           'DD-Client-Library-Version': __BUILD_ENV__SDK_VERSION__,
+          // Lets the CDN attribute this request's usage to the service.
+          ...(serviceHeader ? { 'DD-Service': serviceHeader } : {}),
         },
         signal: controller.signal,
         // Never forward a credential to a redirect destination.
@@ -232,7 +256,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     if (selected) {
       const reason = response.headers.get('DD-Flag-Selection-Ignored')
       if (reason) {
-        reportSelectionError(
+        reportDiagnostic(
           logger,
           `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
         )
