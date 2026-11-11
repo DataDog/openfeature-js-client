@@ -1,4 +1,9 @@
-import { DatadogNodeServerProvider } from '@datadog/openfeature-node-server'
+import {
+  DatadogNodeServerProvider,
+  fetchPrecomputedConfiguration,
+  type PrecomputedConfigurationFetchOptions,
+  configurationToString as serializePrecomputed,
+} from '@datadog/openfeature-node-server'
 import {
   configurationToString,
   type FlagSelection,
@@ -16,7 +21,11 @@ export async function loadConfiguration(options: RulesConfigurationFetchOptions)
   )
 }
 
-// @ts-expect-error: Configuration helpers are only exported from the rules-based entrypoint.
+export async function loadPrecomputed(options: PrecomputedConfigurationFetchOptions): Promise<string> {
+  return serializePrecomputed(await fetchPrecomputedConfiguration(options))
+}
+
+// @ts-expect-error: Rules fetching is only exported from the rules-based entrypoint.
 import { fetchRulesConfiguration as rootFetch } from '@datadog/openfeature-node-server'
 
 void [DatadogNodeServerProvider, rootFetch]

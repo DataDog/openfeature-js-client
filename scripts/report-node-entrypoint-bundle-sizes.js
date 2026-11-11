@@ -11,6 +11,12 @@ const scenarios = [
   { name: 'provider-with-ssr', label: 'Node provider + SSR helpers', expectProtobuf: true },
   { name: 'precompute', label: 'Precompute only (parsed rules)', expectProtobuf: false },
   { name: 'provider-with-precompute', label: 'Node provider + precompute', expectProtobuf: false },
+  { name: 'precomputed-fetch', label: 'Precomputed fetch + serialize (root)', expectProtobuf: false },
+  {
+    name: 'precomputed-fetch-rules-based',
+    label: 'Precomputed fetch + serialize (/rules-based)',
+    expectProtobuf: false,
+  },
 ]
 
 function createWebpackConfigs(testAppDirectory) {
@@ -93,7 +99,7 @@ function renderMarkdown(measurements) {
     '',
     'These are bundler sizes, not npm install sizes, unbundled Node require/import costs, payload sizes, or latency. Gzip compares compressed artifacts. Deltas compare scenarios in this build, not changes against the base branch. The browser scenarios include OpenFeature and a different harness, so their sizes are not directly comparable.',
     '',
-    'Dependency checks passed: no Protobuf runtime or generated schema modules in the provider-only or either precompute bundle; present in both SSR bundles (checked using Webpack module statistics).',
+    'Dependency checks passed: no Protobuf runtime or generated schema modules in the provider-only, precompute, or precomputed-fetch bundles; present in both rules-fetch SSR bundles (checked using Webpack module statistics).',
   ].join('\n')
 }
 
