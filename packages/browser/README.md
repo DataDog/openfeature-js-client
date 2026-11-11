@@ -201,6 +201,22 @@ it are not loaded and evaluations return your default with `FLAG_NOT_FOUND`. Old
 may return the full configuration without a warning. Caller-supplied `initialFlagsConfiguration` is not filtered
 locally.
 
+Both standalone fetch helpers, `fetchPrecomputedConfiguration` and `fetchRulesConfiguration`, accept the same
+`flagSelection` option with the same matching rules, normalization, per-value limits, and fallback behavior.
+`fetchRulesConfiguration` sends selection in the URL, so it also drops a selection that would make the URL longer
+than 8,192 bytes. For example, to fetch precomputed assignments with selection:
+
+```javascript
+const configuration = await fetchPrecomputedConfiguration({
+  clientToken: 'pub_...',
+  env: 'production',
+  context: { targetingKey: 'user-123' },
+  flagSelection: { tags: ['team:checkout'], keyPatterns: ['checkout-*'] },
+})
+```
+
+Invalid selections are reported once per standalone fetch call; the provider reports them once at initialization.
+
 ## Usage Examples
 
 ### Flag Evaluation
