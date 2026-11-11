@@ -1,6 +1,5 @@
 import {
   acknowledgesExperimentationOptOut,
-  buildEndpointHost,
   type CanonicalFlagSelection,
   canonicalizeFlagSelection,
   experimentationOptOutPolicy,
@@ -25,8 +24,20 @@ import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
+import { buildConfigurationUrl } from './configurationEndpoint'
+
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
+import { cloneSigningContext } from './responseSigning/context'
+import {
+  createResponseSigningController,
+  type ResponseSigningConfiguration,
+  type ResponseSigningController,
+} from './responseSigning/controller'
+
+import { ResponseVerificationError } from './responseSigning/verification'
+
+export { buildConfigurationUrl } from './configurationEndpoint'
 
 const sourcePayload = {
   sdk_name: 'browser',
@@ -69,6 +80,7 @@ export interface PrecomputedConfigurationFetchOptions
    * A selection over a limit is not sent, and the full configuration is loaded.
    */
   flagSelection?: FlagSelection
+  responseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -91,27 +103,6 @@ export async function getErrorMessage(response: Response) {
     return 'Unknown error'
   }
   return response.statusText || 'Unknown error'
-}
-
-export function buildConfigurationUrl(options: ConfigurationRequestOptions, endpoint: 'precomputed' | 'rules'): URL {
-  let url: URL
-  if (options.flaggingProxy?.match('https?://')) {
-    // If flaggingProxy has a protocol, use it as-is
-    url = new URL(`${options.flaggingProxy}`)
-  } else if (options.flaggingProxy) {
-    // Otherwise, prepend https:// to the proxy
-    url = new URL(`https://${options.flaggingProxy}`)
-  } else {
-    const host = buildEndpointHost(options.site || 'datadoghq.com', endpoint === 'rules' ? 'ufc-client' : 'preview')
-    url = new URL(
-      endpoint === 'rules'
-        ? `https://${host}/api/v2/feature-flagging/config/rules-based/client`
-        : `https://${host}/precompute-assignments`
-    )
-  }
-
-  url.searchParams.set('dd_env', options.env || '')
-  return url
 }
 
 export function buildConfigurationHeaders(
@@ -140,12 +131,22 @@ export async function fetchPrecomputedConfiguration(
 ): Promise<FlagsConfiguration> {
   const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
   if (error) reportDroppedFlagSelection(error)
-  return requestPrecomputedConfiguration(options, selection)
+  const requestOptions: ConfigurationRequestOptions = options
+  return requestPrecomputedConfiguration(
+    options,
+    selection,
+    createResponseSigningController(options.responseSigning, {
+      site: requestOptions.site,
+      flaggingProxy: requestOptions.flaggingProxy,
+      env: requestOptions.env,
+    })
+  )
 }
 
 async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
   flagSelection?: CanonicalFlagSelection,
+  signing?: ResponseSigningController,
   contextAssignmentToken?: unknown
 ): Promise<FlagsConfiguration> {
   // Also sanitize the standalone fetch API; it can be used without a provider.
@@ -153,7 +154,7 @@ async function requestPrecomputedConfiguration(
   const assignmentToken = normalizeAssignmentToken(
     contextAssignmentToken !== undefined ? contextAssignmentToken : extracted.assignmentToken
   )
-  options = { ...options, context: extracted.context }
+  options = { ...options, context: signing ? cloneSigningContext(extracted.context) : extracted.context }
   const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
   if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
   const requestOptions: ConfigurationRequestOptions = options
@@ -185,33 +186,36 @@ async function requestPrecomputedConfiguration(
     stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
 
+  const body = serializeRequestBody(
+    {
+      data: {
+        type: 'precompute-assignments-request',
+        attributes: {
+          env: envPayload,
+          source: sourcePayload,
+          ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
+          subject: {
+            targeting_key: options.context.targetingKey || '',
+            targeting_attributes: stringifiedContext,
+          },
+          ...(flagSelection && {
+            flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
+          }),
+        },
+      },
+    },
+    options.signal
+  )
+  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body)
   const fetchImplementation = options.fetch ?? globalThis.fetch
   let response: Response
   try {
     response = await fetchImplementation(url.toString(), {
       method: 'POST',
-      headers: defaultHeaders,
+      headers: signingRequest?.headers ?? defaultHeaders,
       signal: options.signal,
-      body: serializeRequestBody(
-        {
-          data: {
-            type: 'precompute-assignments-request',
-            attributes: {
-              env: envPayload,
-              source: sourcePayload,
-              ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
-              subject: {
-                targeting_key: options.context.targetingKey || '',
-                targeting_attributes: stringifiedContext,
-              },
-              ...(flagSelection && {
-                flag_selection: { tags: flagSelection.tags, key_patterns: flagSelection.keyPatterns },
-              }),
-            },
-          },
-        },
-        options.signal
-      ),
+      body,
+      ...(signing && { redirect: 'error' as const }),
     })
   } catch (error) {
     if (assignmentToken === undefined) throw error
@@ -227,12 +231,15 @@ async function requestPrecomputedConfiguration(
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
+  let signedResponse: Awaited<ReturnType<ResponseSigningController['read']>> | undefined
   let responseBody: unknown
   try {
-    responseBody = await response.json()
+    signedResponse = signing ? await signing.read(response, signingRequest) : undefined
+    responseBody = signedResponse ? signedResponse.json : await response.json()
   } catch (error) {
+    // Verification failures contain fixed codes, not server or transport content.
+    if (error instanceof ResponseVerificationError) throw error
     if (assignmentToken === undefined) throw error
-    // JSON parser errors can quote response text, including echoed credentials.
     throw redactAssignmentError(error, new ParseError('Assignment response is not valid JSON'))
   }
   const parsed = parsePrecomputedConfigurationResponse(responseBody)
@@ -241,13 +248,15 @@ async function requestPrecomputedConfiguration(
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }
 
-  return {
+  const configuration: FlagsConfiguration = {
     precomputed: {
       ...parsed,
       context: options.context,
       fetchedAt,
     },
   }
+  signing?.admit(configuration, options.context, signedResponse?.proof, options.signal)
+  return configuration
 }
 
 function redactAssignmentError(error: unknown, fallback: Error): Error {
@@ -283,7 +292,15 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
   }
 }
 
-export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitConfiguration) {
+export function createFlagsConfigurationFetcher(
+  initConfiguration: FlaggingInitConfiguration,
+  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
+    site: initConfiguration.site,
+    flaggingProxy: initConfiguration.flaggingProxy,
+    env: initConfiguration.env,
+  })
+) {
+  if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   buildConfigurationUrl(initConfiguration, 'precomputed')
   const { selection: flagSelection, error: flagSelectionError } = canonicalizeFlagSelection(
@@ -303,6 +320,7 @@ export function createFlagsConfigurationFetcher(initConfiguration: FlaggingInitC
         signal,
       },
       flagSelection,
+      signing,
       assignmentToken
     )
     // Use the provider's existing context-matched cache fallback. Do not replace
