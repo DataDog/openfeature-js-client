@@ -577,6 +577,35 @@ or response signing. Values, variation names, allocation names, telemetry,
 and application code can still reveal a feature's purpose. Do not put sensitive
 information in client-facing variant values, including JSON objects.
 
+## Client fingerprint
+
+When your server generates or fetches a precomputed configuration for the browser,
+forward the browser SDK's fingerprint with your application's bootstrap request:
+
+```typescript
+import { getClientFingerprint } from '@datadog/openfeature-browser'
+
+const response = await fetch('/api/bootstrap', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    clientFingerprint: getClientFingerprint(),
+  }),
+})
+if (!response.ok) throw new Error('Cannot load bootstrap data')
+const { appData, flags: wire } = await response.json()
+```
+
+The getter returns an opaque, versioned string containing the SDK name, version,
+and supported capabilities. Forward it unchanged; do not parse or construct it in
+application code. The SDK-owned format can grow without changes to your request code.
+Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
+supported; a capability does not require the server to use that format or provide
+an authorization boundary. The fingerprint identifies the SDK, not a user or device,
+and is not authentication. Your application chooses its own client-server transport.
+The getter and `ClientFingerprint` type are available from both the root and
+`/rules-based` entry points. The root import does not load protobuf.
+
 ## Portable configuration parsing
 
 The default entry point supports precomputed configurations without including
