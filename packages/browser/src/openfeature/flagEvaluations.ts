@@ -1,13 +1,4 @@
-import type { Context, RawError } from '@datadog/browser-core'
-import {
-  addTelemetryDebug,
-  createBatch,
-  createFlushController,
-  createHttpRequest,
-  createIdentityEncoder,
-  createPageMayExitObservable,
-  Observable,
-} from '@datadog/browser-core'
+import { addTelemetryDebug, type Context } from '@datadog/browser-core'
 import { FlagEvaluationAggregator, type FlagEvaluationEvent } from '@datadog/flagging-core'
 import {
   ErrorCode,
@@ -18,25 +9,23 @@ import {
 } from '@openfeature/web-sdk'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
+import {
+  type EvaluationTelemetryPolicy,
+  getEvaluationTrackingContext,
+  withEvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
 export function createFlagEvalEVPHook(
   configuration: FlaggingTrackingConfiguration,
-  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context
+  getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
+  policy?: EvaluationTelemetryPolicy,
+  sharedTransport?: FlagEvaluationTransport
 ): ManagedTrackingHook {
-  const pageMayExitObservable = createPageMayExitObservable(configuration)
-  const sessionExpireObservable = new Observable<void>()
-  const flagEvaluationBatch = createBatch({
-    encoder: createIdentityEncoder(),
-    request: createHttpRequest([configuration.flagEvaluationEndpointBuilder], (error: RawError) => {
-      addTelemetryDebug('Error reported to customer', { 'error.message': error.message })
-    }),
-    flushController: createFlushController({
-      pageMayExitObservable,
-      sessionExpireObservable,
-    }),
-  })
+  const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
+  const flagEvaluationBatch = transport.batch
 
   const aggregator = new FlagEvaluationAggregator(
     configuration.flagEvaluationTrackingInterval,
@@ -69,37 +58,47 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  const pageExitSubscription = pageMayExitObservable.subscribe(() => {
+  const pageExitSubscription = (
+    sharedTransport
+      ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
+      : transport.pageMayExitObservable
+  ).subscribe(() => {
     aggregator.stop()
   })
 
-  return {
-    shutdown: () => {
-      try {
-        aggregator.stop()
-        sessionExpireObservable.notify()
-      } finally {
-        pageExitSubscription.unsubscribe()
-        flagEvaluationBatch.stop()
-      }
+  return withEvaluationTelemetryPolicy(
+    {
+      shutdown: () => {
+        try {
+          aggregator.stop()
+        } finally {
+          pageExitSubscription.unsubscribe()
+          if (!sharedTransport) transport.stop()
+        }
+      },
+      // Failed evaluations skip `after`; `finally` receives the result returned to the application.
+      finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        try {
+          // OpenFeature can copy a customer hook's error.code without validation.
+          // Restrict telemetry to standard OpenFeature error codes.
+          const errorCode =
+            details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
+              ? details.errorCode
+              : ErrorCode.GENERAL
+          aggregator.addEvaluation(
+            getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
+            details,
+            errorCode
+          )
+        } catch (error) {
+          addTelemetryDebug('Error adding evaluation to aggregator', {
+            'error.message': error instanceof Error ? error.message : String(error),
+          })
+        }
+      },
     },
-    // Failed evaluations skip `after`; `finally` receives the result returned to the application.
-    finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      try {
-        // OpenFeature can copy a customer hook's error.code without validation.
-        // Restrict telemetry to standard OpenFeature error codes.
-        const errorCode =
-          details.errorCode === undefined || Object.values(ErrorCode).includes(details.errorCode)
-            ? details.errorCode
-            : ErrorCode.GENERAL
-        aggregator.addEvaluation(getEvaluationContext(hookContext.context), details, errorCode)
-      } catch (error) {
-        addTelemetryDebug('Error adding evaluation to aggregator', {
-          'error.message': error instanceof Error ? error.message : String(error),
-        })
-      }
-    },
-  }
+    policy
+  )
 }
 
 export function createDatadogEvaluationLoggingHook(options: DatadogTrackingHooksOptions): DatadogTrackingHooks {

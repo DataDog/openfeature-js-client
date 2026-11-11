@@ -1,10 +1,13 @@
 import type { ErrorCode, EvaluationContext, FlagValueType, Logger, ResolutionDetails } from '@openfeature/core'
 import type { FlagTypeToValue, PrecomputedFlagMetadata } from '../configuration'
+import { prepareJsonFlagActivations } from '../configuration/prepared-activation'
 import { type TimeStamp, timeStampNow } from '../time'
 import { TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
+import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
 import { matchesShard } from './matchesShard'
-import { isValidRule, matchesRule, type Rule } from './rules'
+import { isValidRule, matchesRule, type ResolveFlagEvaluation, type Rule } from './rules'
+import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 import { type Flag, type Split, type VariantType, variantTypeToFlagValueType } from './ufc-v1'
 
 export function evaluateForSubject<T extends FlagValueType>(
@@ -14,7 +17,9 @@ export function evaluateForSubject<T extends FlagValueType>(
   subjectAttributes: EvaluationContext,
   defaultValue: FlagTypeToValue<T>,
   logger: Logger,
-  evaluationTimestampMs: TimeStamp = timeStampNow()
+  evaluationTimestampMs: TimeStamp = timeStampNow(),
+  excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
 ): ResolutionDetails<FlagTypeToValue<T>> {
   if (!isValidFlag(flag)) {
     logger.debug(`returning default assignment because flag configuration is invalid`, {
@@ -58,7 +63,17 @@ export function evaluateForSubject<T extends FlagValueType>(
   }
 
   const now = new Date(evaluationTimestampMs)
-  for (const allocation of flag.allocations) {
+  const prepared = excludeExperiments ? prepareJsonFlagActivations(flag) : undefined
+  if (prepared && !prepared.valid && needsActivation(excludeExperiments)) {
+    return { value: defaultValue, reason: 'ERROR', errorCode: 'PARSE_ERROR' as ErrorCode }
+  }
+  for (let index = 0; index < flag.allocations.length; index++) {
+    const allocation = flag.allocations[index]
+    if (
+      prepared &&
+      excludesExperimentAt(excludeExperiments, allocation.doLog !== false, prepared.allocations[index].activation)
+    )
+      continue
     if (allocation.startAt && now < new Date(allocation.startAt)) {
       logger.debug(`allocation before start date`, {
         flagKey: flag.key,
@@ -79,8 +94,10 @@ export function evaluateForSubject<T extends FlagValueType>(
       continue
     }
 
-    const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger)
+    const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
+    const matched = containsMatchingRule(allocation.rules, subjectAttributes, logger, resolveFlagEvaluation)
     if (!matched) {
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
       continue
     }
 
@@ -102,6 +119,11 @@ export function evaluateForSubject<T extends FlagValueType>(
               ? 'DEFAULT'
               : 'STATIC'
 
+        const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(
+          selectedSplit.features,
+          logger
+        )
+
         return {
           value: variant.value as FlagTypeToValue<T>,
           reason,
@@ -112,6 +134,8 @@ export function evaluateForSubject<T extends FlagValueType>(
             __dd_allocation_key: allocation.key,
             __dd_do_log: allocation.doLog,
             __dd_split_serial_id: selectedSplit.serialId,
+            ...featureEntries,
+            ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
             // Legacy keys (internal) - to be removed from server-side
             allocationKey: allocation.key,
             variationType: variantTypeToFlagValueType(flag.variationType),
@@ -125,6 +149,7 @@ export function evaluateForSubject<T extends FlagValueType>(
         subjectKey,
         allocationKey: allocation.key,
       })
+      resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
     }
   }
 
@@ -242,7 +267,8 @@ function isValidShard(shard: unknown): boolean {
 export function containsMatchingRule(
   rules: Rule[] | undefined,
   subjectAttributes: EvaluationContext,
-  logger: Logger
+  logger: Logger,
+  resolveFlagEvaluation?: ResolveFlagEvaluation
 ): boolean {
   if (!rules?.length) {
     return true
@@ -251,7 +277,7 @@ export function containsMatchingRule(
     rules: JSON.stringify(rules),
     subjectAttributes,
   })
-  return rules.some((rule) => matchesRule(rule, subjectAttributes))
+  return rules.some((rule) => matchesRule(rule, subjectAttributes, resolveFlagEvaluation))
 }
 
 function selectSplitUsingSharding(

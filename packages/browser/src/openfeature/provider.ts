@@ -1,9 +1,14 @@
+import { display } from '@datadog/browser-core'
 import {
   type AssignmentCache,
+  acknowledgesExperimentationOptOut,
+  canonicalizeFlagSelection,
   configMatchesContext,
   evaluatePrecomputedConfiguration,
+  experimentationOptOutPolicy,
   type FlagsConfiguration,
   type FlagTypeToValue,
+  INVALID_EXPERIMENTATION_OPT_OUT,
 } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
@@ -13,18 +18,35 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { ErrorCode, GeneralError, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
+import {
+  ASSIGNMENT_AUTHORIZATION_FAILED,
+  extractAssignmentToken,
+  normalizeAssignmentToken,
+} from '../domain/assignment-token'
 import {
   type FlaggingConfiguration,
   type FlaggingInitConfiguration,
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
+import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { toProviderErrorEvent } from './error-event'
+import {
+  bindEvaluationTelemetryResult,
+  createEvaluationTelemetryPolicy,
+  type EvaluationTelemetryPolicy,
+} from './evaluation-telemetry-policy'
+import { ExperimentationOptOutMode, getExperimentationOptOutMode } from './experimentation-opt-out'
+import { registerDatadogProvider } from './exposure-scope'
+import { stampExposureCacheVerdict } from './exposures'
+import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './flagEvaluationTransport'
+import { createLifecycleTelemetry } from './lifecycleTelemetry'
 import { DatadogProviderBase } from './provider-base'
 import { createProviderTracking, type ProviderTracking } from './provider-tracking'
 import { enrichEvaluationContextWithRumUser } from './rumIntegration'
+import { runTrackingLifecycleOperation } from './tracking'
 
 /**
  * @deprecated Use FlaggingInitConfiguration instead
@@ -62,6 +84,9 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /** Controls both directions of the provider's RUM integration. */
   private readonly isRumIntegrationEnabled: boolean
+  private flagEvaluationTransport?: FlagEvaluationTransport
+  private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
+  private initializationStarted = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -73,9 +98,16 @@ export class DatadogProvider extends DatadogProviderBase {
   private evaluationContext: EvaluationContext | undefined
   /** Request context used for tracking until a configuration has been accepted. */
   private requestedEvaluationContext: EvaluationContext = {}
+  private readonly telemetryPolicy: EvaluationTelemetryPolicy
+  private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   status: ProviderStatus
 
+  private readonly requestDiagnostics: ReturnType<typeof createRequestDiagnostics>
+
+  // Token-bearing requests and explicit rejections require subject matching.
+  // Retain this boundary across failures/close while the old assignments remain.
+  private assignmentSubjectIsolationRequired = false
   private flagsConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
@@ -103,20 +135,30 @@ export class DatadogProvider extends DatadogProviderBase {
 
   constructor(options: FlaggingInitConfiguration) {
     super()
+    this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    this.requestDiagnostics = createRequestDiagnostics()
     this.configuration = validateAndBuildFlaggingConfiguration(options)
+    const getTrackingContext = () => this.effectiveTrackingContext()
+    this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
+    registerDatadogProvider(this.metadata)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({
       options,
       configuration: this.configuration,
       enabledByDefault: true,
-      getTrackingContext: () => this.evaluationContext ?? this.requestedEvaluationContext,
+      getTransport: () => this.flagEvaluationTransport,
+      getTrackingContext,
+      telemetryPolicy: this.telemetryPolicy,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
 
     if (hasIndexedDB()) {
-      this.flagsCache = new IndexedDBFlagsCache(options.clientToken)
+      this.flagsCache = new IndexedDBFlagsCache(
+        options.clientToken,
+        canonicalizeFlagSelection(options.flagSelection).selection
+      )
     }
 
     this.flagsConfiguration = options.initialFlagsConfiguration
@@ -124,15 +166,44 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
+    if (!this.initializationStarted) {
+      this.initializationStarted = true
+      try {
+        if (this.configuration) {
+          this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
+          this.lifecycleTelemetry = createLifecycleTelemetry(this.configuration, this.flagEvaluationTransport)
+        }
+      } catch {
+        // Diagnostic transport setup must not prevent flag evaluation.
+      }
+    }
+    const telemetry = this.lifecycleTelemetry
     this.exposureCacheReady = this.tracking.initialize()
-    return this.setContext(context)
+    try {
+      return await this.setContext(context, 'initialization')
+    } catch (error) {
+      telemetry?.settle('failed')
+      throw error
+    }
   }
 
   async onClose(): Promise<void> {
+    try {
+      this.lifecycleTelemetry?.stop()
+    } catch {
+      // Diagnostic shutdown must not interrupt application shutdown.
+    }
     // Aborted updates must not delegate to their own pending promise during shutdown.
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
-    await this.tracking.shutdown()
+    try {
+      await this.tracking.shutdown()
+    } finally {
+      await runTrackingLifecycleOperation(() => this.flagEvaluationTransport?.stop())
+      this.flagEvaluationTransport = undefined
+      this.lifecycleTelemetry = undefined
+      this.initializationStarted = false
+    }
     this.status = ProviderStatus.NOT_READY
   }
 
@@ -140,9 +211,20 @@ export class DatadogProvider extends DatadogProviderBase {
     return this.setContext(context)
   }
 
-  private setContext(context: EvaluationContext): Promise<void> {
-    const evaluationContext = this.isRumIntegrationEnabled ? enrichEvaluationContextWithRumUser(context) : context
+  private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
+    const { context: targetingContext, assignmentToken: suppliedToken } = extractAssignmentToken(context)
+    const assignmentToken = normalizeAssignmentToken(suppliedToken)
+    const effectiveContext = this.isRumIntegrationEnabled
+      ? enrichEvaluationContextWithRumUser(targetingContext)
+      : targetingContext
+    // RUM user attributes must never supply or restore an assignment credential.
+    const { context: evaluationContext } = extractAssignmentToken(effectiveContext)
+    // Apply telemetry admission before the ordinary assignment refresh completes.
+    this.telemetryPolicy.setContext(evaluationContext)
     this.requestedEvaluationContext = evaluationContext
+    // Missing/unusable tokens preserve ordinary no-token behavior, but must not
+    // remove a boundary already established by a request or server rejection.
+    this.assignmentSubjectIsolationRequired ||= assignmentToken !== undefined
 
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
@@ -158,11 +240,12 @@ export class DatadogProvider extends DatadogProviderBase {
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
+    this.requestDiagnostics.accept(signal, trigger)
 
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal })
+    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal, assignmentToken })
       .then((result) =>
         // Preserve the existing timestamp-based reset for experiment reporting.
         // createdAt is a configuration timestamp, not an experiment revision.
@@ -185,8 +268,14 @@ export class DatadogProvider extends DatadogProviderBase {
           // scheduling).
 
           this.flagsConfiguration = config
-          this.evaluationContext = evaluationContext
+          this.assignmentSubjectIsolationRequired = false
+          // Same-subject fallback can have older attributes. Keep its original
+          // context for evaluation and telemetry; do not relabel or re-cache it.
+          this.evaluationContext = fromCache ? (config.precomputed?.context ?? evaluationContext) : evaluationContext
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          // Report fallback errors only after the update survives cache reconciliation.
+          if (fromCache) this.lifecycleTelemetry?.providerError()
+          this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
 
           if (this.status === ProviderStatus.STALE) {
@@ -208,6 +297,8 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            this.assignmentSubjectIsolationRequired ||=
+              error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -225,32 +316,75 @@ export class DatadogProvider extends DatadogProviderBase {
    */
   private async retrieveFlagsConfiguration(
     context: EvaluationContext,
-    { signal }: { signal: AbortSignal }
+    { signal, assignmentToken }: { signal: AbortSignal; assignmentToken?: unknown }
   ): Promise<{ config: FlagsConfiguration; fromCache: boolean }> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
+    const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
+    if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+    let allowSameSubject = this.assignmentSubjectIsolationRequired
+    const canUse = (config: FlagsConfiguration | undefined) =>
+      this.canUseConfiguration(config, context, allowSameSubject)
+    const retainedConfig = this.flagsConfiguration
 
     // Prefer current config over cache if it matches the requested context
-    const cachedConfigPromise = configMatchesContext(this.flagsConfiguration, context)
-      ? Promise.resolve(this.flagsConfiguration)
-      : this.flagsCache?.get(context)
+    const cachedConfigPromise = canUse(retainedConfig)
+      ? Promise.resolve(retainedConfig)
+      : this.flagsCache?.get(context, optedOut)
 
     try {
-      const config = await this.configuration.fetchFlagsConfiguration(context, { signal })
-      this.flagsCache?.set(config, context)
+      const config = await this.configuration.fetchFlagsConfiguration(context, { signal, assignmentToken })
+      signal.throwIfAborted()
+      if (config.precomputed) {
+        this.lifecycleTelemetry?.configurationReceived()
+      } else if (config.precomputedError) {
+        this.lifecycleTelemetry?.providerError()
+      }
+      this.flagsCache?.set(config, context, optedOut)
       return { config, fromCache: false }
     } catch (err) {
+      if (!signal.aborted && err instanceof GeneralError && err.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
+        display.warn(`Assignment download failed: ${ASSIGNMENT_AUTHORIZATION_FAILED}`)
+        allowSameSubject = true
+      }
       // Try to recover with current/cached config
       try {
-        const config = await waitWithAbort(signal, cachedConfigPromise)
-        if (config) {
+        const config = await waitWithAbort(signal, canUse(retainedConfig) ? retainedConfig : cachedConfigPromise)
+        if (config && canUse(config)) {
           return { config, fromCache: true }
         }
       } catch (err) {}
 
+      if (!signal.aborted) this.lifecycleTelemetry?.providerError()
       throw err
     }
+  }
+
+  private canUseConfiguration(
+    config: FlagsConfiguration | undefined,
+    context: EvaluationContext,
+    allowSameSubject = false
+  ): boolean {
+    const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
+    const storedContext = config?.precomputed?.context
+    const matches = allowSameSubject
+      ? typeof storedContext?.targetingKey === 'string' &&
+        storedContext.targetingKey === context.targetingKey &&
+        (this.experimentationOptOutMode === ExperimentationOptOutMode.Disabled || configMatchesContext(config, context))
+      : configMatchesContext(config, context)
+    return (
+      optedOut !== undefined &&
+      matches &&
+      (!optedOut || config?.precomputed?.context !== undefined) &&
+      acknowledgesExperimentationOptOut(config, optedOut)
+    )
+  }
+
+  private effectiveTrackingContext(): EvaluationContext {
+    return this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+      ? this.requestedEvaluationContext
+      : (this.evaluationContext ?? this.requestedEvaluationContext)
   }
 
   private async maybeClearExposureCache(
@@ -273,12 +407,50 @@ export class DatadogProvider extends DatadogProviderBase {
     _context: EvaluationContext,
     _logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
-    return evaluatePrecomputedConfiguration(
+    if (
+      this.assignmentSubjectIsolationRequired &&
+      experimentationOptOutPolicy(this.requestedEvaluationContext, this.experimentationOptOutMode) !== undefined &&
+      !this.canUseConfiguration(this.flagsConfiguration, this.requestedEvaluationContext, true)
+    ) {
+      return bindEvaluationTelemetryResult(
+        { value: defaultValue, reason: 'ERROR', errorCode: ErrorCode.GENERAL },
+        this.telemetryPolicy,
+        this.requestedEvaluationContext
+      )
+    }
+    const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
+    const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
+    const result = evaluatePrecomputedConfiguration(
       this.flagsConfiguration,
       type,
       flagKey,
       defaultValue,
-      this.evaluationContext ?? {}
+      context,
+      this.experimentationOptOutMode,
+      _logger
+    )
+    // A well-formed context is waiting for usable assignments, not invalid.
+    const awaitingAssignments =
+      optOutEnabled &&
+      result.errorCode === ErrorCode.INVALID_CONTEXT &&
+      experimentationOptOutPolicy(context, this.experimentationOptOutMode) !== undefined
+    const boundResult = awaitingAssignments
+      ? {
+          ...result,
+          errorCode: ErrorCode.PROVIDER_NOT_READY,
+          errorMessage: 'Assignments for the current evaluation context are not available',
+        }
+      : result
+    // Prepare the exposure decision before the SDK freezes the metadata for
+    // hooks: the one verdict shared by the Datadog path and the customer hook.
+    stampExposureCacheVerdict({ ...boundResult, flagKey }, this.effectiveTrackingContext(), this.exposureCache)
+    // Bind the evaluated context (for example the RUM-enriched subject) to
+    // successful results so customer hooks read the same identity the exposure
+    // event reports. Error results without metadata keep their existing shape.
+    return bindEvaluationTelemetryResult(
+      boundResult,
+      this.telemetryPolicy,
+      optOutEnabled || boundResult.flagMetadata !== undefined ? context : undefined
     )
   }
 }

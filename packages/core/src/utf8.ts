@@ -4,6 +4,13 @@ export function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
   return textEncoder ? (textEncoder.encode(value) as Uint8Array<ArrayBuffer>) : encodeUtf8Fallback(value)
 }
 
+export function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1
+  }
+  return left.length === right.length ? 0 : left.length < right.length ? -1 : 1
+}
+
 function getUsableTextEncoder(): TextEncoder | undefined {
   try {
     const encoder = new globalThis.TextEncoder()

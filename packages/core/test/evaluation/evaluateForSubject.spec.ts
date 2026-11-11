@@ -245,9 +245,7 @@ describe('evaluateForSubject', () => {
       const flag = validFlag()
       const invalidAllocation = { key: 'invalid', splits: [{ variationKey: 'on', shards: [] }] }
       const allocations =
-        position === 'before'
-          ? [invalidAllocation, ...flag.allocations]
-          : [...flag.allocations, invalidAllocation]
+        position === 'before' ? [invalidAllocation, ...flag.allocations] : [...flag.allocations, invalidAllocation]
       Object.assign(flag, { allocations })
 
       expect(evaluateForSubject(flag, 'string', 'subject', {}, 'default', logger)).toMatchObject({

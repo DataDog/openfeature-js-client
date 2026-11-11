@@ -8,6 +8,7 @@ export interface TestCase {
   defaultValue: FlagValue
   targetingKey: string | null
   attributes: Record<string, unknown>
+  capabilities?: Record<string, TestCase['result']>
   result: {
     value: FlagValue
     reason: string

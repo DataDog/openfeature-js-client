@@ -24,6 +24,8 @@ export interface Split {
   shards: Shard[]
   extraLogging?: Record<string, string>
   serialId?: number
+  // Unparsed wire data: leniently converted to flag metadata by the evaluator.
+  features?: unknown
 }
 
 export interface Allocation {
@@ -31,7 +33,9 @@ export interface Allocation {
   rules?: Rule[]
   startAt?: Date
   endAt?: Date
+  randomizationActivatedAt?: string
   splits: Split[]
+  /** Required by the UFC JSON schema; the producer always supplies an explicit boolean. */
   doLog: boolean
 }
 
@@ -47,6 +51,9 @@ export interface UniversalFlagConfigurationV1 {
   createdAt: string
   format: string
   observeFullEvaluationData?: boolean
+  evaluatorParams?: {
+    maxDependencyDepth?: number
+  }
   environment: {
     name: string
   }

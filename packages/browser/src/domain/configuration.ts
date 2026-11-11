@@ -1,9 +1,19 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
 import { validateAndBuildConfiguration } from '@datadog/browser-core'
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
+
+export interface EvaluationTelemetryOptOutConfiguration {
+  /**
+   * Enable evaluation telemetry suppression through `dd_evaluation_telemetry_opt_out` (default: false).
+   * Only boolean true suppresses new evaluation telemetry and automatic RUM flag annotations.
+   * The attribute remains available to targeting and exposure reporting.
+   */
+  enableEvaluationTelemetryOptOutParameter?: boolean
+}
 
 /**
  * Init Configuration for the Flagging SDK.
@@ -32,7 +42,15 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
   }
 
   /**
+   * Whether to track exposures (default: true). With this off, the SDK sends no
+   * exposure events to Datadog, but exposure recording keeps working for the
+   * customer exposure hook and the deduplication cache still records.
+   */
+  trackExposures?: boolean
+
+  /**
    * Whether to enable exposure logging via the exposures intake
+   * @deprecated Use trackExposures instead. When both are set, trackExposures wins.
    */
   enableExposureLogging?: boolean
 
@@ -57,7 +75,11 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
 /**
  * Init Configuration for the online Flagging provider.
  */
-export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfiguration {
+export interface FlaggingInitConfiguration
+  extends
+    FlaggingTrackingInitConfiguration,
+    EvaluationTelemetryOptOutConfiguration,
+    ExperimentationOptOutConfiguration {
   /**
    * Initial flags configuration (precomputed flags)
    */
@@ -83,6 +105,13 @@ export interface FlaggingInitConfiguration extends FlaggingTrackingInitConfigura
    * including authentication and configured custom headers. Exposure and flag-evaluation intake requests do not use it.
    */
   flagConfigurationFetch?: typeof globalThis.fetch
+
+  /**
+   * Load only the flags that match these tags or key patterns. Tags match exactly, and key patterns are whole-key
+   * globs where only `*` is special. Fixed at initialization. A selection over a limit is not sent, and the full
+   * configuration is loaded. See the README for the limits.
+   */
+  flagSelection?: FlagSelection
 }
 
 export interface FlaggingTrackingConfiguration extends Configuration {
@@ -97,8 +126,27 @@ export interface FlaggingTrackingConfiguration extends Configuration {
 export interface FlaggingConfiguration extends FlaggingTrackingConfiguration {
   fetchFlagsConfiguration: (
     context: EvaluationContext,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; assignmentToken?: unknown }
   ) => Promise<FlagsConfiguration>
+}
+
+let warnedEnableExposureLoggingDeprecation = false
+
+/**
+ * Resolve the exposure tracking toggle: `trackExposures` wins over the deprecated
+ * `enableExposureLogging`, and both default to `enabledByDefault`.
+ */
+export function resolveTrackExposures(
+  initConfiguration: Partial<FlaggingTrackingInitConfiguration>,
+  enabledByDefault: boolean
+): boolean {
+  if (initConfiguration.enableExposureLogging !== undefined && !warnedEnableExposureLoggingDeprecation) {
+    warnedEnableExposureLoggingDeprecation = true
+    console.warn(
+      'enableExposureLogging is deprecated and will be removed in a future version. Use trackExposures instead.'
+    )
+  }
+  return initConfiguration.trackExposures ?? initConfiguration.enableExposureLogging ?? enabledByDefault
 }
 
 export function validateAndBuildFlaggingTrackingConfiguration(

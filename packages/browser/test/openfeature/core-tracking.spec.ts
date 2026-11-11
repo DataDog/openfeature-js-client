@@ -348,7 +348,11 @@ describe('DatadogCoreProvider tracking', () => {
     await legacy.initialize()
     const written = nextWrite()
     legacy.hooks[0].finally!(
-      { flagKey: 'static-flag', context: { targetingKey: 'static-user', plan: 'free' } } as never,
+      {
+        flagKey: 'static-flag',
+        context: { targetingKey: 'static-user', plan: 'free' },
+        providerMetadata: new DatadogCoreProvider().metadata,
+      } as never,
       {
         flagKey: 'static-flag',
         value: 'static-value',

@@ -38,6 +38,25 @@ the application's default with reason `ERROR` and error code `PARSE_ERROR`. Othe
 All allocations are checked before selection, including allocations after an unconditional match.
 This requirement does not change protobuf field-presence rules.
 
+## Local Precomputation
+
+The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package re-exports the same implementation; see its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
+
+The helper follows the Rust assignment-only precomputation contract: successful assignments are included, no-assignment outcomes and individual errors are omitted, and no application defaults are fabricated. Typed single-flag evaluation and precomputation share the protobuf assignment resolver. The JSON scalar/null cases in the helper's tests mirror `precomputed_object_variation_preserves_scalar_json_values` in the Rust evaluator's `rules_based/precomputed.rs` tests.
+
+## Preparing activation timestamps
+
+Rules configurations are snapshots. The protobuf decoder prepares randomization activation
+timestamps once, and the Node provider prepares JSON configurations in `setConfiguration`.
+Invalid activation marks only the affected flag as a parse error, regardless of opt-out mode.
+Evaluation compares the prepared seconds and fractional seconds without reparsing the timestamp;
+using a JavaScript `Date` here would lose the nanosecond precision needed at the opt-out cutoff.
+
+Direct JSON core consumers can call `prepareUniversalFlagConfiguration(configuration)` when
+receiving configuration. Existing low-level evaluation calls still accept raw configurations
+and prepare each flag once on first use. Replace changed flags instead of mutating prepared
+flags in place. Preparation does not change the serialized configuration.
+
 ## Adding a public entry point
 
 `packages/core/package.json` **`exports` is the single source of truth** for public paths.
