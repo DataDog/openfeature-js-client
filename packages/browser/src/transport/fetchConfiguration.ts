@@ -75,6 +75,11 @@ export interface PrecomputedConfigurationFetchOptions
   extends ConfigurationFetchOptions, ExperimentationOptOutConfiguration {
   applicationId?: string
   context: EvaluationContext
+  /**
+   * Load only the flags that match these tags or key patterns. See the README for the matching rules and limits.
+   * A selection over a limit is not sent, and the full configuration is loaded.
+   */
+  flagSelection?: FlagSelection
   responseSigning?: ResponseSigningConfiguration
 }
 
@@ -124,10 +129,12 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
+  const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
+  if (error) reportDroppedFlagSelection(error)
   const requestOptions: ConfigurationRequestOptions = options
   return requestPrecomputedConfiguration(
     options,
-    undefined,
+    selection,
     createResponseSigningController(options.responseSigning, {
       site: requestOptions.site,
       flaggingProxy: requestOptions.flaggingProxy,

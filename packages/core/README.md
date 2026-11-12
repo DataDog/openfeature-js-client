@@ -36,6 +36,13 @@ The `/rules-based` entry point exports `precomputeConfiguration(configuration, c
 
 The helper follows the Rust assignment-only precomputation contract: successful assignments are included, no-assignment outcomes and individual errors are omitted, and no application defaults are fabricated. Typed single-flag evaluation and precomputation share the protobuf assignment resolver. The JSON scalar/null cases in the helper's tests mirror `precomputed_object_variation_preserves_scalar_json_values` in the Rust evaluator's `rules_based/precomputed.rs` tests.
 
+Pass `options.flagSelection: { keyPatterns: ['checkout-*'] }` to include only matching assignments. Patterns are
+case-sensitive whole-key globs with only `*` special and use the shared selection normalization and limits. Omitted
+selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated
+as absent at runtime. Tags are unsupported because rules contain no tag metadata: any defined `tags` value, including
+`[]` or `null`, throws `ConfigurationPrecomputeError` with `invalid_options`, as do malformed selections and selections
+over a limit. Source rules remain available for dependencies and can be reused for other selections.
+
 ## Preparing activation timestamps
 
 Rules configurations are snapshots. The protobuf decoder prepares randomization activation

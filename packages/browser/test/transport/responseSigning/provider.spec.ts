@@ -575,6 +575,29 @@ test('direct fetch opt-in verifies and rejects unsupported HTTP requests locally
   )
 })
 
+test('direct fetch combines flag selection with required response signing', async () => {
+  global.fetch = jest.fn(async (url, init) => {
+    expect(JSON.parse(init?.body as string).data.attributes.flag_selection).toEqual({
+      tags: ['beta'],
+      key_patterns: ['critical*'],
+    })
+    expect(new Headers(init?.headers).get(SIGNING_VERSION_HEADER)).toBe('1')
+    expect(init?.redirect).toBe('error')
+    return signed(url, init)
+  })
+
+  await expect(
+    fetchPrecomputedConfiguration({
+      ...defaultOptions,
+      env: 'production',
+      context,
+      flagSelection: { tags: [' beta ', 'beta'], keyPatterns: ['critical*'] },
+      responseSigning: { mode: 'required', trustedRootCertificates: roots },
+    })
+  ).resolves.toHaveProperty('precomputed')
+  expect(global.fetch).toHaveBeenCalledTimes(1)
+})
+
 test('observe retains network availability without WebCrypto; required fails before fetch', async () => {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined })
   global.fetch = jest.fn().mockResolvedValue(unsigned())
