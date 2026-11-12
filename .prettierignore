@@ -20,6 +20,3 @@ packages/core/src/configuration/generated
 packages/browser/test/ffe-response-signing-data
 packages/browser/test/transport/responseSigning/key-usage-supplement.json
 packages/browser/test/transport/responseSigning/shared-fixtures/*.json
-
-# Shared precompute responses retain original numeric tokens.
-packages/browser/test/fixtures/precomputed

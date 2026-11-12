@@ -7,6 +7,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { DatadogProvider } from '../src/openfeature/provider'
 import { buildSigningTranscript, decodeBase64 } from '../src/transport/responseSigning/verification'
 import corpus from './ffe-response-signing-data/response-signing/v1/corpus.json'
+import { responseBody } from './precomputed-fixtures'
 
 interface Filters {
   _include?: { platform: string }[]
@@ -29,8 +30,7 @@ interface Fixture extends Filters {
   expectedResponseError?: string
   expectations: { noUnmatchedEvents?: boolean; exposures?: Matcher[]; evaluationEvents?: Matcher[] }
 }
-const root = join(__dirname, 'fixtures/precomputed')
-const source = JSON.parse(readFileSync(join(root, 'SOURCE.json'), 'utf8'))
+const root = join(__dirname, 'ffe-response-signing-data/precomputed-assignments')
 function discover(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
@@ -164,12 +164,12 @@ afterEach(async () => {
   jest.useRealTimers()
 })
 for (const mode of ['off', 'required'] as const) {
-  describe(`shared precompute ${source.commit}; signing ${mode}`, () => {
+  describe(`shared precompute; signing ${mode}`, () => {
     for (const { path, fixture } of cases) {
       const run = applies(fixture) ? test : test.skip
       run(fixture.name, async () => {
-        // The response sidecar retains original numeric tokens. Never serialize fixture.response.
-        const body = readFileSync(join(root, 'responses', path.slice(root.length + 1)), 'utf8')
+        // Read the original numeric tokens directly from the pinned fixture.
+        const body = responseBody(readFileSync(path, 'utf8'))
         const events: Record<string, unknown[]> = { exposures: [], flagevaluation: [] }
         global.fetch = jest.fn(async (url, init) => {
           if (String(url).includes('precompute-assignments')) {
@@ -231,7 +231,7 @@ for (const mode of ['off', 'required'] as const) {
 test.each(['missing-proof', 'invalid-signature'])(
   'required rejects a shared response with %s before installation',
   async (failure) => {
-    const body = readFileSync(join(root, 'responses/cases/evaluator/all-types-success.json'), 'utf8')
+    const body = responseBody(readFileSync(join(root, 'cases/evaluator/all-types-success.json'), 'utf8'))
     global.fetch = jest.fn(async (url, init) => {
       if (failure === 'missing-proof') return response(body)
       const signed = await signedResponse(url, init!, body)

@@ -54,9 +54,6 @@ jobs:
       - name: Build packages
         run: yarn build
 
-      - name: Verify shared precompute snapshot
-        run: python3 ci/sync-precomputed-fixtures.py --verify
-
       - name: Run tests
         run: yarn test
 

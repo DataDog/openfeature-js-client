@@ -43,7 +43,6 @@
       "!packages/core/test/ffe-system-test-data",
       "!packages/core/test/ffe-flag-selection-data",
       "!packages/browser/test/ffe-response-signing-data",
-      "!packages/browser/test/fixtures/precomputed",
       "!packages/core/src/configuration/generated"
     ]
   }
