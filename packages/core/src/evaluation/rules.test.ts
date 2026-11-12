@@ -56,7 +56,7 @@ describe('dependent condition validation', () => {
     expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(true)
   })
 
-  it.each([null, {}, { key: '' }, { key: 123 }, { property: 'variant' }])(
+  it.each([null, 'prerequisite', [], {}, { key: '' }, { key: 123 }, { property: 'variant' }])(
     'rejects a malformed flag-evaluation reference: %j',
     (flagEvaluation) => {
       expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(
@@ -64,6 +64,21 @@ describe('dependent condition validation', () => {
       )
     }
   )
+
+  it('rejects a condition with both an attribute and a flag-evaluation reference', () => {
+    expect(
+      isValidRule({
+        conditions: [
+          {
+            attribute: 'id',
+            flagEvaluation: { key: 'prerequisite', property: 'variant' },
+            operator: OperatorType.ONE_OF,
+            value: ['on'],
+          },
+        ],
+      })
+    ).toBe(false)
+  })
 
   it('rejects a regex operator for flag evaluation', () => {
     expect(
