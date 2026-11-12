@@ -1,4 +1,3 @@
-import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
   completeExposureDecision,
@@ -155,6 +154,11 @@ export function prepareExposure(
   }
 }
 
+export interface ExposureSink {
+  readonly hasSubscribers: boolean
+  publish(event: ExposureEvent): void
+}
+
 /**
  * Publishes and records the exposure once the evaluation has completed without an
  * error. A cache entry is written even when nothing subscribes to the exposure
@@ -165,7 +169,7 @@ export class ExposureLoggingHook implements Hook {
 
   constructor(
     private readonly exposureCache: AssignmentCache | undefined,
-    private readonly exposureChannel: Channel<ExposureEvent>,
+    private readonly exposureChannel: ExposureSink,
     private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecarApi
   ) {}
 

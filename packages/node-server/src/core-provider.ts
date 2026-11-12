@@ -35,6 +35,8 @@ import {
 export interface DatadogCoreProviderOptions {
   /** Experiment exclusion policy. Defaults to Disabled. */
   experimentationOptOutMode?: ExperimentationOptOutMode
+  /** Shared with explicitly registered exposure hooks. Does not install a hook or initialize an uploader. @internal */
+  exposureCache?: AssignmentCache
   /** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
   exposureChannel?: Channel<ExposureEvent>
   /** Consumed by the integration's root evaluation hook. @internal */
@@ -57,8 +59,9 @@ export class DatadogCoreProvider implements Provider {
     this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
     this.configuration = snapshotConfiguration(configuration)
     this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
+    this.exposureCache = options.exposureCache
     if (options.exposureChannel) {
-      this.exposureCache = new LRUInMemoryAssignmentCache(50_000)
+      this.exposureCache ??= new LRUInMemoryAssignmentCache(50_000)
       this.hooks.push(
         new ExposureLoggingHook(this.exposureCache, options.exposureChannel, this.dependencyTelemetrySidecar)
       )

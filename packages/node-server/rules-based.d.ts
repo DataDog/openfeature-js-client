@@ -1391,6 +1391,13 @@ export interface FlagSelection {
 	keyPatterns?: readonly string[];
 }
 export type FlagsConfigurationWire = string;
+type AssignmentCacheEntry = ExposureEvent;
+interface AssignmentCache {
+	init(): Promise<void>;
+	set(key: AssignmentCacheEntry): void;
+	has(key: AssignmentCacheEntry): boolean;
+	clear(): Promise<void> | void;
+}
 type DependencyEvaluation = {
 	flagKey: string;
 	details: Omit<ResolutionDetails<FlagValue>, "value"> & {
@@ -1528,9 +1535,15 @@ declare class DependencyTelemetrySidecar {
 	private deleteBatch;
 }
 type DependencyTelemetrySidecarApi = Pick<DependencyTelemetrySidecar, keyof DependencyTelemetrySidecar>;
+interface ExposureSink {
+	readonly hasSubscribers: boolean;
+	publish(event: ExposureEvent): void;
+}
 export interface DatadogCoreProviderOptions {
 	/** Experiment exclusion policy. Defaults to Disabled. */
 	experimentationOptOutMode?: ExperimentationOptOutMode;
+	/** Shared with explicitly registered exposure hooks. Does not install a hook or initialize an uploader. @internal */
+	exposureCache?: AssignmentCache;
 	/** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
 	exposureChannel?: Channel<ExposureEvent>;
 	/** Consumed by the integration's root evaluation hook. @internal */
@@ -1560,6 +1573,15 @@ export declare class DatadogCoreProvider implements Provider {
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 	private resolve;
 }
+/** Shared provider/hook state for the tracer integration. Creates no uploader and installs no hooks. @internal */
+export declare function createExposureTracking(): {
+	providerOptions: {
+		exposureCache: AssignmentCache;
+		dependencyTelemetrySidecar: DependencyTelemetrySidecarApi;
+	};
+	createHook(sink: ExposureSink): Hook;
+	clear(): void;
+};
 
 export {
 	FlagsConfiguration$1 as FlagsConfiguration,
