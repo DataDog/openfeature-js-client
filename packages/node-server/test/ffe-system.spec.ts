@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { ExposureEvent } from '@datadog/flagging-core'
 import type { EvaluationContext, FlagValue, JsonValue, Logger, ResolutionDetails } from '@openfeature/core'
+import { OpenFeature } from '@openfeature/server-sdk'
 import type { UniversalFlagConfigurationV1, VariantType } from '../src/configuration/ufc-v1'
 import { ExperimentationOptOutMode } from '../src/experimentation-opt-out'
 import { DatadogNodeServerProvider } from '../src/provider'
@@ -87,7 +88,34 @@ describe('FFE system tests through DatadogNodeServerProvider', () => {
 
       expect(details.value).toEqual(testCase.result.value)
       expect(details.reason).toEqual(testCase.result.reason)
+      if (testCase.result.errorCode !== undefined) {
+        expect(details.errorCode).toEqual(testCase.result.errorCode)
+      }
     })
+  })
+})
+
+describe('required doLog error telemetry', () => {
+  afterEach(async () => {
+    await OpenFeature.clearProviders()
+  })
+
+  it('returns parse-error details without publishing an exposure', async () => {
+    const subscribedExposureChannel = {
+      hasSubscribers: true,
+      publish: jest.fn(),
+    } as unknown as jest.Mocked<Channel<ExposureEvent>>
+    const provider = new DatadogNodeServerProvider({ exposureChannel: subscribedExposureChannel })
+    provider.setConfiguration(configuration)
+
+    const providerName = 'required-dolog-error-telemetry'
+    await OpenFeature.setProviderAndWait(providerName, provider)
+    const details = await OpenFeature.getClient(providerName).getStringDetails('invalid-dolog-missing', 'default', {
+      targetingKey: 'dolog-subject',
+    })
+
+    expect(details).toMatchObject({ value: 'default', reason: 'ERROR', errorCode: 'PARSE_ERROR' })
+    expect(subscribedExposureChannel.publish).not.toHaveBeenCalled()
   })
 })
 

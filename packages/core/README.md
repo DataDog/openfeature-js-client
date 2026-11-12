@@ -30,6 +30,14 @@ enabled and disabled, including legacy CommonJS and ESM resolution. It executes 
 in Node without `BigInt`, `TextEncoder`, or `TextDecoder`; this checks fallback behavior but does
 not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
+## JSON allocation validation
+
+Every UFC JSON allocation must include `doLog` as a boolean. Both `true` and `false` are valid.
+Missing, `null`, or incorrectly typed values invalidate the affected flag. Evaluation returns
+the application's default with reason `ERROR` and error code `PARSE_ERROR`. Other flags remain usable.
+All allocations are checked before selection, including allocations after an unconditional match.
+This requirement does not change protobuf field-presence rules.
+
 ## Local Precomputation
 
 The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package re-exports the same implementation; see its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
