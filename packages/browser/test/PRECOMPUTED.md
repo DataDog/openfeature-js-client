@@ -31,12 +31,14 @@ The corpus has 63 cases. Upstream filters exclude 45 for web. Of the 18 applicab
 cases, 12 pass and six fail in each signing mode. Keep these failures visible:
 
 - `serial-id-on-exposure`: the fixture omits `createdAt`; the browser rejects it.
-- `defaults-and-emission-gates`: an unsupported variation type returns `TYPE_MISMATCH`
+- `defaults-and-emission-gates`: an unsupported variation type returns `PARSE_ERROR`
   instead of the shared `FLAG_NOT_FOUND` expectation.
 - `empty-flags-response`: browser error evaluations exceed the fixture's event expectations.
 - `numeric-decimal-{float,integer,number}`: the browser rounds an inexact whole
   number instead of returning the default with `TYPE_MISMATCH`.
 
-The same failures occur without signing. This draft adds no runtime changes or local
-skips. Reconcile the shared contract before merging. The mobile PR stack is temporary;
+The same failures occur without signing. The core evaluator accepts additional
+dependency-reference fields and reports dependency failures using the updated
+shared contract. The browser cases have no local skips. Reconcile the remaining
+browser contract gaps before merging. The mobile PR stack is temporary;
 the shared corpus and these assertions are intended to remain.

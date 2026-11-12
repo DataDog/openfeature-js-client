@@ -49,11 +49,31 @@ describe('dependent condition validation', () => {
     ).toBe(true)
   })
 
+  it.each([OperatorType.ONE_OF, OperatorType.NOT_ONE_OF])('ignores additive fields for %s', (operator) => {
+    expect(
+      isValidRule({
+        conditions: [
+          {
+            flagEvaluation: { key: 'prerequisite', unexpected: { nested: true } },
+            operator,
+            value: ['on'],
+            unexpectedConditionField: true,
+          },
+        ],
+      })
+    ).toBe(true)
+  })
+
+  it.each([null, [], {}, { key: '' }, { key: 123 }, { unexpected: 'prerequisite' }])(
+    'rejects a malformed flag-evaluation reference: %j',
+    (flagEvaluation) => {
+      expect(
+        isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })
+      ).toBe(false)
+    }
+  )
+
   it.each([
-    [
-      'a malformed flag-evaluation reference',
-      { flagEvaluation: { key: 'prerequisite', unexpected: true }, operator: OperatorType.ONE_OF, value: ['on'] },
-    ],
     ['a regex operator', { flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
   ])('rejects %s', (_description, condition) => {
     expect(isValidRule({ conditions: [condition] })).toBe(false)

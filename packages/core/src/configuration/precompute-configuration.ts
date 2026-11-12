@@ -104,7 +104,8 @@ export function precomputeConfiguration(
     } catch (error) {
       errors.push({
         flagKey,
-        errorCode: error instanceof DependencyGraphError ? error.errorCode : ('GENERAL' as ErrorCode),
+        errorCode:
+          error instanceof DependencyGraphError && error.flagKey === flagKey ? error.errorCode : ('GENERAL' as ErrorCode),
       })
       continue
     }
