@@ -37,8 +37,8 @@ cases, 12 pass and six fail in each signing mode. Keep these failures visible:
 - `numeric-decimal-{float,integer,number}`: the browser rounds an inexact whole
   number instead of returning the default with `TYPE_MISMATCH`.
 
-The same failures occur without signing. The core evaluator accepts additional
-dependency-reference fields and reports dependency failures using the updated
-shared contract. The browser cases have no local skips. Reconcile the remaining
-browser contract gaps before merging. The mobile PR stack is temporary;
-the shared corpus and these assertions are intended to remain.
+The same failures occur without signing. This PR adds no runtime changes or local
+skips. The core fixture pins remain at the base revisions; core compatibility
+changes are separate work. Reconcile the browser contract gaps before merging.
+The mobile PR stack is temporary; the shared corpus and these assertions are
+intended to remain.

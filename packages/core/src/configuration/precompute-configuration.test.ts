@@ -164,7 +164,7 @@ describe('precomputeConfiguration', () => {
         onEvaluationError,
       })
       expect(result.precomputed!.response.data.attributes.flags).toEqual({})
-      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'GENERAL' }]])
+      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'PARSE_ERROR' }]])
     })
 
     it.each([
@@ -251,9 +251,9 @@ describe('precomputeConfiguration', () => {
   })
 
   it.each([
-    ['missing parent', 'GENERAL'],
+    ['missing parent', 'FLAG_NOT_FOUND'],
     ['unassigned parent', 'GENERAL'],
-    ['invalid parent', 'GENERAL'],
+    ['invalid parent', 'PARSE_ERROR'],
     ['cycle', 'GENERAL'],
     ['depth limit', 'GENERAL'],
     ['invalid depth', 'PARSE_ERROR'],
@@ -283,10 +283,7 @@ describe('precomputeConfiguration', () => {
       onEvaluationError.mock.calls
         .map(([error]) => error)
         .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
-    ).toEqual([
-      { flagKey: 'child', errorCode },
-      ...(parentFails ? [{ flagKey: 'parent', errorCode: failure === 'invalid parent' ? 'PARSE_ERROR' : errorCode }] : []),
-    ])
+    ).toEqual([{ flagKey: 'child', errorCode }, ...(parentFails ? [{ flagKey: 'parent', errorCode }] : [])])
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {

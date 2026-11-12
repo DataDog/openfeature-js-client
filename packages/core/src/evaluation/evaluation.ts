@@ -312,7 +312,7 @@ function evaluateRules<T extends FlagValueType>(
       )
     } catch (error) {
       if (error instanceof DependencyGraphError) {
-        details = dependencyGraphFailure(error, flagKey, defaultValue, logger, evaluationTimestampMs)
+        details = dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
       } else {
         logger.error('Error evaluating flag', { error })
         details = {
@@ -407,7 +407,7 @@ function evaluateRules<T extends FlagValueType>(
         flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
       }
     } else if (error instanceof DependencyGraphError) {
-      details = dependencyGraphFailure(error, flagKey, defaultValue, logger, evaluationTimestampMs)
+      details = dependencyGraphFailure(error, defaultValue, logger, evaluationTimestampMs)
     } else {
       logger.error('Error evaluating flag', { error })
       details = {
@@ -490,7 +490,6 @@ export function createProtobufDependencyResolver(
 
 function dependencyGraphFailure<T extends FlagValue>(
   error: DependencyGraphError,
-  flagKey: string,
   defaultValue: T,
   logger: Logger,
   evaluationTimestampMs: TimeStamp
@@ -503,7 +502,7 @@ function dependencyGraphFailure<T extends FlagValue>(
   return {
     value: defaultValue,
     reason: 'ERROR',
-    errorCode: error.flagKey === flagKey ? error.errorCode : ('GENERAL' as ErrorCode),
+    errorCode: error.errorCode,
     errorMessage: error.message,
     flagMetadata: createEvaluationTimestampMetadata(evaluationTimestampMs),
   }
@@ -641,7 +640,7 @@ class DependencyEvaluationSession {
         details: {
           value: defaultValue,
           reason: 'ERROR',
-          errorCode: graphError.flagKey === flagKey ? graphError.errorCode : ('GENERAL' as ErrorCode),
+          errorCode: graphError.errorCode,
           errorMessage: graphError.message,
           flagMetadata: createEvaluationMetadata(this.evaluationTimestampMs, this.observeFullEvaluationData),
         },

@@ -564,7 +564,7 @@ describe('dependent flag evaluation', () => {
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
@@ -585,10 +585,10 @@ describe('dependent flag evaluation', () => {
     config.flags.prerequisite.allocations[0].targetingConditionIndex = 1
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies).toMatchObject([
       { flagKey: 'missing', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
-      { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'GENERAL' } },
+      { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' } },
     ])
     expect(exposures).toEqual([])
     expect(logger.debug).toHaveBeenCalledWith('prerequisite flag is missing', { flagKey: 'missing' })
@@ -646,7 +646,7 @@ describe('dependent flag evaluation', () => {
     config.flags.root.allocations[0].targetingConditionIndex = 3
 
     const { result, dependencies, exposures } = evaluateProtobuf(roundTrip(config), logger)
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' })
     expect(dependencies.map(({ flagKey }) => flagKey)).toEqual(['prerequisite', 'missing'])
     expect(exposures).toEqual([])
   })
@@ -854,7 +854,7 @@ describe('dependent flag evaluation', () => {
 
     const result = evaluate(config, 'root', logger, (dependency) => dependencies.push(dependency), {}, onExposures)
 
-    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'PARSE_ERROR' })
     expect(dependencies).toMatchObject([
       { flagKey: 'prerequisite', details: { reason: 'ERROR', errorCode: 'PARSE_ERROR' } },
     ])
