@@ -10,6 +10,7 @@ import {
   configurationFromString,
   configurationToString,
   fetchPrecomputedConfiguration,
+  createExposureTracking,
   DatadogCoreProvider,
   fetchRulesConfiguration,
   precomputeConfiguration,
@@ -47,6 +48,7 @@ for (const mode of ['require', 'import']) {
           const core = require('@datadog/flagging-core')
           assert.equal('encodePrecomputedFlagKey' in core, false)
           assert.equal('DatadogCoreProvider' in root, false)
+          assert.equal('createExposureTracking' in root, false)
           const protobufModules = () => Object.keys(require.cache).filter((file) =>
             /@bufbuild[/\\\\]protobuf|configuration[/\\\\](generated|protobuf-text-encoding|rules-wire|ufc-protobuf)/.test(file)
           )
@@ -65,6 +67,7 @@ for (const mode of ['require', 'import']) {
           assert.equal(helpers.fetchPrecomputedConfiguration, root.fetchPrecomputedConfiguration)
           assert.equal(helpers.ConfigurationFetchError, root.ConfigurationFetchError)
           assert.equal(typeof helpers.DatadogCoreProvider, 'function')
+          assert.equal(typeof helpers.createExposureTracking, 'function')
           const emptyRules = helpers.configurationFromRulesBinary(new Uint8Array())
           const snapshot = helpers.precomputeConfiguration(emptyRules, { targetingKey: 'subject' })
           const restored = helpers.configurationFromString(helpers.configurationToString(snapshot))
@@ -89,6 +92,7 @@ test('native ESM and CommonJS expose identical standalone helpers without OpenFe
     configurationFromString,
     ConfigurationPrecomputeError,
     configurationToString,
+    createExposureTracking,
     DatadogCoreProvider,
     fetchRulesConfiguration,
     fetchPrecomputedConfiguration,
@@ -116,9 +120,14 @@ test('packed core provider evaluates and replaces local rules without OpenFeatur
   await provider.onClose()
 })
 
-for (const format of ['rules', 'precomputed']) {
+for (const [format, registration] of [
+  ['rules', 'implicit'],
+  ['precomputed', 'implicit'],
+  ['rules', 'explicit'],
+  ['precomputed', 'explicit'],
+]) {
   test(
-    `installed OpenFeature supports synchronous core registration and optional exposures with ${format}`,
+    `installed OpenFeature supports synchronous core registration and ${registration} exposures with ${format}`,
     { skip: !OpenFeature },
     async () => {
       const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
@@ -128,13 +137,21 @@ for (const format of ['rules', 'precomputed']) {
       const exposures = []
       const record = (event) => exposures.push(event)
       sink.subscribe(record)
+      const tracking = registration === 'explicit' ? createExposureTracking() : undefined
       try {
-        const provider = new DatadogCoreProvider(format === 'rules' ? rules : precomputeConfiguration(rules, context), {
-          exposureChannel: sink,
-        })
+        const provider = new DatadogCoreProvider(
+          format === 'rules' ? rules : precomputeConfiguration(rules, context),
+          tracking?.providerOptions ?? { exposureChannel: sink }
+        )
         OpenFeature.setProvider('offline-core', provider)
         const client = OpenFeature.getClient('offline-core')
         assert.equal(client.providerStatus, 'READY')
+        if (tracking) {
+          assert.deepEqual(provider.hooks, [])
+          assert.equal(await client.getBooleanValue('test-flag', false, context), true)
+          assert.equal(exposures.length, 0)
+          provider.hooks.push(tracking.createHook(sink))
+        }
         const results = await Promise.all([
           client.getBooleanDetails('test-flag', false, context),
           client.getBooleanDetails('test-flag', false, context),
@@ -166,6 +183,7 @@ for (const format of ['rules', 'precomputed']) {
         assert.deepEqual(changed, [true])
         assert.equal((await client.getBooleanDetails('test-flag', false, context)).errorCode, 'FLAG_NOT_FOUND')
       } finally {
+        tracking?.clear()
         sink.unsubscribe(record)
         await OpenFeature.clearProviders()
       }

@@ -2,8 +2,14 @@ import type { Channel } from 'node:diagnostics_channel'
 import type { ExposureEvent, FlagsConfiguration } from '@datadog/flagging-core'
 import { type EvaluationDetails, type FlagValue, OpenFeature } from '@openfeature/server-sdk'
 import rulesWire from '../../browser/test/data/rules-v1-wire.json'
+import { createExposureTracking } from '../src/exposure-tracking'
 import { DependencyTelemetrySidecar } from '../src/provider'
-import { configurationFromString, DatadogCoreProvider, ExperimentationOptOutMode } from '../src/rules-based'
+import {
+  configurationFromString,
+  DatadogCoreProvider,
+  ExperimentationOptOutMode,
+  precomputeConfiguration,
+} from '../src/rules-based'
 
 const context = { targetingKey: 'subject', country: 'US' }
 const domain = 'offline-tracking'
@@ -62,6 +68,68 @@ describe('DatadogCoreProvider optional tracking', () => {
     expect(result).toMatchObject({ value: true, variant: 'on' })
     expect(result.flagMetadata?.__dd_do_log).toBe(true)
     expect(result.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
+  })
+
+  it.each(['rules', 'precomputed'])(
+    'shares exposure state without implicitly installing hooks (%s)',
+    async (format) => {
+      const snapshot = (configuration: FlagsConfiguration) =>
+        format === 'rules' ? configuration : precomputeConfiguration(configuration, context)
+      const tracking = createExposureTracking()
+      const sink = channel()
+      const configuration = snapshot(rules())
+      const provider = new DatadogCoreProvider(configuration, tracking.providerOptions)
+      const client = clientFor(provider)
+      expect(provider.hooks).toEqual([])
+      await client.getBooleanValue('test-flag', false, context)
+      expect(sink.publish).not.toHaveBeenCalled()
+      provider.hooks.push(tracking.createHook(sink))
+      await Promise.all([
+        client.getBooleanValue('test-flag', false, context),
+        client.getBooleanValue('test-flag', false, context),
+      ])
+      expect(sink.publish).toHaveBeenCalledTimes(1)
+      provider.setConfiguration(structuredClone(configuration))
+      expect(() => provider.setConfiguration({})).toThrow(TypeError)
+      await client.getBooleanValue('test-flag', false, context)
+      expect(sink.publish).toHaveBeenCalledTimes(1)
+      const replacement = structuredClone(configuration)
+      if (replacement.rules) {
+        replacement.rules.response.createdAt!.seconds += BigInt(1)
+      } else {
+        const attributes = replacement.precomputed!.response.data.attributes
+        attributes.createdAt = new Date(Date.parse(attributes.createdAt) + 1000).toISOString()
+      }
+      provider.setConfiguration(replacement)
+      await client.getBooleanValue('test-flag', false, context)
+      expect(sink.publish).toHaveBeenCalledTimes(2)
+      tracking.clear()
+      await client.getBooleanValue('test-flag', false, context)
+      expect(sink.publish).toHaveBeenCalledTimes(3)
+    }
+  )
+
+  it('explicit exposure tracking preserves dependency exposures and late-error rollback', async () => {
+    const tracking = createExposureTracking()
+    const sink = channel()
+    const provider = new DatadogCoreProvider(dependentRules(), tracking.providerOptions)
+    provider.hooks.push(tracking.createHook(sink))
+    const client = clientFor(provider)
+    await client.getBooleanValue('test-flag', false, context, {
+      hooks: [
+        {
+          after: () => {
+            throw new Error('late hook failure')
+          },
+        },
+      ],
+    })
+    expect(sink.publish).not.toHaveBeenCalled()
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'prerequisite',
+      'test-flag',
+    ])
   })
 
   it.each([true, false])('deduplicates concurrent exposures with subscribers=%s', async (hasSubscribers) => {
