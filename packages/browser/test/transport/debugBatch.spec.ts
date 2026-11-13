@@ -1,5 +1,5 @@
 import type { Context, EndpointBuilder, PageMayExitEvent } from '@datadog/browser-core'
-import { Observable } from '@datadog/browser-core'
+import { Observable, validateAndBuildConfiguration } from '@datadog/browser-core'
 import { createDebugLogger } from '../../src/debug'
 import { createTrackedBatch, createTrackedRequest } from '../../src/transport/debugBatch'
 
@@ -76,6 +76,20 @@ describe('debug event transport', () => {
       transportStatus: 0,
     })
     expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it.each(['fetch', 'beacon'] as const)('omits client credentials in real string-proxy %s URLs', async (mode) => {
+    const proxyEndpoint = validateAndBuildConfiguration({
+      clientToken: 'proxy-client-secret',
+      proxy: 'https://proxy.test/intake',
+    })!.exposuresEndpointBuilder
+    const request = createTrackedRequest(proxyEndpoint, jest.fn(), createDebugLogger(true))
+    if (mode === 'fetch') request.send({ data: '{}', bytesCount: 2 })
+    else request.sendOnExit({ data: '{}', bytesCount: 2 })
+    await settle()
+    const url = events(mode === 'fetch' ? 'upload.started' : 'upload.beacon')[0].details.endpoint
+    expect(decodeURIComponent(url)).toContain('/api/v2/exposures')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('proxy-client-secret')
   })
 
   it('logs queue overflow', () => {

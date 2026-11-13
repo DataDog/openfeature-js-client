@@ -176,42 +176,45 @@ export function validateAndBuildFlaggingTrackingConfiguration(
   if (!baseConfiguration) {
     debug.event('init.failed', () => ({
       reason: 'invalid_configuration',
-      clientTokenPresent: !!initConfiguration.clientToken,
+      clientTokenPresent: !!Object.getOwnPropertyDescriptor(initConfiguration, 'clientToken')?.value,
       validationIssues: configurationIssues(initConfiguration),
     }))
     return
   }
-  debug.event('init.effective_configuration', () => ({
-    site: baseConfiguration.site,
-    env: baseConfiguration.env,
-    service: baseConfiguration.service,
-    applicationId: initConfiguration.applicationId,
-    evaluationIntervalMs: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
-    defaults: {
-      site: initConfiguration.site == null || initConfiguration.site === '',
-      evaluationInterval: initConfiguration.flagEvaluationTrackingInterval == null,
-    },
-    trackingRoutes:
-      typeof initConfiguration.proxy === 'function'
-        ? { resolution: 'at_send', reason: 'custom_proxy_callback' }
-        : {
-            exposure: initConfiguration.proxy
-              ? { proxy: debugUrl(initConfiguration.proxy), path: '/api/v2/exposures' }
-              : `https://${buildEndpointHost({ clientToken: '', site: baseConfiguration.site })}/api/v2/exposures`,
-            evaluation: initConfiguration.proxy
-              ? { proxy: debugUrl(initConfiguration.proxy), path: '/api/v2/flagevaluation' }
-              : `https://${buildEndpointHost({ clientToken: '', site: baseConfiguration.site })}/api/v2/flagevaluation`,
-          },
-    openFeatureVersion: 'not_exposed_by_runtime_api',
-    registration: 'application_managed; client/domain observed on evaluation',
-  }))
-
-  return {
+  // These reads are operational. Diagnostics reuse their values rather than invoking customer accessors again.
+  const configuration = {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
     ...baseConfiguration,
     debug,
   }
+  debug.event('init.effective_configuration', () => {
+    const properties = Object.getOwnPropertyDescriptors(initConfiguration)
+    const proxy = properties.proxy
+    const proxyValue = proxy && 'value' in proxy ? proxy.value : undefined
+    const route = (path: string) => {
+      if (proxy && !('value' in proxy)) return { resolution: 'at_send', reason: 'proxy_accessor' }
+      if (typeof proxyValue === 'function') return { resolution: 'at_send', reason: 'custom_proxy_callback' }
+      if (typeof proxyValue === 'string' && proxyValue) return { proxy: debugUrl(proxyValue), path }
+      return `https://${buildEndpointHost({ clientToken: '', site: configuration.site })}${path}`
+    }
+    const defaultUsed = (field: string) => {
+      const property = properties[field]
+      return property && !('value' in property) ? 'accessor_not_reinspected' : property?.value == null
+    }
+    return {
+      site: configuration.site,
+      env: configuration.env,
+      service: configuration.service,
+      applicationId: configuration.applicationId,
+      evaluationIntervalMs: configuration.flagEvaluationTrackingInterval,
+      defaults: { site: defaultUsed('site'), evaluationInterval: defaultUsed('flagEvaluationTrackingInterval') },
+      trackingRoutes: { exposure: route('/api/v2/exposures'), evaluation: route('/api/v2/flagevaluation') },
+      openFeatureVersion: 'not_exposed_by_runtime_api',
+      registration: 'application_managed; client/domain observed on evaluation',
+    }
+  })
+  return configuration
 }
 
 export function validateAndBuildFlaggingConfiguration(

@@ -3,8 +3,10 @@ import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sd
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { withStore } from '../../src/cache/indexeddb-store'
 import { createDebugLogger } from '../../src/debug'
+import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
+import { createDatadogEvaluationLoggingHook } from '../../src/openfeature/flagEvaluations'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import { withRetry, withTimeout } from '../../src/transport/fetch'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
@@ -68,6 +70,93 @@ describe('browser debug-mode scenarios', () => {
     localStorage.clear()
     jest.restoreAllMocks()
   })
+
+  it('preserves operational configuration getters and old core context accessors', async () => {
+    const outcomes = []
+    for (const debugMode of [false, true]) {
+      const reads = { interval: 0, applicationId: 0, site: 0, proxy: 0, oldContext: 0 }
+      const configuration = validateAndBuildFlaggingTrackingConfiguration({
+        clientToken: 'secret',
+        debugMode,
+        get flagEvaluationTrackingInterval() {
+          return ++reads.interval * 1000
+        },
+        get applicationId() {
+          reads.applicationId++
+          return 'app'
+        },
+        get site() {
+          reads.site++
+          return 'datadoghq.com'
+        },
+        get proxy() {
+          reads.proxy++
+          return '/proxy'
+        },
+      })
+      const core = new DatadogCoreProvider({ debugMode })
+      core.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+      await core.initialize({ targetingKey: 'user-1', country: 'US' })
+      core.onContextChange(
+        {
+          get targetingKey() {
+            reads.oldContext++
+            return 'old'
+          },
+        },
+        { targetingKey: 'user-1', country: 'US' }
+      )
+      outcomes.push({ reads, interval: configuration?.flagEvaluationTrackingInterval })
+      await core.onClose()
+    }
+    expect(outcomes[1]).toEqual(outcomes[0])
+    expect(outcomes[0].reads.oldContext).toBe(0)
+  })
+
+  it.each(['core', 'override', 'wrapper_debug_only'] as const)(
+    'correlates %s and separately configured tracking, including nested evaluations',
+    async (mode) => {
+      const core = new DatadogCoreProvider({ debugMode: mode !== 'wrapper_debug_only' })
+      core.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+      if (mode !== 'core')
+        localStorage.setItem('dd.dd_flag.overrides', JSON.stringify({ 'test-flag': { type: 'BOOLEAN', value: false } }))
+      const selected = mode === 'core' ? core : new DatadogDevtools(core, { debugMode: true })
+      const tracking = createDatadogEvaluationLoggingHook({ clientToken: 'tracking-secret', debugMode: true })
+      const client = OpenFeature.getClient('core-debug-audit')
+      await tracking.initialize()
+      try {
+        await OpenFeature.setProviderAndWait('core-debug-audit', selected, {
+          targetingKey: 'user-1',
+          country: 'US',
+          dd_assignment_token: 'assignment-secret',
+        })
+        let nested = false
+        client.addHooks(...tracking.hooks, {
+          after: () => {
+            if (!nested) {
+              nested = true
+              client.getBooleanValue('test-flag', false)
+            }
+          },
+        })
+        expect(client.getBooleanValue('test-flag', false)).toBe(mode === 'core')
+        const requested = events('evaluation.requested')
+        const completed = events('evaluation.completed')
+        const returned = events('evaluation.returned')
+        expect(requested).toHaveLength(2)
+        expect(new Set(requested.map((r) => r.evaluationId)).size).toBe(2)
+        for (const request of requested) {
+          expect(completed.some((r) => r.evaluationId === request.evaluationId)).toBe(true)
+          expect(returned.some((r) => r.evaluationId === request.evaluationId)).toBe(true)
+          expect(events('evaluation.aggregated').some((r) => r.evaluationId === request.evaluationId)).toBe(true)
+        }
+        expect(JSON.stringify(log.mock.calls)).not.toContain('assignment-secret')
+      } finally {
+        client.clearHooks()
+        await tracking.shutdown()
+      }
+    }
+  )
 
   it.each(['provider', 'standalone'] as const)('logs malformed JSON at the %s decode boundary', async (entry) => {
     const failure = new SyntaxError('Unexpected token in JSON')

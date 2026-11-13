@@ -58,7 +58,7 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
           component,
           ...context,
           event: name,
-          details: fields?.(),
+          details: diagnosticFields(name, fields?.()),
         }
         const serialized = JSON.stringify(snapshot(envelope))
         if (serialized.length <= CHUNK_SIZE) {
@@ -115,7 +115,11 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
 }
 
 /** Data descriptors avoid invoking getters/toJSON a second time merely to log a value. */
+const contextViews = new WeakMap<object, object>()
+
 function snapshot(value: unknown, ancestors = new Set<object>()): unknown {
+  const context = value && typeof value === 'object' ? contextViews.get(value) : undefined
+  if (context) value = context
   if (value === undefined) return { $type: 'undefined' }
   if (typeof value === 'bigint') return { $type: 'bigint', value: String(value) }
   if (typeof value === 'number' && !Number.isFinite(value)) return { $type: 'number', value: String(value) }
@@ -148,8 +152,7 @@ function snapshot(value: unknown, ancestors = new Set<object>()): unknown {
       })
     const descriptors = Object.getOwnPropertyDescriptors(value)
     for (const key of Object.keys(descriptors)) {
-      // This reserved context member is a transport credential, never a targeting attribute.
-      if (key === 'dd_assignment_token' || key.toLowerCase() === 'dd-assignment-token') continue
+      if (context && key === 'dd_assignment_token') continue
       if (Array.isArray(value) && key === 'length') continue
       const descriptor = descriptors[key]
       Object.defineProperty(output, key, {
@@ -189,6 +192,16 @@ export function debugOptions(options: object): Record<string, unknown> {
     const value = descriptor.value
     if (/token|api.?key|authorization|password|secret/i.test(key)) {
       result[key] = { present: value !== undefined && value !== '' }
+    } else if (key === 'replica' && value && typeof value === 'object') {
+      result[key] = debugOptions(value)
+    } else if (key === 'initialFlagsConfiguration') {
+      result[key] = diagnosticConfiguration(value)
+    } else if (key === 'exposureCache') {
+      result[key] = { implementation: value ? 'application_supplied' : 'none' }
+    } else if (key === 'rum' && value && typeof value === 'object') {
+      result[key] = mapDiagnosticProperties(value, (name, item) =>
+        name === 'sdk' ? { implementation: 'application_supplied' } : item
+      )
     } else if (key === 'customHeaders') {
       result[key] = value && typeof value === 'object' ? Object.keys(value) : value
     } else if ((key === 'proxy' || key === 'flaggingProxy') && typeof value === 'string') {
@@ -200,7 +213,7 @@ export function debugOptions(options: object): Record<string, unknown> {
   return result
 }
 
-export function debugUrl(input: string): string {
+export function debugUrl(input: string, depth = 0): string {
   try {
     const url = new URL(input, 'https://relative.invalid')
     url.username = ''
@@ -211,8 +224,12 @@ export function debugUrl(input: string): string {
     })
     for (const key of keys) {
       if (/token|api.?key|authorization|password|secret|cookie/i.test(key)) url.searchParams.set(key, '[credential]')
+      else if (key.toLowerCase() === 'ddforward') {
+        const forwarded = url.searchParams.get(key) ?? ''
+        url.searchParams.set(key, depth < 4 ? debugUrl(forwarded, depth + 1) : '[nested_forwarding]')
+      }
     }
-    return url.toString()
+    return depth > 0 && input.startsWith('/') ? url.pathname + url.search + url.hash : url.toString()
   } catch {
     return '[unparseable endpoint]'
   }
@@ -244,19 +261,14 @@ export function configurationDebugFields(configuration?: FlagsConfiguration): Re
 }
 
 // Correlation is local only: no debug fields enter contexts, metadata or intake payloads.
-const evaluations = new WeakMap<object, Map<string, { id: number; pending: boolean }>>()
+const evaluations = new WeakMap<object, { id: number; pending: boolean }>()
 let evaluationSequence = 0
 export function evaluationDebug(context: object, debug: DebugLogger, phase?: 'before' | 'resolve'): DebugLogger {
   if (!debug.enabled || !debug.instanceId) return debug
-  let entries = evaluations.get(context)
-  if (!entries) {
-    entries = new Map()
-    evaluations.set(context, entries)
-  }
-  let entry = entries.get(debug.instanceId)
-  if (!entry || phase === 'before' || (phase === 'resolve' && !entry.pending)) {
+  let entry = evaluations.get(context)
+  if (!entry || ((phase === 'before' || phase === 'resolve') && !entry.pending)) {
     entry = { id: ++evaluationSequence, pending: phase === 'before' }
-    entries.set(debug.instanceId, entry)
+    evaluations.set(context, entry)
   }
   if (phase === 'resolve') entry.pending = false
   return debug.child({ evaluationId: entry.id })
@@ -267,4 +279,65 @@ export function bindEventCorrelation(event: object, fields: Record<string, unkno
 }
 export function eventCorrelation(event: object): Record<string, unknown> | undefined {
   return eventCorrelations.get(event)
+}
+
+/** Copy only diagnostic structure; accessors stay descriptors for snapshot() to mark without invoking. */
+function mapDiagnosticProperties(value: unknown, transform: (key: string, value: unknown) => unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  const copy = Object.create(null)
+  let changed = false
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if ('value' in descriptor) {
+      const item = transform(key, descriptor.value)
+      changed ||= item !== descriptor.value
+      Object.defineProperty(copy, key, { ...descriptor, value: item })
+    } else Object.defineProperty(copy, key, descriptor)
+  }
+  return changed ? copy : value
+}
+
+function diagnosticContext(value: unknown): unknown {
+  // A private view lets snapshot omit only the context root's credential, retaining cycle identity.
+  if (!value || typeof value !== 'object') return value
+  const view = Object.create(null)
+  contextViews.set(view, value)
+  return view
+}
+
+function diagnosticConfiguration(value: unknown): unknown {
+  return mapDiagnosticProperties(value, (key, item) =>
+    key === 'precomputed'
+      ? mapDiagnosticProperties(item, (name, field) => (name === 'context' ? diagnosticContext(field) : field))
+      : item
+  )
+}
+
+const contextFields = new Set([
+  'context',
+  'oldContext',
+  'newContext',
+  'rawContext',
+  'normalizedContext',
+  'requestedContext',
+  'effectiveContext',
+  'assignmentContext',
+  'pendingContext',
+  'previousRequestedContext',
+  'applicationContext',
+  'targetingContext',
+  'user',
+])
+function diagnosticFields(event: string, value: unknown): unknown {
+  return mapDiagnosticProperties(value, (key, item) => {
+    if (
+      key === 'context' &&
+      (event === 'evaluation.requested' || event === 'evaluation.returned' || event === 'tracking.skipped')
+    ) {
+      return mapDiagnosticProperties(item, (name, field) => (name === 'context' ? diagnosticContext(field) : field))
+    }
+    if (contextFields.has(key)) return diagnosticContext(item)
+    if (key === 'configuration' || key === 'initialConfiguration') return diagnosticConfiguration(item)
+    return item
+  })
 }

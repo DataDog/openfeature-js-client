@@ -1,5 +1,6 @@
 import type {
   EvaluationContext,
+  Hook,
   JsonValue,
   Logger,
   Paradigm,
@@ -12,6 +13,7 @@ import {
   createDebugLogger,
   type DebugConfiguration,
   type DebugLogger,
+  evaluationDebug,
   getDebugLogger,
   registerDebugLogger,
 } from '../debug'
@@ -88,8 +90,17 @@ export class DatadogDevtools implements Provider {
     registerTransparentProvider(this.metadata, inner.metadata)
   }
 
-  get hooks() {
-    return this.inner.hooks
+  get hooks(): Hook[] | undefined {
+    if (!this.debug.enabled || getDebugLogger(this.inner.metadata).enabled) return this.inner.hooks
+    return [
+      ...(this.inner.hooks ?? []),
+      {
+        before: (context) =>
+          evaluationDebug(context.context, this.debug, 'before').event('evaluation.requested', () => ({ context })),
+        finally: (context, details) =>
+          evaluationDebug(context.context, this.debug).event('evaluation.returned', () => ({ context, details })),
+      },
+    ]
   }
 
   get events() {
@@ -131,7 +142,7 @@ export class DatadogDevtools implements Provider {
   ): ResolutionDetails<T> | null {
     const override = this.overrides[flagKey]
     if (!override || !expectedTypes.includes(override.type)) {
-      this.debug.event('override.decision', () => ({
+      evaluationDebug(context, this.debug).event('override.decision', () => ({
         flagKey,
         override,
         expectedTypes,
@@ -142,17 +153,27 @@ export class DatadogDevtools implements Provider {
     const actualType = override.value === null ? 'null' : typeof override.value
     if (override.value === null || actualType !== EXPECTED_JS_TYPES[override.type]) {
       const msg = `[DatadogDevtools] override for '${flagKey}' declares type ${override.type} but value is ${actualType} — override ignored`
-      this.debug.event('override.invalid', () => ({ flagKey, override, expectedTypes, error: msg }))
+      evaluationDebug(context, this.debug).event('override.invalid', () => ({
+        flagKey,
+        override,
+        expectedTypes,
+        error: msg,
+      }))
       console.warn(msg)
       throw new TypeMismatchError(msg)
     }
     if (override.type === 'INTEGER' && !Number.isInteger(override.value)) {
       const msg = `[DatadogDevtools] override for '${flagKey}' declares type INTEGER but value ${override.value} is not a whole number — override ignored`
-      this.debug.event('override.invalid', () => ({ flagKey, override, expectedTypes, error: msg }))
+      evaluationDebug(context, this.debug).event('override.invalid', () => ({
+        flagKey,
+        override,
+        expectedTypes,
+        error: msg,
+      }))
       console.warn(msg)
       throw new TypeMismatchError(msg)
     }
-    this.debug.event('evaluation.completed', () => ({
+    evaluationDebug(context, this.debug, 'resolve').event('evaluation.completed', () => ({
       flagKey,
       requestedContext: context,
       defaultValue,

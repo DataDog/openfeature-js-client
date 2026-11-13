@@ -111,6 +111,39 @@ describe('local flag debug logger', () => {
     expect(debugUrl('/path?dd-api-key=secret&dd_env=prod')).not.toContain('=secret')
   })
 
+  it('sanitizes nested transport credentials without changing ordinary flag/default/targeting values', () => {
+    const value = { dd_assignment_token: 'ordinary-value', nested: { 'dd-assignment-token': 'ordinary-header-name' } }
+    const debug = createDebugLogger(true)
+    debug.event('evaluation.completed', () => ({
+      defaultValue: value,
+      result: { value },
+      requestedContext: { targetingKey: 'user', dd_assignment_token: 'credential-secret', nested: value },
+    }))
+    const details = records(log).slice(-1)[0].details
+    expect(details.defaultValue).toEqual(value)
+    expect(details.result.value).toEqual(value)
+    expect(details.requestedContext.nested).toEqual(value)
+    expect(details.requestedContext).not.toHaveProperty('dd_assignment_token')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('credential-secret')
+    const proxy =
+      'https://proxy.test/intake?ddforward=' +
+      encodeURIComponent('/api/v2/exposures?dd-api-key=proxy-secret&ddsource=browser')
+    expect(decodeURIComponent(debugUrl(proxy))).not.toContain('proxy-secret')
+    expect(decodeURIComponent(debugUrl(proxy))).toContain('ddsource=browser')
+    expect(debugOptions({ replica: { clientToken: 'replica-secret', applicationId: 'app' } })).toEqual({
+      replica: { clientToken: { present: true }, applicationId: 'app' },
+    })
+  })
+
+  it('retains cyclic context identity while excluding its reserved credential', () => {
+    const context: Record<string, unknown> = { dd_assignment_token: 'secret', targetingKey: 'user' }
+    context.self = context
+    createDebugLogger(true).event('init.started', () => ({ context }))
+    const result = records(log).slice(-1)[0].details.context
+    expect(result.self).toEqual({ $type: 'circular' })
+    expect(JSON.stringify(result)).not.toContain('secret')
+  })
+
   it('isolates provider identities and preserves original logger calls', () => {
     const a = createDebugLogger(true)
     const b = createDebugLogger(true)

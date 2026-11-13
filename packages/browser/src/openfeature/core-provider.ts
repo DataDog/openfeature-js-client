@@ -20,6 +20,8 @@ import {
   configurationDebugFields,
   configurationSummaryFields,
   type DebugConfiguration,
+  debugOptions,
+  evaluationDebug,
   registerDebugLogger,
 } from '../debug'
 import { extractAssignmentToken } from '../domain/assignment-token'
@@ -82,13 +84,15 @@ export class DatadogCoreProvider extends DatadogProviderBase {
       mode: 'application_managed',
       automaticFetch: false,
       automaticTracking: false,
-      options,
+      options: debugOptions(options),
     }))
     this.experimentationOptOutMode = getExperimentationOptOutMode(options, this.debug)
     if (this.debug.enabled)
       this.hooks.push({
-        before: (context) => this.debug.event('evaluation.requested', () => ({ context })),
-        finally: (context, details) => this.debug.event('evaluation.returned', () => ({ context, details })),
+        before: (context) =>
+          evaluationDebug(context.context, this.debug, 'before').event('evaluation.requested', () => ({ context })),
+        finally: (context, details) =>
+          evaluationDebug(context.context, this.debug).event('evaluation.returned', () => ({ context, details })),
       })
     this.exposureCache = options.exposureCache
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
@@ -166,7 +170,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   onContextChange(_oldContext: EvaluationContext, newContext: EvaluationContext): void {
     newContext = extractAssignmentToken(newContext).context
     this.debug.event('context.accepted', () => ({
-      oldContext: extractAssignmentToken(_oldContext).context,
+      oldContext: _oldContext,
       newContext,
       assignmentContext: this.flagsConfiguration?.precomputed?.context,
     }))
