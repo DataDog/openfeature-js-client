@@ -353,7 +353,7 @@ function evaluateRules<T extends FlagValueType>(
     const createDependencySession = (maxDependencyDepth: number) =>
       new DependencyEvaluationSession(
         flagKey,
-        getMaxDependencyDepth(config, logger),
+        maxDependencyDepth,
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -377,7 +377,7 @@ function evaluateRules<T extends FlagValueType>(
         collectDependencyEvaluations
       )
     const resolveDependency = ((flagEvaluation: FlagEvaluation) => {
-      dependencySession ??= createDependencySession(maxDependencyDepth)
+      dependencySession ??= createDependencySession(getMaxDependencyDepth(config, logger))
       return dependencySession.resolveFlagEvaluation(flagEvaluation, 1)
     }) as ResolveFlagEvaluation
     resolveDependency.checkpoint = () => dependencySession?.checkpoint()
@@ -445,7 +445,7 @@ export function createProtobufDependencyResolver(
   const createDependencySession = (maxDependencyDepth: number) =>
     new DependencyEvaluationSession(
       flagKey,
-      getMaxDependencyDepth(config, logger),
+      maxDependencyDepth,
       observeFullEvaluationData,
       (key) => {
         const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
@@ -470,7 +470,7 @@ export function createProtobufDependencyResolver(
       collectDependencyEvaluations
     )
   const resolve = ((dependencyFlagKey: string) => {
-    dependencySession ??= createDependencySession(maxDependencyDepth)
+    dependencySession ??= createDependencySession(getMaxDependencyDepth(config, logger))
     return dependencySession.resolveFlagEvaluation(dependencyFlagKey, 1)
   }) as ResolveProtobufFlagEvaluation
   // Hook presence tells the protobuf evaluator to retain and replay dependency keys.

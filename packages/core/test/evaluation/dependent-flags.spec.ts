@@ -587,7 +587,7 @@ describe('dependent flag evaluation', () => {
     config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(255) })
 
     expect(evaluateProtobuf(roundTrip(config), logger).result).toMatchObject({ value: true, variant: 'on' })
-    expect(logger.warn).not.toHaveBeenCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
       defaultMaxDependencyDepth: 10,
     })
   })
@@ -613,11 +613,10 @@ describe('dependent flag evaluation', () => {
     expect(result).toMatchObject({ reason: 'ERROR', errorCode: 'GENERAL' })
     expect(dependencies).toEqual([])
     expect(exposures).toEqual([])
-    expect(logger.warn).toHaveBeenCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+    expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
       defaultMaxDependencyDepth: 10,
     })
   })
-
   it('accepts the protobuf maximum depth upper boundary', () => {
     const config = protobufDependentConfiguration(true)
     config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(255) })
@@ -1063,7 +1062,7 @@ describe('dependent flag evaluation', () => {
       value: false,
       reason: 'ERROR',
       errorCode: 'GENERAL',
-      errorMessage: 'maximum flag dependency depth exceeded',
+      errorMessage: 'prerequisite flag "node11" failed: maximum flag dependency depth exceeded',
     })
   })
 
@@ -1100,7 +1099,7 @@ describe('dependent flag evaluation', () => {
     expect(trace.details).toMatchObject({ reason: 'ERROR', errorCode: 'GENERAL' })
     expect(trace.dependencyEvaluations).toEqual([])
     expect(trace.dependencyExposures).toEqual([])
-    expect(logger.warn).toHaveBeenCalledWith('Invalid evaluatorParams.maxDependencyDepth; using default', {
+    expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
       defaultMaxDependencyDepth: 10,
     })
   })
