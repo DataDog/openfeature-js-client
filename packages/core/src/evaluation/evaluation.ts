@@ -856,14 +856,14 @@ function asFlagEvaluationResolver(resolveDependency: ResolveDependency): Resolve
 
 function getMaxDependencyDepth(
   config: UniversalFlagConfigurationV1 | ProtobufFlagsConfiguration,
-  logger: Pick<Logger, 'warn'>
+  logger: Pick<Logger, 'debug'>
 ): number {
   let configuredDepth: unknown
   try {
     const evaluatorParams: unknown = config.evaluatorParams
     if (evaluatorParams === undefined) return DEFAULT_MAX_DEPENDENCY_DEPTH
     if (typeof evaluatorParams !== 'object' || evaluatorParams === null || Array.isArray(evaluatorParams)) {
-      warnInvalidMaxDependencyDepth(logger)
+      debugInvalidMaxDependencyDepth(logger)
       return DEFAULT_MAX_DEPENDENCY_DEPTH
     }
     if (!Object.prototype.hasOwnProperty.call(evaluatorParams, 'maxDependencyDepth')) {
@@ -871,7 +871,7 @@ function getMaxDependencyDepth(
     }
     configuredDepth = Reflect.get(evaluatorParams, 'maxDependencyDepth')
   } catch {
-    warnInvalidMaxDependencyDepth(logger)
+    debugInvalidMaxDependencyDepth(logger)
     return DEFAULT_MAX_DEPENDENCY_DEPTH
   }
   if (configuredDepth === undefined) return DEFAULT_MAX_DEPENDENCY_DEPTH
@@ -885,13 +885,13 @@ function getMaxDependencyDepth(
     return numericDepth
   }
 
-  warnInvalidMaxDependencyDepth(logger)
+  debugInvalidMaxDependencyDepth(logger)
   return DEFAULT_MAX_DEPENDENCY_DEPTH
 }
 
-function warnInvalidMaxDependencyDepth(logger: Pick<Logger, 'warn'>): void {
+function debugInvalidMaxDependencyDepth(logger: Pick<Logger, 'debug'>): void {
   try {
-    logger.warn('Invalid evaluatorParams.maxDependencyDepth; using default', {
+    logger.debug('Invalid evaluatorParams.maxDependencyDepth; using default', {
       defaultMaxDependencyDepth: DEFAULT_MAX_DEPENDENCY_DEPTH,
     })
   } catch {
