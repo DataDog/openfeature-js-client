@@ -76,6 +76,147 @@ describe('precomputeConfiguration', () => {
     )
   }
 
+  describe('flagSelection', () => {
+    it.each([
+      ['checkout', 'checkout', true],
+      ['checkout-v2', 'checkout', false],
+      ['checkout-v2', 'checkout-*', true],
+      ['checkout', 'Checkout', false],
+      ['my-checkout', '*checkout', true],
+      ['my-checkout', 'checkout*', false],
+      ['my-checkout-v2', '*checkout*', true],
+      ['checkout-v2', '*checkout', false],
+      ['checkout', 'check*out', true],
+      ['checkout', 'check**out', true],
+      ['checkout', 'checkout*', true],
+      ['checkout', '*', true],
+      ['a', 'a*a', false],
+      ['ab', '*ab*b', false],
+      ['ab', '*a*b', true],
+      ['ab', 'a*a*b', false],
+      ['xbyaz', '*a*b*', false],
+      ['abxb', 'a*b*b', true],
+      ['a-b-c', 'a*-*c', true],
+      ['a\nb', 'a*b', true],
+      ['a\nb\n', 'a*b', false],
+      ['😀-checkout', '😀-*', true],
+      ['a.b[0]?(x)!+{y}^$|\\', 'a.b[0]?(x)!+{y}^$|\\', true],
+      ['axb', 'a.b', false],
+      ['ab', 'a?', false],
+    ])('matches key %j against whole-key glob %j: %s', (key, pattern, matches) => {
+      const result = roundTrip(
+        precomputeConfiguration(rules({ [key]: flag() }), context, { flagSelection: { keyPatterns: [pattern] } })
+      )
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(matches ? [key] : [])
+      expect(result.precomputed?.context).toEqual(context)
+    })
+
+    it('normalizes readonly patterns, combines them with OR, and reuses the source for different selections', () => {
+      const input = rules({ checkout: flag(), 'search-v2': flag(), other: flag() })
+      const before = configurationToString(input)
+      const flagSelection = Object.freeze({ keyPatterns: Object.freeze(['\u0085checkout\u3000', '*-v2', 'checkout']) })
+      const result = precomputeConfiguration(input, context, { flagSelection })
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['checkout', 'search-v2'])
+      const other = precomputeConfiguration(input, context, { flagSelection: { keyPatterns: ['other'] } })
+      expect(Object.keys(other.precomputed!.response.data.attributes.flags)).toEqual(['other'])
+      expect(configurationToString(input)).toBe(before)
+      expect(flagSelection.keyPatterns).toEqual(['\u0085checkout\u3000', '*-v2', 'checkout'])
+    })
+
+    it.each([undefined, null, {}, { keyPatterns: [] }, { keyPatterns: [' ', '\u0085'] }])(
+      'includes all assignments for an absent or empty selection: %j',
+      (flagSelection) => {
+        expect(precomputeConfiguration(rules(), context, { flagSelection } as PrecomputeConfigurationOptions)).toEqual(
+          precomputeConfiguration(rules(), context)
+        )
+      }
+    )
+
+    it('does not evaluate or report errors for unselected root flags', () => {
+      const onEvaluationError = jest.fn()
+      const input = rules({ good: flag(), bad: flag({ minimumFeatureLevel: 999 }) })
+      const result = precomputeConfiguration(input, context, {
+        flagSelection: { keyPatterns: ['good'] },
+        onEvaluationError,
+      })
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['good'])
+      expect(onEvaluationError).not.toHaveBeenCalled()
+    })
+
+    it.each([true, false])('evaluates unselected dependencies with parent value %s without emitting them', (value) => {
+      const input = dependentRules(flag({ variations: [{ keyStringIndex: value ? 0 : 1, booleanValue: value }] }))
+      const result = roundTrip(precomputeConfiguration(input, context, { flagSelection: { keyPatterns: ['child'] } }))
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['child'])
+      expect(result.precomputed!.response.data.attributes.flags.child.variationValue).toBe(value)
+      const direct = evaluate(input, 'boolean', 'child', false, context)
+      expect(evaluate(result, 'boolean', 'child', false, context)).toMatchObject({
+        value: direct.value,
+        variant: direct.variant,
+        reason: direct.reason,
+      })
+    })
+
+    it('reports selected root failures caused by unselected dependencies', () => {
+      const onEvaluationError = jest.fn()
+      const result = precomputeConfiguration(dependentRules(flag({ minimumFeatureLevel: 999 })), context, {
+        flagSelection: { keyPatterns: ['child'] },
+        onEvaluationError,
+      })
+      expect(result.precomputed!.response.data.attributes.flags).toEqual({})
+      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'PARSE_ERROR' }]])
+    })
+
+    it.each([
+      'checkout',
+      [],
+      { keyPatterns: 'checkout' },
+      { keyPatterns: [1] },
+      { keyPatterns: new Array(1) },
+      { keyPatterns: ['\uD800'] },
+      { keyPatterns: Array.from({ length: 32 }, (_, index) => `flag-${index}`) },
+      { keyPatterns: ['é'.repeat(101)] },
+      { tags: [] },
+      { tags: null },
+      { tags: ['checkout'], keyPatterns: ['checkout'] },
+    ])('rejects invalid or unsupported selections with invalid_options: %j', (flagSelection) => {
+      expect(() =>
+        precomputeConfiguration(rules(), context, { flagSelection } as PrecomputeConfigurationOptions)
+      ).toThrow(expect.objectContaining({ code: 'invalid_options', message: 'Invalid precomputation options' }))
+    })
+
+    it('keeps selection accessor failures out of diagnostics', () => {
+      const flagSelection = {
+        get keyPatterns(): string[] {
+          throw new Error('secret')
+        },
+      }
+      expect(() => precomputeConfiguration(rules(), context, { flagSelection })).toThrow(
+        expect.objectContaining({ code: 'invalid_options', message: 'Invalid precomputation options' })
+      )
+    })
+
+    it('accepts the canonical pattern limits after trimming and deduplication', () => {
+      const keyPatterns = Array.from({ length: 31 }, (_, index) => `flag-${index}`)
+      expect(() =>
+        precomputeConfiguration(rules(), context, {
+          flagSelection: { keyPatterns: [...keyPatterns, ` ${keyPatterns[0]} `, ''] },
+        })
+      ).not.toThrow()
+      const key = 'é'.repeat(100)
+      const result = precomputeConfiguration(rules({ [key]: flag() }), context, {
+        flagSelection: { keyPatterns: [` ${key} `] },
+      })
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual([key])
+    })
+
+    it('rejects tags in the public type and at runtime', () => {
+      expect(() => {
+        // @ts-expect-error Local rules do not carry tags; only keyPatterns are supported.
+        precomputeConfiguration(rules(), context, { flagSelection: { tags: ['checkout'] } })
+      }).toThrow(expect.objectContaining({ code: 'invalid_options' }))
+    })
+  })
+
   it.each([
     [true, false],
     [true, true],
