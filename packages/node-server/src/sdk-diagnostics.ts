@@ -41,7 +41,7 @@ export class SDKDiagnostics {
   private fetchFailed = false
   private lastErrorAt = -Infinity
 
-  constructor(private readonly onDiagnostic: (diagnostic: SDKDiagnostic) => void) {}
+  constructor(private readonly onDiagnostic: (diagnostic: SDKDiagnostic) => void | Promise<void>) {}
 
   start(hasConfiguration: boolean): void {
     if (this.closed || this.startedAt !== undefined) return
@@ -121,7 +121,7 @@ export class SDKDiagnostics {
   private emit(diagnostic: SDKDiagnostic): void {
     if (diagnostic.timestamp < MIN_TIMESTAMP_MS || diagnostic.timestamp > MAX_TIMESTAMP_MS) return
     try {
-      this.onDiagnostic(diagnostic)
+      this.onDiagnostic(diagnostic)?.catch(() => {})
     } catch {
       // Diagnostics must not affect initialization, polling, or evaluations.
     }

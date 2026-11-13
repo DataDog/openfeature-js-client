@@ -141,7 +141,8 @@ https://www.datadoghq.com/legal/eula
 
 Pass an optional `onDiagnostic` callback to receive initialization outcomes and configuration-fetch errors.
 The provider measures initialization duration and configuration arrival. It reports `ready`, `failed`, or
-`incomplete` when closed while waiting for configuration. Callback errors do not affect provider behavior.
+`incomplete` when closed while waiting for configuration. The callback can return a promise; delivery is never
+awaited. Synchronous errors and rejected callback promises do not affect provider behavior.
 Without a callback, diagnostic measurement is disabled.
 
 An integration that polls for configuration calls `reportConfigurationFetchStart()` once before each sequential

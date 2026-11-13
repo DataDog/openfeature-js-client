@@ -50,8 +50,8 @@ export interface DatadogNodeServerProviderOptions {
    * Log experiment exposures
    */
   exposureChannel: Channel<ExposureEvent>
-  /** Receives diagnostic observations. Omit to disable measurement; delivery belongs to the integration. */
-  onDiagnostic?: (diagnostic: SDKDiagnostic) => void
+  /** Receives diagnostic observations without awaiting delivery. Omit to disable measurement. */
+  onDiagnostic?: (diagnostic: SDKDiagnostic) => void | Promise<void>
   /**
    * Internal sidecar consumed by the integration's root evaluation hook.
    * @internal

@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks'
 import { type ExposureEvent, LRUInMemoryAssignmentCache } from '@datadog/flagging-core'
 import { InMemoryProvider, OpenFeature } from '@openfeature/server-sdk'
 import type { UniversalFlagConfigurationV1 } from '../src/configuration/ufc-v1'
-import { DatadogNodeServerProvider } from '../src/provider'
+import { DatadogNodeServerProvider, type DatadogNodeServerProviderOptions } from '../src/provider'
 import type { SDKDiagnostic } from '../src/sdk-diagnostics'
 
 jest.mock('node:perf_hooks', () => ({ performance: { now: jest.fn() } }))
@@ -35,7 +35,7 @@ describe('provider SDK diagnostics', () => {
     jest.useRealTimers()
   })
 
-  function create(onDiagnostic: ((diagnostic: SDKDiagnostic) => void) | undefined = (event) => observations.push(event)) {
+  function create(onDiagnostic: DatadogNodeServerProviderOptions['onDiagnostic'] = (event) => { observations.push(event) }) {
     return new DatadogNodeServerProvider({ exposureChannel: channel('test:sdk-diagnostics') as Channel<ExposureEvent>, onDiagnostic })
   }
 
@@ -177,16 +177,36 @@ describe('provider SDK diagnostics', () => {
     expect(observations).toHaveLength(1)
   })
 
-  it('contains callback errors during initialization, polling, and close', async () => {
-    provider = create(() => { throw new Error('callback failure') })
+  it.each(['synchronous', 'asynchronous'])('contains %s callback errors during initialization, polling, and close', async (kind) => {
+    const onDiagnostic = jest.fn(kind === 'synchronous'
+      ? () => { throw new Error('callback failure') }
+      : async () => { throw new Error('callback failure') })
+    provider = create(onDiagnostic)
     await ready()
     expect(failFetch).not.toThrow()
     await expect(provider.onClose()).resolves.toBeUndefined()
-    provider = create(() => { throw new Error('callback failure') })
+    provider = create(onDiagnostic)
     const pending = provider.initialize()
     provider.onClose()
     provider.setConfiguration(configuration)
     await pending
+    await advance(0)
+    expect(onDiagnostic).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not wait for diagnostic delivery during initialization or close', async () => {
+    let completeDelivery!: () => void
+    const delivery = new Promise<void>((resolve) => { completeDelivery = resolve })
+    const onDiagnostic = jest.fn(() => delivery)
+    provider = create(onDiagnostic)
+    try {
+      await ready()
+      failFetch()
+      await expect(provider.onClose()).resolves.toBeUndefined()
+      expect(onDiagnostic).toHaveBeenCalledTimes(2)
+    } finally {
+      completeDelivery()
+    }
   })
 
   it('does no measurement work without a callback', async () => {
