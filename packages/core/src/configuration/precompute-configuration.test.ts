@@ -144,13 +144,13 @@ describe('precomputeConfiguration', () => {
       expect(onEvaluationError).not.toHaveBeenCalled()
     })
 
-    it.each([true, false])('evaluates unselected dependencies with parent value %s without emitting them', (value) => {
+    it.each([true, false])('retains prerequisite assignments with parent value %s for client telemetry', (value) => {
       const input = dependentRules(flag({ variations: [{ keyStringIndex: value ? 0 : 1, booleanValue: value }] }))
       const result = roundTrip(precomputeConfiguration(input, context, { flagSelection: { keyPatterns: ['child'] } }))
-      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['child'])
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['child', 'parent'])
       expect(result.precomputed!.response.data.attributes.flags.child.variationValue).toBe(value)
       expect(result.precomputed!.response.data.attributes.flags.child.dependencyEvaluations).toEqual([
-        { flagKey: 'parent', isPresentInAssignment: false },
+        { flagKey: 'parent', isPresentInAssignment: value },
       ])
       const direct = evaluate(input, 'boolean', 'child', false, context)
       expect(evaluate(result, 'boolean', 'child', false, context)).toMatchObject({
@@ -167,7 +167,10 @@ describe('precomputeConfiguration', () => {
         onEvaluationError,
       })
       expect(result.precomputed!.response.data.attributes.flags).toEqual({})
-      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'GENERAL' }]])
+      expect(onEvaluationError.mock.calls).toEqual([
+        [{ flagKey: 'child', errorCode: 'GENERAL' }],
+        [{ flagKey: 'parent', errorCode: 'PARSE_ERROR' }],
+      ])
     })
 
     it.each([
