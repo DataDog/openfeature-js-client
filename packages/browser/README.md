@@ -18,7 +18,7 @@ import { OpenFeature } from '@openfeature/web-sdk'
 const provider = new DatadogProvider({
   applicationId: 'your-datadog-application-id',
   clientToken: 'your-datadog-client-token',
-  enableExposureLogging: true,
+  trackExposures: true,
   enableFlagEvaluationTracking: true,
   site: 'datadoghq.com',
 })
@@ -45,8 +45,8 @@ const provider = new DatadogProvider({
   version: '1.0.0', // Application version
   applicationId: 'app-id', // Your application ID for RUM attribution
 
-  // Enable exposure logging
-  enableExposureLogging: true,
+  // Enable exposure logging to Datadog (default: true)
+  trackExposures: true,
 
   // Enable flag evaluation tracking
   enableFlagEvaluationTracking: true,
@@ -102,6 +102,96 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Response signing
+
+Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
+Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
+Custom proxies must forward this header and permit it in CORS preflights.
+
+Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
+assignments, or `required` to admit only verified responses. Existing authentication,
+HTTP errors, JSON validation, and experimentation opt-out checks still apply.
+
+```typescript
+const provider = new DatadogProvider({
+  clientToken: '<client-token>',
+  env: 'production',
+  responseSigning: {
+    mode: 'observe',
+    trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
+  },
+})
+```
+
+`DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
+`trustedRootCertificates` accepts at most four standard padded base64 DER public
+root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
+approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
+anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
+if no trusted root is available, before any network request.
+Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
+them verified. Verification error messages contain no token, context, response, or certificate data.
+
+Required-mode verification failures use OpenFeature error code `GENERAL`.
+`PROVIDER_ERROR` events include the failure message, such as `Response signing: missing-proof`.
+When no usable verified configuration remains, evaluation details return the default value,
+reason `ERROR`, error code `GENERAL`, and the verification failure message.
+Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
+There is no separate verification callback.
+
+For Datadog staging, select `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
+the bundled **public staging root** automatically. Signing still defaults to off.
+The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
+A `flaggingProxy` override takes precedence over `site` for both requests and trust;
+unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
+(including when empty), for custom proxies and tests. Additional Datadog aliases
+and production site roots must be provisioned before they enter the catalog.
+
+A response carries its leaf and intermediate certificates, so rotating either under
+the unchanged trusted root requires no SDK update or prior rotation history. The
+SDK verifies the chain, exact request and response bytes, nonce, effective client
+token and semantic headers, and the original proof lifetime (at most five minutes).
+Signed requests require HTTPS and reject redirects. A custom fetch implementation
+must preserve the generated URL, body and headers and the exact returned bytes.
+Proxies must support the signing request headers and expose the proof headers in
+CORS. The `response-signing-v1` capability and signature version `1` are added only
+when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
+and draft v3 formats are not supported compatibility targets. This protocol number
+is independent of X.509 v3 certificate encoding.
+
+Verification requires an accurate device clock and uses the browser's `Date.now()`.
+Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
+Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+
+Required mode uses only verified memory for the same provider and full evaluation
+context. It does not read bootstrap or persistent configurations, never retries
+unsigned, and returns defaults after proof expiry or restart until a fresh verified
+response arrives. This includes expiry while offline, without another refresh.
+The first evaluation that detects expiry returns the default with reason `ERROR`,
+error code `GENERAL`, and an explicit proof-expiry message. The provider changes
+from `READY` or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event
+per expiry episode. Repeated evaluations do not repeat that event. A fresh verified
+response restores `READY` and emits `PROVIDER_READY` after expiry recovery.
+Expiry does not start a refresh. There is no expiry timer;
+an idle provider signals expiry when its next evaluation detects it. An update
+already in progress keeps its reconciliation status until that update completes.
+Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
+its persistent namespace binds the complete token, endpoint, environment, app ID,
+headers, mode, selection and nested context. Upgrading into observe causes a
+one-time cache cold start. Context snapshots preserve Date values, including nested
+dates. Signing context keys distinguish dates from strings and objects. The updated
+key encoding also causes a one-time cold start for existing observe-mode caches. An unsigned observation cannot overwrite the separately
+retained verified memory fallback. If WebCrypto is unavailable, observe retains
+ordinary network and in-memory availability but cannot use its scoped persistent
+cache. Required mode fails locally.
+
+Off mode preserves ordinary transport and caching and performs no signing work.
+Signing covers complete buffered JSON responses in the same assignment request;
+it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
+or change the existing unsigned streaming protocol.
+
 ### Flag selection
 
 Use `flagSelection` to load only the flags that match a set of tags or key patterns:
@@ -126,6 +216,22 @@ server (`too_many_values`), in which case the full config loads. When the server
 it are not loaded and evaluations return your default with `FLAG_NOT_FOUND`. Older servers or disabled selection gates
 may return the full configuration without a warning. Caller-supplied `initialFlagsConfiguration` is not filtered
 locally.
+
+Both standalone fetch helpers, `fetchPrecomputedConfiguration` and `fetchRulesConfiguration`, accept the same
+`flagSelection` option with the same matching rules, normalization, per-value limits, and fallback behavior.
+`fetchRulesConfiguration` sends selection in the URL, so it also drops a selection that would make the URL longer
+than 8,192 bytes. For example, to fetch precomputed assignments with selection:
+
+```javascript
+const configuration = await fetchPrecomputedConfiguration({
+  clientToken: 'pub_...',
+  env: 'production',
+  context: { targetingKey: 'user-123' },
+  flagSelection: { tags: ['team:checkout'], keyPatterns: ['checkout-*'] },
+})
+```
+
+Invalid selections are reported once per standalone fetch call; the provider reports them once at initialization.
 
 ## Usage Examples
 
@@ -164,6 +270,171 @@ const result = await client.getBooleanDetails('premium-feature', false)
 console.log(result.value) // Flag value
 console.log(result.reason) // Evaluation reason
 ```
+
+### Subject authorization for assignment downloads
+
+For environments configured to require subject authorization, obtain a JWT from your backend and include it in
+one complete OpenFeature context update:
+
+```javascript
+await OpenFeature.setContext({
+  targetingKey: 'user-123',
+  country: 'US',
+  dd_assignment_token: jwtFromYourBackend,
+})
+```
+
+Your backend signs a token for the requested subject and environment. Keep the signing private key on your backend.
+Your application obtains a replacement before expiration and submits it with the complete context using the same
+call. Changing only the token triggers a full assignment download. When the response's `createdAt` changes,
+exposure deduplication resets, so the next evaluation of each flag eligible for exposure logging can send another
+exposure. Avoid unnecessary token-only updates while continuing to replace tokens before expiration.
+Omitting `dd_assignment_token`, or setting it to `null` or an empty string, removes the credential;
+the SDK does not restore old tokens when switching users.
+
+The provider sends the token in the reserved `DD-Assignment-Token` header. The context is the only source of this
+header: a `customHeaders` entry with that name, in any letter case, is replaced when a token is supplied and removed
+when the context has no usable token. It excludes the reserved context field from Datadog targeting attributes, telemetry,
+and assignment-cache data, including in portable `DatadogCoreProvider` evaluations. OpenFeature and custom
+application hooks can still access the original context. Datadog's tracking hooks remove the token.
+Other providers sharing that context can also read or forward it. Scope token-bearing contexts to a Datadog-only
+OpenFeature domain rather than sharing them with other providers.
+Customer proxies must forward `DD-Assignment-Token`, allow it in CORS preflight responses, and include CORS headers
+on error responses. A blocked preflight prevents the assignment request. If the browser cannot read an authorization
+rejection, the SDK treats it as an ordinary network failure: it cannot log `ASSIGNMENT_AUTHORIZATION_FAILED`, and retry
+wrappers can retry the request. The subject boundary described below still applies to token-bearing requests,
+including when CORS prevents the request from reaching the endpoint.
+
+Authorization controls new downloads. A usable assignment token requires retained assignments to match the requested
+targeting key, starting when the context update is accepted. A switch to another targeting key serves application
+defaults while fetching and after failure. Token refreshes and ordinary attribute changes for the same targeting key
+can retain downloaded assignments; fallback reports `STALE` and keeps the original downloaded context for evaluation
+and telemetry. Existing experimentation opt-out checks can require stricter matching.
+
+An explicit authorization rejection also establishes this subject boundary when no token was sent. Without usable
+assignments, the provider reports `ERROR` with `GENERAL`. Removing the token, retrying, or closing/reusing the provider
+does not restore another subject's retained assignments. Returning to eligible assignments or a successful download can
+recover without recreating the provider. The diagnostic logger reports `ASSIGNMENT_AUTHORIZATION_FAILED` without
+the token; there is no custom refresh-required event.
+
+Ordinary no-token flows retain their previous behavior, including serving the last successful subject's assignments
+during a context switch or network failure, unless a subject boundary has already been established. Missing or unusable
+token values do not establish one themselves. The boundary ends when the provider accepts assignments, including
+from a `STALE` fallback. A later context change without a token, such as a logout, uses the ordinary behavior above.
+This release does not add a strict context-switching option.
+The server rejection contract is HTTP 401 with a JSON:API error whose `code` is `ASSIGNMENT_AUTHORIZATION_FAILED`.
+Other errors retain ordinary fetch-error handling; when a token was sent, server error bodies are replaced with
+the HTTP status in diagnostics to avoid reflecting credentials. Token-bearing transport and response-parsing
+failures use safe messages without retaining the original error object, stack, cause, or attached request metadata.
+Cancellation and timeout classifications are preserved. Server-provided flag-selection diagnostic text is also
+withheld from console and debug telemetry for these requests. This does not redact logging performed inside a
+customer-provided fetch implementation or other application code.
+
+The SDK forwards the token without parsing JWT claims or checking expiration against the device clock.
+The assignment endpoint validates signatures, expiration, and other claims, including malformed JWTs and missing
+or invalid `exp` values. Missing, `null`, or empty token values send no header. Other non-string values or strings
+containing whitespace or non-ASCII characters also omit the header and log a fixed diagnostic without the value.
+The assignment request still proceeds, and the endpoint decides whether authorization is required. An unusable
+replacement never reuses a previous token or a custom assignment header. The reserved field is excluded from
+targeting, telemetry, and assignment-cache data even when unusable. Token expiration does not itself clear downloaded assignments.
+
+### Exposures in your own data store
+
+Use `ExposureHook` to receive every completed evaluation with the same deduplication decision the SDK uses when
+sending exposures to Datadog, so you can record exposures in your own data store:
+
+```javascript
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(), // split features, e.g. holdout.key
+    })
+  })
+)
+```
+
+- `isExposure()` is true when the evaluation succeeded and selected an allocation that logs exposures, repeats
+  included.
+- `isCacheHit()` is true when this subject was already exposed to the same flag, allocation, variant and serial ID.
+- `shouldSend()` is true for a new or changed exposure: exactly what the SDK sends to Datadog.
+- `getFeatures()` returns the read-only `HOOK` features of the selected split, such as `holdout.key` and
+  `holdout.assignment_group`, when the flag is part of a holdout.
+
+The callback runs on the evaluation thread; hand the data to a background queue instead of doing I/O in the callback.
+An exception from the callback never affects the evaluation (the first failure logs a warning, later ones log at debug
+level).
+
+The SDK's exposure cache persists across page loads. A page reload that re-evaluates the same assignment is a cache
+hit, so `shouldSend()` stays false and Datadog does not log the exposure again.
+
+Set `trackExposures: false` to stop sending exposure events to Datadog only. The hook still receives every
+evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
+and superseded by `trackExposures`; when both are set, `trackExposures` wins.
+
+Exposures require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`.
+Composed providers such as OpenFeature's `MultiProvider` are not supported: their child hooks finish before the
+application's hooks can reject the result. Under a composed provider, the SDK sends no exposures to Datadog, does not
+update the exposure cache and does not call `ExposureHook` callbacks, and logs one warning. Flag evaluation is not
+affected.
+
+#### Rules-based mode and `DatadogCoreProvider`
+
+`DatadogProvider` wires this up automatically. In rules-based mode the application composes its own tracking
+hooks, so it must share the exposure controller's cache with the provider for the verdicts to be stamped:
+
+```javascript
+import {
+  composeDatadogTrackingHooks,
+  createDatadogExposureLoggingHook,
+  DatadogCoreProvider,
+} from '@datadog/openfeature-browser/rules-based'
+import { ExposureHook } from '@datadog/openfeature-browser'
+import { OpenFeature } from '@openfeature/web-sdk'
+
+// One exposure controller owns the one exposure cache; pass it to the provider.
+const exposureTracking = createDatadogExposureLoggingHook({
+  clientToken: 'client-token',
+  applicationId: 'application-id',
+  site: 'datadoghq.com',
+  trackExposures: false, // record-only: no exposures go to Datadog
+})
+const tracking = composeDatadogTrackingHooks(exposureTracking)
+await tracking.initialize()
+
+const provider = new DatadogCoreProvider({ exposureCache: tracking.exposureCache })
+provider.setConfiguration(rulesConfiguration)
+
+await OpenFeature.setProviderAndWait('datadog-core', provider, context)
+const client = OpenFeature.getClient('datadog-core')
+client.addHooks(...tracking.hooks)
+
+OpenFeature.addHooks(
+  new ExposureHook((evaluation) => {
+    if (!evaluation.shouldSend()) return
+    yourWarehouse.record({
+      flag: evaluation.flagKey,
+      variant: evaluation.variant,
+      allocation: evaluation.allocation,
+      targetingKey: evaluation.targetingKey,
+      features: evaluation.getFeatures(),
+    })
+  })
+)
+```
+
+The provider and the Datadog send path share that one cache, so `shouldSend()` and the SDK's own deduplication
+always agree. `DatadogCoreProvider.initialize()` waits for the shared cache to load, so evaluations after
+`setProviderAndWait` see persisted entries; still call `tracking.initialize()` before evaluating so the recording
+hooks are active. Without the `exposureCache` option, evaluations carry no exposure verdict and the tracking
+hooks behave exactly as before.
 
 ### Experimentation opt-out
 
@@ -235,7 +506,8 @@ Immediate responses acknowledge `experimentation_opt_out=true`. Future responses
 The provider rejects unsupported responses and cached assignments from a different subject, mode, or opt-out timestamp.
 With either enabled mode, `DatadogProvider` withholds assignments fetched for a different context, including for
 subjects without an opt-out timestamp. Until usable assignments arrive, evaluations return the application default
-with `PROVIDER_NOT_READY`, including after a failed refresh. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
+with `PROVIDER_NOT_READY`, including after an ordinary failed refresh. A subject-authorization rejection without
+usable assignments returns `GENERAL` instead. A malformed opt-out timestamp returns `INVALID_CONTEXT`.
 With `Disabled`, the previous assignments remain available during a context change.
 For portable configurations, the application remains responsible for fetching replacement assignments when the context changes.
 
@@ -364,6 +636,13 @@ if (context !== undefined) {
 }
 ```
 
+For protected environments, add a current `dd_assignment_token` to the context passed to
+`setProviderAndWait` above; without one, the initial refresh can be rejected even when cached
+assignments remain usable. `precomputeConfiguration()` excludes this reserved field before
+evaluating rules and creating a snapshot. `getPrecomputedContext(configuration)` returns a copy
+of the stored context; it does not sanitize snapshots from older or custom producers, which
+must also exclude the token.
+
 Rules-based configurations contain targeting rules that the SDK evaluates locally
 against the OpenFeature evaluation context, rather than assignments precomputed for one context.
 Applications that use them can opt into the full parser and its Protobuf-ES dependency
@@ -449,7 +728,11 @@ client.clearHooks()
 await tracking.shutdown()
 ```
 
-`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically.
+`composeDatadogTrackingHooks()` combines the supplied controllers' hooks and lifecycle methods. It does not initialize resources or register hooks with OpenFeature automatically. The composed result (and each exposure controller) exposes the one exposure cache as `exposureCache`; pass it to `DatadogCoreProvider`'s `exposureCache` option to stamp exposure deduplication verdicts in rules-based mode, as described in [Exposures in your own data store](#exposures-in-your-own-data-store).
+
+The exposure controller accepts the same `trackExposures` option as `DatadogProvider` (default `true`; the deprecated
+`enableExposureLogging` alias behaves identically). With `trackExposures: false` it runs record-only: nothing is
+sent to Datadog, but the shared cache keeps recording so `ExposureHook` verdicts stay correct.
 
 `tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
 
@@ -482,6 +765,30 @@ For rules-based configurations, `DatadogCoreProvider` also includes the rules co
 Both the standalone exposure hook and `DatadogProvider` scope persistent exposure caches by telemetry site, client token, proxy URL, environment, application, service, and source. Scope values are hashed into the storage namespace; raw tokens are not stored in cache keys. Recreating a hook with the same scope retains deduplication, while another destination can emit its own exposures. Existing localStorage and Chrome storage entries are not migrated or deleted, so upgrading can produce repeat exposures. Function-valued telemetry proxies use memory-only deduplication because their destination cannot be inferred reliably from the callback's identity.
 
 To exclude one of these integrations, omit that hook factory from both the import list and `composeDatadogTrackingHooks()` call.
+
+## SDK lifecycle telemetry
+
+`DatadogProvider` sends SDK initialization and configuration-fetch error diagnostics through the same
+`/api/v2/flagevaluation` JSONL transport as flag evaluations. No RUM initialization or flag evaluation is required.
+Diagnostics are independent of the evaluation, exposure, and RUM tracking options.
+
+An initialization report records `ready`, `failed`, `cached_fallback`, or `incomplete`, with elapsed timings.
+Pending initialization produces an incomplete observation on page exit or provider close, at most once.
+There is no initialization timeout observation. A resumed page can later report its settled result.
+After initialization settles, at most one configuration-fetch error is reported before the provider closes.
+Initializing a closed provider starts a new diagnostic lifecycle, including new timings and error limits.
+Each initialize-to-close lifecycle produces at most three diagnostic records. Transport batching can delay delivery, and page-exit delivery
+is best effort. No diagnostic events does not establish whether the SDK is healthy.
+
+Reports require `env` and either `applicationId` or `service`; `applicationId` takes precedence when both are provided.
+They contain SDK name/version, application or service identity, environment, timings, and bounded error codes.
+They do not contain flag values, evaluation context, targeting keys, client tokens, raw errors, or an instance identifier.
+Reports are separate observations and must not be correlated to a specific instance from their timestamps alone.
+Diagnostic queue failures do not change evaluation results.
+
+The wire schema fixture in `test/data/sdkdiagnostic-v1.json` matches the flageval worker's diagnostic contract.
+`yarn test:browser-install` tests the packaged SDK in Chromium, including mixed evaluation/diagnostic batches.
+For manual staging checks, run `yarn dev` in `test-app` after that command and open `/diagnostics.html`.
 
 ## End-user license agreement
 

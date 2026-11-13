@@ -26,6 +26,7 @@ const hash = 'sha256_b4698f9b6d186781fa8dc59e533578fa2d8379a46b1cf6db85cda6aa9c9
 async function capture(page: Page, initial: unknown, failFirst = false) {
   let consent = initial
   const events: Event[] = []
+  const diagnostics: unknown[] = []
   const requests: string[] = []
   const assignments: unknown[] = []
   const errors: string[] = []
@@ -36,13 +37,13 @@ async function capture(page: Page, initial: unknown, failFirst = false) {
     if (!new URL(request.url()).pathname.endsWith('/flagevaluation')) return
     const body = request.postData() || ''
     requests.push(body)
-    events.push(
-      ...body
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line))
-    )
+    // Main shares the intake batch with SDK diagnostics. Count only evaluation records,
+    // while retaining diagnostics and complete request bodies for independent assertions.
+    for (const line of body.trim().split('\n').filter(Boolean)) {
+      const record = JSON.parse(line)
+      if (record.type === 'sdk_diagnostic') diagnostics.push(record)
+      else events.push(record)
+    }
   })
   await page.context().route('**/*', (route) => {
     const request = route.request()
@@ -82,6 +83,7 @@ async function capture(page: Page, initial: unknown, failFirst = false) {
   })
   return {
     events,
+    diagnostics,
     requests,
     assignments,
     errors,
@@ -163,6 +165,7 @@ test('tracking disable wins even with full-data consent', async ({ page }) => {
   await page.evaluate(() => window.privacyTest.close())
   await page.waitForLoadState('networkidle')
   expect(captured.events).toEqual([])
+  expect(captured.diagnostics.length).toBeGreaterThan(0)
   expect(captured.errors).toEqual([])
 })
 
@@ -206,3 +209,42 @@ test('retries the same protected payload after consent refresh', async ({ page }
   expect(captured.errors).toEqual([])
   await page.evaluate(() => window.privacyTest.close())
 })
+
+for (const mode of ['online', 'precomputed', 'rules']) {
+  for (const lifecycle of ['hidden-visible', 'canceled-beforeunload']) {
+    test(`${mode}: periodic protected uploads resume after ${lifecycle}`, async ({ page }) => {
+      await page.clock.install()
+      const captured = await capture(page, false)
+      await ready(page, `mode=${mode}&interval=1000`)
+      await evaluate(page)
+      await page.evaluate((lifecycle) => {
+        if (lifecycle === 'hidden-visible') {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+          window.dispatchEvent(Object.assign(new Event('visibilitychange'), { __ddIsTrusted: true }))
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+          window.dispatchEvent(Object.assign(new Event('visibilitychange'), { __ddIsTrusted: true }))
+          Reflect.deleteProperty(document, 'visibilityState')
+        } else {
+          // Trusted-test notification exercises preparation while this page remains alive.
+          window.addEventListener('beforeunload', (event) => event.preventDefault(), { once: true })
+          window.dispatchEvent(Object.assign(new Event('beforeunload', { cancelable: true }), { __ddIsTrusted: true }))
+        }
+      }, lifecycle)
+      await expect.poll(() => captured.events.reduce((sum, event) => sum + event.evaluation_count, 0)).toBe(4)
+      const exitRequests = captured.requests.length
+
+      // Only ordinary aggregation and transport timers can deliver this second evaluation.
+      // Assert before closing: shutdown or another lifecycle event would mask a stopped interval.
+      await evaluate(page)
+      await page.clock.runFor(31_000)
+      await expect.poll(() => captured.events.reduce((sum, event) => sum + event.evaluation_count, 0)).toBe(8)
+      expect(captured.requests.length).toBeGreaterThan(exitRequests)
+      expect(
+        captured.events.every((event) => event.targeting_key === hash && event.context?.evaluation === undefined)
+      ).toBe(true)
+      expect(JSON.stringify(captured.events)).not.toContain('canary')
+      expect(captured.errors).toEqual([])
+      await page.evaluate(() => window.privacyTest.close())
+    })
+  }
+}

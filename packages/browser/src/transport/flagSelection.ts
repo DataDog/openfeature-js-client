@@ -24,9 +24,11 @@ export function reportDroppedFlagSelection(reason: FlagSelectionError, limit = L
   addTelemetryDebug('Flag selection dropped', { reason })
 }
 
-export function reportIgnoredFlagSelection(response: Response) {
-  const reason = response.headers?.get(FLAG_SELECTION_IGNORED_HEADER)
-  if (!reason) return
+export function reportIgnoredFlagSelection(response: Response, redactReason = false) {
+  const serverReason = response.headers?.get(FLAG_SELECTION_IGNORED_HEADER)
+  if (!serverReason) return
+  // A proxy can reflect request headers in this diagnostic header too.
+  const reason = redactReason ? 'redacted' : serverReason
   display.error(`flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`)
   addTelemetryDebug('Flag selection ignored', { reason })
 }

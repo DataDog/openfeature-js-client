@@ -1,3 +1,5 @@
+import type { ErrorCode } from '@openfeature/core'
+
 export class TargetingKeyMissingError extends Error {
   constructor() {
     super('Targeting key is required for split evaluation')
@@ -16,5 +18,20 @@ export class InvalidContextError extends Error {
   constructor() {
     super('Evaluation context is missing a required partition attribute')
     this.name = 'InvalidContextError'
+  }
+}
+
+export class DependencyGraphError extends Error {
+  readonly rootErrorCode = 'GENERAL' as ErrorCode
+  readonly rootErrorMessage: string
+
+  constructor(
+    readonly flagKey: string,
+    readonly errorCode: ErrorCode,
+    message: string
+  ) {
+    super(message)
+    this.rootErrorMessage = `prerequisite flag "${flagKey}" failed: ${message}`
+    this.name = 'DependencyGraphError'
   }
 }

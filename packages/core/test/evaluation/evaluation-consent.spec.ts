@@ -1,5 +1,10 @@
 import type { EvaluationContext, Logger } from '@openfeature/core'
-import { evaluateRulesBasedConfiguration, type UniversalFlagConfigurationV1 } from '../../src/evaluation'
+import {
+  evaluateRulesBasedConfiguration,
+  evaluateRulesBasedConfigurationWithTrace,
+  type UniversalFlagConfigurationV1,
+} from '../../src/evaluation'
+import { OperatorType } from '../../src/evaluation/rules'
 
 const logger: Logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 const context = { targetingKey: 'subject' }
@@ -157,5 +162,51 @@ describe('evaluation-time privacy consent', () => {
     const result = evaluateRulesBasedConfiguration(config, 'boolean', 'flag', false, context, mutatingLogger)
     expect(result.flagMetadata?.[metadataKey]).toBe(true)
     expect(evaluate(config).flagMetadata?.[metadataKey]).toBe(false)
+  })
+
+  it('uses the evaluation-start consent snapshot for lazily created dependency sessions', () => {
+    const config = configuration(true)
+    const prerequisite = config.flags.flag
+    const root = {
+      key: 'root',
+      enabled: true,
+      variationType: 'BOOLEAN' as const,
+      variations: { on: { key: 'on', value: true } },
+      allocations: [
+        {
+          key: 'targeted',
+          doLog: true,
+          rules: [
+            {
+              conditions: [
+                {
+                  flagEvaluation: { key: 'prerequisite' },
+                  operator: OperatorType.ONE_OF,
+                  value: ['on'],
+                },
+              ],
+            },
+          ],
+          splits: [{ variationKey: 'on', shards: [] }],
+        },
+      ],
+    }
+    config.flags = { prerequisite }
+    // The root is read before its first dependency condition creates the lazy session.
+    Object.defineProperty(config.flags, 'root', {
+      enumerable: true,
+      get() {
+        config.observeFullEvaluationData = false
+        return root
+      },
+    })
+    const trace = evaluateRulesBasedConfigurationWithTrace(config, 'boolean', 'root', false, context, logger)
+
+    const result = trace.details
+    expect(result).toMatchObject({ value: true, variant: 'on' })
+    expect(result.flagMetadata?.[metadataKey]).toBe(true)
+    expect(trace.dependencyEvaluations).toHaveLength(1)
+    expect(trace.dependencyEvaluations[0].details.flagMetadata?.[metadataKey]).toBe(true)
+    expect(config.observeFullEvaluationData).toBe(false)
   })
 })

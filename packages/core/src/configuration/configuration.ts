@@ -51,6 +51,8 @@ export type PrecomputedConfigurationResponse = {
     attributes: {
       /** When configuration was generated. */
       createdAt: string
+      format?: 'PRECOMPUTED'
+      environment?: { name: string }
       /** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
       observeFullEvaluationData?: boolean
       /** Effective server evaluation options, retained in portable and persisted configurations. */
@@ -77,6 +79,8 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
+  /** Split features of the selected assignment; parsed leniently at evaluation time. */
+  features?: unknown
 }
 
 /** @internal */
@@ -94,6 +98,11 @@ export type PrecomputedFlagMetadata = {
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
   __dd_observe_full_evaluation_data?: boolean
+  // Stamped by the provider after a successful evaluation of an allocation that
+  // logs exposures: true when this subject's exposure was already recorded.
+  __dd_exposure_cache_hit?: boolean
+  // Present only when the selected split routes a feature to EVALUATION.
+  __dd_has_evaluation_features?: boolean
 }
 
 /**

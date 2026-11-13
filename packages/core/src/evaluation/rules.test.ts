@@ -1,5 +1,5 @@
 import type { EvaluationContext } from '@openfeature/core'
-import { matchesRule, OperatorType, type Rule } from './rules'
+import { isValidRule, matchesRule, OperatorType, type Rule } from './rules'
 
 describe('condition attribute coercion', () => {
   it.each([
@@ -37,5 +37,54 @@ describe('condition attribute coercion', () => {
     } as Rule
 
     expect(matchesRule(rule, { value } as EvaluationContext)).toBe(expected)
+  })
+})
+
+describe('dependent condition validation', () => {
+  it('accepts key-only variant membership', () => {
+    expect(
+      isValidRule({
+        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.ONE_OF, value: ['on'] }],
+      })
+    ).toBe(true)
+  })
+
+  it.each([
+    { key: 'prerequisite', unexpected: true },
+    { key: 'prerequisite', property: 'variant' },
+  ])('accepts unknown fields in a flag-evaluation reference: %j', (flagEvaluation) => {
+    expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(true)
+  })
+
+  it.each([null, 'prerequisite', [], {}, { key: '' }, { key: 123 }, { property: 'variant' }])(
+    'rejects a malformed flag-evaluation reference: %j',
+    (flagEvaluation) => {
+      expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(
+        false
+      )
+    }
+  )
+
+  it('rejects a condition with both an attribute and a flag-evaluation reference', () => {
+    expect(
+      isValidRule({
+        conditions: [
+          {
+            attribute: 'id',
+            flagEvaluation: { key: 'prerequisite', property: 'variant' },
+            operator: OperatorType.ONE_OF,
+            value: ['on'],
+          },
+        ],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects a regex operator for flag evaluation', () => {
+    expect(
+      isValidRule({
+        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
+      })
+    ).toBe(false)
   })
 })

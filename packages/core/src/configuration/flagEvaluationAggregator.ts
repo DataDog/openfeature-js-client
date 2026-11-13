@@ -1,4 +1,16 @@
-import type { EvaluationContext, EvaluationContextValue, EvaluationDetails, FlagValue } from '@openfeature/core'
+import type {
+  EvaluationContext,
+  EvaluationContextValue,
+  EvaluationDetails,
+  FlagMetadata,
+  FlagValue,
+} from '@openfeature/core'
+import {
+  type FeatureValue,
+  featuresWithPrefix,
+  HAS_EVALUATION_FEATURES_METADATA_KEY,
+  METADATA_EVALUATION_FEATURE_PREFIX,
+} from '../evaluation/split-features'
 import { getMD5Hash } from '../obfuscation'
 import { type TimeStamp, timeStampNow } from '../time'
 import { captureEvaluationContext, sanitizeEvaluationError } from './evaluation-privacy'
@@ -14,6 +26,7 @@ interface FlagEvaluationAggregationData {
   targetingRuleKey?: string
   targetingKey?: string
   targetingContext?: Record<string, EvaluationContextValue>
+  features?: Record<string, FeatureValue>
   count: number
   firstEvaluation: TimeStamp
   lastEvaluation: TimeStamp
@@ -58,6 +71,7 @@ export class FlagEvaluationAggregator {
       allocationKey: details.flagMetadata?.allocationKey as string | undefined,
       targetingRuleKey: details.flagMetadata?.targetingRuleKey as string | undefined,
       ...capturedContext,
+      features: canonicalEvaluationFeatures(details.flagMetadata),
       error: sanitizedError,
     }
     // Consent keeps protected and full-data evaluations in separate buckets even
@@ -92,6 +106,23 @@ export class FlagEvaluationAggregator {
     this.aggregatedData.clear()
     this.onFlush(events)
   }
+}
+
+function readEvaluationFeatures(metadata: FlagMetadata | undefined): Record<string, FeatureValue> | undefined {
+  if (metadata?.[HAS_EVALUATION_FEATURES_METADATA_KEY] !== true) return undefined
+  return featuresWithPrefix(metadata, METADATA_EVALUATION_FEATURE_PREFIX)
+}
+
+function canonicalEvaluationFeatures(metadata: FlagMetadata | undefined): Record<string, FeatureValue> | undefined {
+  const features = readEvaluationFeatures(metadata)
+  if (features === undefined) return undefined
+  // Null prototype: a feature literally named `__proto__` must not hit the
+  // inherited setter on an ordinary object.
+  const canonical: Record<string, FeatureValue> = Object.create(null)
+  for (const key of Object.keys(features).sort()) {
+    canonical[key] = features[key]
+  }
+  return canonical
 }
 
 function getEvaluationTimestamp<T extends FlagValue>(details: EvaluationDetails<T>): TimeStamp {

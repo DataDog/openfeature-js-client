@@ -85,6 +85,20 @@ describe('DatadogCoreProvider', () => {
     })
   })
 
+  it('excludes the reserved assignment token from local targeting rules', async () => {
+    const configuration = configurationFromString(JSON.stringify(rulesWire))
+    const response = configuration.rules!.response
+    response.strings[response.strings.indexOf('country')] = 'dd_assignment_token'
+    const provider = providerWithConfiguration(configuration)
+    const context = Object.freeze({ targetingKey: 'user-1', dd_assignment_token: 'US' })
+    await provider.initialize(context)
+    expect(provider.resolveBooleanEvaluation('test-flag', false, context, logger)).toMatchObject({
+      reason: 'SPLIT',
+      flagMetadata: { allocationKey: 'fallback' },
+    })
+    expect(context.dd_assignment_token).toBe('US')
+  })
+
   it('stays ready and evaluates valid rules when the precomputed branch is invalid', async () => {
     const provider = providerWithConfiguration({
       precomputedError: 'Malformed precomputed data',

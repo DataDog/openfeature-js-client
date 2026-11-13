@@ -458,6 +458,14 @@ type NotOneOfCondition = {
 	attribute: string;
 	value: string[];
 };
+type FlagEvaluation = {
+	key: string;
+};
+type FlagEvaluationCondition = {
+	operator: OperatorType.ONE_OF | OperatorType.NOT_ONE_OF;
+	flagEvaluation: FlagEvaluation;
+	value: string[];
+};
 type NumericCondition = {
 	operator: NumericOperator;
 	attribute: string;
@@ -473,7 +481,7 @@ type SemVerCondition = {
 	attribute: string;
 	value: string;
 };
-type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | NumericCondition | NullCondition | SemVerCondition;
+type Condition = MatchesCondition | NotMatchesCondition | OneOfCondition | NotOneOfCondition | FlagEvaluationCondition | NumericCondition | NullCondition | SemVerCondition;
 interface Rule {
 	conditions: Condition[];
 }
@@ -496,6 +504,7 @@ interface Split {
 	shards: Shard[];
 	extraLogging?: Record<string, string>;
 	serialId?: number;
+	features?: unknown;
 }
 interface Allocation {
 	key: string;
@@ -518,6 +527,9 @@ export interface UniversalFlagConfigurationV1 {
 	createdAt: string;
 	format: string;
 	observeFullEvaluationData?: boolean;
+	evaluatorParams?: {
+		maxDependencyDepth?: number;
+	};
 	environment: {
 		name: string;
 	};
@@ -534,6 +546,7 @@ interface ExposureEvent {
 		key: string;
 	};
 	serial_id?: number;
+	features?: Record<string, string | number | boolean>;
 	subject: {
 		id: string;
 		attributes: EvaluationContext;
@@ -547,6 +560,16 @@ interface ExposureEvent {
 			url?: string;
 		};
 	};
+}
+type DependencyEvaluation = {
+	flagKey: string;
+	details: Omit<ResolutionDetails<FlagValue>, "value"> & {
+		value?: FlagValue;
+	};
+};
+export declare enum ExperimentationOptOutMode {
+	Disabled = "disabled",
+	Immediate = "immediate"
 }
 type Hook<TData = Record<string, unknown>> = BaseHook<FlagValue, TData, Promise<EvaluationContext | void> | EvaluationContext | void, Promise<void> | void>;
 interface Provider extends CommonProvider<ServerProviderStatus> {
@@ -580,11 +603,46 @@ export interface DatadogNodeServerProviderOptions {
 	 */
 	exposureChannel: Channel<ExposureEvent>;
 	/**
+	 * Internal sidecar consumed by the integration's root evaluation hook.
+	 * @internal
+	 */
+	dependencyTelemetrySidecar?: DependencyTelemetrySidecar;
+	/**
 	 * Timeout in milliseconds for provider initialization.
 	 * If the configuration is not set within this time, initialization will fail.
 	 * @default DEFAULT_INITIALIZATION_TIMEOUT_MS (30000ms / 30 seconds)
 	 */
 	initializationTimeoutMs?: number;
+	/** Experiment exclusion policy. Defaults to Disabled; environment configuration belongs to the caller. */
+	experimentationOptOutMode?: ExperimentationOptOutMode;
+}
+type PreparedDependencyExposure = {
+	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
+		value?: FlagValue;
+	};
+	event: ExposureEvent;
+};
+type PreparedDependencyTelemetry = {
+	dependencyEvaluations: readonly DependencyEvaluation[];
+	dependencyExposures: readonly PreparedDependencyExposure[];
+};
+/**
+ * Associates a completed dependency trace with the root result's metadata and evaluation context.
+ * Evaluation and exposure hooks consume their respective batches from the same root lifecycle.
+ * @internal
+ */
+export declare class DependencyTelemetrySidecar {
+	readonly collectDependencyEvaluations: boolean;
+	private readonly batchesByMetadata;
+	private readonly batchesByContext;
+	private readonly evaluationAliases;
+	constructor(collectDependencyEvaluations?: boolean);
+	stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void;
+	associateDependencyEvaluations(alias: object, metadata: object | undefined): void;
+	takeDependencyEvaluations(metadata: object | undefined, alias?: object, context?: object): readonly DependencyEvaluation[];
+	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
+	discardDependencyExposures(metadata: object | undefined): void;
+	private deleteBatch;
 }
 export declare class DatadogNodeServerProvider implements Provider {
 	private readonly options;
@@ -594,16 +652,18 @@ export declare class DatadogNodeServerProvider implements Provider {
 	private initController?;
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
 	private readonly exposureCache;
+	private readonly dependencyTelemetrySidecar;
 	private configuration?;
+	private readonly experimentationOptOutMode;
 	constructor(options: DatadogNodeServerProviderOptions);
 	/**
 	 * Used by dd-source-js
 	 */
 	getConfiguration(): UniversalFlagConfigurationV1 | undefined;
 	/**
-	 * Used by dd-source-js
+	 * Used by dd-source-js. Pass null or undefined to withdraw the configuration.
 	 */
-	setConfiguration(configuration: UniversalFlagConfigurationV1): void;
+	setConfiguration(configuration: UniversalFlagConfigurationV1 | null | undefined): void;
 	/**
 	 * Used by dd-source-js
 	 */
@@ -622,7 +682,10 @@ export declare class DatadogNodeServerProvider implements Provider {
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<T>>;
+	private stageDependencyTelemetry;
+	/** Prepares a verdict finalized by the provider hook after successful evaluation. */
 	private handleExposure;
+	private prepareExposure;
 }
 
 export {};
