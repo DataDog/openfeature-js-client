@@ -326,8 +326,6 @@ function evaluateRules<T extends FlagValueType>(
     return dependencies.complete(details)
   }
 
-  const maxDependencyDepth = getMaxDependencyDepth(config, logger)
-
   const { targetingKey: subjectKey, ...remainingContext } = context
 
   // Include the subjectKey as an "id" attribute for rule matching only when present
@@ -355,7 +353,7 @@ function evaluateRules<T extends FlagValueType>(
     const createDependencySession = (maxDependencyDepth: number) =>
       new DependencyEvaluationSession(
         flagKey,
-        maxDependencyDepth,
+        getMaxDependencyDepth(config, logger),
         observeFullEvaluationData,
         (key) => {
           if (!Object.prototype.hasOwnProperty.call(config.flags, key)) return undefined
@@ -443,12 +441,11 @@ export function createProtobufDependencyResolver(
   collectDependencyExposures = false,
   collectDependencyEvaluations = false
 ) {
-  const maxDependencyDepth = getMaxDependencyDepth(config, logger)
   let dependencySession: DependencyEvaluationSession | undefined
   const createDependencySession = (maxDependencyDepth: number) =>
     new DependencyEvaluationSession(
       flagKey,
-      maxDependencyDepth,
+      getMaxDependencyDepth(config, logger),
       observeFullEvaluationData,
       (key) => {
         const flag = Object.prototype.hasOwnProperty.call(config.flags, key) ? config.flags[key] : undefined
