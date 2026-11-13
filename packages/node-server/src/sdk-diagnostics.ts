@@ -72,7 +72,11 @@ export class SDKDiagnostics {
     }
     if (outcome === 'ready') {
       initialization.milestones.provider_ready = { elapsed_ms: duration }
-      this.emit({ timestamp, event_type: 'sdk_initialization', initialization: { ...initialization, outcome, final: true } })
+      this.emit({
+        timestamp,
+        event_type: 'sdk_initialization',
+        initialization: { ...initialization, outcome, final: true },
+      })
     } else if (outcome === 'failed') {
       this.emit({
         timestamp,

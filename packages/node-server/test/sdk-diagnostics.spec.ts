@@ -24,7 +24,10 @@ describe('provider SDK diagnostics', () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: NOW })
     monotonic = 0
-    jest.mocked(performance.now).mockReset().mockImplementation(() => monotonic)
+    jest
+      .mocked(performance.now)
+      .mockReset()
+      .mockImplementation(() => monotonic)
     observations = []
     provider = create()
   })
@@ -35,8 +38,15 @@ describe('provider SDK diagnostics', () => {
     jest.useRealTimers()
   })
 
-  function create(onDiagnostic: DatadogNodeServerProviderOptions['onDiagnostic'] = (event) => { observations.push(event) }) {
-    return new DatadogNodeServerProvider({ exposureChannel: channel('test:sdk-diagnostics') as Channel<ExposureEvent>, onDiagnostic })
+  function create(
+    onDiagnostic: DatadogNodeServerProviderOptions['onDiagnostic'] = (event) => {
+      observations.push(event)
+    }
+  ) {
+    return new DatadogNodeServerProvider({
+      exposureChannel: channel('test:sdk-diagnostics') as Channel<ExposureEvent>,
+      onDiagnostic,
+    })
   }
 
   async function advance(ms: number) {
@@ -59,14 +69,19 @@ describe('provider SDK diagnostics', () => {
     await advance(20)
     provider.setConfiguration(configuration)
     await pending
-    expect(observations).toEqual([{
-      timestamp: NOW + 20,
-      event_type: 'sdk_initialization',
-      initialization: {
-        outcome: 'ready', started_at_ms: NOW, duration_ms: 20, final: true,
-        milestones: { configuration_received: { elapsed_ms: 20 }, provider_ready: { elapsed_ms: 20 } },
+    expect(observations).toEqual([
+      {
+        timestamp: NOW + 20,
+        event_type: 'sdk_initialization',
+        initialization: {
+          outcome: 'ready',
+          started_at_ms: NOW,
+          duration_ms: 20,
+          final: true,
+          milestones: { configuration_received: { elapsed_ms: 20 }, provider_ready: { elapsed_ms: 20 } },
+        },
       },
-    }])
+    ])
   })
 
   for (const outcome of ['preloaded', 'ready', 'failed', 'rules removed', 'cache failed'] as const) {
@@ -108,14 +123,20 @@ describe('provider SDK diagnostics', () => {
     provider.setConfiguration(configuration)
     await pending
     failFetch()
-    expect(observations).toEqual([{
-      timestamp: NOW + 25,
-      event_type: 'sdk_initialization',
-      initialization: {
-        outcome: 'incomplete', reason: 'provider_closed', started_at_ms: NOW,
-        duration_ms: 25, final: false, milestones: {},
+    expect(observations).toEqual([
+      {
+        timestamp: NOW + 25,
+        event_type: 'sdk_initialization',
+        initialization: {
+          outcome: 'incomplete',
+          reason: 'provider_closed',
+          started_at_ms: NOW,
+          duration_ms: 25,
+          final: false,
+          milestones: {},
+        },
       },
-    }])
+    ])
   })
 
   it('does not observe construction or close before initialization', () => {
@@ -129,10 +150,14 @@ describe('provider SDK diagnostics', () => {
     const rejected = expect(provider.initialize()).rejects.toBe(error)
     provider.setError(error)
     await rejected
-    expect(observations).toEqual([{
-      timestamp: NOW, event_type: 'sdk_initialization', error_code: 'INIT_FAILED',
-      initialization: { outcome: 'failed', started_at_ms: NOW, duration_ms: 0, final: true, milestones: {} },
-    }])
+    expect(observations).toEqual([
+      {
+        timestamp: NOW,
+        event_type: 'sdk_initialization',
+        error_code: 'INIT_FAILED',
+        initialization: { outcome: 'failed', started_at_ms: NOW, duration_ms: 0, final: true, milestones: {} },
+      },
+    ])
   })
 
   for (const outcome of ['ready', 'timeout'] as const) {
@@ -177,26 +202,37 @@ describe('provider SDK diagnostics', () => {
     expect(observations).toHaveLength(1)
   })
 
-  it.each(['synchronous', 'asynchronous'])('contains %s callback errors during initialization, polling, and close', async (kind) => {
-    const onDiagnostic = jest.fn(kind === 'synchronous'
-      ? () => { throw new Error('callback failure') }
-      : async () => { throw new Error('callback failure') })
-    provider = create(onDiagnostic)
-    await ready()
-    expect(failFetch).not.toThrow()
-    await expect(provider.onClose()).resolves.toBeUndefined()
-    provider = create(onDiagnostic)
-    const pending = provider.initialize()
-    provider.onClose()
-    provider.setConfiguration(configuration)
-    await pending
-    await advance(0)
-    expect(onDiagnostic).toHaveBeenCalledTimes(3)
-  })
+  it.each(['synchronous', 'asynchronous'])(
+    'contains %s callback errors during initialization, polling, and close',
+    async (kind) => {
+      const onDiagnostic = jest.fn(
+        kind === 'synchronous'
+          ? () => {
+              throw new Error('callback failure')
+            }
+          : async () => {
+              throw new Error('callback failure')
+            }
+      )
+      provider = create(onDiagnostic)
+      await ready()
+      expect(failFetch).not.toThrow()
+      await expect(provider.onClose()).resolves.toBeUndefined()
+      provider = create(onDiagnostic)
+      const pending = provider.initialize()
+      provider.onClose()
+      provider.setConfiguration(configuration)
+      await pending
+      await advance(0)
+      expect(onDiagnostic).toHaveBeenCalledTimes(3)
+    }
+  )
 
   it('does not wait for diagnostic delivery during initialization or close', async () => {
     let completeDelivery!: () => void
-    const delivery = new Promise<void>((resolve) => { completeDelivery = resolve })
+    const delivery = new Promise<void>((resolve) => {
+      completeDelivery = resolve
+    })
     const onDiagnostic = jest.fn(() => delivery)
     provider = create(onDiagnostic)
     try {
@@ -210,7 +246,9 @@ describe('provider SDK diagnostics', () => {
   })
 
   it('does no measurement work without a callback', async () => {
-    provider = new DatadogNodeServerProvider({ exposureChannel: channel('test:sdk-diagnostics-disabled') as Channel<ExposureEvent> })
+    provider = new DatadogNodeServerProvider({
+      exposureChannel: channel('test:sdk-diagnostics-disabled') as Channel<ExposureEvent>,
+    })
     await ready()
     failFetch()
     await provider.onClose()
