@@ -1018,7 +1018,10 @@ type PrecomputedConfigurationResponse = {
 			obfuscated?: boolean;
 			/** Required when obfuscated is true; retained with the map in caches. */
 			obfuscation?: FlagKeyObfuscation;
+			/** Complete successful assignments only. */
 			flags: Record<string, PrecomputedFlag>;
+			/** Terminal per-flag evaluation failures for dependent-flags-capable clients. */
+			flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>;
 		};
 	};
 };
@@ -1030,8 +1033,26 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
 	/** Split features of the selected assignment; parsed leniently at evaluation time. */
 	features?: unknown;
+};
+type PrecomputedErrorFlag = {
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
+};
+type PrecomputedDependencyEvaluation = {
+	flagKey: string;
+	/** Whether this dependency belongs to the root flag's selected assignment path. */
+	isPresentInAssignment: boolean;
+} | {
+	flagKey: string;
+	/** Root-relative prerequisite failure; error entries never belong to an assignment. */
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
 };
 export interface FlagSelection {
 	tags?: readonly string[];
@@ -1061,15 +1082,18 @@ export type PrecomputeConfigurationOptions = {
 	};
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
+	/** Encode top-level keys and encrypt root-relative prerequisite keys using this descriptor. */
+	obfuscation?: FlagKeyObfuscation;
 	/**
-	 * Called for each omitted evaluation error, after all flags have been evaluated.
+	 * Called for each retained evaluation error, after all flags have been evaluated.
 	 * Contains no context, values, or raw error messages. Exceptions from this callback propagate.
 	 */
 	onEvaluationError?: (error: PrecomputeEvaluationError) => void;
 };
 /**
  * Locally resolve rules for one context, without defaults, tracking, or network calls.
- * Returns a context-bound, precomputed-only snapshot. Failed and unassigned flags are omitted.
+ * Returns a context-bound, precomputed-only snapshot. Failures are separated from successful assignments;
+ * no-assignment flags remain absent.
  * Recompute when the context or rules change; client-directed output requires client-safe source rules.
  */
 export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions): FlagsConfiguration$1;

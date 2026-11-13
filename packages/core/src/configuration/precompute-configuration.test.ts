@@ -5,7 +5,7 @@ import { evaluate } from '../evaluation/evaluation'
 import * as clock from '../time'
 import type { FlagsConfiguration } from './configuration'
 import { createExposureEvent } from './exposureEvent'
-import { FlagsConfigurationSchema } from './generated/ufc_pb'
+import { FlagsConfigurationSchema, VariationType } from './generated/ufc_pb'
 import {
   ConfigurationPrecomputeError,
   type PrecomputeConfigurationOptions,
@@ -144,11 +144,14 @@ describe('precomputeConfiguration', () => {
       expect(onEvaluationError).not.toHaveBeenCalled()
     })
 
-    it.each([true, false])('evaluates unselected dependencies with parent value %s without emitting them', (value) => {
+    it.each([true, false])('retains prerequisite assignments with parent value %s for client telemetry', (value) => {
       const input = dependentRules(flag({ variations: [{ keyStringIndex: value ? 0 : 1, booleanValue: value }] }))
       const result = roundTrip(precomputeConfiguration(input, context, { flagSelection: { keyPatterns: ['child'] } }))
-      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['child'])
+      expect(Object.keys(result.precomputed!.response.data.attributes.flags)).toEqual(['child', 'parent'])
       expect(result.precomputed!.response.data.attributes.flags.child.variationValue).toBe(value)
+      expect(result.precomputed!.response.data.attributes.flags.child.dependencyEvaluations).toEqual([
+        { flagKey: 'parent', isPresentInAssignment: value },
+      ])
       const direct = evaluate(input, 'boolean', 'child', false, context)
       expect(evaluate(result, 'boolean', 'child', false, context)).toMatchObject({
         value: direct.value,
@@ -164,7 +167,10 @@ describe('precomputeConfiguration', () => {
         onEvaluationError,
       })
       expect(result.precomputed!.response.data.attributes.flags).toEqual({})
-      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'GENERAL' }]])
+      expect(onEvaluationError.mock.calls).toEqual([
+        [{ flagKey: 'child', errorCode: 'GENERAL' }],
+        [{ flagKey: 'parent', errorCode: 'PARSE_ERROR' }],
+      ])
     })
 
     it.each([
@@ -246,19 +252,20 @@ describe('precomputeConfiguration', () => {
       variationKey: parentValue ? 'on' : 'off',
       reason: parentValue ? 'TARGETING_MATCH' : 'DEFAULT',
       allocationKey: parentValue ? 'matched' : 'fallback',
+      dependencyEvaluations: [{ flagKey: 'parent', isPresentInAssignment: parentValue }],
     })
     expect(onEvaluationError).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['missing parent', 'GENERAL', 'GENERAL', undefined],
-    ['unassigned parent', 'GENERAL', 'GENERAL', undefined],
-    ['invalid parent', 'GENERAL', 'GENERAL', 'PARSE_ERROR'],
+    ['missing parent', 'GENERAL', undefined, 'FLAG_NOT_FOUND'],
+    ['unassigned parent', 'GENERAL', undefined, 'GENERAL'],
+    ['invalid parent', 'GENERAL', 'PARSE_ERROR', 'PARSE_ERROR'],
     ['cycle', 'GENERAL', 'GENERAL', 'GENERAL'],
-    ['depth limit', 'GENERAL', 'GENERAL', undefined],
+    ['depth limit', 'GENERAL', undefined, 'GENERAL'],
   ])(
     'omits a child with %s, reports its error, and continues precomputing',
-    (failure, rootErrorCode, evaluationErrorCode, parentErrorCode) => {
+    (failure, rootErrorCode, parentErrorCode, dependencyErrorCode) => {
       const input = dependentRules()
       const source = input.rules!.response
       if (failure === 'missing parent') delete source.flags.parent
@@ -283,38 +290,103 @@ describe('precomputeConfiguration', () => {
         parentAssigned ? ['parent', 'unrelated'] : ['unrelated']
       )
       expect(result.precomputed?.response.data.attributes.flags.unrelated.variationValue).toBe(true)
+      const evaluationErrors = result.precomputed?.response.data.attributes.flagEvaluationErrors ?? {}
+      expect(evaluationErrors.child).toMatchObject({
+        reason: 'ERROR',
+        errorCode: rootErrorCode,
+        dependencyEvaluations: [
+          expect.objectContaining({ flagKey: 'parent', reason: 'ERROR', errorCode: dependencyErrorCode }),
+        ],
+      })
+      if (parentErrorCode !== 'GENERAL') {
+        expect(evaluationErrors.parent).toBeUndefined()
+      } else {
+        expect(evaluationErrors.parent).toMatchObject({ reason: 'ERROR', errorCode: parentErrorCode })
+      }
       expect(
         onEvaluationError.mock.calls
           .map(([error]) => error)
           .sort((left, right) => left.flagKey.localeCompare(right.flagKey))
       ).toEqual([
-        { flagKey: 'child', errorCode: evaluationErrorCode },
+        { flagKey: 'child', errorCode: rootErrorCode },
         ...(parentFails ? [{ flagKey: 'parent', errorCode: parentErrorCode }] : []),
       ])
     }
   )
 
-  it('uses the default depth when precomputing an invalid override', () => {
+  it('uses the default depth when precomputing malformed evaluator options', () => {
     const input = dependentRules()
-    const source = input.rules!.response
-    source.evaluatorParams = fromJson(FlagsConfigurationSchema, {
+    input.rules!.response.evaluatorParams = fromJson(FlagsConfigurationSchema, {
       evaluatorParams: { maxDependencyDepth: 256 },
     }).evaluatorParams
-    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(source))
     const onEvaluationError = jest.fn()
 
-    const result = roundTrip(precomputeConfiguration(configuration, context, { onEvaluationError }))
+    const result = roundTrip(precomputeConfiguration(input, context, { onEvaluationError }))
 
-    expect(evaluate(configuration, 'boolean', 'child', false, context)).toMatchObject({
-      value: true,
-      reason: 'TARGETING_MATCH',
-    })
     expect(Object.keys(result.precomputed!.response.data.attributes.flags).sort()).toEqual([
       'child',
       'parent',
       'unrelated',
     ])
+    expect(result.precomputed?.response.data.attributes.flagEvaluationErrors).toBeUndefined()
     expect(onEvaluationError).not.toHaveBeenCalled()
+  })
+
+  it('hashes both top-level maps and encrypts dependency keys with the shared fixed vector', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    const { child, parent } = source.flags
+    source.flags = { 'checkout-redesign': child, 'new-payment-flow': parent }
+    source.strings[2] = 'new-payment-flow'
+
+    const result = roundTrip(
+      precomputeConfiguration(input, context, {
+        obfuscation: { scheme: 'flag-key-sha256-v1', salt: '000102030405060708090a0b0c0d0e0f' },
+      })
+    )
+    const attributes = result.precomputed!.response.data.attributes
+    const root = attributes.flags['48b7d4159a8d76fdedfe394963458bd62c086678150cc050f78fafd2a401ceb2']
+    expect(attributes.obfuscated).toBe(true)
+    expect(Object.keys(attributes.flags).sort()).toEqual([
+      '48b7d4159a8d76fdedfe394963458bd62c086678150cc050f78fafd2a401ceb2',
+      '759237c770620cac2495dcc9dc7e4ac5a1093cda7c1eb976f065e9066d55618a',
+    ])
+    expect(root.dependencyEvaluations).toEqual([
+      {
+        flagKey: 'tATBHdKpF-zxZ2Fr70UGwTMfPcXSdulh78uKYPpNzVBoSlNnB6qMCTtI1o8',
+        isPresentInAssignment: true,
+      },
+    ])
+    expect(attributes.obfuscation?.dependencyKeyEncryption).toEqual({
+      scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1',
+    })
+    expect(JSON.stringify(attributes)).not.toContain('checkout-redesign')
+    expect(JSON.stringify(attributes)).not.toContain('new-payment-flow')
+  })
+
+  it('encodes dependent root failures without fabricating an assignment for an unassigned parent', () => {
+    const input = dependentRules()
+    input.rules!.response.flags.parent.allocations.length = 0
+    const configuration = configurationFromRulesBinary(encodeFlagsConfiguration(input.rules!.response))
+    const result = roundTrip(
+      precomputeConfiguration(configuration, context, {
+        obfuscation: { scheme: 'flag-key-sha256-v1', salt: '000102030405060708090a0b0c0d0e0f' },
+      })
+    )
+    const attributes = result.precomputed!.response.data.attributes
+    expect(Object.keys(attributes.flags)).toEqual(['e59b23d6a1d150b3c54f2d029d99081aafc65e4ea3b05200783adecc186f65a1'])
+    expect(Object.keys(attributes.flagEvaluationErrors ?? {})).toEqual([
+      'ee6ef10f7432d756d81d26ae3ee2790b22cac4358dc2192b8abc367a6fb6f4e8',
+    ])
+    expect(Object.values(attributes.flagEvaluationErrors ?? {})).toEqual([
+      expect.objectContaining({
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        dependencyEvaluations: [expect.objectContaining({ reason: 'ERROR', errorCode: 'GENERAL' })],
+      }),
+    ])
+    expect(JSON.stringify(attributes)).not.toContain('child')
+    expect(JSON.stringify(attributes)).not.toContain('parent')
   })
 
   it('applies the same opt-out policy to parent and child assignments', () => {
@@ -635,6 +707,131 @@ describe('precomputeConfiguration', () => {
     expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'bad', errorCode: 'PARSE_ERROR' })
   })
 
+  it.each([false, true])(
+    'fails a dependent root when its prerequisite is not portable, parentFirst=%s',
+    (parentFirst) => {
+      const input = dependentRules(
+        flag({ variationType: 'VARIATION_TYPE_JSON', variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }] }),
+        { jsonStrings: ['{"overflow":1e400}'] }
+      )
+      if (parentFirst) {
+        const { child, parent, unrelated } = input.rules!.response.flags
+        input.rules!.response.flags = { parent, child, unrelated }
+      }
+      const onEvaluationError = jest.fn()
+      const attributes = roundTrip(precomputeConfiguration(input, context, { onEvaluationError })).precomputed!.response
+        .data.attributes
+      expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).not.toHaveProperty('parent')
+      expect(attributes.flagEvaluationErrors).toMatchObject({
+        child: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+        },
+      })
+      expect(onEvaluationError.mock.calls.map(([error]) => error)).toEqual(
+        expect.arrayContaining([
+          { flagKey: 'parent', errorCode: 'PARSE_ERROR' },
+          { flagKey: 'child', errorCode: 'GENERAL' },
+        ])
+      )
+    }
+  )
+
+  it('retains dependency status when a deeply nested prerequisite value cannot be cloned', () => {
+    const depth = 10_000
+    const deeplyNestedJson = `${'{"nested":'.repeat(depth)}null${'}'.repeat(depth)}`
+    const input = dependentRules(
+      flag({ variationType: 'VARIATION_TYPE_JSON', variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }] }),
+      { jsonStrings: [deeplyNestedJson] }
+    )
+
+    const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+    expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+    expect(attributes.flagEvaluationErrors).not.toHaveProperty('parent')
+    expect(attributes.flagEvaluationErrors).toMatchObject({
+      child: {
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+      },
+    })
+  })
+
+  it.each([false, true])(
+    'reconciles transitive serialization failures against the final assignments, parentFirst=%s',
+    (parentFirst) => {
+      const dependent = (targetingConditionIndex: number): JsonObject =>
+        flag({
+          allocations: [
+            {
+              key: 'matched',
+              targetingConditionIndex,
+              splits: [{ reason: 'REASON_TARGETING_MATCH' }],
+            },
+          ],
+        })
+      const parent = dependent(0)
+      const root = dependent(1)
+      const grandparent = flag({
+        variationType: 'VARIATION_TYPE_JSON',
+        variations: [{ keyStringIndex: 0, jsonStringIndex: 0 }],
+      })
+      const input = rules(
+        parentFirst
+          ? { parent, root, grandparent, unrelated: flag() }
+          : { root, parent, grandparent, unrelated: flag() },
+        {
+          strings: ['on', 'off', 'grandparent', 'parent'],
+          jsonStrings: ['{"overflow":1e400}'],
+          conditions: [
+            { flagEvaluationStringMembership: { flagKeyStringIndex: 2, variantKeyStringIndexes: [0] } },
+            { flagEvaluationStringMembership: { flagKeyStringIndex: 3, variantKeyStringIndexes: [0] } },
+          ],
+        }
+      )
+
+      const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+      expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).not.toHaveProperty('grandparent')
+      expect(attributes.flagEvaluationErrors).toMatchObject({
+        parent: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: [{ flagKey: 'grandparent', reason: 'ERROR', errorCode: 'PARSE_ERROR' }],
+        },
+        root: {
+          reason: 'ERROR',
+          errorCode: 'GENERAL',
+          dependencyEvaluations: expect.arrayContaining([
+            { flagKey: 'grandparent', reason: 'ERROR', errorCode: 'PARSE_ERROR' },
+            {
+              flagKey: 'parent',
+              reason: 'ERROR',
+              errorCode: 'GENERAL',
+              errorMessage: 'Dependency has no serializable assignment',
+            },
+          ]),
+        },
+      })
+    }
+  )
+
+  it('keeps a nonportable root absent without fabricating an error-map assignment', () => {
+    const input = dependentRules()
+    const source = input.rules!.response
+    source.flags.child.variationType = VariationType.JSON
+    source.flags.child.variations = [
+      { ...source.flags.child.variations[0], value: { case: 'jsonStringIndex', value: 0 } },
+    ]
+    source.jsonStrings = ['{"overflow":1e400}']
+    const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
+    expect(attributes.flags).toHaveProperty('parent')
+    expect(attributes.flags).not.toHaveProperty('child')
+    expect(attributes.flagEvaluationErrors?.child).toBeUndefined()
+  })
+
   it('evaluates targeting and sharding for the requested subject', () => {
     const input = rules(
       {
@@ -842,14 +1039,18 @@ describe('precomputeConfiguration', () => {
     }
   )
 
-  it.each([null, [], { experimentationOptOutMode: 'unknown' }, { onEvaluationError: true }])(
-    'rejects invalid options %j',
-    (options) => {
-      expect(() => precomputeConfiguration(rules(), context, options as PrecomputeConfigurationOptions)).toThrow(
-        expect.objectContaining({ code: 'invalid_options' })
-      )
-    }
-  )
+  it.each([
+    null,
+    [],
+    { experimentationOptOutMode: 'unknown' },
+    { onEvaluationError: true },
+    { obfuscation: { scheme: 'unknown', salt: '0'.repeat(32) } },
+    { obfuscation: { scheme: 'flag-key-sha256-v1', salt: 'short' } },
+  ])('rejects invalid options %j', (options) => {
+    expect(() => precomputeConfiguration(rules(), context, options as PrecomputeConfigurationOptions)).toThrow(
+      expect.objectContaining({ code: 'invalid_options' })
+    )
+  })
 
   it.each([
     null,
