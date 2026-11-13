@@ -1,0 +1,562 @@
+[
+  {
+    "consent": false,
+    "optimized": false,
+    "streaming": false,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.191815123Z",
+          "observeFullEvaluationData": false,
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": false,
+    "streaming": false,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "e8689997d6b848eda17f039490b14cb4"
+          },
+          "createdAt": "2026-10-21T18:15:48.193113621Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "35533dddeb232c6b626ab520a9ed326d5d5e8fcdb0c80a915d50b1329bae6e78": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": false,
+    "streaming": true,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.194331348Z",
+          "observeFullEvaluationData": false,
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": false,
+    "streaming": true,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "4484da6aaa9540018b1cbb501a044170"
+          },
+          "createdAt": "2026-10-21T18:15:48.195445870Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "fa936a6a41c9ef77e9c4d8e47614c70bef449ab11306ad6405aee9dd13b9a244": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": true,
+    "streaming": false,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.196900184Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": true,
+    "streaming": false,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "a0c0b4eac29b483c9bd909cf3c099bbc"
+          },
+          "createdAt": "2026-10-21T18:15:48.198219654Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "8b2c1180e7b0afbe3840a1a919e3ccc41d36d7cebf20e859cd53f801f2e17b40": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": true,
+    "streaming": true,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.199528942Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": false,
+    "optimized": true,
+    "streaming": true,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "60a30e8146134c3f8725fe6f034cd813"
+          },
+          "createdAt": "2026-10-21T18:15:48.200776552Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": false,
+          "flags": {
+            "09cef9f489972a5efa0fbbab3f9e3d3d11bd9eb7c8f49c477d2737945f37eb7e": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": false,
+    "streaming": false,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.202024318Z",
+          "observeFullEvaluationData": true,
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": false,
+    "streaming": false,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "e92038982b8f463c8e709134a48c0bd8"
+          },
+          "createdAt": "2026-10-21T18:15:48.203123381Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "a7435b87ba9a3cc678f205dd00f7ca2fa7b7695b68c716414132039304bbea85": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": false,
+    "streaming": true,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.204285313Z",
+          "observeFullEvaluationData": true,
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": false,
+    "streaming": true,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "ad31aac9ab4f4a35b6a878edddbaea83"
+          },
+          "createdAt": "2026-10-21T18:15:48.205355141Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "950b8e5d44a819a928b4edbda6a6279d562fd42ad9618b11ec728cbabba6f83d": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": true,
+    "streaming": false,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.206752782Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": true,
+    "streaming": false,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "97340105f09748628885f1b7fe0b630b"
+          },
+          "createdAt": "2026-10-21T18:15:48.208125882Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "fd24a92dba71b34557fe34b0c78b7e5dafb718230d642b45d325682702db0636": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": true,
+    "streaming": true,
+    "obfuscated": false,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": false,
+          "createdAt": "2026-10-21T18:15:48.209448905Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "country-message": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "consent": true,
+    "optimized": true,
+    "streaming": true,
+    "obfuscated": true,
+    "response": {
+      "data": {
+        "id": "user123",
+        "type": "precomputed-assignments",
+        "attributes": {
+          "obfuscated": true,
+          "obfuscation": {
+            "scheme": "flag-key-sha256-v1",
+            "salt": "8b2b16037fcb483ea3c01a24511e26b8"
+          },
+          "createdAt": "2026-10-21T18:15:48.210662398Z",
+          "format": "PRECOMPUTED",
+          "environment": {
+            "name": "test-env"
+          },
+          "observeFullEvaluationData": true,
+          "flags": {
+            "c7480f15726dcc1f887460cf3ffbb653e38d32136b4865187ac4a9931f1c827e": {
+              "variationType": "string",
+              "variationValue": "hello-us",
+              "doLog": false,
+              "allocationKey": "country-allocation",
+              "variationKey": "us",
+              "reason": "TARGETING_MATCH",
+              "serialId": 11,
+              "extraLogging": {}
+            }
+          }
+        }
+      }
+    }
+  }
+]

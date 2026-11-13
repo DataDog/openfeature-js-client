@@ -1,5 +1,5 @@
 import { sha256Hex } from '../evaluation/sha256'
-import { encodeUtf8 } from '../utf8'
+import { encodeUtf8, isWellFormedUnicode } from '../utf8'
 
 const SCHEME = 'flag-key-sha256-v1'
 const DOMAIN = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.flag-key.v1\0')
@@ -70,17 +70,4 @@ export function encodePrecomputedFlagKey(
 /** Check the exact byte length and alphabet of a hex-encoded wire value. */
 export function isLowercaseHex(value: unknown, bytes: number): value is string {
   return typeof value === 'string' && value.length === bytes * 2 && /^[0-9a-f]+$/.test(value)
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index++) {
-    const codeUnit = value.charCodeAt(index)
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(++index)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false
-    }
-  }
-  return true
 }

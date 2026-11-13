@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import type { FlagEvaluationEvent } from '@datadog/flagging-core'
 import {
@@ -440,8 +441,8 @@ describe('evaluation telemetry opt-out', () => {
     expect(evaluationCount()).toBe(suppressed ? 1 : 3)
     expect(rum).toHaveBeenCalledTimes(suppressed ? 1 : 3)
     expect(evaluations().slice(-1)[0]).toMatchObject({
-      targeting_key: nextSubject,
-      context: { evaluation: { [attribute]: false } },
+      targeting_key: `sha256_${createHash('sha256').update(nextSubject).digest('hex')}`,
+      context: expect.not.objectContaining({ evaluation: expect.anything() }),
       evaluation_count: 1,
     })
     expect(events('exposures')).toHaveLength(2)
@@ -501,7 +502,7 @@ describe('evaluation telemetry opt-out', () => {
     expect(OpenFeature.getClient('other-opt-out-provider').getBooleanValue('boolean-flag', false)).toBe(true)
     jest.advanceTimersByTime(31_000)
     expect(evaluationCount()).toBe(1)
-    expect(evaluations()[0].targeting_key).toBe('other')
+    expect(evaluations()[0].targeting_key).toBe(`sha256_${createHash('sha256').update('other').digest('hex')}`)
   })
 
   it('preserves opt-out through the Datadog developer-tools wrapper', async () => {

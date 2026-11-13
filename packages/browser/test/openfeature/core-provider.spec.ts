@@ -137,6 +137,7 @@ describe('DatadogCoreProvider', () => {
 
     await expect(provider.initialize(context)).rejects.toMatchObject({ code: 'PARSE_ERROR' })
     expect(provider.resolveStringEvaluation('static-flag', 'default', context, logger)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
@@ -164,6 +165,7 @@ describe('DatadogCoreProvider', () => {
     await expect(provider.initialize({})).rejects.toBeInstanceOf(InvalidContextError)
 
     expect(provider.resolveStringEvaluation('string-flag', 'default', {}, logger)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
@@ -178,6 +180,7 @@ describe('DatadogCoreProvider', () => {
     await expect(provider.initialize(emptyContext)).rejects.toBeInstanceOf(InvalidContextError)
 
     expect(provider.resolveStringEvaluation('static-flag', 'default', emptyContext, logger)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
@@ -200,6 +203,7 @@ describe('DatadogCoreProvider', () => {
     expect(
       provider.resolveStringEvaluation('static-flag', 'default', { targetingKey: 'other-user', plan: 'free' }, logger)
     ).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
@@ -306,6 +310,7 @@ describe('DatadogCoreProvider', () => {
     expect(errorHandler).not.toHaveBeenCalled()
     await expect(provider.initialize({})).rejects.toMatchObject({ code: 'PARSE_ERROR' })
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: true,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR',
@@ -317,6 +322,7 @@ describe('DatadogCoreProvider', () => {
     const provider = new DatadogCoreProvider()
 
     expect(provider.resolveBooleanEvaluation('missing-flag', true, {}, logger)).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: true,
       reason: 'ERROR',
       errorCode: 'PROVIDER_NOT_READY',

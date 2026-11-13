@@ -12,6 +12,8 @@ export default defineConfig({
         coreProvider: fileURLToPath(new URL('./core-provider.html', import.meta.url)),
         protobuf: fileURLToPath(new URL('./protobuf.html', import.meta.url)),
         precomputed: fileURLToPath(new URL('./precomputed.html', import.meta.url)),
+        privacy: fileURLToPath(new URL('./privacy.html', import.meta.url)),
+        consent: fileURLToPath(new URL('./consent.html', import.meta.url)),
         diagnostics: fileURLToPath(new URL('./diagnostics.html', import.meta.url)),
         obfuscation: fileURLToPath(new URL('./obfuscation.html', import.meta.url)),
         evaluationTelemetry: fileURLToPath(new URL('./evaluation-telemetry.html', import.meta.url)),

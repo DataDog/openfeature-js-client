@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import type { FlagEvaluationEvent } from '@datadog/flagging-core'
 import { OpenFeature } from '@openfeature/web-sdk'
@@ -306,10 +307,10 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
 
   function expectedContext() {
     return {
-      targeting_key: kind === 'core' ? 'core-user' : 'rum-user',
-      context: expect.objectContaining({
-        evaluation: { country: 'US', ...(kind === 'online' && { user_email: 'rum@example.com' }) },
-      }),
+      targeting_key: `sha256_${createHash('sha256')
+        .update(kind === 'core' ? 'core-user' : 'rum-user')
+        .digest('hex')}`,
+      context: expect.not.objectContaining({ evaluation: expect.anything() }),
     }
   }
 })

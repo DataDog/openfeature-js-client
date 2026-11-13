@@ -192,6 +192,11 @@ for (const mode of ['success', 'unrelated401', 'unavailable'] as const) {
       ...initial,
       // Exposure deduplication legitimately changes cache-hit metadata on repeat reads.
       boolean: { value: true, reason: 'TARGETING_MATCH' },
+      // Error evaluations capture a fresh timestamp even when the cached assignments are unchanged.
+      missing: {
+        ...initial.missing,
+        flagMetadata: { ...initial.missing.flagMetadata, __dd_eval_timestamp_ms: expect.any(Number) },
+      },
     })
     expect(origin.posts).toHaveLength(mode === 'unavailable' ? 4 : 2)
     for (const request of origin.posts) {

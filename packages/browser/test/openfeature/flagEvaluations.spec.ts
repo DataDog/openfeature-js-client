@@ -1,7 +1,9 @@
+import { createBatch, createFlushController } from '@datadog/browser-core'
 import { FlagEvaluationAggregator } from '@datadog/flagging-core'
 import { ErrorCode, type EvaluationDetails, type HookContext } from '@openfeature/web-sdk'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../../src/domain/configuration'
 import { createFlagEvalEVPHook } from '../../src/openfeature/flagEvaluations'
+import { createFlagEvaluationTransport } from '../../src/openfeature/flagEvaluationTransport'
 
 const mockConfiguration = validateAndBuildFlaggingTrackingConfiguration({
   clientToken: 'tracking-token',
@@ -13,11 +15,14 @@ const mockConfiguration = validateAndBuildFlaggingTrackingConfiguration({
 jest.mock('@datadog/browser-core', () => ({
   ...jest.requireActual('@datadog/browser-core'),
   addTelemetryDebug: jest.fn(),
-  createBatch: jest.fn(() => ({
+  createBatch: jest.fn(({ flushController }) => ({
+    flushController,
     add: jest.fn(),
     stop: jest.fn(),
   })),
-  createFlushController: jest.fn(),
+  createFlushController: jest.fn(() => ({
+    preparePageExitFlushObservable: new (jest.requireActual('@datadog/browser-core').Observable)(),
+  })),
   createHttpRequest: jest.fn(),
   createIdentityEncoder: jest.fn(),
   createPageMayExitObservable: jest.fn(() => ({
@@ -51,6 +56,61 @@ describe('createFlagEvalEVPHook', () => {
     expect(hook.after).toBeUndefined()
     expect(hook.finally).toBeDefined()
   })
+
+  it.each(['owned', 'shared'] as const)(
+    'keeps periodic aggregation running after page-exit preparation with an %s transport',
+    (ownership) => {
+      const sharedTransport = ownership === 'shared' ? createFlagEvaluationTransport(mockConfiguration) : undefined
+      hook = createFlagEvalEVPHook(mockConfiguration, undefined, undefined, sharedTransport)
+      const batch = jest.mocked(createBatch).mock.results.slice(-1)[0].value
+      const preparation = jest.mocked(createFlushController).mock.results.slice(-1)[0]
+        .value.preparePageExitFlushObservable
+      const context = {
+        flagKey: 'test-flag',
+        defaultValue: false,
+        context: { targetingKey: 'user123' },
+      } as HookContext
+      const details: EvaluationDetails<boolean> = {
+        flagKey: 'test-flag',
+        value: true,
+        variant: 'on',
+        reason: 'STATIC',
+        flagMetadata: { __dd_observe_full_evaluation_data: false },
+      }
+      const evaluate = () => hook!.finally!(context, details)
+
+      evaluate()
+      preparation.notify('visibility_hidden')
+      expect(batch.add).toHaveBeenCalledTimes(1)
+      expect(batch.add.mock.calls[0][0].evaluation_count).toBe(1)
+
+      // Neither returning to a visible page nor canceling navigation recreates the hook.
+      // Each subsequent evaluation must still reach the batch on the original timer.
+      for (const reason of ['visibility_hidden', 'before_unload'] as const) {
+        const previousCount = batch.add.mock.calls.length
+        preparation.notify(reason)
+        expect(batch.add).toHaveBeenCalledTimes(previousCount)
+        evaluate()
+        jest.advanceTimersByTime(999)
+        expect(batch.add).toHaveBeenCalledTimes(previousCount)
+        jest.advanceTimersByTime(1)
+        expect(batch.add).toHaveBeenCalledTimes(previousCount + 1)
+        expect(batch.add.mock.calls.slice(-1)[0][0].evaluation_count).toBe(1)
+      }
+
+      evaluate()
+      hook.shutdown()
+      expect(batch.add).toHaveBeenCalledTimes(4)
+      expect(batch.stop).toHaveBeenCalledTimes(ownership === 'owned' ? 1 : 0)
+      expect(jest.getTimerCount()).toBe(0)
+      const stoppedCount = batch.add.mock.calls.length
+      preparation.notify('before_unload')
+      jest.advanceTimersByTime(2000)
+      expect(batch.add).toHaveBeenCalledTimes(stoppedCount)
+      hook = undefined
+      sharedTransport?.stop()
+    }
+  )
 
   it.each([
     { errorCode: undefined, errorMessage: undefined, expectedError: undefined },
