@@ -19,4 +19,3 @@ packages/core/src/configuration/generated
 # Shared response-signing fixtures retain their independently pinned bytes.
 packages/browser/test/ffe-response-signing-data
 packages/browser/test/transport/responseSigning/key-usage-supplement.json
-packages/browser/test/transport/responseSigning/shared-fixtures/*.json
