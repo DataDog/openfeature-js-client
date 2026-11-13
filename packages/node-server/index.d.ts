@@ -597,11 +597,51 @@ interface Provider extends CommonProvider<ServerProviderStatus> {
 	 */
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 }
+type Milestone = {
+	elapsed_ms: number;
+};
+type Initialization = {
+	started_at_ms: number;
+	duration_ms: number;
+	milestones: {
+		configuration_received?: Milestone;
+		provider_ready?: Milestone;
+	};
+};
+/** A provider observation. The integration adds SDK and service identity and handles delivery. */
+export type SDKDiagnostic = {
+	timestamp: number;
+} & ({
+	event_type: "sdk_initialization";
+	initialization: Initialization & {
+		outcome: "ready";
+		final: true;
+	};
+} | {
+	event_type: "sdk_initialization";
+	error_code: "INIT_FAILED";
+	initialization: Initialization & {
+		outcome: "failed";
+		final: true;
+	};
+} | {
+	event_type: "sdk_initialization";
+	initialization: Initialization & {
+		outcome: "incomplete";
+		final: false;
+		reason: "provider_closed";
+	};
+} | {
+	event_type: "provider_error";
+	error_code: "CONFIG_FETCH_FAILED";
+});
 export interface DatadogNodeServerProviderOptions {
 	/**
 	 * Log experiment exposures
 	 */
 	exposureChannel: Channel<ExposureEvent>;
+	/** Receives diagnostic observations. Omit to disable measurement; delivery belongs to the integration. */
+	onDiagnostic?: (diagnostic: SDKDiagnostic) => void;
 	/**
 	 * Internal sidecar consumed by the integration's root evaluation hook.
 	 * @internal
@@ -649,6 +689,8 @@ export declare class DatadogNodeServerProvider implements Provider {
 	readonly runsOn: Paradigm;
 	readonly hooks?: Hook[];
 	private initController?;
+	private readonly diagnostics?;
+	private initialization?;
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
 	private readonly exposureCache;
 	private readonly dependencyTelemetrySidecar;
@@ -677,6 +719,12 @@ export declare class DatadogNodeServerProvider implements Provider {
 	 * See setConfiguration and setError for more details.
 	 */
 	initialize(): Promise<void>;
+	private initializeConfiguration;
+	/** Called by the integration once before a sequential configuration poll, including its retries. */
+	reportConfigurationFetchStart(): void;
+	/** Called after the poll succeeds or exhausts retries; cancellations are not fetch failures. */
+	reportConfigurationFetchResult(success: boolean): void;
+	onClose(): Promise<void>;
 	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<boolean>>;
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
 	resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<number>>;

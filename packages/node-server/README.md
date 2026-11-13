@@ -136,3 +136,20 @@ Immediate withdrawal can change an enrolled subject's experience; account for th
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula
+
+### Diagnostic observations for integrations
+
+Pass an optional `onDiagnostic` callback to receive initialization outcomes and configuration-fetch errors.
+The provider measures initialization duration and configuration arrival. It reports `ready`, `failed`, or
+`incomplete` when closed while waiting for configuration. Callback errors do not affect provider behavior.
+Without a callback, diagnostic measurement is disabled.
+
+An integration that polls for configuration calls `reportConfigurationFetchStart()` once before each sequential
+poll and `reportConfigurationFetchResult(success)` after the poll completes, including its retries. Do not report
+cancellation as a failed fetch. Startup fetch failures are covered by the initialization observation. Later fetch
+failures are suppressed until a successful fetch, with at most one error report per minute per provider.
+
+The callback receives an `SDKDiagnostic` observation with a timestamp, event type, and initialization or error
+fields. The integration supplies SDK, service, and environment identity and handles buffering and delivery.
+The provider does not send network requests for diagnostics. Call `onClose()` and await its result before closing
+the delivery mechanism so an initialization result already in progress can be reported.
