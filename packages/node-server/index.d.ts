@@ -529,7 +529,6 @@ export interface UniversalFlagConfigurationV1 {
 	observeFullEvaluationData?: boolean;
 	evaluatorParams?: {
 		maxDependencyDepth?: number;
-		[key: string]: unknown;
 	};
 	environment: {
 		name: string;

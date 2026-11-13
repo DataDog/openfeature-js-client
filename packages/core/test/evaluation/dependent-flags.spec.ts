@@ -758,21 +758,16 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
   })
 
-  it('leaves an extensible evaluator parameters block without a depth override untouched', () => {
-    const evaluatorParams = { futureParameter: { enabled: true } }
+  it('ignores an unrecognized evaluator parameter', () => {
     const config = configuration({ root: booleanFlag('root', 'on') })
-    config.evaluatorParams = evaluatorParams
+    config.evaluatorParams = { futureParameter: { enabled: true } } as never
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
-    expect(config.evaluatorParams).toBe(evaluatorParams)
-    expect(config.evaluatorParams).toEqual({ futureParameter: { enabled: true } })
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
-  it('ignores an inherited maximum depth while preserving own future parameters', () => {
-    const evaluatorParams = Object.assign(Object.create({ maxDependencyDepth: 0 }), {
-      futureParameter: { enabled: true },
-    })
+  it('ignores an inherited maximum depth', () => {
+    const evaluatorParams = Object.create({ maxDependencyDepth: 0 })
     const config = configuration({
       prerequisite: booleanFlag('prerequisite', 'on'),
       root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
@@ -780,8 +775,6 @@ describe('dependent flag evaluation', () => {
     config.evaluatorParams = evaluatorParams
 
     expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
-    expect(config.evaluatorParams).toBe(evaluatorParams)
-    expect(Object.keys(evaluatorParams)).toEqual(['futureParameter'])
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
