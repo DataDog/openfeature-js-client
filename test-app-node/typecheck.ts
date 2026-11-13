@@ -31,6 +31,7 @@ import {
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
+  DatadogCoreProvider,
   type FlagSelection,
   type FlagsConfiguration,
   fetchRulesConfiguration,
@@ -134,6 +135,7 @@ const pendingConfiguration: Promise<FlagsConfiguration> = fetchRulesConfiguratio
 const timeoutCode: ConfigurationFetchErrorCode = 'timeout'
 void fetchRulesConfiguration(clientOptions)
 const decoded: FlagsConfiguration = configurationFromRulesBinary(new Uint8Array())
+OpenFeature.setProvider('offline', new DatadogCoreProvider(decoded))
 const serialized: string = configurationToString(decoded)
 const restored: FlagsConfiguration = configurationFromString(serialized)
 const precomputeOptions: PrecomputeConfigurationOptions = {
