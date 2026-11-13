@@ -101,6 +101,14 @@ export function precomputeConfiguration(
   const selectedFlagKeys = Object.keys(rules.flags).filter(
     (flagKey) => !patterns || patterns.some((parts) => matchesKeyPattern(flagKey, parts))
   )
+  const selectedFlagKeySet = new Set(selectedFlagKeys)
+  const enqueueConfiguredDependencies = (evaluations: readonly DependencyEvaluation[]) => {
+    for (const { flagKey } of evaluations) {
+      if (selectedFlagKeySet.has(flagKey) || !Object.prototype.hasOwnProperty.call(rules.flags, flagKey)) continue
+      selectedFlagKeySet.add(flagKey)
+      selectedFlagKeys.push(flagKey)
+    }
+  }
   for (const flagKey of selectedFlagKeys) {
     const dependencies = createProtobufDependencyResolver(
       rules,
@@ -129,6 +137,7 @@ export function precomputeConfiguration(
       const errorCode = error instanceof DependencyGraphError ? error.rootErrorCode : ('GENERAL' as ErrorCode)
       const errorMessage = error instanceof DependencyGraphError ? error.rootErrorMessage : undefined
       const trace = dependencies.complete({ value: false, reason: 'ERROR', errorCode, errorMessage })
+      enqueueConfiguredDependencies(trace.dependencyEvaluations)
       const failure = precomputedError(errorCode, errorMessage, trace.dependencyEvaluations, trace.dependencyExposures)
       flagEvaluationErrors.push([flagKey, failure])
       errors.push({ flagKey, errorCode })
@@ -141,6 +150,7 @@ export function precomputeConfiguration(
         errorCode: result.errorCode,
         errorMessage: result.errorMessage,
       })
+      enqueueConfiguredDependencies(trace.dependencyEvaluations)
       flagEvaluationErrors.push([
         flagKey,
         precomputedError(result.errorCode, result.errorMessage, trace.dependencyEvaluations, trace.dependencyExposures),
@@ -152,6 +162,7 @@ export function precomputeConfiguration(
         variant: result.assignment.variationKey,
         reason: result.assignment.reason,
       })
+      enqueueConfiguredDependencies(trace.dependencyEvaluations)
       try {
         const { features, ...assignment } = result.assignment
         const dependencyEvaluations = toPrecomputedDependencyEvaluations(
@@ -184,7 +195,7 @@ export function precomputeConfiguration(
     }
   }
 
-  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors, new Set(selectedFlagKeys))
+  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors, selectedFlagKeySet)
   const encoded = encodePrecomputedResults(flags, flagEvaluationErrors, obfuscation)
 
   const precomputed: FlagsConfiguration = {
