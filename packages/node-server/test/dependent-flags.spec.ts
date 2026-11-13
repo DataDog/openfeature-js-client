@@ -64,6 +64,19 @@ describe('dependent flag exposures', () => {
     return provider
   }
 
+  it('recovers dependency evaluations by alias exactly once after metadata is replaced', () => {
+    const sidecar = new DependencyTelemetrySidecar()
+    const metadata = {}
+    const context = {}
+    const alias = {}
+    const evaluations = [{ flagKey: 'leaf', details: { value: true, reason: 'STATIC' } }]
+    sidecar.stage(metadata, context, { dependencyEvaluations: evaluations, dependencyExposures: [] })
+    sidecar.associateDependencyEvaluations(alias, metadata)
+
+    expect(sidecar.takeDependencyEvaluations({}, alias)).toEqual(evaluations)
+    expect(sidecar.takeDependencyEvaluations(metadata, alias, context)).toEqual([])
+  })
+
   it('publishes successful dependency exposures depth-first before the root', async () => {
     const exposureChannel = channel<ExposureEvent>()
     const dependencyEvaluationChannel = channel<DependencyEvaluationEvent>()

@@ -38,6 +38,13 @@ The helper follows the Rust assignment-only precomputation contract: complete su
 
 Passing an `obfuscation` descriptor hashes keys in both top-level maps using `flag-key-sha256-v1`. Each nested dependency `flagKey` is instead authenticated ciphertext bound to the plaintext root key: AES-256-GCM with a key derived by HKDF-SHA256 from the root key and response salt, the shared dependency-key domain as AAD, and the unpadded base64url envelope `nonce || ciphertext || tag`. Plain precomputed packets retain plaintext dependency keys. This local helper produces the capable packet shape directly; HTTP capability forwarding and cache partitioning remain the responsibility of the delivery layer.
 
+Pass `options.flagSelection: { keyPatterns: ['checkout-*'] }` to include only matching assignments. Patterns are
+case-sensitive whole-key globs with only `*` special and use the shared selection normalization and limits. Omitted
+selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated
+as absent at runtime. Tags are unsupported because rules contain no tag metadata: any defined `tags` value, including
+`[]` or `null`, throws `ConfigurationPrecomputeError` with `invalid_options`, as do malformed selections and selections
+over a limit. Source rules remain available for dependencies and can be reused for other selections.
+
 ## Preparing activation timestamps
 
 Rules configurations are snapshots. The protobuf decoder prepares randomization activation

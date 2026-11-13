@@ -68,7 +68,7 @@ describe('assignment authorization', () => {
       targeting_key: 'user-a',
       targeting_attributes: context,
     })
-    expect(cacheWrite).toHaveBeenCalledWith(expect.anything(), context, false)
+    expect(cacheWrite).toHaveBeenCalledWith(expect.anything(), context, false, expect.any(AbortSignal))
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain(jwt)
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain('dd_assignment_token')
     expect(original.dd_assignment_token).toBe(jwt)
@@ -565,7 +565,7 @@ describe('assignment authorization', () => {
         ...args
       ) {
         const request = put.apply(this, args)
-        if (String(args[1]).startsWith('v2-flags-config-')) {
+        if (String(args[1]).startsWith('v3-flags-config-')) {
           spy.mockRestore()
           this.transaction.addEventListener('complete', () => resolve(), { once: true })
           this.transaction.addEventListener('abort', () => reject(this.transaction.error), { once: true })
@@ -709,7 +709,12 @@ describe('assignment authorization', () => {
       targeting_key: 'user-b',
       targeting_attributes: { targetingKey: 'user-b' },
     })
-    expect(cacheWrite).toHaveBeenCalledWith(expect.anything(), { targetingKey: 'user-b' }, false)
+    expect(cacheWrite).toHaveBeenCalledWith(
+      expect.anything(),
+      { targetingKey: 'user-b' },
+      false,
+      expect.any(AbortSignal)
+    )
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain('dd_assignment_token')
     expect(provider.status).toBe(ProviderStatus.READY)
     expect(provider.resolveBooleanEvaluation('boolean-flag', false, replacement, logger).value).toBe(true)
