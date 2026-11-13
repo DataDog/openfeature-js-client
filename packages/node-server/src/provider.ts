@@ -32,6 +32,7 @@ import type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 import { type ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { InitializationController } from './initialization-controller'
 import { NodeProviderEventEmitter } from './provider-event-emitter'
+import { type SDKDiagnostic, SDKDiagnostics } from './sdk-diagnostics'
 
 const PROVIDER_EVENTS = {
   ConfigurationChanged: 'PROVIDER_CONFIGURATION_CHANGED' as ServerProviderEvents.ConfigurationChanged,
@@ -49,6 +50,8 @@ export interface DatadogNodeServerProviderOptions {
    * Log experiment exposures
    */
   exposureChannel: Channel<ExposureEvent>
+  /** Receives diagnostic observations without awaiting delivery. Omit to disable measurement. */
+  onDiagnostic?: (diagnostic: SDKDiagnostic) => void | Promise<void>
   /**
    * Internal sidecar consumed by the integration's root evaluation hook.
    * @internal
@@ -166,6 +169,8 @@ export class DatadogNodeServerProvider implements Provider {
   readonly hooks?: Hook[]
 
   private initController?: InitializationController
+  private readonly diagnostics?: SDKDiagnostics
+  private initialization?: Promise<void>
   readonly events: ProviderEventEmitter<ServerProviderEvents>
   private readonly exposureCache: AssignmentCache | undefined
   private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecar
@@ -174,6 +179,7 @@ export class DatadogNodeServerProvider implements Provider {
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
 
   constructor(private readonly options: DatadogNodeServerProviderOptions) {
+    this.diagnostics = options.onDiagnostic ? new SDKDiagnostics(options.onDiagnostic) : undefined
     this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
     this.hooks = []
     this.events = new NodeProviderEventEmitter()
@@ -212,6 +218,8 @@ export class DatadogNodeServerProvider implements Provider {
       }
       return
     }
+
+    this.diagnostics?.configurationReceived()
 
     if (hadConfiguration && previousConfiguration !== configuration) {
       if (prevCreatedAt !== configuration.createdAt) {
@@ -252,21 +260,62 @@ export class DatadogNodeServerProvider implements Provider {
    * loading functionality via InitializationController.
    * See setConfiguration and setError for more details.
    */
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
+    this.diagnostics?.start(this.configuration !== undefined)
     if (this.configuration) {
-      return
+      this.diagnostics?.finish('ready')
+      return Promise.resolve()
     }
 
+    const initialization = this.initializeConfiguration()
+    if (this.diagnostics) this.initialization = initialization
+    return initialization
+  }
+
+  private async initializeConfiguration(): Promise<void> {
     const timeoutMs = this.options.initializationTimeoutMs ?? DEFAULT_INITIALIZATION_TIMEOUT_MS
     this.initController = new InitializationController(timeoutMs, () =>
       this.setError(new Error(`Initialization timeout after ${timeoutMs}ms`))
     )
 
-    await this.initController.wait()
-    await this.exposureCache?.init()
-    if (!this.configuration) {
-      throw new Error('Flag configuration is unavailable')
+    try {
+      await this.initController.wait()
+      await this.exposureCache?.init()
+      if (!this.configuration) {
+        throw new Error('Flag configuration is unavailable')
+      }
+      this.diagnostics?.finish('ready')
+    } catch (error) {
+      this.diagnostics?.finish('failed')
+      throw error
+    } finally {
+      this.initialization = undefined
     }
+  }
+
+  /** Called by the integration once before a sequential configuration poll, including its retries. */
+  reportConfigurationFetchStart(): void {
+    this.diagnostics?.fetchStarted()
+  }
+
+  /** Called after the poll succeeds or exhausts retries; cancellations are not fetch failures. */
+  reportConfigurationFetchResult(success: boolean): void {
+    this.diagnostics?.fetchResult(success)
+  }
+
+  async onClose(): Promise<void> {
+    const diagnostics = this.diagnostics
+    if (!diagnostics) return
+    if (this.initialization && !this.initController?.isInitializing()) {
+      // Configuration or an error arrived. Let initialization finish, including cache setup,
+      // before closing diagnostics so a same-turn close preserves the actual outcome.
+      try {
+        await this.initialization
+      } catch {
+        // The initialization caller still receives the original rejection.
+      }
+    }
+    diagnostics.close()
   }
 
   async resolveBooleanEvaluation(

@@ -1,6 +1,7 @@
 export type { UniversalFlagConfigurationV1 } from './configuration/ufc-v1'
 export { ExperimentationOptOutMode } from './experimentation-opt-out'
 export * from './provider'
+export type { SDKDiagnostic } from './sdk-diagnostics'
 
 // Build environment placeholder for testing
 const _SDK_VERSION = __BUILD_ENV__SDK_VERSION__
