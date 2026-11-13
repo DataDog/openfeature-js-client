@@ -1,4 +1,4 @@
-import { configurationFromString, configurationToString } from '@datadog/openfeature-browser'
+import { configurationFromString, configurationToString, getClientFingerprint } from '@datadog/openfeature-browser'
 import { assert, reportSuccess } from './smoke'
 
 const response = {
@@ -30,6 +30,11 @@ const roundTripWire = JSON.parse(serialized) as Record<string, unknown>
 const restored = configurationFromString(serialized)
 const flag = configuration.precomputed?.response.data.attributes.flags['precomputed-flag']
 const restoredFlag = restored.precomputed?.response.data.attributes.flags['precomputed-flag']
+
+const fingerprint = getClientFingerprint()
+const forwarded = JSON.parse(JSON.stringify({ clientFingerprint: fingerprint }))
+assert(typeof fingerprint === 'string' && fingerprint.length > 0, 'root entrypoint did not expose a client fingerprint')
+assert(forwarded.clientFingerprint === fingerprint, 'fingerprint did not survive application transport')
 
 assert(flag?.variationValue === true, 'precomputed flag was not parsed')
 assert(configuration.rules === undefined, 'precomputed entrypoint parsed rules')
