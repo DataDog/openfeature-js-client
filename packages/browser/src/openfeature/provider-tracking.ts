@@ -1,6 +1,7 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
+import { type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import {
   type FlaggingTrackingConfiguration,
   type FlaggingTrackingInitConfiguration,
@@ -25,6 +26,7 @@ export function createProviderTracking({
   getTrackingContext,
   getTransport,
   telemetryPolicy,
+  debug = configuration?.debug ?? NO_DEBUG,
 }: {
   options: Partial<FlaggingTrackingInitConfiguration>
   configuration?: FlaggingTrackingConfiguration
@@ -32,17 +34,26 @@ export function createProviderTracking({
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
   getTransport?: () => FlagEvaluationTransport | undefined
   telemetryPolicy?: EvaluationTelemetryPolicy
+  debug?: DebugLogger
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
+  debug.event('tracking.configured', () => ({
+    exposure: options.trackExposures ?? options.enableExposureLogging ?? enabledByDefault,
+    evaluation: options.enableFlagEvaluationTracking ?? enabledByDefault,
+    rum: options.enableRumFeatureFlagTracking ?? enabledByDefault,
+    validConfiguration: !!configuration,
+    flagConfigurationCustomFetchAppliesToTracking: false,
+  }))
 
   if (options.enableRumFeatureFlagTracking ?? enabledByDefault) {
-    trackingHooks.push({ hooks: [createRumTrackingHook(telemetryPolicy)] })
+    trackingHooks.push({ hooks: [createRumTrackingHook(telemetryPolicy, debug.child({ channel: 'rum' }))] })
   }
 
   if ((options.enableFlagEvaluationTracking ?? enabledByDefault) && configuration) {
     trackingHooks.push(
-      createTrackingHookController(() =>
-        createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy, getTransport?.())
+      createTrackingHookController(
+        () => createFlagEvalEVPHook(configuration, getTrackingContext, telemetryPolicy, getTransport?.()),
+        debug.child({ channel: 'evaluation' })
       )
     )
   }
@@ -57,13 +68,27 @@ export function createProviderTracking({
     exposureCache = cache
     const sendToDatadog = resolveTrackExposures(options, enabledByDefault)
     trackingHooks.push(
-      createTrackingHookController(async () => {
-        await runTrackingLifecycleOperation(() => cache.init())
-        return createExposureLoggingHook(configuration, cache, getTrackingContext, { sendToDatadog })
-      })
+      createTrackingHookController(
+        async () => {
+          await runTrackingLifecycleOperation(() => cache.init(), debug)
+          return createExposureLoggingHook(configuration, cache, getTrackingContext, { sendToDatadog })
+        },
+        debug.child({ channel: 'exposure' })
+      )
     )
   }
 
+  if (debug.enabled)
+    trackingHooks.push({
+      hooks: [
+        {
+          before: (context) =>
+            evaluationDebug(context.context, debug, 'before').event('evaluation.requested', () => ({ context })),
+          finally: (context, details) =>
+            evaluationDebug(context.context, debug).event('evaluation.returned', () => ({ context, details })),
+        },
+      ],
+    })
   const tracking = composeDatadogTrackingHooks(...trackingHooks)
   return {
     ...tracking,

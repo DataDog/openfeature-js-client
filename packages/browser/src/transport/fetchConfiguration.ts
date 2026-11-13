@@ -12,6 +12,7 @@ import {
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugForSignal, NO_DEBUG } from '../debug'
 import {
   ASSIGNMENT_AUTHORIZATION_FAILED,
   ASSIGNMENT_TOKEN_HEADER,
@@ -25,6 +26,7 @@ import {
   getExperimentationOptOutMode,
 } from '../openfeature/experimentation-opt-out'
 import { buildConfigurationUrl } from './configurationEndpoint'
+import { debugFetch } from './debugFetch'
 
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
@@ -63,7 +65,7 @@ interface ConfigurationRequestOptions {
   signal?: AbortSignal
 }
 
-interface ConfigurationFetchOptions {
+interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
   site?: string
@@ -129,17 +131,24 @@ export function buildConfigurationHeaders(
 export async function fetchPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions
 ): Promise<FlagsConfiguration> {
+  const debug = createDebugLogger(options.debugMode, 'configuration_fetch')
   const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
   if (error) reportDroppedFlagSelection(error)
+  debug.event('configuration.selection', () => ({ requested: options.flagSelection, effective: selection, error }))
   const requestOptions: ConfigurationRequestOptions = options
   return requestPrecomputedConfiguration(
     options,
     selection,
-    createResponseSigningController(options.responseSigning, {
-      site: requestOptions.site,
-      flaggingProxy: requestOptions.flaggingProxy,
-      env: requestOptions.env,
-    })
+    createResponseSigningController(
+      options.responseSigning,
+      {
+        site: requestOptions.site,
+        flaggingProxy: requestOptions.flaggingProxy,
+        env: requestOptions.env,
+      },
+      debug
+    ),
+    debug
   )
 }
 
@@ -147,6 +156,7 @@ async function requestPrecomputedConfiguration(
   options: PrecomputedConfigurationFetchOptions,
   flagSelection?: CanonicalFlagSelection,
   signing?: ResponseSigningController,
+  debug: DebugLogger = NO_DEBUG,
   contextAssignmentToken?: unknown
 ): Promise<FlagsConfiguration> {
   // Also sanitize the standalone fetch API; it can be used without a provider.
@@ -155,8 +165,15 @@ async function requestPrecomputedConfiguration(
     contextAssignmentToken !== undefined ? contextAssignmentToken : extracted.assignmentToken
   )
   options = { ...options, context: signing ? cloneSigningContext(extracted.context) : extracted.context }
-  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options))
-  if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+  debug.event('context.received', () => ({
+    context: options.context,
+    assignmentCredentialPresent: assignmentToken !== undefined,
+  }))
+  const optedOut = experimentationOptOutPolicy(options.context, getExperimentationOptOutMode(options, debug))
+  if (optedOut === undefined) {
+    debug.event('context.invalid', () => ({ context: options.context, reason: INVALID_EXPERIMENTATION_OPT_OUT }))
+    throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+  }
   const requestOptions: ConfigurationRequestOptions = options
   const url = buildConfigurationUrl(requestOptions, 'precomputed')
   const fetchedAt = timeStampNow()
@@ -183,9 +200,15 @@ async function requestPrecomputedConfiguration(
   // Stringify all context values
   const stringifiedContext: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.context)) {
-    stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+    try {
+      stringifiedContext[key] = typeof value === 'string' ? value : JSON.stringify(value)
+    } catch (error) {
+      debug.event('context.encoding_failed', () => ({ key, value, type: typeof value, error }))
+      throw error
+    }
   }
 
+  const targetingKey = options.context.targetingKey || ''
   const body = serializeRequestBody(
     {
       data: {
@@ -195,7 +218,7 @@ async function requestPrecomputedConfiguration(
           source: sourcePayload,
           ...(optedOut && { evaluation_options: { experimentation_opt_out_mode: optedOut.mode } }),
           subject: {
-            targeting_key: options.context.targetingKey || '',
+            targeting_key: targetingKey,
             targeting_attributes: stringifiedContext,
           },
           ...(flagSelection && {
@@ -206,24 +229,47 @@ async function requestPrecomputedConfiguration(
     },
     options.signal
   )
-  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body)
+  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body, debug)
   const fetchImplementation = options.fetch ?? globalThis.fetch
+  debug.event('context.normalized', () => ({
+    rawContext: options.context,
+    normalizedContext: stringifiedContext,
+    targetingKey,
+    optedOut,
+    flagSelection,
+    capabilities: capabilitiesHeader,
+  }))
   let response: Response
   try {
-    response = await fetchImplementation(url.toString(), {
-      method: 'POST',
-      headers: signingRequest?.headers ?? defaultHeaders,
-      signal: options.signal,
-      body,
-      ...(signing && { redirect: 'error' as const }),
-    })
+    response = await debugFetch(
+      fetchImplementation,
+      url.toString(),
+      {
+        method: 'POST',
+        headers: signingRequest?.headers ?? defaultHeaders,
+        signal: options.signal,
+        body,
+        ...(signing && { redirect: 'error' as const }),
+      },
+      debug,
+      assignmentToken !== undefined,
+      signing?.mode !== 'required'
+    )
   } catch (error) {
     if (assignmentToken === undefined) throw error
     // Custom transports can include request headers in their message, stack,
     // cause or extra properties. Never forward the original error object.
     throw redactAssignmentError(error, new Error('Failed to fetch flag configuration: transport error'))
   }
-  if (await isAssignmentAuthorizationRejection(response)) throw assignmentAuthorizationError()
+  if (await isAssignmentAuthorizationRejection(response)) {
+    debug.event('authorization.rejected', () => ({
+      httpStatus: response.status,
+      reason: ASSIGNMENT_AUTHORIZATION_FAILED,
+      credentialPresent: assignmentToken !== undefined,
+      action: 'same_subject_fallback_only',
+    }))
+    throw assignmentAuthorizationError()
+  }
   if (!response.ok) {
     // A proxy may echo request headers in an error body. Do not expose that body
     // through OpenFeature errors when a credential was supplied.
@@ -234,17 +280,64 @@ async function requestPrecomputedConfiguration(
   let signedResponse: Awaited<ReturnType<ResponseSigningController['read']>> | undefined
   let responseBody: unknown
   try {
-    signedResponse = signing ? await signing.read(response, signingRequest) : undefined
+    signedResponse = signing ? await signing.read(response, signingRequest, debug) : undefined
     responseBody = signedResponse ? signedResponse.json : await response.json()
   } catch (error) {
+    debug.event('configuration.decode_failed', () => ({
+      stage: error instanceof ResponseVerificationError ? 'signature_verification' : 'body_read_or_json_decode',
+      httpStatus: response.status,
+      error:
+        assignmentToken === undefined || error instanceof ResponseVerificationError
+          ? error
+          : 'Assignment response is not valid JSON',
+      action: 'reject_response',
+    }))
     // Verification failures contain fixed codes, not server or transport content.
     if (error instanceof ResponseVerificationError) throw error
     if (assignmentToken === undefined) throw error
     throw redactAssignmentError(error, new ParseError('Assignment response is not valid JSON'))
   }
-  const parsed = parsePrecomputedConfigurationResponse(responseBody)
+  const parsed = parsePrecomputedConfigurationResponse(
+    responseBody,
+    debug.enabled
+      ? (key, issue) => {
+          debug.event('configuration.flag_rejected', () => ({
+            flagKey: key,
+            ...issue,
+            actualType: typeof issue.actual,
+            rejectionScope: 'individual_flag',
+          }))
+        }
+      : undefined
+  )
+  debug.event('configuration.decoded', () => {
+    const raw = responseBody as { data?: { attributes?: { flags?: unknown } } } | null
+    const receivedFlags = raw?.data?.attributes?.flags
+    const receivedKeys = receivedFlags && typeof receivedFlags === 'object' ? Object.keys(receivedFlags) : []
+    const rejectedKeys = 'error' in parsed ? receivedKeys : Object.keys(parsed.flagErrors ?? {})
+    const rejected = new Set(rejectedKeys)
+    const acceptedKeys =
+      'error' in parsed ? [] : Object.keys(parsed.response.data.attributes.flags).filter((key) => !rejected.has(key))
+    return {
+      raw: responseBody,
+      parsed,
+      outcome: 'error' in parsed ? 'rejected' : 'decoded',
+      receivedCount: receivedKeys.length,
+      acceptedCount: acceptedKeys.length,
+      rejectedCount: rejectedKeys.length,
+      acceptedKeys,
+      rejectedKeys,
+      flagErrors: 'error' in parsed ? undefined : parsed.flagErrors,
+      rejectionScope: 'error' in parsed ? 'response' : 'individual_flags',
+    }
+  })
   if ('error' in parsed) return { precomputedError: parsed.error }
   if (!acknowledgesExperimentationOptOut({ precomputed: parsed }, optedOut)) {
+    debug.event('configuration.rejected', () => ({
+      reason: 'experimentation_policy_mismatch',
+      optedOut,
+      response: parsed,
+    }))
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }
 
@@ -255,7 +348,7 @@ async function requestPrecomputedConfiguration(
       fetchedAt,
     },
   }
-  signing?.admit(configuration, options.context, signedResponse?.proof, options.signal)
+  signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
   return configuration
 }
 
@@ -298,15 +391,26 @@ export function createFlagsConfigurationFetcher(
     site: initConfiguration.site,
     flaggingProxy: initConfiguration.flaggingProxy,
     env: initConfiguration.env,
-  })
+  }),
+  debug: DebugLogger = NO_DEBUG
 ) {
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
-  buildConfigurationUrl(initConfiguration, 'precomputed')
+  try {
+    buildConfigurationUrl(initConfiguration, 'precomputed')
+  } catch (error) {
+    debug.event('init.failed', () => ({ error, stage: 'endpoint' }))
+    throw error
+  }
   const { selection: flagSelection, error: flagSelectionError } = canonicalizeFlagSelection(
     initConfiguration.flagSelection
   )
   if (flagSelectionError) reportDroppedFlagSelection(flagSelectionError)
+  debug.event('configuration.selection', () => ({
+    requested: initConfiguration.flagSelection,
+    effective: flagSelection,
+    error: flagSelectionError,
+  }))
   return async (
     context: EvaluationContext,
     { signal, assignmentToken }: { signal?: AbortSignal; assignmentToken?: unknown } = {}
@@ -321,6 +425,7 @@ export function createFlagsConfigurationFetcher(
       },
       flagSelection,
       signing,
+      signal ? debugForSignal(signal) : debug,
       assignmentToken
     )
     // Use the provider's existing context-matched cache fallback. Do not replace

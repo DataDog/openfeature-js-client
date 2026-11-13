@@ -145,6 +145,13 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   }
 
   const flag = getOwnProperty(attributes.flags, lookup.key)
+  logger.debug('precomputed flag lookup', {
+    flagKey,
+    lookupKey: lookup.key,
+    encoding: encoding.encoding,
+    requestedType: type,
+    rawFlag: flag,
+  })
   if (!flag) {
     return {
       value: defaultValue,

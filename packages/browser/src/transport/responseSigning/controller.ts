@@ -1,5 +1,6 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
 import { signingContextKey } from './context'
 import { bundledRootsForEndpoint } from './trustRoots'
@@ -35,23 +36,53 @@ export interface ResponseSigningConfiguration {
 
 export function createResponseSigningController(
   options: ResponseSigningConfiguration | undefined,
-  scope: ConfigurationEndpointOptions & Record<string, unknown> = {}
+  scope: ConfigurationEndpointOptions & Record<string, unknown> = {},
+  debug: DebugLogger = NO_DEBUG
 ) {
   const mode = options?.mode ?? 'off'
-  if (!['off', 'observe', 'required'].includes(mode)) throw new Error('Invalid response signing mode')
+  debug.event('signing.configured', () => ({
+    mode,
+    trustSource: options?.trustedRootCertificates === undefined ? 'bundled_endpoint_roots' : 'explicit_roots',
+    trustAnchorCount: options?.trustedRootCertificates?.length,
+  }))
+  if (!['off', 'observe', 'required'].includes(mode)) {
+    debug.event('init.failed', () => ({ field: 'responseSigning.mode', reason: 'invalid_signing_mode' }))
+    throw new Error('Invalid response signing mode')
+  }
   if (mode === 'off') return undefined
   const endpoint = buildConfigurationUrl(scope, 'precomputed')
   const automaticRoots = options?.trustedRootCertificates === undefined
   const roots = [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]
-  if (roots.length > 4 || roots.some((root) => typeof root !== 'string' || root.length > 5464))
+  if (roots.length > 4 || roots.some((root) => typeof root !== 'string' || root.length > 5464)) {
+    debug.event('init.failed', () => ({
+      field: 'responseSigning.trustedRootCertificates',
+      reason: 'invalid_trust_anchors',
+    }))
     throw new Error('Invalid response signing trust anchors')
-  if (mode === 'required' && !roots.length)
+  }
+  debug.event('signing.trust', () => ({
+    mode,
+    trustAnchorCount: roots.length,
+    source: automaticRoots ? 'bundled_endpoint_roots' : 'explicit_roots',
+  }))
+  if (mode === 'required' && !roots.length) {
+    debug.event('init.failed', () => ({
+      field: 'responseSigning.trustedRootCertificates',
+      reason: 'missing_trusted_root',
+    }))
     throw new Error('Required response signing needs a locally trusted root certificate')
+  }
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()
   const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
-  function failure(error: unknown): undefined {
+  function failure(error: unknown, logger = debug, stage = 'verification'): undefined {
     const reason = error instanceof ResponseVerificationError ? error.reason : 'invalid-proof'
+    logger.event('signing.failed', () => ({
+      mode,
+      stage,
+      reason,
+      action: mode === 'required' ? 'reject_response' : 'continue_unverified',
+    }))
     if (mode === 'required')
       throw error instanceof ResponseVerificationError ? error : new ResponseVerificationError(reason)
     return undefined
@@ -62,11 +93,17 @@ export function createResponseSigningController(
     cacheNamespace(): Promise<string | undefined> {
       namespace ??= sha256(utf8(serializedScope)).then(
         (digest) => `response-signing-v1-${hex(digest)}`,
-        () => undefined
+        () => {
+          debug.event('cache.namespace_unavailable', () => ({
+            reason: 'signing_digest_failed',
+            action: 'skip_persistence',
+          }))
+          return undefined
+        }
       )
       return namespace
     },
-    prepare(url: string, headers: Record<string, string>, body: string): SigningRequest | undefined {
+    prepare(url: string, headers: Record<string, string>, body: string, logger = debug): SigningRequest | undefined {
       try {
         if (automaticRoots && new URL(url).origin !== endpoint.origin)
           throw new ResponseVerificationError('unsupported-request')
@@ -101,17 +138,27 @@ export function createResponseSigningController(
         normalized.set('x-dd-feature-flags-capabilities', capabilities.sort().join(','))
         const request = { url, method: 'POST', headers: normalized, body: utf8(body) }
         validateSigningRequest(request)
+        logger.event('signing.prepared', () => ({ mode, noncePresent: true, version: 1, bufferedResponse: true }))
         return request
       } catch (error) {
-        return failure(error)
+        return failure(error, logger, 'request_preparation')
       }
     },
     async read(
       response: Response,
-      request: SigningRequest | undefined
+      request: SigningRequest | undefined,
+      logger = debug
     ): Promise<{ json: unknown; proof?: VerifiedResponse }> {
       // A custom fetch may ignore redirect: 'error'. Redirects are transport failures, even in observe mode.
-      if (response.redirected) throw new Error('Flag configuration redirects are not supported with response signing')
+      if (response.redirected) {
+        logger.event('signing.failed', () => ({
+          mode,
+          stage: 'response',
+          reason: 'redirected_response',
+          action: 'reject_response',
+        }))
+        throw new Error('Flag configuration redirects are not supported with response signing')
+      }
       if (!request) return { json: await response.json() }
       // Response bodies are application bytes: fetch has already decompressed HTTP content-encoding.
       let bytes: Uint8Array
@@ -126,7 +173,7 @@ export function createResponseSigningController(
             length += result.value.length
             if (length > MAX_SIGNED_RESPONSE) {
               void reader.cancel().catch(() => undefined)
-              failure(new ResponseVerificationError('response-too-large'))
+              failure(new ResponseVerificationError('response-too-large'), logger)
             }
             chunks.push(result.value)
           }
@@ -148,8 +195,9 @@ export function createResponseSigningController(
           roots
         )
       } catch (error) {
-        failure(error)
+        failure(error, logger)
       }
+      logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
       // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
       return { json: JSON.parse(new TextDecoder().decode(bytes)), proof }
     },
@@ -157,14 +205,16 @@ export function createResponseSigningController(
       config: FlagsConfiguration,
       context: EvaluationContext,
       proof: VerifiedResponse | undefined,
-      signal?: AbortSignal
+      signal?: AbortSignal,
+      logger = debug
     ): void {
       signal?.throwIfAborted()
       if (proof) {
         if (proof.expiresAt <= Date.now() / 1000 || proof.verifiedAt > Date.now() / 1000) {
-          failure(new ResponseVerificationError('expired-proof'))
+          failure(new ResponseVerificationError('expired-proof'), logger, 'admission')
           return
         }
+        logger.event('signing.admitted', () => ({ mode, expiresAt: proof.expiresAt, verifiedAt: proof.verifiedAt }))
         verified.set(config, { ...proof, acceptedAt: proof.verifiedAt, context: signingContextKey(context) })
       }
     },

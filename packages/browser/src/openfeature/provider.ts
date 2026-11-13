@@ -29,6 +29,13 @@ import {
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
 import {
+  bindDebugSignal,
+  configurationDebugFields,
+  configurationSummaryFields,
+  debugForSignal,
+  registerDebugLogger,
+} from '../debug'
+import {
   ASSIGNMENT_AUTHORIZATION_FAILED,
   extractAssignmentToken,
   normalizeAssignmentToken,
@@ -149,10 +156,11 @@ export class DatadogProvider extends DatadogProviderBase {
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
-    super()
-    this.experimentationOptOutMode = getExperimentationOptOutMode(options)
+    super(options)
+    registerDebugLogger(this.metadata, this.debug)
+    this.experimentationOptOutMode = getExperimentationOptOutMode(options, this.debug)
     this.requestDiagnostics = createRequestDiagnostics()
-    this.configuration = validateAndBuildFlaggingConfiguration(options)
+    this.configuration = validateAndBuildFlaggingConfiguration(options, this.debug)
     const getTrackingContext = () => this.effectiveTrackingContext()
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
     registerDatadogProvider(this.metadata)
@@ -165,6 +173,7 @@ export class DatadogProvider extends DatadogProviderBase {
       getTransport: () => this.flagEvaluationTransport,
       getTrackingContext,
       telemetryPolicy: this.telemetryPolicy,
+      debug: this.debug,
     })
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
@@ -173,13 +182,47 @@ export class DatadogProvider extends DatadogProviderBase {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
         canonicalizeFlagSelection(options.flagSelection).selection,
-        this.configuration?.responseSigning?.cacheNamespace
+        this.configuration?.responseSigning?.cacheNamespace,
+        this.debug
       )
     }
 
     this.flagsConfiguration =
       this.configuration?.responseSigning?.mode === 'required' ? undefined : options.initialFlagsConfiguration
+    this.configurationSource = this.flagsConfiguration ? 'initial_configuration' : 'none'
     this.status = ProviderStatus.NOT_READY
+    this.debug.event('cache.configured', () => ({
+      cache: 'assignments',
+      backend: this.flagsCache ? 'indexeddb' : 'memory',
+      initialConfiguration: options.initialFlagsConfiguration,
+      initialConfigurationAccepted: !!this.flagsConfiguration,
+      signingMode: this.configuration?.responseSigning?.mode ?? 'off',
+      persistence:
+        this.configuration?.responseSigning?.mode === 'required'
+          ? 'stored_assignments_are_not_verified_proofs'
+          : 'context_matched',
+    }))
+  }
+
+  private contextRevision = 0
+  private configurationRevision = 0
+  private configurationSource = 'none'
+  private closed = false
+
+  protected debugEvaluationFields(): Record<string, unknown> {
+    return {
+      ...configurationSummaryFields(this.flagsConfiguration),
+      expirationPolicy:
+        this.configuration?.responseSigning?.mode === 'required' ? 'verified_proof_expiry' : 'no_sdk_ttl',
+      signingMode: this.configuration?.responseSigning?.mode ?? 'off',
+      contextRevision: this.contextRevision,
+      configurationRevision: this.configurationRevision,
+      source: this.configurationSource,
+      state: this.status,
+      effectiveContext: this.evaluationContext,
+      pendingContext: this.requestedEvaluationContext,
+      closed: this.closed,
+    }
   }
 
   async initialize(context: EvaluationContext = {}): Promise<void> {
@@ -195,16 +238,22 @@ export class DatadogProvider extends DatadogProviderBase {
       }
     }
     const telemetry = this.lifecycleTelemetry
+    this.closed = false
+    this.debug.event('init.started', () => ({ context, state: this.status }))
     this.exposureCacheReady = this.tracking.initialize()
     try {
-      return await this.setContext(context, 'initialization')
+      await this.setContext(context, 'initialization')
+      this.debug.event('init.completed', () => this.debugEvaluationFields())
     } catch (error) {
       telemetry?.settle('failed')
+      this.debug.event('init.failed', () => ({ error, ...this.debugEvaluationFields() }))
       throw error
     }
   }
 
   async onClose(): Promise<void> {
+    this.closed = true
+    this.debug.event('shutdown.started', () => ({ state: this.status, contextRevision: this.contextRevision }))
     try {
       this.lifecycleTelemetry?.stop()
     } catch {
@@ -222,6 +271,13 @@ export class DatadogProvider extends DatadogProviderBase {
       this.initializationStarted = false
     }
     this.status = ProviderStatus.NOT_READY
+    this.debug.event('shutdown.completed', () => ({
+      state: this.status,
+      assignmentsRetained: true,
+      persistentCacheRetained: true,
+      request: 'aborted',
+      transportDrain: 'best_effort',
+    }))
   }
 
   public onContextChange(_oldContext: EvaluationContext, context: EvaluationContext): Promise<void> {
@@ -229,16 +285,27 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   private setContext(context: EvaluationContext, trigger: FetchTrigger = 'context_change'): Promise<void> {
+    const revision = ++this.contextRevision
+    const debug = this.debug.child({ contextRevision: revision, requestId: revision })
     const { context: targetingContext, assignmentToken: suppliedToken } = extractAssignmentToken(context)
     const assignmentToken = normalizeAssignmentToken(suppliedToken)
     const effectiveContext = this.isRumIntegrationEnabled
-      ? enrichEvaluationContextWithRumUser(targetingContext)
+      ? enrichEvaluationContextWithRumUser(targetingContext, debug)
       : targetingContext
     // RUM user attributes must never supply or restore an assignment credential.
     const { context: sanitizedContext } = extractAssignmentToken(effectiveContext)
     const evaluationContext: EvaluationContext = this.configuration?.responseSigning
       ? cloneSigningContext(sanitizedContext)
       : sanitizedContext
+    debug.event('context.accepted', () => ({
+      rawContext: targetingContext,
+      effectiveContext,
+      previousRequestedContext: this.requestedEvaluationContext,
+      assignmentContext: this.evaluationContext,
+      trigger,
+      closed: this.closed,
+      targetingKeyPresent: !!evaluationContext.targetingKey,
+    }))
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
     this.requestedEvaluationContext = evaluationContext
@@ -250,6 +317,7 @@ export class DatadogProvider extends DatadogProviderBase {
     if (this.status === ProviderStatus.NOT_READY) {
       // we're initializing, no status changes necessary
     } else {
+      debug.event('provider.state_changed', () => ({ previousState: this.status, state: ProviderStatus.RECONCILING }))
       this.status = ProviderStatus.RECONCILING
       this.events.emit(ProviderEvents.Reconciling)
     }
@@ -262,6 +330,18 @@ export class DatadogProvider extends DatadogProviderBase {
 
     const signal = this.contextUpdateAbortController.signal
     this.requestDiagnostics.accept(signal, trigger)
+    bindDebugSignal(signal, debug)
+    if (debug.enabled)
+      signal.addEventListener(
+        'abort',
+        () =>
+          debug.event('fetch.cancelled', () => ({
+            reason: signal.reason,
+            action: 'abort_signal',
+            customTransportMayContinue: true,
+          })),
+        { once: true }
+      )
 
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
@@ -273,12 +353,19 @@ export class DatadogProvider extends DatadogProviderBase {
         this.maybeClearExposureCache(result.config, { signal }).then(
           () => result,
           // Ignore exposure cache errors. They should not prevent us from using the latest configuration.
-          () => result
+          (error) => {
+            debug.event('cache.reset_failed', () => ({ cache: 'exposures', error, action: 'use_configuration' }))
+            return result
+          }
         )
       )
       .then(
-        ({ config, fromCache }) => {
+        ({ config, fromCache, source }) => {
           if (signal.aborted) {
+            debug.event('configuration.discarded', () => ({
+              reason: this.closed ? 'closed' : 'superseded',
+              currentRevision: this.contextRevision,
+            }))
             // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           }
@@ -292,6 +379,16 @@ export class DatadogProvider extends DatadogProviderBase {
             this.configuration?.responseSigning?.mode === 'required' &&
             !this.configuration.responseSigning.isVerified(config, evaluationContext)
           ) {
+            debug.event('configuration.rejected', () => ({
+              reason: 'expired_proof',
+              stage: 'installation',
+              action: 'retain_previous_configuration',
+            }))
+            debug.event('provider.state_changed', () => ({
+              previousState: this.status,
+              state: ProviderStatus.ERROR,
+              reason: 'expired_proof',
+            }))
             this.status = ProviderStatus.ERROR
             const error = new ResponseVerificationError('expired-proof')
             this.verificationError = error
@@ -300,6 +397,8 @@ export class DatadogProvider extends DatadogProviderBase {
           }
           const recoveredFromExpiry = this.proofExpirySignaled
           this.proofExpirySignaled = false
+          this.configurationRevision++
+          this.configurationSource = source
           this.flagsConfiguration = config
           if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
             this.verifiedConfiguration = config
@@ -307,7 +406,20 @@ export class DatadogProvider extends DatadogProviderBase {
           // Same-subject fallback can have older attributes. Keep its original
           // context for evaluation and telemetry; do not relabel or re-cache it.
           this.evaluationContext = fromCache ? (config.precomputed?.context ?? evaluationContext) : evaluationContext
+          const previousState = this.status
           this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          debug.event('configuration.installed', () => ({
+            ...configurationDebugFields(config),
+            source,
+            configurationRevision: this.configurationRevision,
+            fromCache,
+          }))
+          debug.event('provider.state_changed', () => ({
+            previousState,
+            state: this.status,
+            source,
+            configurationRevision: this.configurationRevision,
+          }))
           // Report fallback errors only after the update survives cache reconciliation.
           if (fromCache) this.lifecycleTelemetry?.providerError()
           this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
@@ -329,6 +441,10 @@ export class DatadogProvider extends DatadogProviderBase {
         },
         (error) => {
           if (signal.aborted) {
+            debug.event('configuration.discarded', () => ({
+              reason: this.closed ? 'closed' : 'superseded',
+              currentRevision: this.contextRevision,
+            }))
             // Follow the newer update, or the settled promise installed by onClose.
             return this.latestContextUpdate
           } else {
@@ -336,6 +452,16 @@ export class DatadogProvider extends DatadogProviderBase {
             this.verificationError = error instanceof ResponseVerificationError ? error : undefined
             this.assignmentSubjectIsolationRequired ||=
               error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
+            debug.event('configuration.failed', () => ({
+              error,
+              action: 'retain_previous_configuration',
+              ...this.debugEvaluationFields(),
+            }))
+            debug.event('provider.state_changed', () => ({
+              previousState: this.status,
+              state: ProviderStatus.ERROR,
+              error,
+            }))
             this.status = ProviderStatus.ERROR
             this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
@@ -354,10 +480,11 @@ export class DatadogProvider extends DatadogProviderBase {
   private async retrieveFlagsConfiguration(
     context: EvaluationContext,
     { signal, assignmentToken }: { signal: AbortSignal; assignmentToken?: unknown }
-  ): Promise<{ config: FlagsConfiguration; fromCache: boolean }> {
+  ): Promise<{ config: FlagsConfiguration; fromCache: boolean; source: string }> {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
+    const debug = debugForSignal(signal)
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
     const signing = this.configuration.responseSigning
@@ -367,13 +494,24 @@ export class DatadogProvider extends DatadogProviderBase {
       (signing?.mode !== 'required' || signing.isVerified(config, context))
     const retainedConfig = this.flagsConfiguration
 
+    const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
     // Prefer verified memory, then current config, before persistent cache.
-    const cachedConfigPromise =
+    const verifiedMemoryEligible =
       signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
-        ? Promise.resolve(this.verifiedConfiguration)
-        : canUse(retainedConfig)
-          ? Promise.resolve(retainedConfig)
-          : this.flagsCache?.get(context, optedOut)
+    const memoryEligible = !verifiedMemoryEligible && canUse(retainedConfig)
+    const cachedConfigPromise = verifiedMemoryEligible
+      ? Promise.resolve(this.verifiedConfiguration)
+      : memoryEligible
+        ? Promise.resolve(retainedConfig)
+        : this.flagsCache?.get(context, optedOut, ...(debug.enabled ? ([debug] as const) : ([] as const)))
+    debug.event('cache.eligibility', () => ({
+      requestedContext: context,
+      ...configurationDebugFields(retainedConfig),
+      eligible: memoryEligible,
+      verifiedMemoryEligible,
+      optedOut,
+      signingMode: signing?.mode ?? 'off',
+    }))
 
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal, assignmentToken })
@@ -385,13 +523,19 @@ export class DatadogProvider extends DatadogProviderBase {
       } else if (config.precomputedError) {
         this.lifecycleTelemetry?.providerError()
       }
-      this.flagsCache?.set(config, context, optedOut, signal)
-      return { config, fromCache: false }
+      this.flagsCache?.set(config, context, optedOut, signal, ...(debug.enabled ? ([debug] as const) : ([] as const)))
+      return { config, fromCache: false, source: 'network' }
     } catch (err) {
       if (!signal.aborted && err instanceof GeneralError && err.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
         display.warn(`Assignment download failed: ${ASSIGNMENT_AUTHORIZATION_FAILED}`)
         allowSameSubject = true
       }
+      debug.event('configuration.refresh_failed', () => ({
+        error: err,
+        action: 'check_eligible_fallback',
+        sameSubjectRequired: allowSameSubject,
+        signingMode: signing?.mode ?? 'off',
+      }))
       // Try to recover with current/cached config
       try {
         const fallback =
@@ -402,9 +546,31 @@ export class DatadogProvider extends DatadogProviderBase {
               : cachedConfigPromise
         const config = await waitWithAbort(signal, fallback)
         if (config && canUse(config)) {
-          return { config, fromCache: true }
+          debug.event('cache.fallback', () => ({
+            error: err,
+            requestedContext: context,
+            ...configurationDebugFields(config),
+            source:
+              config === this.verifiedConfiguration
+                ? 'verified_memory'
+                : config === retainedConfig
+                  ? memorySource
+                  : 'indexeddb',
+          }))
+          return {
+            config,
+            fromCache: true,
+            source:
+              config === this.verifiedConfiguration
+                ? 'verified_memory'
+                : config === retainedConfig
+                  ? memorySource
+                  : 'indexeddb',
+          }
         }
-      } catch (err) {}
+      } catch (cacheError) {
+        debug.event('cache.fallback_failed', () => ({ cacheError }))
+      }
 
       if (!signal.aborted) this.lifecycleTelemetry?.providerError()
       throw err
@@ -446,6 +612,12 @@ export class DatadogProvider extends DatadogProviderBase {
     const prevCreatedAt = this.flagsConfiguration?.precomputed?.response.data.attributes.createdAt
     const newCreatedAt = newFlagsConfiguration.precomputed?.response.data.attributes.createdAt
     if (prevCreatedAt !== undefined && prevCreatedAt !== newCreatedAt) {
+      this.debug.event('cache.reset', () => ({
+        cache: 'exposures',
+        reason: 'configuration_timestamp_changed',
+        prevCreatedAt,
+        newCreatedAt,
+      }))
       await waitWithAbort(signal, this.exposureCache?.clear())
     }
   }
@@ -462,6 +634,11 @@ export class DatadogProvider extends DatadogProviderBase {
       experimentationOptOutPolicy(this.requestedEvaluationContext, this.experimentationOptOutMode) !== undefined &&
       !this.canUseConfiguration(this.flagsConfiguration, this.requestedEvaluationContext, true)
     ) {
+      this.debug.event('authorization.isolation', () => ({
+        flagKey,
+        reason: 'assignments_do_not_match_requested_subject',
+        action: 'runtime_default',
+      }))
       return bindEvaluationTelemetryResult(
         { value: defaultValue, reason: 'ERROR', errorCode: ErrorCode.GENERAL },
         this.telemetryPolicy,
@@ -481,6 +658,15 @@ export class DatadogProvider extends DatadogProviderBase {
       (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
     ) {
       this.proofExpirySignaled = true
+      this.debug.event('signing.expired', () => ({
+        configurationRevision: this.configurationRevision,
+        action: 'runtime_default_until_verified_refresh',
+      }))
+      this.debug.event('provider.state_changed', () => ({
+        previousState: this.status,
+        state: ProviderStatus.ERROR,
+        reason: 'expired_proof',
+      }))
       this.status = ProviderStatus.ERROR
       this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
     }

@@ -1,6 +1,8 @@
 import { canonicalizeFlagSelection, type FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
 import { timeStampNow } from '@datadog/js-core/time'
+import { createDebugLogger } from '../debug'
+import { debugFetch } from './debugFetch'
 import {
   buildConfigurationHeaders,
   buildConfigurationUrl,
@@ -15,27 +17,48 @@ import {
 } from './flagSelection'
 
 export async function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration> {
+  const debug = createDebugLogger(options.debugMode, 'rules_fetch')
   const { url, selected } = buildRulesUrl(options)
+  debug.event('configuration.selection', () => ({ requested: options.flagSelection, selected }))
   const fetchedAt = timeStampNow()
   const fetchImplementation = options.fetch ?? globalThis.fetch
-  const response = await fetchImplementation(url.toString(), {
-    method: 'GET',
-    headers: buildConfigurationHeaders(
-      options,
-      {
-        Accept: 'application/protobuf',
-      },
-      'rules'
-    ),
-    signal: options.signal,
-  })
+  const response = await debugFetch(
+    fetchImplementation,
+    url.toString(),
+    {
+      method: 'GET',
+      headers: buildConfigurationHeaders(
+        options,
+        {
+          Accept: 'application/protobuf',
+        },
+        'rules'
+      ),
+      signal: options.signal,
+    },
+    debug
+  )
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
   if (selected) reportIgnoredFlagSelection(response)
 
-  const configuration = configurationFromRulesBinary(new Uint8Array(await response.arrayBuffer()))
+  let bytes: Uint8Array
+  let configuration: FlagsConfiguration
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer())
+    configuration = configurationFromRulesBinary(bytes)
+  } catch (error) {
+    debug.event('configuration.decode_failed', () => ({
+      stage: 'body_read_or_protobuf_decode',
+      httpStatus: response.status,
+      error,
+      action: 'reject_response',
+    }))
+    throw error
+  }
+  debug.event('configuration.decoded', () => ({ rawBytes: bytes, configuration }))
   if (configuration.rules) {
     configuration.rules.fetchedAt = fetchedAt
   }

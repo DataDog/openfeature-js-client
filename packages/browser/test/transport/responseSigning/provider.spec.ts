@@ -1051,3 +1051,51 @@ describe('response signing with assignment authorization', () => {
     ).rejects.toThrow('Assignment response is not valid JSON')
   })
 })
+
+describe('response signing debug diagnostics', () => {
+  let log: jest.SpyInstance
+  const events = (name: string) =>
+    log.mock.calls
+      .map(([line]) => JSON.parse(String(line).slice('[Datadog Feature Flags] '.length)))
+      .filter((record) => record.event === name)
+  beforeEach(() => {
+    log = jest.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  test.each(['observe', 'required'] as const)(
+    'logs %s verification failures without changing admission',
+    async (mode) => {
+      global.fetch = jest.fn().mockResolvedValue(unsigned())
+      const subject = provider(mode, { debugMode: true })
+      if (mode === 'required') await expect(subject.initialize(context)).rejects.toThrow()
+      else {
+        await subject.initialize(context)
+        expect(evaluation(subject)).toBe(true)
+      }
+      expect(events('signing.failed')[0].details).toMatchObject({
+        mode,
+        action: mode === 'required' ? 'reject_response' : 'continue_unverified',
+      })
+      expect(JSON.stringify(log.mock.calls)).not.toContain('token-a')
+    }
+  )
+
+  test('logs verified memory fallback and proof expiry, without cloning the bounded response stream', async () => {
+    const clone = jest.fn(() => {
+      throw new Error('must not clone')
+    })
+    global.fetch = jest.fn(async (url, init) => Object.assign(await signed(url, init), { clone }))
+    const subject = provider('required', { debugMode: true })
+    await subject.initialize(context)
+    expect(events('signing.verified')[0].details.outcome).toBe('verified')
+    expect(clone).not.toHaveBeenCalled()
+    global.fetch = jest.fn().mockRejectedValue(new Error('offline'))
+    await subject.onContextChange(context, context)
+    expect(events('cache.fallback').slice(-1)[0].details.source).toBe('verified_memory')
+    expect(evaluation(subject)).toBe(true)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 301) * 1000)
+    expect(evaluation(subject)).toBe(false)
+    expect(events('signing.expired')[0].details.action).toBe('runtime_default_until_verified_refresh')
+    expect(events('evaluation.completed').slice(-1)[0].details.expirationPolicy).toBe('verified_proof_expiry')
+  })
+})

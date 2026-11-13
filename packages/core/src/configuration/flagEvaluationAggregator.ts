@@ -33,29 +33,43 @@ interface FlagEvaluationAggregationData {
   error?: string
 }
 
+export interface AggregationDiagnostic {
+  type: 'add' | 'flush'
+  aggregationId: string
+  aggregationSize: number
+  data: Readonly<FlagEvaluationAggregationData>
+  event?: FlagEvaluationEvent
+  trigger?: string
+}
+
 export class FlagEvaluationAggregator {
   private aggregatedData = new Map<string, FlagEvaluationAggregationData>()
+  private generation = 0
   private intervalId?: NodeJS.Timeout
   private readonly flushInterval: number
   private readonly onFlush: (events: FlagEvaluationEvent[]) => void
 
-  constructor(flushInterval: number, onFlush: (events: FlagEvaluationEvent[]) => void) {
+  constructor(
+    flushInterval: number,
+    onFlush: (events: FlagEvaluationEvent[]) => void,
+    private readonly observe?: (diagnostic: AggregationDiagnostic) => void
+  ) {
     this.flushInterval = flushInterval
     this.onFlush = onFlush
   }
 
   start(): void {
     this.intervalId = setInterval(() => {
-      this.flush()
+      this.flush('interval')
     }, this.flushInterval)
   }
 
-  stop(): void {
+  stop(trigger = 'shutdown'): void {
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = undefined
     }
-    this.flush()
+    this.flush(trigger)
   }
 
   addEvaluation<T extends FlagValue>(context: EvaluationContext, details: EvaluationDetails<T>, error?: string): void {
@@ -90,17 +104,44 @@ export class FlagEvaluationAggregator {
         error,
       })
     }
+    this.notify(() => ({
+      type: 'add',
+      aggregationId: `${this.generation}:${keyString}`,
+      aggregationSize: this.aggregatedData.size,
+      data: this.aggregatedData.get(keyString)!,
+    }))
   }
 
-  flush(): void {
+  private notify(fields: () => AggregationDiagnostic): void {
+    if (this.observe) {
+      try {
+        this.observe(fields())
+      } catch {
+        /* Diagnostics cannot change aggregation or delivery. */
+      }
+    }
+  }
+
+  flush(trigger = 'manual'): void {
     if (this.aggregatedData.size === 0) {
       return
     }
 
     const flushTimestamp = timeStampNow()
-    const events = Array.from(this.aggregatedData.values()).map((data) =>
-      createFlagEvaluationEvent(data, flushTimestamp)
-    )
+    const entries = Array.from(this.aggregatedData.entries())
+    const events = entries.map(([key, data]) => {
+      const event = createFlagEvaluationEvent(data, flushTimestamp)
+      this.notify(() => ({
+        type: 'flush',
+        aggregationId: `${this.generation}:${key}`,
+        aggregationSize: entries.length,
+        data,
+        event,
+        trigger,
+      }))
+      return event
+    })
+    this.generation++
     this.aggregatedData.clear()
     this.onFlush(events)
   }

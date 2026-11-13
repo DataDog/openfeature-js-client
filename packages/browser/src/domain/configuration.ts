@@ -1,7 +1,8 @@
 import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog/browser-core'
-import { validateAndBuildConfiguration } from '@datadog/browser-core'
+import { buildEndpointHost, validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugOptions, debugUrl } from '../debug'
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
@@ -23,7 +24,7 @@ export interface EvaluationTelemetryOptOutConfiguration {
 /**
  * Init Configuration for the Flagging SDK.
  */
-export interface FlaggingTrackingInitConfiguration extends InitConfiguration {
+export interface FlaggingTrackingInitConfiguration extends InitConfiguration, DebugConfiguration {
   /**
    * The RUM application ID.
    */
@@ -123,6 +124,8 @@ export interface FlaggingInitConfiguration
 }
 
 export interface FlaggingTrackingConfiguration extends Configuration {
+  /** @internal Local diagnostics, never included in remote payloads. */
+  debug?: DebugLogger
   applicationId?: string
   flagEvaluationTrackingInterval: number
 
@@ -159,24 +162,66 @@ export function resolveTrackExposures(
 }
 
 export function validateAndBuildFlaggingTrackingConfiguration(
-  initConfiguration: FlaggingTrackingInitConfiguration
+  initConfiguration: FlaggingTrackingInitConfiguration,
+  debug = createDebugLogger(initConfiguration.debugMode, 'tracking')
 ): FlaggingTrackingConfiguration | undefined {
-  const baseConfiguration = validateAndBuildConfiguration(initConfiguration)
+  debug.event('init.configuration', () => ({ options: debugOptions(initConfiguration) }))
+  let baseConfiguration: Configuration | undefined
+  try {
+    baseConfiguration = validateAndBuildConfiguration(initConfiguration)
+  } catch (error) {
+    debug.event('init.failed', () => ({ error, stage: 'configuration_validation' }))
+    throw error
+  }
   if (!baseConfiguration) {
+    debug.event('init.failed', () => ({
+      reason: 'invalid_configuration',
+      clientTokenPresent: !!Object.getOwnPropertyDescriptor(initConfiguration, 'clientToken')?.value,
+      validationIssues: configurationIssues(initConfiguration),
+    }))
     return
   }
-
-  return {
+  // These reads are operational. Diagnostics reuse their values rather than invoking customer accessors again.
+  const configuration = {
     applicationId: initConfiguration.applicationId,
     flagEvaluationTrackingInterval: initConfiguration.flagEvaluationTrackingInterval ?? 10000,
     ...baseConfiguration,
+    debug,
   }
+  debug.event('init.effective_configuration', () => {
+    const properties = Object.getOwnPropertyDescriptors(initConfiguration)
+    const proxy = properties.proxy
+    const proxyValue = proxy && 'value' in proxy ? proxy.value : undefined
+    const route = (path: string) => {
+      if (proxy && !('value' in proxy)) return { resolution: 'at_send', reason: 'proxy_accessor' }
+      if (typeof proxyValue === 'function') return { resolution: 'at_send', reason: 'custom_proxy_callback' }
+      if (typeof proxyValue === 'string' && proxyValue) return { proxy: debugUrl(proxyValue), path }
+      return `https://${buildEndpointHost({ clientToken: '', site: configuration.site })}${path}`
+    }
+    const defaultUsed = (field: string) => {
+      const property = properties[field]
+      return property && !('value' in property) ? 'accessor_not_reinspected' : property?.value == null
+    }
+    return {
+      site: configuration.site,
+      env: configuration.env,
+      service: configuration.service,
+      applicationId: configuration.applicationId,
+      evaluationIntervalMs: configuration.flagEvaluationTrackingInterval,
+      defaults: { site: defaultUsed('site'), evaluationInterval: defaultUsed('flagEvaluationTrackingInterval') },
+      trackingRoutes: { exposure: route('/api/v2/exposures'), evaluation: route('/api/v2/flagevaluation') },
+      openFeatureVersion: 'not_exposed_by_runtime_api',
+      registration: 'application_managed; client/domain observed on evaluation',
+    }
+  })
+  return configuration
 }
 
 export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration
+  initConfiguration: FlaggingInitConfiguration,
+  debug = createDebugLogger(initConfiguration.debugMode)
 ): FlaggingConfiguration | undefined {
-  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration)
+  const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)
   if (!trackingConfiguration) {
     // Invalid ordinary configuration must never erase a requested required-signing policy.
     if (initConfiguration.responseSigning?.mode === 'required')
@@ -188,19 +233,61 @@ export function validateAndBuildFlaggingConfiguration(
     initConfiguration.responseSigning && initConfiguration.responseSigning.mode !== 'off'
       ? { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
       : initConfiguration
-  const responseSigning = createResponseSigningController(initConfiguration.responseSigning, {
-    clientToken: snapshot.clientToken,
-    applicationId: snapshot.applicationId,
-    env: snapshot.env,
-    site: snapshot.site,
-    flaggingProxy: snapshot.flaggingProxy,
-    customHeaders: snapshot.customHeaders,
-    overwriteRequestHeaders: snapshot.overwriteRequestHeaders,
-    flagSelection: snapshot.flagSelection,
-  })
+  const responseSigning = createResponseSigningController(
+    initConfiguration.responseSigning,
+    {
+      clientToken: snapshot.clientToken,
+      applicationId: snapshot.applicationId,
+      env: snapshot.env,
+      site: snapshot.site,
+      flaggingProxy: snapshot.flaggingProxy,
+      customHeaders: snapshot.customHeaders,
+      overwriteRequestHeaders: snapshot.overwriteRequestHeaders,
+      flagSelection: snapshot.flagSelection,
+    },
+    debug
+  )
   return {
     responseSigning,
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning),
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning, debug),
     ...trackingConfiguration,
   }
+}
+
+/** Explain ordinary validation failures using data properties only; never re-read user accessors. */
+function configurationIssues(options: object): Array<{ field: string; reason: string; value?: unknown }> {
+  const descriptors = Object.getOwnPropertyDescriptors(options)
+  const value = (key: string) => descriptors[key]?.value
+  const issues: Array<{ field: string; reason: string; value?: unknown }> = []
+  if (!value('clientToken')) issues.push({ field: 'clientToken', reason: 'required_credential_missing_or_accessor' })
+  for (const field of ['env', 'service', 'version']) {
+    const raw = value(field)
+    if (raw != null && typeof raw !== 'string') issues.push({ field, reason: 'expected_string', value: raw })
+  }
+  for (const field of [
+    'sessionSampleRate',
+    'telemetrySampleRate',
+    'telemetryConfigurationSampleRate',
+    'telemetryUsageSampleRate',
+  ]) {
+    const raw = value(field)
+    if (raw !== undefined && (typeof raw !== 'number' || !(raw >= 0 && raw <= 100)))
+      issues.push({ field, reason: 'expected_percentage_0_to_100', value: raw })
+  }
+  const site = value('site')
+  if (site && typeof site === 'string' && !/(datadog|ddog|datad0g|dd0g)/.test(site))
+    issues.push({ field: 'site', reason: 'unsupported_site', value: site })
+  const consent = value('trackingConsent')
+  if (consent !== undefined && consent !== 'granted' && consent !== 'not-granted')
+    issues.push({ field: 'trackingConsent', reason: 'expected_granted_or_not_granted', value: consent })
+  const origins = value('allowedTrackingOrigins')
+  if (origins !== undefined)
+    issues.push({
+      field: 'allowedTrackingOrigins',
+      reason: Array.isArray(origins) ? 'check_origin_and_proxy_validation' : 'expected_array',
+      value: origins,
+    })
+  if (!issues.length)
+    issues.push({ field: 'configuration', reason: 'shared_core_rejected; see_validation_console_error' })
+  return issues
 }
