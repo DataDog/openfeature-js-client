@@ -146,6 +146,7 @@ describe('precomputed dependent flags', () => {
     const obfuscation: FlagKeyObfuscation = {
       scheme: 'flag-key-sha256-v1',
       salt: '00112233445566778899aabbccddeeff',
+      dependencyKeyEncryption: { scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1' },
     }
     const parentKey = encodePrecomputedFlagKey('parent', obfuscation)
     const rootKey = encodePrecomputedFlagKey('root', obfuscation)
@@ -170,7 +171,7 @@ describe('precomputed dependent flags', () => {
                   doLog: true,
                   dependencyEvaluations: [
                     {
-                      flagKey: 'Dnh0eaLWDiAaLkwLG6hAV7Q-rU7_xMvXou2PWK3dCjz9rg',
+                      flagKey: 'gM1Jf89VeabBzwfdAfy4uIKSOYeD4ZYYeuShN5lF4oKyGQ',
                       isPresentInAssignment: true,
                     },
                   ],
