@@ -68,13 +68,7 @@ describe('assignment authorization', () => {
       targeting_key: 'user-a',
       targeting_attributes: context,
     })
-    expect(cacheWrite).toHaveBeenCalledWith(
-      expect.anything(),
-      context,
-      false,
-      expect.any(AbortSignal),
-      expect.objectContaining({ enabled: false })
-    )
+    expect(cacheWrite).toHaveBeenCalledWith(expect.anything(), context, false, expect.any(AbortSignal))
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain(jwt)
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain('dd_assignment_token')
     expect(original.dd_assignment_token).toBe(jwt)
@@ -719,8 +713,7 @@ describe('assignment authorization', () => {
       expect.anything(),
       { targetingKey: 'user-b' },
       false,
-      expect.any(AbortSignal),
-      expect.objectContaining({ enabled: false })
+      expect.any(AbortSignal)
     )
     expect(JSON.stringify(cacheWrite.mock.calls)).not.toContain('dd_assignment_token')
     expect(provider.status).toBe(ProviderStatus.READY)

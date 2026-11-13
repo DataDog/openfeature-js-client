@@ -503,7 +503,7 @@ export class DatadogProvider extends DatadogProviderBase {
       ? Promise.resolve(this.verifiedConfiguration)
       : memoryEligible
         ? Promise.resolve(retainedConfig)
-        : this.flagsCache?.get(context, optedOut, debug)
+        : this.flagsCache?.get(context, optedOut, ...(debug.enabled ? ([debug] as const) : ([] as const)))
     debug.event('cache.eligibility', () => ({
       requestedContext: context,
       ...configurationDebugFields(retainedConfig),
@@ -523,7 +523,7 @@ export class DatadogProvider extends DatadogProviderBase {
       } else if (config.precomputedError) {
         this.lifecycleTelemetry?.providerError()
       }
-      this.flagsCache?.set(config, context, optedOut, signal, debug)
+      this.flagsCache?.set(config, context, optedOut, signal, ...(debug.enabled ? ([debug] as const) : ([] as const)))
       return { config, fromCache: false, source: 'network' }
     } catch (err) {
       if (!signal.aborted && err instanceof GeneralError && err.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
