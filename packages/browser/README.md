@@ -86,6 +86,96 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Response signing
+
+Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
+Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
+Custom proxies must forward this header and permit it in CORS preflights.
+
+Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
+assignments, or `required` to admit only verified responses. Existing authentication,
+HTTP errors, JSON validation, and experimentation opt-out checks still apply.
+
+```typescript
+const provider = new DatadogProvider({
+  clientToken: '<client-token>',
+  env: 'production',
+  responseSigning: {
+    mode: 'observe',
+    trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
+  },
+})
+```
+
+`DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
+`trustedRootCertificates` accepts at most four standard padded base64 DER public
+root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
+approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
+anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
+if no trusted root is available, before any network request.
+Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
+them verified. Verification error messages contain no token, context, response, or certificate data.
+
+Required-mode verification failures use OpenFeature error code `GENERAL`.
+`PROVIDER_ERROR` events include the failure message, such as `Response signing: missing-proof`.
+When no usable verified configuration remains, evaluation details return the default value,
+reason `ERROR`, error code `GENERAL`, and the verification failure message.
+Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
+There is no separate verification callback.
+
+For Datadog staging, select `site: 'datad0g.com'` and
+`responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
+the bundled **public staging root** automatically. Signing still defaults to off.
+The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
+A `flaggingProxy` override takes precedence over `site` for both requests and trust;
+unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
+(including when empty), for custom proxies and tests. Additional Datadog aliases
+and production site roots must be provisioned before they enter the catalog.
+
+A response carries its leaf and intermediate certificates, so rotating either under
+the unchanged trusted root requires no SDK update or prior rotation history. The
+SDK verifies the chain, exact request and response bytes, nonce, effective client
+token and semantic headers, and the original proof lifetime (at most five minutes).
+Signed requests require HTTPS and reject redirects. A custom fetch implementation
+must preserve the generated URL, body and headers and the exact returned bytes.
+Proxies must support the signing request headers and expose the proof headers in
+CORS. The `response-signing-v1` capability and signature version `1` are added only
+when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
+and draft v3 formats are not supported compatibility targets. This protocol number
+is independent of X.509 v3 certificate encoding.
+
+Verification requires an accurate device clock and uses the browser's `Date.now()`.
+Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
+Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+
+Required mode uses only verified memory for the same provider and full evaluation
+context. It does not read bootstrap or persistent configurations, never retries
+unsigned, and returns defaults after proof expiry or restart until a fresh verified
+response arrives. This includes expiry while offline, without another refresh.
+The first evaluation that detects expiry returns the default with reason `ERROR`,
+error code `GENERAL`, and an explicit proof-expiry message. The provider changes
+from `READY` or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event
+per expiry episode. Repeated evaluations do not repeat that event. A fresh verified
+response restores `READY` and emits `PROVIDER_READY` after expiry recovery.
+Expiry does not start a refresh. There is no expiry timer;
+an idle provider signals expiry when its next evaluation detects it. An update
+already in progress keeps its reconciliation status until that update completes.
+Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
+its persistent namespace binds the complete token, endpoint, environment, app ID,
+headers, mode, selection and nested context. Upgrading into observe causes a
+one-time cache cold start. Context snapshots preserve Date values, including nested
+dates. Signing context keys distinguish dates from strings and objects. The updated
+key encoding also causes a one-time cold start for existing observe-mode caches. An unsigned observation cannot overwrite the separately
+retained verified memory fallback. If WebCrypto is unavailable, observe retains
+ordinary network and in-memory availability but cannot use its scoped persistent
+cache. Required mode fails locally.
+
+Off mode preserves ordinary transport and caching and performs no signing work.
+Signing covers complete buffered JSON responses in the same assignment request;
+it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
+or change the existing unsigned streaming protocol.
+
 ### Flag selection
 
 Use `flagSelection` to load only the flags that match a set of tags or key patterns:
@@ -111,6 +201,22 @@ it are not loaded and evaluations return your default with `FLAG_NOT_FOUND`. Old
 may return the full configuration without a warning. Caller-supplied `initialFlagsConfiguration` is not filtered
 locally.
 
+Both standalone fetch helpers, `fetchPrecomputedConfiguration` and `fetchRulesConfiguration`, accept the same
+`flagSelection` option with the same matching rules, normalization, per-value limits, and fallback behavior.
+`fetchRulesConfiguration` sends selection in the URL, so it also drops a selection that would make the URL longer
+than 8,192 bytes. For example, to fetch precomputed assignments with selection:
+
+```javascript
+const configuration = await fetchPrecomputedConfiguration({
+  clientToken: 'pub_...',
+  env: 'production',
+  context: { targetingKey: 'user-123' },
+  flagSelection: { tags: ['team:checkout'], keyPatterns: ['checkout-*'] },
+})
+```
+
+Invalid selections are reported once per standalone fetch call; the provider reports them once at initialization.
+
 ### Local debug logging
 
 Set `debugMode: true` in the provider options to print feature-flag diagnostics to `console.log`. It defaults to
@@ -127,11 +233,11 @@ const provider = new DatadogProvider({
 
 Filter the developer console for `[Datadog Feature Flags]`. Each record includes an event name, timestamp, SDK
 version, provider instance ID and sequence. Context changes have request/revision IDs; evaluations have evaluation
-IDs; uploads have batch IDs. The initial `debug.enabled` record confirms the option took effect before validation.
+IDs shared with tracking decisions; exposures have event IDs, evaluations have aggregation IDs, and uploads have batch IDs. Correlation identifiers are local only and never enter intake payloads. The initial `debug.enabled` record confirms the option took effect before validation.
 
 Logs include **complete raw contexts, normalized targeting attributes, flag values, defaults, configuration responses,
 assignment metadata and event payloads**. Transport credential values and custom-header values are omitted from
-configuration diagnostics. Context attributes remain intact even if their names resemble credential fields.
+configuration diagnostics. The reserved `dd_assignment_token` context member is a transport credential and is also excluded. Context attributes remain intact even if their names resemble credential fields.
 Full configurations are logged at fetch, installation and cache boundaries. Per-evaluation records reference their
 configuration ID/revision and retain raw context, defaults, results and the evaluated assignment without repeating
 unrelated flags. Values are snapshotted at logging time. Large records are emitted as `debug.chunk` records: group by
@@ -149,7 +255,10 @@ Useful events:
 | `evaluation.completed`, `evaluation.trace`, `evaluation.returned` | Value/default origin, variant metadata, local-rule trace and OpenFeature hook result   |
 | `exposure.*`, `tracking.policy`, `rum.*`                          | Eligibility, duplicates, opt-outs and handoff to RUM                                   |
 | `evaluation.aggregated`, `batch.*`, `upload.*`                    | Aggregation, admission, flush, intake acceptance, retry and drop                       |
+| `signing.*`, `authorization.*`                                    | Verification/admission, proof expiry, credential rejection and subject isolation       |
 | `shutdown.*`                                                      | Close/cancellation and retained state                                                  |
+
+Signing logs distinguish observe-mode continuation from required rejection and verified-memory fallback. Required signing retains bounded body reading; raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
 
 `intake_accepted` means an HTTP success response; it does not prove downstream processing. `browser_queued` means
 `sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures

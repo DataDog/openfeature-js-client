@@ -7,7 +7,8 @@ export async function debugFetch(
   url: string,
   init: RequestInit,
   debug: DebugLogger,
-  hasAssignmentCredential = false
+  hasAssignmentCredential = false,
+  captureResponseBody = true
 ): Promise<Response> {
   if (!debug.enabled) return implementation(url, init)
   if (hasAssignmentCredential) {
@@ -31,7 +32,7 @@ export async function debugFetch(
     endpoint: debugUrl(url),
     method: init.method,
     body: init.body,
-    headerNames: Object.keys(init.headers ?? {}).filter((name) => name.toLowerCase() !== 'dd-assignment-token'),
+    headerNames: headerNames(init.headers).filter((name) => name.toLowerCase() !== 'dd-assignment-token'),
     policy: describeFetch(implementation),
   }))
   try {
@@ -49,7 +50,7 @@ export async function debugFetch(
     }))
     // Credentialed responses may echo headers, even in malformed/error bodies.
     // The caller logs the decoded configuration after the parsing boundary.
-    if (hasAssignmentCredential) return response
+    if (hasAssignmentCredential || !captureResponseBody) return response
     try {
       void response
         .clone()
@@ -72,4 +73,15 @@ export async function debugFetch(
     }))
     throw error
   }
+}
+
+function headerNames(headers: HeadersInit | undefined): string[] {
+  if (headers instanceof Headers) {
+    const names: string[] = []
+    headers.forEach((_value, name) => {
+      names.push(name)
+    })
+    return names
+  }
+  return Array.isArray(headers) ? headers.map(([name]) => name) : Object.keys(headers ?? {})
 }

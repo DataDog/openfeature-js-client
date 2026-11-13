@@ -11,7 +11,7 @@ import type {
 } from '@openfeature/web-sdk'
 import { OpenFeatureEventEmitter, type ProviderEventEmitter, type ProviderEvents } from '@openfeature/web-sdk'
 
-import { createDebugLogger, type DebugConfiguration, type DebugLogger } from '../debug'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, evaluationDebug } from '../debug'
 
 /** Shared OpenFeature evaluation surface for Datadog's browser providers. */
 export abstract class DatadogProviderBase implements Provider {
@@ -20,7 +20,6 @@ export abstract class DatadogProviderBase implements Provider {
   readonly events: ProviderEventEmitter<ProviderEvents>
 
   protected readonly debug: DebugLogger
-  private evaluationSequence = 0
 
   protected constructor(options: DebugConfiguration = {}) {
     this.debug = createDebugLogger(options.debugMode)
@@ -55,9 +54,8 @@ export abstract class DatadogProviderBase implements Provider {
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
     if (!this.debug.enabled) return this.resolve(type, flagKey, defaultValue, context, logger)
-    const evaluationId = ++this.evaluationSequence
     const started = performance.now()
-    const debug = this.debug.child({ evaluationId, flagKey })
+    const debug = evaluationDebug(context, this.debug, 'resolve').child({ flagKey })
     try {
       const result = this.resolve(type, flagKey, defaultValue, context, debug.logger(logger))
       debug.event('evaluation.completed', () => ({

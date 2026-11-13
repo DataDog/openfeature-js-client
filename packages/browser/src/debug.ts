@@ -50,6 +50,7 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
       try {
         const envelope = {
           sdk: 'openfeature-browser',
+          platform: 'browser',
           sdkVersion: __BUILD_ENV__SDK_VERSION__,
           providerInstanceId: instanceId,
           sequence: ++sequence,
@@ -240,4 +241,30 @@ export function configurationDebugFields(configuration?: FlagsConfiguration): Re
     flagCount: precomputed && Object.keys(precomputed.response.data.attributes.flags).length,
     flagErrors: precomputed?.flagErrors,
   }
+}
+
+// Correlation is local only: no debug fields enter contexts, metadata or intake payloads.
+const evaluations = new WeakMap<object, Map<string, { id: number; pending: boolean }>>()
+let evaluationSequence = 0
+export function evaluationDebug(context: object, debug: DebugLogger, phase?: 'before' | 'resolve'): DebugLogger {
+  if (!debug.enabled || !debug.instanceId) return debug
+  let entries = evaluations.get(context)
+  if (!entries) {
+    entries = new Map()
+    evaluations.set(context, entries)
+  }
+  let entry = entries.get(debug.instanceId)
+  if (!entry || phase === 'before' || (phase === 'resolve' && !entry.pending)) {
+    entry = { id: ++evaluationSequence, pending: phase === 'before' }
+    entries.set(debug.instanceId, entry)
+  }
+  if (phase === 'resolve') entry.pending = false
+  return debug.child({ evaluationId: entry.id })
+}
+const eventCorrelations = new WeakMap<object, Record<string, unknown>>()
+export function bindEventCorrelation(event: object, fields: Record<string, unknown>): void {
+  eventCorrelations.set(event, fields)
+}
+export function eventCorrelation(event: object): Record<string, unknown> | undefined {
+  return eventCorrelations.get(event)
 }

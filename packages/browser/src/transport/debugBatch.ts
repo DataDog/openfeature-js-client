@@ -11,7 +11,7 @@ import {
 // Pinned browser-core 7.1.0 does not expose response statuses on HttpRequest.observable.
 // Reuse its retry state machine; observe only this client's send strategy, never global fetch.
 import { newRetryState, sendWithRetryStrategy } from '@datadog/browser-core/cjs/transport/sendWithRetryStrategy'
-import { type DebugLogger, debugUrl, NO_DEBUG } from '../debug'
+import { bindEventCorrelation, type DebugLogger, debugUrl, eventCorrelation, NO_DEBUG } from '../debug'
 
 export function createTrackedRequest(
   endpoint: EndpointBuilder,
@@ -23,9 +23,12 @@ export function createTrackedRequest(
   const state = newRetryState<Payload>()
   const ids = new WeakMap<Payload, number>()
   let sequence = 0
+  const admittedAt = new WeakMap<Payload, number>()
+  let nextAttemptAt: number | undefined
   const id = (payload: Payload) => {
+    if (!admittedAt.has(payload)) admittedAt.set(payload, performance.now())
     if (!ids.has(payload)) ids.set(payload, ++sequence)
-    return ids.get(payload)
+    return eventCorrelation(payload)?.batchId ?? ids.get(payload)
   }
   observable.subscribe((event) => {
     debug.event('upload.queue_result', () => ({
@@ -43,6 +46,7 @@ export function createTrackedRequest(
   })
   const send = (payload: Payload, onResponse?: (response: { status: number; type?: ResponseType }) => void) => {
     const started = performance.now()
+    nextAttemptAt = undefined
     const url = endpoint.build('fetch', payload)
     debug.event('upload.started', () => ({
       batchId: id(payload),
@@ -88,6 +92,7 @@ export function createTrackedRequest(
               )
           } catch {}
           onResponse?.({ status: response.status, type: response.type })
+          nextAttemptAt = state.transportStatus === 2 ? Date.now() + state.currentBackoffTime : undefined
           reportQueue()
         })
       )
@@ -95,7 +100,8 @@ export function createTrackedRequest(
         monitor((error) => {
           debug.event('upload.completed', () => ({
             batchId: id(payload),
-            httpStatus: 0,
+            httpStatus: null,
+            transportStatus: 0,
             error,
             durationMs: performance.now() - started,
             cause: 'unknown_transport_failure',
@@ -103,6 +109,7 @@ export function createTrackedRequest(
             onlineHint: navigator.onLine,
           }))
           onResponse?.({ status: 0 })
+          nextAttemptAt = state.transportStatus === 2 ? Date.now() + state.currentBackoffTime : undefined
           reportQueue()
         })
       )
@@ -110,6 +117,11 @@ export function createTrackedRequest(
   const reportQueue = () =>
     debug.event('upload.queue_state', () => ({
       pendingBatches: state.queuedPayloads.size(),
+      oldestPendingAgeMs: state.queuedPayloads.size()
+        ? performance.now() - (admittedAt.get(state.queuedPayloads.first()) ?? performance.now())
+        : 0,
+      nextAttemptAt,
+      nextAttemptTrigger: state.transportStatus === 2 ? 'backoff_timer' : 'available_bandwidth_or_inflight_completion',
       pendingBytes: state.queuedPayloads.bytesCount,
       backoffMs: state.currentBackoffTime,
       bandwidth: state.bandwidthMonitor.stats(),
@@ -117,6 +129,7 @@ export function createTrackedRequest(
   return {
     observable,
     send(payload) {
+      id(payload)
       sendWithRetryStrategy(payload, state, send, endpoint.trackType, reportError, observable)
       reportQueue()
     },
@@ -149,6 +162,8 @@ export function createTrackedRequest(
   }
 }
 
+let transportInstances = 0
+
 export function createTrackedBatch(
   endpoint: EndpointBuilder,
   reportError: (error: RawError) => void,
@@ -156,6 +171,11 @@ export function createTrackedBatch(
   sessionExpireObservable: Observable<void>,
   debug: DebugLogger = NO_DEBUG
 ) {
+  debug = debug.child({ transportInstanceId: ++transportInstances })
+  let batchId = 1
+  let flushingBatchId = 1
+  let pendingSince: number | undefined
+  let currentMessage: Record<string, unknown> | undefined
   const encoder = createIdentityEncoder()
   const flushController = createFlushController({ pageMayExitObservable, sessionExpireObservable })
   const subscriptions: { unsubscribe(): void }[] = []
@@ -164,25 +184,64 @@ export function createTrackedBatch(
     encoder.estimateEncodedBytesCount = (data) => {
       const bytes = estimate(data)
       if (bytes >= 256 * 1024)
-        debug.event('batch.dropped', () => ({ reason: 'message_size_limit', bytesCount: bytes, payload: data }))
+        debug.event('batch.dropped', () => ({
+          reason: 'message_size_limit',
+          bytesCount: bytes,
+          payload: data,
+          ...currentMessage,
+        }))
       return bytes
     }
     const write = encoder.write.bind(encoder)
     encoder.write = (data, callback) => {
-      debug.event('batch.enqueued', () => ({ payload: data, messagesCountBefore: flushController.messagesCount }))
+      pendingSince ??= performance.now()
+      debug.event('batch.enqueued', () => ({
+        batchId,
+        ...currentMessage,
+        payload: data,
+        messagesCountBefore: flushController.messagesCount,
+      }))
       return write(data, callback)
     }
     subscriptions.push(
-      flushController.flushObservable.subscribe((event) => debug.event('batch.flushed', () => ({ ...event }))),
+      flushController.flushObservable.subscribe((event) => {
+        flushingBatchId = batchId++
+        const ageMs = pendingSince === undefined ? 0 : performance.now() - pendingSince
+        pendingSince = undefined
+        debug.event('batch.flushed', () => ({ ...event, batchId: flushingBatchId, pendingAgeMs: ageMs }))
+      }),
       pageMayExitObservable.subscribe((event) =>
         debug.event('lifecycle.page_exit', () => ({ ...event, delivery: 'best_effort' }))
       )
     )
   }
   const request = createTrackedRequest(endpoint, reportError, debug)
-  const batch = createBatch({ encoder, request, flushController })
+  const correlatedRequest: HttpRequest = !debug.enabled
+    ? request
+    : {
+        ...request,
+        send(payload) {
+          bindEventCorrelation(payload, { batchId: flushingBatchId })
+          request.send(payload)
+        },
+        sendOnExit(payload) {
+          bindEventCorrelation(payload, { batchId: flushingBatchId })
+          request.sendOnExit(payload)
+        },
+      }
+  const batch = createBatch({ encoder, request: correlatedRequest, flushController })
   return {
     ...batch,
+    add(...args: Parameters<typeof batch.add>) {
+      if (!debug.enabled) return batch.add(...args)
+      const previous = currentMessage
+      currentMessage = eventCorrelation(args[0])
+      try {
+        return batch.add(...args)
+      } finally {
+        currentMessage = previous
+      }
+    },
     stop() {
       debug.event('batch.stopped', () => ({
         pendingMessages: flushController.messagesCount,

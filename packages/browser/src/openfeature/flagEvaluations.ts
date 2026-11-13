@@ -7,7 +7,7 @@ import {
   type FlagValue,
   type HookContext,
 } from '@openfeature/web-sdk'
-import { NO_DEBUG } from '../debug'
+import { bindEventCorrelation, evaluationDebug, eventCorrelation, NO_DEBUG } from '../debug'
 import type { FlaggingTrackingConfiguration } from '../domain/configuration'
 import { validateAndBuildFlaggingTrackingConfiguration } from '../domain/configuration'
 import {
@@ -19,6 +19,8 @@ import { createFlagEvaluationTransport, type FlagEvaluationTransport } from './f
 import type { DatadogTrackingHooks, DatadogTrackingHooksOptions, ManagedTrackingHook } from './tracking'
 import { composeDatadogTrackingHooks, createTrackingHookController } from './tracking'
 
+let aggregationInstances = 0
+
 export function createFlagEvalEVPHook(
   configuration: FlaggingTrackingConfiguration,
   getEvaluationContext: (context: EvaluationContext) => EvaluationContext = (context) => context,
@@ -27,7 +29,9 @@ export function createFlagEvalEVPHook(
 ): ManagedTrackingHook {
   const transport = sharedTransport ?? createFlagEvaluationTransport(configuration)
   const flagEvaluationBatch = transport.batch
-  const debug = configuration.debug?.child({ channel: 'evaluation' }) ?? NO_DEBUG
+  const aggregationInstanceId = ++aggregationInstances
+  const debug = configuration.debug?.child({ channel: 'evaluation', aggregationInstanceId }) ?? NO_DEBUG
+  let activeEvaluation = debug
   debug.event('evaluation.aggregation_started', () => ({ intervalMs: configuration.flagEvaluationTrackingInterval }))
 
   const aggregator = new FlagEvaluationAggregator(
@@ -50,6 +54,7 @@ export function createFlagEvalEVPHook(
               },
             },
           }
+          if (debug.enabled) bindEventCorrelation(eventWithMetadata, eventCorrelation(event) ?? {})
           flagEvaluationBatch.add(eventWithMetadata as unknown as Context)
         } catch (error) {
           debug.event('batch.enqueue_failed', () => ({ error, event }))
@@ -58,7 +63,18 @@ export function createFlagEvalEVPHook(
           })
         }
       })
-    }
+    },
+    debug.enabled
+      ? (diagnostic) => {
+          if (diagnostic.event)
+            bindEventCorrelation(diagnostic.event, { aggregationId: diagnostic.aggregationId, aggregationInstanceId })
+          const logger = diagnostic.type === 'add' ? activeEvaluation : debug
+          logger.event(
+            diagnostic.type === 'add' ? 'evaluation.aggregate_updated' : 'evaluation.aggregate_flushed',
+            () => diagnostic
+          )
+        }
+      : undefined
   )
 
   aggregator.start()
@@ -68,7 +84,7 @@ export function createFlagEvalEVPHook(
       ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
       : transport.pageMayExitObservable
   ).subscribe(() => {
-    aggregator.stop()
+    aggregator.stop('page_exit')
   })
 
   return withEvaluationTelemetryPolicy(
@@ -83,6 +99,7 @@ export function createFlagEvalEVPHook(
       },
       // Failed evaluations skip `after`; `finally` receives the result returned to the application.
       finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        const evaluation = evaluationDebug(hookContext.context, debug)
         try {
           // OpenFeature can copy a customer hook's error.code without validation.
           // Restrict telemetry to standard OpenFeature error codes.
@@ -91,10 +108,15 @@ export function createFlagEvalEVPHook(
               ? details.errorCode
               : ErrorCode.GENERAL
           const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
-          aggregator.addEvaluation(context, details, errorCode)
-          debug.event('evaluation.aggregated', () => ({ context, details, errorCode, countDelta: 1 }))
+          activeEvaluation = evaluation
+          try {
+            aggregator.addEvaluation(context, details, errorCode)
+          } finally {
+            activeEvaluation = debug
+          }
+          evaluation.event('evaluation.aggregated', () => ({ context, details, errorCode, countDelta: 1 }))
         } catch (error) {
-          debug.event('evaluation.aggregation_failed', () => ({ error, details }))
+          evaluation.event('evaluation.aggregation_failed', () => ({ error, details }))
           addTelemetryDebug('Error adding evaluation to aggregator', {
             'error.message': error instanceof Error ? error.message : String(error),
           })

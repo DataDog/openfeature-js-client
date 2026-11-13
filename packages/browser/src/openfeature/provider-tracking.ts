@@ -1,7 +1,7 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { createExposureCache } from '../cache/exposure-cache'
-import { type DebugLogger, NO_DEBUG } from '../debug'
+import { type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import {
   type FlaggingTrackingConfiguration,
   type FlaggingTrackingInitConfiguration,
@@ -82,8 +82,10 @@ export function createProviderTracking({
     trackingHooks.push({
       hooks: [
         {
-          before: (context) => debug.event('evaluation.requested', () => ({ context })),
-          finally: (context, details) => debug.event('evaluation.returned', () => ({ context, details })),
+          before: (context) =>
+            evaluationDebug(context.context, debug, 'before').event('evaluation.requested', () => ({ context })),
+          finally: (context, details) =>
+            evaluationDebug(context.context, debug).event('evaluation.returned', () => ({ context, details })),
         },
       ],
     })

@@ -7,6 +7,8 @@ import {
 } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { configurationDebugFields, type DebugLogger, NO_DEBUG } from '../debug'
+import { signingContextKey } from '../transport/responseSigning/controller'
+import { hex, sha256, utf8 } from '../transport/responseSigning/verification'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
@@ -20,10 +22,12 @@ function buildConfigKey(clientToken: string, context: EvaluationContext): string
 export class IndexedDBFlagsCache {
   private readonly clientToken: string
   private readonly selectionSuffix: string
+  private operationSequence = 0
 
   constructor(
     clientToken: string,
     flagSelection?: CanonicalFlagSelection,
+    private readonly signingNamespace?: () => Promise<string | undefined>,
     private readonly debug: DebugLogger = NO_DEBUG
   ) {
     this.clientToken = clientToken
@@ -33,13 +37,25 @@ export class IndexedDBFlagsCache {
   /** Read cached config for the given context. Returns undefined on miss or any error. */
   async get(
     context: EvaluationContext,
-    optedOut: ExperimentationOptOutPolicy = false
+    optedOut: ExperimentationOptOutPolicy = false,
+    logger = this.debug
   ): Promise<FlagsConfiguration | undefined> {
+    const debug = logger.child({ cacheOperationId: ++this.operationSequence })
     const started = performance.now()
-    this.debug.event('cache.read_started', () => ({ cache: 'assignments', backend: 'indexeddb', context, optedOut }))
+    debug.event('cache.read_started', () => ({ cache: 'assignments', backend: 'indexeddb', context, optedOut }))
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+      const configKey = this.signingNamespace
+        ? await this.scopedKey(context, optedOut)
+        : `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+      if (!configKey) {
+        debug.event('cache.read_completed', () => ({
+          cache: 'assignments',
+          outcome: 'skipped',
+          reason: 'signing_namespace_unavailable',
+        }))
+        return undefined
+      }
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -51,7 +67,7 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (optedOut || this.selectionSuffix) {
+            if (this.signingNamespace || optedOut || this.selectionSuffix) {
               resolve(undefined)
               return
             }
@@ -73,7 +89,7 @@ export class IndexedDBFlagsCache {
           }
           request.onerror = () => reject(request.error)
         })
-        this.debug.event('cache.read_completed', () => ({
+        debug.event('cache.read_completed', () => ({
           cache: 'assignments',
           backend: 'indexeddb',
           context,
@@ -89,7 +105,7 @@ export class IndexedDBFlagsCache {
         db.close()
       }
     } catch (error) {
-      this.debug.event('cache.read_failed', () => ({
+      debug.event('cache.read_failed', () => ({
         cache: 'assignments',
         context,
         error,
@@ -100,43 +116,88 @@ export class IndexedDBFlagsCache {
   }
 
   /** Fire-and-forget persist. Never throws. */
-  set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
-    this.debug.event('cache.write_started', () => ({ cache: 'assignments', context, optedOut }))
+  set(
+    config: FlagsConfiguration,
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy = false,
+    signal?: AbortSignal,
+    logger = this.debug
+  ): void {
+    const debug = logger.child({ cacheOperationId: ++this.operationSequence })
+    debug.event('cache.write_started', () => ({
+      cache: 'assignments',
+      context,
+      optedOut,
+      ...configurationDebugFields(config),
+    }))
+    const fail = (error: unknown) =>
+      debug.event('cache.write_failed', () => ({ cache: 'assignments', error, action: 'retain_memory' }))
     try {
-      // One namespace for new writes keeps plaintext rollback and encoded
-      // refreshes in the same slot without changing what older SDKs can read.
-      const prefix = policyPrefix(optedOut)
-      const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
-      openDB()
-        .then((db) => {
+      if (this.signingNamespace) {
+        void this.scopedKey(context, optedOut)
+          .then((key) => {
+            if (!key) debug.event('cache.write_skipped', () => ({ reason: 'signing_namespace_unavailable' }))
+            else this.persist(config, key, signal, debug)
+          })
+          .catch(fail)
+        return
+      }
+      const key = `${policyPrefix(optedOut)}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+      this.persist(config, key, signal, debug)
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  private async scopedKey(
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy
+  ): Promise<string | undefined> {
+    const namespace = await this.signingNamespace?.()
+    if (!namespace) return undefined
+    return `${namespace}-${policyPrefix(optedOut)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
+  }
+
+  private persist(
+    config: FlagsConfiguration,
+    configKey: string,
+    signal: AbortSignal | undefined,
+    debug: DebugLogger
+  ): void {
+    if (signal?.aborted) {
+      debug.event('cache.write_skipped', () => ({ reason: 'request_cancelled' }))
+      return
+    }
+    void openDB()
+      .then((db) => {
+        if (signal?.aborted) {
+          debug.event('cache.write_skipped', () => ({ reason: 'request_cancelled' }))
+          db.close()
+          return
+        }
+        try {
           const tx = db.transaction(STORE_NAME, 'readwrite')
-          const store = tx.objectStore(STORE_NAME)
-          store.put(config, configKey)
+          tx.objectStore(STORE_NAME).put(config, configKey)
           tx.oncomplete = () => {
-            this.debug.event('cache.write_completed', () => ({ cache: 'assignments', context }))
+            debug.event('cache.write_completed', () => ({ cache: 'assignments', durable: true }))
             db.close()
           }
           tx.onerror = tx.onabort = () => {
-            this.debug.event('cache.write_failed', () => ({
+            debug.event('cache.write_failed', () => ({
               cache: 'assignments',
-              context,
               error: tx.error,
               action: 'retain_memory',
             }))
             db.close()
           }
-        })
-        .catch((error) => {
-          this.debug.event('cache.write_failed', () => ({
-            cache: 'assignments',
-            context,
-            error,
-            action: 'retain_memory',
-          }))
-        })
-    } catch (error) {
-      this.debug.event('cache.write_failed', () => ({ cache: 'assignments', context, error, action: 'retain_memory' }))
-    }
+        } catch (error) {
+          db.close()
+          throw error
+        }
+      })
+      .catch((error) =>
+        debug.event('cache.write_failed', () => ({ cache: 'assignments', error, action: 'retain_memory' }))
+      )
   }
 }
 

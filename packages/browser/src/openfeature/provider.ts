@@ -18,10 +18,23 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { ErrorCode, GeneralError, InvalidContextError, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import {
+  ErrorCode,
+  GeneralError,
+  InvalidContextError,
+  ProviderEvents,
+  ProviderStatus,
+  StandardResolutionReasons,
+} from '@openfeature/web-sdk'
 import { hasIndexedDB } from '../cache/helpers'
 import { IndexedDBFlagsCache } from '../cache/indexeddb-flags-cache'
-import { bindDebugSignal, configurationDebugFields, configurationSummaryFields, registerDebugLogger } from '../debug'
+import {
+  bindDebugSignal,
+  configurationDebugFields,
+  configurationSummaryFields,
+  debugForSignal,
+  registerDebugLogger,
+} from '../debug'
 import {
   ASSIGNMENT_AUTHORIZATION_FAILED,
   extractAssignmentToken,
@@ -33,6 +46,8 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
+import { cloneSigningContext } from '../transport/responseSigning/context'
+import { ResponseVerificationError } from '../transport/responseSigning/verification'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -75,6 +90,8 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider extends DatadogProviderBase {
+  /** Runtime feature detection for applications adopting the response-signing draft. */
+  static readonly responseSigningVersion = 1
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
@@ -88,6 +105,8 @@ export class DatadogProvider extends DatadogProviderBase {
   private flagEvaluationTransport?: FlagEvaluationTransport
   private lifecycleTelemetry?: ReturnType<typeof createLifecycleTelemetry>
   private initializationStarted = false
+  private verificationError: ResponseVerificationError | undefined
+  private proofExpirySignaled = false
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -110,6 +129,8 @@ export class DatadogProvider extends DatadogProviderBase {
   // Retain this boundary across failures/close while the old assignments remain.
   private assignmentSubjectIsolationRequired = false
   private flagsConfiguration: FlagsConfiguration | undefined
+  // Separate from observation/bootstrap/persistence: only this provider can establish verification.
+  private verifiedConfiguration: FlagsConfiguration | undefined
   private flagsCache: IndexedDBFlagsCache | undefined
 
   private exposureCache: AssignmentCache | undefined
@@ -157,21 +178,29 @@ export class DatadogProvider extends DatadogProviderBase {
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
 
-    if (hasIndexedDB()) {
+    if (hasIndexedDB() && this.configuration?.responseSigning?.mode !== 'required') {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
         canonicalizeFlagSelection(options.flagSelection).selection,
+        this.configuration?.responseSigning?.cacheNamespace,
         this.debug
       )
     }
 
-    this.flagsConfiguration = options.initialFlagsConfiguration
-    this.configurationSource = options.initialFlagsConfiguration ? 'initial_configuration' : 'none'
+    this.flagsConfiguration =
+      this.configuration?.responseSigning?.mode === 'required' ? undefined : options.initialFlagsConfiguration
+    this.configurationSource = this.flagsConfiguration ? 'initial_configuration' : 'none'
     this.status = ProviderStatus.NOT_READY
     this.debug.event('cache.configured', () => ({
       cache: 'assignments',
       backend: this.flagsCache ? 'indexeddb' : 'memory',
       initialConfiguration: options.initialFlagsConfiguration,
+      initialConfigurationAccepted: !!this.flagsConfiguration,
+      signingMode: this.configuration?.responseSigning?.mode ?? 'off',
+      persistence:
+        this.configuration?.responseSigning?.mode === 'required'
+          ? 'stored_assignments_are_not_verified_proofs'
+          : 'context_matched',
     }))
   }
 
@@ -183,6 +212,9 @@ export class DatadogProvider extends DatadogProviderBase {
   protected debugEvaluationFields(): Record<string, unknown> {
     return {
       ...configurationSummaryFields(this.flagsConfiguration),
+      expirationPolicy:
+        this.configuration?.responseSigning?.mode === 'required' ? 'verified_proof_expiry' : 'no_sdk_ttl',
+      signingMode: this.configuration?.responseSigning?.mode ?? 'off',
       contextRevision: this.contextRevision,
       configurationRevision: this.configurationRevision,
       source: this.configurationSource,
@@ -261,7 +293,10 @@ export class DatadogProvider extends DatadogProviderBase {
       ? enrichEvaluationContextWithRumUser(targetingContext, debug)
       : targetingContext
     // RUM user attributes must never supply or restore an assignment credential.
-    const { context: evaluationContext } = extractAssignmentToken(effectiveContext)
+    const { context: sanitizedContext } = extractAssignmentToken(effectiveContext)
+    const evaluationContext: EvaluationContext = this.configuration?.responseSigning
+      ? cloneSigningContext(sanitizedContext)
+      : sanitizedContext
     debug.event('context.accepted', () => ({
       rawContext: targetingContext,
       effectiveContext,
@@ -274,6 +309,7 @@ export class DatadogProvider extends DatadogProviderBase {
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
     this.requestedEvaluationContext = evaluationContext
+    this.verificationError = undefined
     // Missing/unusable tokens preserve ordinary no-token behavior, but must not
     // remove a boundary already established by a request or server rejection.
     this.assignmentSubjectIsolationRequired ||= assignmentToken !== undefined
@@ -339,9 +375,33 @@ export class DatadogProvider extends DatadogProviderBase {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          if (
+            this.configuration?.responseSigning?.mode === 'required' &&
+            !this.configuration.responseSigning.isVerified(config, evaluationContext)
+          ) {
+            debug.event('configuration.rejected', () => ({
+              reason: 'expired_proof',
+              stage: 'installation',
+              action: 'retain_previous_configuration',
+            }))
+            debug.event('provider.state_changed', () => ({
+              previousState: this.status,
+              state: ProviderStatus.ERROR,
+              reason: 'expired_proof',
+            }))
+            this.status = ProviderStatus.ERROR
+            const error = new ResponseVerificationError('expired-proof')
+            this.verificationError = error
+            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            throw error
+          }
+          const recoveredFromExpiry = this.proofExpirySignaled
+          this.proofExpirySignaled = false
           this.configurationRevision++
           this.configurationSource = source
           this.flagsConfiguration = config
+          if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
+            this.verifiedConfiguration = config
           this.assignmentSubjectIsolationRequired = false
           // Same-subject fallback can have older attributes. Keep its original
           // context for evaluation and telemetry; do not relabel or re-cache it.
@@ -364,6 +424,7 @@ export class DatadogProvider extends DatadogProviderBase {
           if (fromCache) this.lifecycleTelemetry?.providerError()
           this.lifecycleTelemetry?.settle(config.precomputed ? (fromCache ? 'cached_fallback' : 'ready') : 'failed')
           this.events.emit(ProviderEvents.ConfigurationChanged)
+          if (recoveredFromExpiry && !fromCache) this.events.emit(ProviderEvents.Ready)
 
           if (this.status === ProviderStatus.STALE) {
             // HACK: returning from onContextChange causes the OF SDK
@@ -388,6 +449,7 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            this.verificationError = error instanceof ResponseVerificationError ? error : undefined
             this.assignmentSubjectIsolationRequired ||=
               error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
             debug.event('configuration.failed', () => ({
@@ -422,55 +484,92 @@ export class DatadogProvider extends DatadogProviderBase {
     if (!this.configuration) {
       throw new Error('Invalid configuration')
     }
+    const debug = debugForSignal(signal)
     const optedOut = experimentationOptOutPolicy(context, this.experimentationOptOutMode)
     if (optedOut === undefined) throw new InvalidContextError(INVALID_EXPERIMENTATION_OPT_OUT)
+    const signing = this.configuration.responseSigning
     let allowSameSubject = this.assignmentSubjectIsolationRequired
     const canUse = (config: FlagsConfiguration | undefined) =>
-      this.canUseConfiguration(config, context, allowSameSubject)
+      this.canUseConfiguration(config, context, allowSameSubject) &&
+      (signing?.mode !== 'required' || signing.isVerified(config, context))
     const retainedConfig = this.flagsConfiguration
 
-    // Prefer current config over cache if it matches the requested context
-    const memoryEligible = canUse(retainedConfig)
     const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
-    this.debug.event('cache.eligibility', () => ({
+    // Prefer verified memory, then current config, before persistent cache.
+    const verifiedMemoryEligible =
+      signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+    const memoryEligible = !verifiedMemoryEligible && canUse(retainedConfig)
+    const cachedConfigPromise = verifiedMemoryEligible
+      ? Promise.resolve(this.verifiedConfiguration)
+      : memoryEligible
+        ? Promise.resolve(retainedConfig)
+        : this.flagsCache?.get(context, optedOut, debug)
+    debug.event('cache.eligibility', () => ({
       requestedContext: context,
-      ...configurationDebugFields(this.flagsConfiguration),
+      ...configurationDebugFields(retainedConfig),
       eligible: memoryEligible,
+      verifiedMemoryEligible,
       optedOut,
+      signingMode: signing?.mode ?? 'off',
     }))
-    const cachedConfigPromise = memoryEligible
-      ? Promise.resolve(retainedConfig)
-      : this.flagsCache?.get(context, optedOut)
 
     try {
       const config = await this.configuration.fetchFlagsConfiguration(context, { signal, assignmentToken })
       signal.throwIfAborted()
+      if (signing?.mode === 'required' && !signing.isVerified(config, context))
+        throw new ResponseVerificationError('expired-proof')
       if (config.precomputed) {
         this.lifecycleTelemetry?.configurationReceived()
       } else if (config.precomputedError) {
         this.lifecycleTelemetry?.providerError()
       }
-      this.flagsCache?.set(config, context, optedOut)
+      this.flagsCache?.set(config, context, optedOut, signal, debug)
       return { config, fromCache: false, source: 'network' }
     } catch (err) {
       if (!signal.aborted && err instanceof GeneralError && err.message === ASSIGNMENT_AUTHORIZATION_FAILED) {
         display.warn(`Assignment download failed: ${ASSIGNMENT_AUTHORIZATION_FAILED}`)
         allowSameSubject = true
       }
+      debug.event('configuration.refresh_failed', () => ({
+        error: err,
+        action: 'check_eligible_fallback',
+        sameSubjectRequired: allowSameSubject,
+        signingMode: signing?.mode ?? 'off',
+      }))
       // Try to recover with current/cached config
       try {
-        const config = await waitWithAbort(signal, canUse(retainedConfig) ? retainedConfig : cachedConfigPromise)
+        const fallback =
+          signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+            ? this.verifiedConfiguration
+            : canUse(retainedConfig)
+              ? retainedConfig
+              : cachedConfigPromise
+        const config = await waitWithAbort(signal, fallback)
         if (config && canUse(config)) {
-          this.debug.event('cache.fallback', () => ({
+          debug.event('cache.fallback', () => ({
             error: err,
             requestedContext: context,
             ...configurationDebugFields(config),
-            source: config === retainedConfig ? memorySource : 'indexeddb',
+            source:
+              config === this.verifiedConfiguration
+                ? 'verified_memory'
+                : config === retainedConfig
+                  ? memorySource
+                  : 'indexeddb',
           }))
-          return { config, fromCache: true, source: config === retainedConfig ? memorySource : 'indexeddb' }
+          return {
+            config,
+            fromCache: true,
+            source:
+              config === this.verifiedConfiguration
+                ? 'verified_memory'
+                : config === retainedConfig
+                  ? memorySource
+                  : 'indexeddb',
+          }
         }
       } catch (cacheError) {
-        this.debug.event('cache.fallback_failed', () => ({ cacheError }))
+        debug.event('cache.fallback_failed', () => ({ cacheError }))
       }
 
       if (!signal.aborted) this.lifecycleTelemetry?.providerError()
@@ -535,6 +634,11 @@ export class DatadogProvider extends DatadogProviderBase {
       experimentationOptOutPolicy(this.requestedEvaluationContext, this.experimentationOptOutMode) !== undefined &&
       !this.canUseConfiguration(this.flagsConfiguration, this.requestedEvaluationContext, true)
     ) {
+      this.debug.event('authorization.isolation', () => ({
+        flagKey,
+        reason: 'assignments_do_not_match_requested_subject',
+        action: 'runtime_default',
+      }))
       return bindEvaluationTelemetryResult(
         { value: defaultValue, reason: 'ERROR', errorCode: ErrorCode.GENERAL },
         this.telemetryPolicy,
@@ -543,15 +647,46 @@ export class DatadogProvider extends DatadogProviderBase {
     }
     const optOutEnabled = this.experimentationOptOutMode !== ExperimentationOptOutMode.Disabled
     const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
-    const result = evaluatePrecomputedConfiguration(
-      this.flagsConfiguration,
-      type,
-      flagKey,
-      defaultValue,
-      context,
-      this.experimentationOptOutMode,
-      _logger
-    )
+    const signing = this.configuration?.responseSigning
+    const unverified =
+      signing?.mode === 'required' && !signing.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
+    const expired = unverified && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+    const expiryMessage = 'The verified flag configuration proof has expired'
+    if (
+      expired &&
+      !this.proofExpirySignaled &&
+      (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
+    ) {
+      this.proofExpirySignaled = true
+      this.debug.event('signing.expired', () => ({
+        configurationRevision: this.configurationRevision,
+        action: 'runtime_default_until_verified_refresh',
+      }))
+      this.debug.event('provider.state_changed', () => ({
+        previousState: this.status,
+        state: ProviderStatus.ERROR,
+        reason: 'expired_proof',
+      }))
+      this.status = ProviderStatus.ERROR
+      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
+    }
+    const verificationMessage = expired ? expiryMessage : unverified ? this.verificationError?.message : undefined
+    const result: ResolutionDetails<FlagTypeToValue<T>> = verificationMessage
+      ? {
+          value: defaultValue,
+          reason: StandardResolutionReasons.ERROR,
+          errorCode: ErrorCode.GENERAL,
+          errorMessage: verificationMessage,
+        }
+      : evaluatePrecomputedConfiguration(
+          unverified ? undefined : this.flagsConfiguration,
+          type,
+          flagKey,
+          defaultValue,
+          context,
+          this.experimentationOptOutMode,
+          _logger
+        )
     // A well-formed context is waiting for usable assignments, not invalid.
     const awaitingAssignments =
       optOutEnabled &&

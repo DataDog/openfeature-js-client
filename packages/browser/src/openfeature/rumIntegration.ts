@@ -1,6 +1,6 @@
 import { type Context, getGlobalObject } from '@datadog/browser-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
-import { createDebugLogger, type DebugConfiguration, type DebugLogger, NO_DEBUG } from '../debug'
+import { createDebugLogger, type DebugConfiguration, type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import { type EvaluationTelemetryPolicy, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
 import type { DatadogTrackingHook } from './tracking'
 
@@ -57,8 +57,9 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy, debug:
   return withEvaluationTelemetryPolicy(
     {
       finally: (_hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
+        const evaluation = evaluationDebug(_hookContext.context, debug)
         if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
-          debug.event('rum.annotation', () => ({
+          evaluation.event('rum.annotation', () => ({
             details,
             outcome: 'skipped',
             reason: 'evaluation_error_or_no_variant',
@@ -68,14 +69,14 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy, debug:
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
         try {
           globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
-          debug.event('rum.annotation', () => ({
+          evaluation.event('rum.annotation', () => ({
             flagKey: details.flagKey,
             value: details.variant,
             outcome: globalObject.DD_RUM?.addFeatureFlagEvaluation ? 'handed_to_rum' : 'rum_unavailable',
             downstreamDelivery: 'not_observable',
           }))
         } catch (error) {
-          debug.event('rum.annotation_failed', () => ({ details, error }))
+          evaluation.event('rum.annotation_failed', () => ({ details, error }))
           throw error
         }
       },

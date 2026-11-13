@@ -57,6 +57,7 @@ describe('debug event transport', () => {
     await jest.advanceTimersByTimeAsync(1000)
     expect(fetch).toHaveBeenCalledTimes(2)
     if (enabled) {
+      expect(events('upload.queue_state').some((r) => typeof r.details.nextAttemptAt === 'number')).toBe(true)
       expect(events('upload.completed').map((r) => r.details.outcome)).toEqual(['retry_pending', 'intake_accepted'])
       expect(events('upload.started').map((r) => r.details.attempt)).toEqual([1, 2])
       expect(events('upload.started')[0].details.batchId).toBe(events('upload.started')[1].details.batchId)
@@ -71,6 +72,8 @@ describe('debug event transport', () => {
     expect(events('upload.completed')[0].details).toMatchObject({
       outcome: 'dropped',
       cause: 'unknown_transport_failure',
+      httpStatus: null,
+      transportStatus: 0,
     })
     expect(jest.getTimerCount()).toBe(0)
   })
@@ -118,6 +121,8 @@ describe('debug event transport', () => {
     await settle()
     expect(events('batch.flushed')[0].details).toMatchObject({ reason: 'session_expire', messagesCount: 1 })
     expect(events('upload.started')[0].details.payload).toContain('original')
+    expect(events('batch.enqueued')[0].details.batchId).toBe(events('upload.started')[0].details.batchId)
+    expect(events('batch.flushed')[0].details.pendingAgeMs).toBeGreaterThanOrEqual(0)
     batch.stop()
     expect(jest.getTimerCount()).toBe(0)
     log.mockClear()

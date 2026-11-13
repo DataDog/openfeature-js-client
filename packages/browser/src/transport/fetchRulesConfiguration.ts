@@ -44,8 +44,20 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   }
   if (selected) reportIgnoredFlagSelection(response)
 
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  const configuration = configurationFromRulesBinary(bytes)
+  let bytes: Uint8Array
+  let configuration: FlagsConfiguration
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer())
+    configuration = configurationFromRulesBinary(bytes)
+  } catch (error) {
+    debug.event('configuration.decode_failed', () => ({
+      stage: 'body_read_or_protobuf_decode',
+      httpStatus: response.status,
+      error,
+      action: 'reject_response',
+    }))
+    throw error
+  }
   debug.event('configuration.decoded', () => ({ rawBytes: bytes, configuration }))
   if (configuration.rules) {
     configuration.rules.fetchedAt = fetchedAt

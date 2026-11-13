@@ -6,7 +6,7 @@ import type {
   ProviderMetadata,
   ResolutionDetails,
 } from '@openfeature/web-sdk'
-import { type DebugLogger, NO_DEBUG } from '../debug'
+import { type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import { extractAssignmentToken } from '../domain/assignment-token'
 import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
 
@@ -130,7 +130,7 @@ export function withEvaluationTelemetryPolicy<T extends Hook>(
         (policy) => atStart?.get(policy) !== false && policy.allowsTelemetry(context.context)
       )
       // A customer hook can change consent during evaluation. Do not restore admission mid-call.
-      debug.event('tracking.policy', () => ({
+      evaluationDebug(context.context, debug).event('tracking.policy', () => ({
         allowed,
         context: context.context,
         details,

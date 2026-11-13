@@ -1,11 +1,14 @@
 import { configurationFromString } from '@datadog/flagging-core/rules-based'
 import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
 import { withStore } from '../../src/cache/indexeddb-store'
+import { createDebugLogger } from '../../src/debug'
 import { DatadogCoreProvider } from '../../src/openfeature/core-provider'
 import { DatadogDevtools } from '../../src/openfeature/devtools-provider'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import { withRetry, withTimeout } from '../../src/transport/fetch'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
+import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
 import precomputed from '../data/precomputed-v1.json'
 import rulesWire from '../data/rules-v1-wire.json'
 
@@ -64,6 +67,111 @@ describe('browser debug-mode scenarios', () => {
     await withStore('readwrite', (store) => store.count())
     localStorage.clear()
     jest.restoreAllMocks()
+  })
+
+  it.each(['provider', 'standalone'] as const)('logs malformed JSON at the %s decode boundary', async (entry) => {
+    const failure = new SyntaxError('Unexpected token in JSON')
+    fetch.mockResolvedValue({
+      ...response(),
+      json: async () => {
+        throw failure
+      },
+    })
+    const operation =
+      entry === 'provider' ? provider().initialize(context) : fetchPrecomputedConfiguration({ ...options, context })
+    await expect(operation).rejects.toThrow(failure)
+    expect(events('configuration.decode_failed')[0].details).toMatchObject({
+      httpStatus: 200,
+      stage: 'body_read_or_json_decode',
+      action: 'reject_response',
+    })
+  })
+
+  it('logs a rules body-read failure without changing the thrown error', async () => {
+    const failure = new Error('body stream failed')
+    fetch.mockResolvedValue({
+      ...response(),
+      arrayBuffer: async () => {
+        throw failure
+      },
+    })
+    await expect(fetchRulesConfiguration(options)).rejects.toBe(failure)
+    expect(events('configuration.decode_failed')[0].details.stage).toBe('body_read_or_protobuf_decode')
+  })
+
+  it('identifies the field of a rejected flag while retaining valid flags', async () => {
+    const body = JSON.parse(JSON.stringify(precomputed))
+    body.data.attributes.flags['boolean-flag'].variationValue = 'not a boolean'
+    fetch.mockResolvedValue(response(body))
+    const subject = provider()
+    await subject.initialize(context)
+    expect(subject.resolveStringEvaluation('string-flag', 'default', context, logger).value).toBe('red')
+    expect(events('configuration.flag_rejected')[0].details).toMatchObject({
+      flagKey: 'boolean-flag',
+      field: 'variationValue',
+      actual: 'not a boolean',
+      expected: 'boolean',
+    })
+  })
+
+  it('explains setup field errors without echoing credentials', () => {
+    provider({ env: 42 })
+    expect(events('init.failed')[0].details.validationIssues).toContainEqual({
+      field: 'env',
+      reason: 'expected_string',
+      value: 42,
+    })
+    expect(JSON.stringify(log.mock.calls)).not.toContain('transport-secret')
+  })
+
+  it('closes unavailable signing-cache reads and cancelled writes with distinct operation IDs', async () => {
+    const cache = new IndexedDBFlagsCache('secret', undefined, async () => undefined, createDebugLogger(true))
+    await expect(cache.get(context)).resolves.toBeUndefined()
+    const controller = new AbortController()
+    controller.abort()
+    const unsignedCache = new IndexedDBFlagsCache('secret', undefined, undefined, createDebugLogger(true))
+    unsignedCache.set({}, context, false, controller.signal)
+    expect(events('cache.read_completed')[0].details).toMatchObject({
+      outcome: 'skipped',
+      reason: 'signing_namespace_unavailable',
+    })
+    expect(events('cache.write_skipped')[0].details.reason).toBe('request_cancelled')
+    expect(events('cache.read_started')[0].cacheOperationId).toBeDefined()
+    expect(events('cache.read_completed')[0].cacheOperationId).toBe(events('cache.read_started')[0].cacheOperationId)
+  })
+
+  it('correlates named-client evaluations through aggregation and upload without changing payloads', async () => {
+    const subject = provider({ trackExposures: true, enableFlagEvaluationTracking: true })
+    await OpenFeature.setProviderAndWait('matrix-domain', subject, context)
+    const client = OpenFeature.getClient('matrix-domain')
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
+    const requested = events('evaluation.requested')
+    const completed = events('evaluation.completed')
+    const aggregated = events('evaluation.aggregate_updated')
+    expect(requested).toHaveLength(2)
+    expect(requested[0].details.context.clientMetadata.domain).toBe('matrix-domain')
+    expect(completed.map((r) => r.evaluationId)).toEqual(requested.map((r) => r.evaluationId))
+    expect(new Set(completed.map((r) => r.evaluationId)).size).toBe(2)
+    expect(aggregated.map((r) => r.evaluationId)).toEqual(completed.map((r) => r.evaluationId))
+    expect(aggregated.map((r) => r.details.data.count)).toEqual([1, 2])
+    await subject.onClose()
+    const flushed = events('evaluation.aggregate_flushed')[0]
+    expect(flushed.details.trigger).toBe('shutdown')
+    const enqueued = events('batch.enqueued').find((r) => r.details.aggregationId === flushed.details.aggregationId)
+    expect(enqueued).toBeDefined()
+    const upload = events('upload.started').find(
+      (r) => r.transportInstanceId === enqueued.transportInstanceId && r.details.batchId === enqueued.details.batchId
+    )
+    expect(upload).toBeDefined()
+    const payload = upload.details.payload
+      .split('\n')
+      .map((line: string) => JSON.parse(line))
+      .find((row: { flag?: { key: string } }) => row.flag?.key === 'boolean-flag')
+    expect(payload.evaluation_count).toBe(2)
+    expect(payload).not.toHaveProperty('aggregationId')
+    expect(payload).not.toHaveProperty('evaluationId')
+    expect(events('exposure.created')[0].evaluationId).toBe(completed[0].evaluationId)
   })
 
   it.each(['provider', 'standalone'] as const)(

@@ -273,12 +273,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isValidFlagEvaluation(value: unknown): value is FlagEvaluation {
-  return (
-    isRecord(value) &&
-    typeof value.key === 'string' &&
-    value.key.length > 0 &&
-    Object.keys(value).every((key) => key === 'key')
-  )
+  return isRecord(value) && typeof value.key === 'string' && value.key.length > 0
 }
 
 function isFlagEvaluationOperator(operator: string): boolean {
