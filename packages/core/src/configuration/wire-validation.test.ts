@@ -110,4 +110,43 @@ describe('precomputed dependency wire validation', () => {
       flagErrors: { ['a'.repeat(64)]: 'Invalid precomputed flag evaluation error' },
     })
   })
+
+  it('rejects obfuscated dependency traces without declared encryption metadata', () => {
+    const encoded = response(
+      {
+        ['a'.repeat(64)]: {
+          ...assignment,
+          dependencyEvaluations: [{ flagKey: 'A'.repeat(38), isPresentInAssignment: true }],
+        },
+      },
+      undefined
+    )
+    encoded.data.attributes = {
+      ...encoded.data.attributes,
+      obfuscated: true,
+      obfuscation: { scheme: 'flag-key-sha256-v1', salt: '0'.repeat(32) },
+    } as typeof encoded.data.attributes
+
+    expect(parsePrecomputedConfigurationResponse(encoded)).toEqual({
+      response: encoded,
+      flagErrors: { ['a'.repeat(64)]: 'Invalid precomputed flag configuration' },
+    })
+  })
+
+  it('rejects an unknown dependency encryption scheme', () => {
+    const encoded = response({})
+    encoded.data.attributes = {
+      ...encoded.data.attributes,
+      obfuscated: true,
+      obfuscation: {
+        scheme: 'flag-key-sha256-v1',
+        salt: '0'.repeat(32),
+        dependencyKeyEncryption: { scheme: 'unknown' },
+      },
+    } as typeof encoded.data.attributes
+
+    expect(parsePrecomputedConfigurationResponse(encoded)).toEqual({
+      error: 'Unsupported precomputed dependency flag-key encryption scheme',
+    })
+  })
 })

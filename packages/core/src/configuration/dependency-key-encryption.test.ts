@@ -8,13 +8,14 @@ import {
 const encoding = {
   scheme: 'flag-key-sha256-v1',
   salt: '000102030405060708090a0b0c0d0e0f',
+  dependencyKeyEncryption: { scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1' },
 } as const
 
 describe('dependency flag-key encryption', () => {
   it('matches the shared fixed vector and decrypts with the plaintext root key', () => {
     const encrypted = encryptDependencyFlagKey('new-payment-flow', 'checkout-redesign', encoding)
 
-    expect(encrypted).toBe('Eb_cST-0-FZKdvcpKLHbDDG_CX2hK4Xfrw7h5o-47Gp6GyFntOGTZO3wmLg')
+    expect(encrypted).toBe('tATBHdKpF-zxZ2Fr70UGwTMfPcXSdulh78uKYPpNzVBoSlNnB6qMCTtI1o8')
     expect(decryptDependencyFlagKey(encrypted, 'checkout-redesign', encoding)).toEqual({ key: 'new-payment-flow' })
   })
 

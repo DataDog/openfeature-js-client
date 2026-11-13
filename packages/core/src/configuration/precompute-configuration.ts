@@ -15,7 +15,12 @@ import type {
   PrecomputedFlag,
 } from './configuration'
 import { createDependencyFlagKeyEncryptor } from './dependency-key-encryption'
-import { encodePrecomputedFlagKey, type FlagKeyObfuscation, readFlagKeyObfuscation } from './flag-key-obfuscation'
+import {
+  DEPENDENCY_KEY_ENCRYPTION_SCHEME,
+  encodePrecomputedFlagKey,
+  type FlagKeyObfuscation,
+  readFlagKeyObfuscation,
+} from './flag-key-obfuscation'
 import { canonicalizeFlagSelection, type FlagSelection } from './flag-selection'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
@@ -261,7 +266,11 @@ function validateOptions(
       )
         return {
           experimentationOptOutMode,
-          obfuscation: encoding && { scheme: encoding.scheme, salt: encoding.salt },
+          obfuscation: encoding && {
+            scheme: encoding.scheme,
+            salt: encoding.salt,
+            dependencyKeyEncryption: { scheme: DEPENDENCY_KEY_ENCRYPTION_SCHEME },
+          },
           onEvaluationError,
           keyPatterns: selection?.keyPatterns,
         }

@@ -5,7 +5,12 @@ import type {
   PrecomputedErrorFlag,
   PrecomputedFlag,
 } from './configuration'
-import { type FlagKeyObfuscation, isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
+import {
+  type FlagKeyObfuscation,
+  isLowercaseHex,
+  readFlagKeyObfuscation,
+  supportsDependencyKeyEncryption,
+} from './flag-key-obfuscation'
 
 type WireEntry = {
   response: string
@@ -125,6 +130,7 @@ function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): 
 function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
   if (value === undefined) return true
   if (!Array.isArray(value)) return false
+  if (encoding !== undefined && value.length > 0 && !supportsDependencyKeyEncryption(encoding)) return false
   const flagKeys = new Set<string>()
   for (const evaluation of value) {
     if (
