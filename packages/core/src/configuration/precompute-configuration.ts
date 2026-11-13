@@ -98,6 +98,7 @@ export function precomputeConfiguration(
   const flags: Array<[string, PrecomputedFlag]> = []
   const flagEvaluationErrors: Array<[string, PrecomputedErrorFlag]> = []
   const errors: PrecomputeEvaluationError[] = []
+  const dependencyFailures = new Set<string>()
   const selectedFlagKeys = Object.keys(rules.flags).filter(
     (flagKey) => !patterns || patterns.some((parts) => matchesKeyPattern(flagKey, parts))
   )
@@ -140,6 +141,7 @@ export function precomputeConfiguration(
       enqueueConfiguredDependencies(trace.dependencyEvaluations)
       const failure = precomputedError(errorCode, errorMessage, trace.dependencyEvaluations, trace.dependencyExposures)
       flagEvaluationErrors.push([flagKey, failure])
+      if (error instanceof DependencyGraphError) dependencyFailures.add(flagKey)
       errors.push({ flagKey, errorCode })
       continue
     }
@@ -195,8 +197,18 @@ export function precomputeConfiguration(
     }
   }
 
-  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors, selectedFlagKeySet)
-  const encoded = encodePrecomputedResults(flags, flagEvaluationErrors, obfuscation)
+  reconcileDependencySerializationFailures(
+    flags,
+    flagEvaluationErrors,
+    errors,
+    selectedFlagKeySet,
+    dependencyFailures
+  )
+  const encoded = encodePrecomputedResults(
+    flags,
+    flagEvaluationErrors.filter(([flagKey]) => dependencyFailures.has(flagKey)),
+    obfuscation
+  )
 
   const precomputed: FlagsConfiguration = {
     precomputed: {
@@ -328,7 +340,8 @@ function reconcileDependencySerializationFailures(
   flags: Array<[string, PrecomputedFlag]>,
   flagEvaluationErrors: Array<[string, PrecomputedErrorFlag]>,
   errors: PrecomputeEvaluationError[],
-  selectedKeys: ReadonlySet<string>
+  selectedKeys: ReadonlySet<string>,
+  dependencyFailures: Set<string>
 ): void {
   const successfulKeys = new Set(flags.map(([flagKey]) => flagKey))
   const failures = new Map(flagEvaluationErrors)
@@ -363,6 +376,7 @@ function reconcileDependencySerializationFailures(
       flags.splice(index, 1)
       successfulKeys.delete(rootKey)
       flagEvaluationErrors.push([rootKey, failure])
+      dependencyFailures.add(rootKey)
       failures.set(rootKey, failure)
       errors.push({ flagKey: rootKey, errorCode: 'GENERAL' as ErrorCode })
       changed = true

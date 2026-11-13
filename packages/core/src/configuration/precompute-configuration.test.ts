@@ -298,7 +298,7 @@ describe('precomputeConfiguration', () => {
           expect.objectContaining({ flagKey: 'parent', reason: 'ERROR', errorCode: dependencyErrorCode }),
         ],
       })
-      if (parentErrorCode === undefined) {
+      if (parentErrorCode !== 'GENERAL') {
         expect(evaluationErrors.parent).toBeUndefined()
       } else {
         expect(evaluationErrors.parent).toMatchObject({ reason: 'ERROR', errorCode: parentErrorCode })
@@ -600,7 +600,7 @@ describe('precomputeConfiguration', () => {
     for (const key of ['unsupported', 'unsafeInteger', 'badJson']) {
       expect(evaluate(result, 'boolean', key, false, context)).toMatchObject({
         value: false,
-        errorCode: 'PARSE_ERROR',
+        errorCode: 'FLAG_NOT_FOUND',
       })
     }
   })
@@ -726,8 +726,8 @@ describe('precomputeConfiguration', () => {
       const attributes = roundTrip(precomputeConfiguration(input, context, { onEvaluationError })).precomputed!.response
         .data.attributes
       expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).not.toHaveProperty('parent')
       expect(attributes.flagEvaluationErrors).toMatchObject({
-        parent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
         child: {
           reason: 'ERROR',
           errorCode: 'GENERAL',
@@ -753,8 +753,8 @@ describe('precomputeConfiguration', () => {
 
     const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
     expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+    expect(attributes.flagEvaluationErrors).not.toHaveProperty('parent')
     expect(attributes.flagEvaluationErrors).toMatchObject({
-      parent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
       child: {
         reason: 'ERROR',
         errorCode: 'GENERAL',
@@ -798,8 +798,8 @@ describe('precomputeConfiguration', () => {
 
       const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
       expect(Object.keys(attributes.flags)).toEqual(['unrelated'])
+      expect(attributes.flagEvaluationErrors).not.toHaveProperty('grandparent')
       expect(attributes.flagEvaluationErrors).toMatchObject({
-        grandparent: { reason: 'ERROR', errorCode: 'PARSE_ERROR' },
         parent: {
           reason: 'ERROR',
           errorCode: 'GENERAL',
@@ -822,7 +822,7 @@ describe('precomputeConfiguration', () => {
     }
   )
 
-  it('rolls back selected dependency exposure markers when the root is not portable', () => {
+  it('keeps a nonportable root absent without fabricating an error-map assignment', () => {
     const input = dependentRules()
     const source = input.rules!.response
     source.flags.child.variationType = VariationType.JSON
@@ -833,11 +833,7 @@ describe('precomputeConfiguration', () => {
     const attributes = roundTrip(precomputeConfiguration(input, context)).precomputed!.response.data.attributes
     expect(attributes.flags).toHaveProperty('parent')
     expect(attributes.flags).not.toHaveProperty('child')
-    expect(attributes.flagEvaluationErrors?.child).toMatchObject({
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      dependencyEvaluations: [{ flagKey: 'parent', isPresentInAssignment: false }],
-    })
+    expect(attributes.flagEvaluationErrors?.child).toBeUndefined()
   })
 
   it('evaluates targeting and sharding for the requested subject', () => {
@@ -901,7 +897,7 @@ describe('precomputeConfiguration', () => {
     expect(evaluate(result, 'boolean', 'sharded', false, subject)).toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'INVALID_CONTEXT',
+      errorCode: 'FLAG_NOT_FOUND',
     })
     expect(onEvaluationError).toHaveBeenCalledTimes(1)
     expect(onEvaluationError).toHaveBeenCalledWith({ flagKey: 'sharded', errorCode: 'INVALID_CONTEXT' })
