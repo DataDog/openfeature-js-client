@@ -6,6 +6,8 @@ import {
   getMD5Hash,
 } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
+import { signingContextKey } from '../transport/responseSigning/controller'
+import { hex, sha256, utf8 } from '../transport/responseSigning/verification'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
@@ -20,7 +22,11 @@ export class IndexedDBFlagsCache {
   private readonly clientToken: string
   private readonly selectionSuffix: string
 
-  constructor(clientToken: string, flagSelection?: CanonicalFlagSelection) {
+  constructor(
+    clientToken: string,
+    flagSelection?: CanonicalFlagSelection,
+    private readonly signingNamespace?: () => Promise<string | undefined>
+  ) {
     this.clientToken = clientToken
     this.selectionSuffix = flagSelection ? `-sel-${getMD5Hash(JSON.stringify(flagSelection))}` : ''
   }
@@ -32,7 +38,10 @@ export class IndexedDBFlagsCache {
   ): Promise<FlagsConfiguration | undefined> {
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+      const configKey = this.signingNamespace
+        ? await this.scopedKey(context, optedOut)
+        : `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+      if (!configKey) return undefined
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -44,7 +53,7 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (optedOut || this.selectionSuffix) {
+            if (this.signingNamespace || optedOut || this.selectionSuffix) {
               resolve(undefined)
               return
             }
@@ -79,13 +88,43 @@ export class IndexedDBFlagsCache {
   }
 
   /** Fire-and-forget persist. Never throws. */
-  set(config: FlagsConfiguration, context: EvaluationContext, optedOut: ExperimentationOptOutPolicy = false): void {
+  set(
+    config: FlagsConfiguration,
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy = false,
+    signal?: AbortSignal
+  ): void {
     // One namespace for new writes keeps plaintext rollback and encoded
     // refreshes in the same slot without changing what older SDKs can read.
     const prefix = policyPrefix(optedOut)
     const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+    if (this.signingNamespace) {
+      void this.scopedKey(context, optedOut)
+        .then((key) => {
+          if (key && !signal?.aborted) this.persist(config, key, signal)
+        })
+        .catch(() => {})
+      return
+    }
+    this.persist(config, configKey, signal)
+  }
+
+  private async scopedKey(
+    context: EvaluationContext,
+    optedOut: ExperimentationOptOutPolicy
+  ): Promise<string | undefined> {
+    const namespace = await this.signingNamespace?.()
+    if (!namespace) return undefined
+    return `${namespace}-${policyPrefix(optedOut)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
+  }
+
+  private persist(config: FlagsConfiguration, configKey: string, signal?: AbortSignal): void {
     openDB()
       .then((db) => {
+        if (signal?.aborted) {
+          db.close()
+          return
+        }
         const tx = db.transaction(STORE_NAME, 'readwrite')
         const store = tx.objectStore(STORE_NAME)
         store.put(config, configKey)

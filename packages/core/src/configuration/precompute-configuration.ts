@@ -16,6 +16,7 @@ import type {
 } from './configuration'
 import { createDependencyFlagKeyEncryptor } from './dependency-key-encryption'
 import { encodePrecomputedFlagKey, type FlagKeyObfuscation, readFlagKeyObfuscation } from './flag-key-obfuscation'
+import { canonicalizeFlagSelection, type FlagSelection } from './flag-selection'
 import type { PreparedRulesResponse } from './prepared-rules-response'
 
 export type ConfigurationPrecomputeErrorCode = 'invalid_configuration' | 'invalid_context' | 'invalid_options'
@@ -42,6 +43,14 @@ export type PrecomputeEvaluationError = {
 }
 
 export type PrecomputeConfigurationOptions = {
+  /**
+   * Include only assignments whose whole key matches any pattern; only `*` is special.
+   * Tags are unsupported: any defined tags value, including [] or null, throws invalid_options.
+   * Malformed or over-limit selections also throw invalid_options. With tags absent, omitted selections or no
+   * nonempty keyPatterns include all assignments; a null selection is treated as absent at runtime.
+   * Dependencies can use any flag in the source rules.
+   */
+  flagSelection?: Pick<FlagSelection, 'keyPatterns'> & { tags?: never }
   /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
   experimentationOptOutMode?: ExperimentationOptOutModeValue
   /** Encode top-level keys and encrypt root-relative prerequisite keys using this descriptor. */
@@ -72,7 +81,8 @@ export function precomputeConfiguration(
   options: PrecomputeConfigurationOptions = {}
 ): FlagsConfiguration {
   const rules = validateRules(configuration)
-  const { experimentationOptOutMode, obfuscation, onEvaluationError } = validateOptions(options)
+  const { experimentationOptOutMode, obfuscation, onEvaluationError, keyPatterns } = validateOptions(options)
+  const patterns = keyPatterns?.map((pattern) => pattern.split('*'))
   const snapshotContext = snapshotEvaluationContext(context)
   const optOut = experimentationOptOutPolicy(snapshotContext, experimentationOptOutMode)
   if (optOut === undefined) throw new ConfigurationPrecomputeError('invalid_context')
@@ -83,7 +93,10 @@ export function precomputeConfiguration(
   const flags: Array<[string, PrecomputedFlag]> = []
   const flagEvaluationErrors: Array<[string, PrecomputedErrorFlag]> = []
   const errors: PrecomputeEvaluationError[] = []
-  for (const flagKey of Object.keys(rules.flags)) {
+  const selectedFlagKeys = Object.keys(rules.flags).filter(
+    (flagKey) => !patterns || patterns.some((parts) => matchesKeyPattern(flagKey, parts))
+  )
+  for (const flagKey of selectedFlagKeys) {
     const dependencies = createProtobufDependencyResolver(
       rules,
       flagKey,
@@ -166,7 +179,7 @@ export function precomputeConfiguration(
     }
   }
 
-  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors)
+  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors, new Set(selectedFlagKeys))
   const encoded = encodePrecomputedResults(flags, flagEvaluationErrors, obfuscation)
 
   const precomputed: FlagsConfiguration = {
@@ -230,21 +243,27 @@ function validateRules(configuration: FlagsConfiguration): PreparedRulesResponse
   throw new ConfigurationPrecomputeError('invalid_configuration')
 }
 
-function validateOptions(options: PrecomputeConfigurationOptions): PrecomputeConfigurationOptions {
+function validateOptions(
+  options: PrecomputeConfigurationOptions
+): Omit<PrecomputeConfigurationOptions, 'flagSelection'> & { keyPatterns?: readonly string[] } {
   try {
     if (isPlainRecord(options)) {
-      const { experimentationOptOutMode = 'disabled', obfuscation, onEvaluationError } = options
+      const { experimentationOptOutMode = 'disabled', obfuscation, onEvaluationError, flagSelection } = options
+      if (flagSelection?.tags !== undefined) throw new ConfigurationPrecomputeError('invalid_options')
+      const { selection, error } = canonicalizeFlagSelection(flagSelection)
       const parsedEncoding = obfuscation === undefined ? {} : readFlagKeyObfuscation(true, obfuscation)
       const encoding = 'error' in parsedEncoding ? undefined : parsedEncoding.encoding
       if (
         ['disabled', 'immediate', 'future_experiments_only'].includes(experimentationOptOutMode) &&
         (obfuscation === undefined || encoding !== undefined) &&
-        (onEvaluationError === undefined || typeof onEvaluationError === 'function')
+        (onEvaluationError === undefined || typeof onEvaluationError === 'function') &&
+        !error
       )
         return {
           experimentationOptOutMode,
           obfuscation: encoding && { scheme: encoding.scheme, salt: encoding.salt },
           onEvaluationError,
+          keyPatterns: selection?.keyPatterns,
         }
     }
   } catch {
@@ -288,7 +307,8 @@ function toPrecomputedDependencyEvaluations(
 function reconcileDependencySerializationFailures(
   flags: Array<[string, PrecomputedFlag]>,
   flagEvaluationErrors: Array<[string, PrecomputedErrorFlag]>,
-  errors: PrecomputeEvaluationError[]
+  errors: PrecomputeEvaluationError[],
+  selectedKeys: ReadonlySet<string>
 ): void {
   const successfulKeys = new Set(flags.map(([flagKey]) => flagKey))
   const failures = new Map(flagEvaluationErrors)
@@ -298,12 +318,17 @@ function reconcileDependencySerializationFailures(
     for (let index = flags.length - 1; index >= 0; index--) {
       const [rootKey, flag] = flags[index]
       const missingDependencies = flag.dependencyEvaluations?.filter(
-        (dependency) => 'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+        (dependency) =>
+          'isPresentInAssignment' in dependency &&
+          selectedKeys.has(dependency.flagKey) &&
+          !successfulKeys.has(dependency.flagKey)
       )
       if (!missingDependencies?.length) continue
 
       const dependencyEvaluations = flag.dependencyEvaluations?.map((dependency) =>
-        'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+        'isPresentInAssignment' in dependency &&
+        selectedKeys.has(dependency.flagKey) &&
+        !successfulKeys.has(dependency.flagKey)
           ? dependencySerializationError(dependency.flagKey, failures.get(dependency.flagKey))
           : 'isPresentInAssignment' in dependency
             ? { ...dependency, isPresentInAssignment: false }
@@ -324,13 +349,24 @@ function reconcileDependencySerializationFailures(
     }
   }
 
+  for (const [, flag] of flags) {
+    if (!flag.dependencyEvaluations) continue
+    flag.dependencyEvaluations = flag.dependencyEvaluations.map((dependency) =>
+      'isPresentInAssignment' in dependency && !selectedKeys.has(dependency.flagKey)
+        ? { ...dependency, isPresentInAssignment: false }
+        : dependency
+    )
+  }
+
   // Reconcile every failed root against the final assignment set. A root can be
   // demoted before one of its transitive dependencies, so normalizing only at
   // demotion time would leave an order-dependent successful dependency entry.
   for (const [, failure] of flagEvaluationErrors) {
     if (!failure.dependencyEvaluations) continue
     failure.dependencyEvaluations = failure.dependencyEvaluations.map((dependency) =>
-      'isPresentInAssignment' in dependency && !successfulKeys.has(dependency.flagKey)
+      'isPresentInAssignment' in dependency &&
+      selectedKeys.has(dependency.flagKey) &&
+      !successfulKeys.has(dependency.flagKey)
         ? dependencySerializationError(dependency.flagKey, failures.get(dependency.flagKey))
         : 'isPresentInAssignment' in dependency
           ? { ...dependency, isPresentInAssignment: false }
@@ -404,10 +440,27 @@ function encodeDependencies<T extends PrecomputedFlag | PrecomputedErrorFlag>(
   return encoded as T
 }
 
+/** Match literal segments in order, anchored at both ends, without interpreting regex syntax. */
+function matchesKeyPattern(key: string, parts: readonly string[]): boolean {
+  if (parts.length === 1) return key === parts[0]
+  if (!key.startsWith(parts[0])) return false
+  let offset = parts[0].length
+  for (let index = 1; index < parts.length - 1; index++) {
+    const position = key.indexOf(parts[index], offset)
+    if (position === -1) return false
+    offset = position + parts[index].length
+  }
+  const last = parts[parts.length - 1]
+  return key.endsWith(last) && key.length - last.length >= offset
+}
+
 function snapshotEvaluationContext(context: EvaluationContext): EvaluationContext {
   try {
     if (isPlainRecord(context)) {
-      const snapshot = cloneJson(context) as EvaluationContext
+      const targetingContext = Object.fromEntries(
+        Object.entries(context).filter(([key]) => key !== 'dd_assignment_token')
+      )
+      const snapshot = cloneJson(targetingContext) as EvaluationContext
       if (snapshot.targetingKey === undefined || typeof snapshot.targetingKey === 'string') return snapshot
     }
   } catch {

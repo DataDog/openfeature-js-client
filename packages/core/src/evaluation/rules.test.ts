@@ -41,26 +41,50 @@ describe('condition attribute coercion', () => {
 })
 
 describe('dependent condition validation', () => {
-  it.each([
-    ['key-only variant membership', { key: 'prerequisite' }],
-    ['future fields alongside the key', { key: 'prerequisite', property: 'variant', futureOption: true }],
-  ])('accepts %s', (_description, flagEvaluation) => {
+  it('accepts key-only variant membership', () => {
     expect(
       isValidRule({
-        conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }],
+        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.ONE_OF, value: ['on'] }],
       })
     ).toBe(true)
   })
 
   it.each([
-    [
-      'a missing dependency key',
-      { flagEvaluation: { property: 'variant' }, operator: OperatorType.ONE_OF, value: ['on'] },
-    ],
-    ['an empty dependency key', { flagEvaluation: { key: '' }, operator: OperatorType.ONE_OF, value: ['on'] }],
-    ['a null dependency key', { flagEvaluation: { key: null }, operator: OperatorType.ONE_OF, value: ['on'] }],
-    ['a regex operator', { flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
-  ])('rejects %s', (_description, condition) => {
-    expect(isValidRule({ conditions: [condition] })).toBe(false)
+    { key: 'prerequisite', unexpected: true },
+    { key: 'prerequisite', property: 'variant' },
+  ])('accepts unknown fields in a flag-evaluation reference: %j', (flagEvaluation) => {
+    expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(true)
+  })
+
+  it.each([null, 'prerequisite', [], {}, { key: '' }, { key: 123 }, { property: 'variant' }])(
+    'rejects a malformed flag-evaluation reference: %j',
+    (flagEvaluation) => {
+      expect(isValidRule({ conditions: [{ flagEvaluation, operator: OperatorType.ONE_OF, value: ['on'] }] })).toBe(
+        false
+      )
+    }
+  )
+
+  it('rejects a condition with both an attribute and a flag-evaluation reference', () => {
+    expect(
+      isValidRule({
+        conditions: [
+          {
+            attribute: 'id',
+            flagEvaluation: { key: 'prerequisite', property: 'variant' },
+            operator: OperatorType.ONE_OF,
+            value: ['on'],
+          },
+        ],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects a regex operator for flag evaluation', () => {
+    expect(
+      isValidRule({
+        conditions: [{ flagEvaluation: { key: 'prerequisite' }, operator: OperatorType.MATCHES, value: '^on$' }],
+      })
+    ).toBe(false)
   })
 })
