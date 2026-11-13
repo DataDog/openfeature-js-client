@@ -587,7 +587,10 @@ describe('evaluation features', () => {
     const events = onFlushSpy.mock.calls[0][0]
     expect(events).toHaveLength(4)
     expect(events.map((event: { features: { group: string } }) => event.features.group)).toEqual([
-      'control', 'treatment', 'control', 'treatment',
+      'control',
+      'treatment',
+      'control',
+      'treatment',
     ])
     for (const event of events) {
       expect(event.targeting_key).toBe('')

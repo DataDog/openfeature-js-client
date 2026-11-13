@@ -70,7 +70,12 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   )
   if (selection.kind === 'precomputed') {
     const details = evaluatePrecomputedFlag(
-      selection.configuration, type, flagKey, defaultValue, selection.encoding, logger
+      selection.configuration,
+      type,
+      flagKey,
+      defaultValue,
+      selection.encoding,
+      logger
     )
     return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
   }
