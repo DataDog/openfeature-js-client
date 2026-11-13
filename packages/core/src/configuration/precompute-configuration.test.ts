@@ -11,6 +11,7 @@ import {
   type PrecomputeConfigurationOptions,
   precomputeConfiguration,
 } from './precompute-configuration'
+import { getPrecomputedContext } from './precomputed-context'
 import { configurationFromRulesBinary } from './rules-wire'
 import { encodeFlagsConfiguration } from './ufc-protobuf'
 import { configurationFromString, configurationToString } from './wire'
@@ -608,6 +609,52 @@ describe('precomputeConfiguration', () => {
     expect(evaluate(result, 'boolean', 'flag', false, subject)).toMatchObject({ errorCode: 'INVALID_CONTEXT' })
     expect(precomputeConfiguration(rules({}), {}).precomputed?.context).toEqual({})
     expect(roundTrip(precomputeConfiguration(rules({}), {})).precomputed?.response.data.attributes.flags).toEqual({})
+  })
+
+  it('excludes the assignment token from snapshots and serialized context without mutating the input', () => {
+    const jwt = 'private.jwt.signature'
+    const subject = Object.freeze({ ...context, dd_assignment_token: jwt })
+    const snapshot = precomputeConfiguration(rules(), subject)
+    const wire = configurationToString(snapshot)
+    const restored = configurationFromString(wire)
+    expect(snapshot.precomputed?.context).toEqual(context)
+    expect(getPrecomputedContext(restored)).toEqual(context)
+    expect(wire).not.toContain('dd_assignment_token')
+    expect(wire).not.toContain(jwt)
+    expect(evaluate(restored, 'boolean', 'flag', false, context)).toMatchObject({ value: true, reason: 'STATIC' })
+    expect(subject.dd_assignment_token).toBe(jwt)
+  })
+
+  it('ignores the assignment token before evaluating snapshot targeting rules', () => {
+    const jwt = 'private.jwt.signature'
+    const input = rules(
+      {
+        flag: flag({
+          variations: [{ booleanValue: true }, { keyStringIndex: 1, booleanValue: false }],
+          allocations: [
+            { key: 'token-match', targetingConditionIndex: 0, splits: [{ reason: 'REASON_TARGETING_MATCH' }] },
+            { key: 'fallback', splits: [{ variationIndex: 1, reason: 'REASON_DEFAULT' }] },
+          ],
+        }),
+      },
+      {
+        strings: ['on', 'off', 'dd_assignment_token', jwt],
+        attributes: [{ attributePath: { segments: [{ objectKeyStringIndex: 2 }] } }],
+        conditions: [{ stringMembership: { attributeIndex: 0, stringIndexes: [3] } }],
+      }
+    )
+    const subject = { ...context, dd_assignment_token: jwt }
+    // The fixture would match if the token were passed to the evaluator.
+    expect(evaluate(input, 'boolean', 'flag', false, subject).value).toBe(true)
+    const snapshot = roundTrip(precomputeConfiguration(input, subject))
+    expect(evaluate(snapshot, 'boolean', 'flag', true, context)).toMatchObject({ value: false, reason: 'DEFAULT' })
+  })
+
+  it('does not serialize an unusable reserved token value', () => {
+    const subject: EvaluationContext = { ...context }
+    subject.dd_assignment_token = subject
+    expect(precomputeConfiguration(rules(), subject).precomputed?.context).toEqual(context)
+    expect(subject.dd_assignment_token).toBe(subject)
   })
 
   it('does not expose cached JSON or raw feature arrays through the output', () => {
