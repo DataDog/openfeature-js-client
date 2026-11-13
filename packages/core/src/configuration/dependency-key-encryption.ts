@@ -4,7 +4,8 @@ import { encodeUtf8 } from '../utf8'
 import type { FlagKeyObfuscation } from './flag-key-obfuscation'
 
 const AAD = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1\0')
-const INFO = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1')
+const ENCRYPTION_INFO = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1\0enc')
+const NONCE_KEY_INFO = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.v1\0nonce')
 const NONCE_DOMAIN = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.dependency-key.nonce.v1\0')
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 const TAG_LENGTH = 16
@@ -24,11 +25,11 @@ export function createDependencyFlagKeyEncryptor(
   rootFlagKey: string,
   encoding: FlagKeyObfuscation
 ): (dependencyFlagKey: string) => string {
-  const key = deriveKey(rootFlagKey, encoding.salt)
+  const { encryptionKey, nonceKey } = deriveKeys(rootFlagKey, encoding.salt)
   return (dependencyFlagKey) => {
     const plaintext = encodeUtf8(dependencyFlagKey)
-    const nonce = hmacSha256(key, concatenate(NONCE_DOMAIN, plaintext)).subarray(0, NONCE_LENGTH)
-    const ciphertext = gcm(key, nonce, AAD).encrypt(plaintext)
+    const nonce = hmacSha256(nonceKey, concatenate(NONCE_DOMAIN, plaintext)).subarray(0, NONCE_LENGTH)
+    const ciphertext = gcm(encryptionKey, nonce, AAD).encrypt(plaintext)
     return encodeBase64Url(concatenate(nonce, ciphertext))
   }
 }
@@ -47,14 +48,14 @@ export function createDependencyFlagKeyDecryptor(
   rootFlagKey: string,
   encoding: FlagKeyObfuscation
 ): (encryptedFlagKey: string) => { key: string } | { error: string } {
-  const key = deriveKey(rootFlagKey, encoding.salt)
+  const { encryptionKey } = deriveKeys(rootFlagKey, encoding.salt)
   return (encryptedFlagKey) => {
     try {
       const envelope = decodeBase64Url(encryptedFlagKey)
       if (envelope.length < NONCE_LENGTH + TAG_LENGTH) throw new Error('Dependency flag-key ciphertext is too short')
       const nonce = envelope.subarray(0, NONCE_LENGTH)
       const ciphertext = envelope.subarray(NONCE_LENGTH)
-      const plaintext = gcm(key, nonce, AAD).decrypt(ciphertext)
+      const plaintext = gcm(encryptionKey, nonce, AAD).decrypt(ciphertext)
       return { key: decodeUtf8(plaintext) }
     } catch {
       return { error: 'Invalid encrypted dependency flag key' }
@@ -62,11 +63,18 @@ export function createDependencyFlagKeyDecryptor(
   }
 }
 
-function deriveKey(rootFlagKey: string, saltHex: string): Uint8Array {
+function deriveKeys(rootFlagKey: string, saltHex: string): { encryptionKey: Uint8Array; nonceKey: Uint8Array } {
   const pseudoRandomKey = hmacSha256(hexToBytes(saltHex), encodeUtf8(rootFlagKey))
-  const expandInput = new Uint8Array(INFO.length + 1)
-  expandInput.set(INFO)
-  expandInput[INFO.length] = 1
+  return {
+    encryptionKey: hkdfExpand(pseudoRandomKey, ENCRYPTION_INFO),
+    nonceKey: hkdfExpand(pseudoRandomKey, NONCE_KEY_INFO),
+  }
+}
+
+function hkdfExpand(pseudoRandomKey: Uint8Array, info: Uint8Array): Uint8Array {
+  const expandInput = new Uint8Array(info.length + 1)
+  expandInput.set(info)
+  expandInput[info.length] = 1
   return hmacSha256(pseudoRandomKey, expandInput)
 }
 

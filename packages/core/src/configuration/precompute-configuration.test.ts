@@ -350,10 +350,13 @@ describe('precomputeConfiguration', () => {
     ])
     expect(root.dependencyEvaluations).toEqual([
       {
-        flagKey: 'Eb_cST-0-FZKdvcpKLHbDDG_CX2hK4Xfrw7h5o-47Gp6GyFntOGTZO3wmLg',
+        flagKey: 'tATBHdKpF-zxZ2Fr70UGwTMfPcXSdulh78uKYPpNzVBoSlNnB6qMCTtI1o8',
         isPresentInAssignment: true,
       },
     ])
+    expect(attributes.obfuscation?.dependencyKeyEncryption).toEqual({
+      scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1',
+    })
     expect(JSON.stringify(attributes)).not.toContain('checkout-redesign')
     expect(JSON.stringify(attributes)).not.toContain('new-payment-flow')
   })
