@@ -635,12 +635,13 @@ export declare class DependencyTelemetrySidecar {
 	readonly collectDependencyEvaluations: boolean;
 	private readonly batchesByMetadata;
 	private readonly batchesByContext;
+	private readonly evaluationAliases;
 	constructor(collectDependencyEvaluations?: boolean);
 	stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void;
-	takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[];
+	associateDependencyEvaluations(alias: object, metadata: object | undefined): void;
+	takeDependencyEvaluations(metadata: object | undefined, alias?: object, context?: object): readonly DependencyEvaluation[];
 	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
 	discardDependencyExposures(metadata: object | undefined): void;
-	private getBatch;
 	private deleteBatch;
 }
 export declare class DatadogNodeServerProvider implements Provider {
