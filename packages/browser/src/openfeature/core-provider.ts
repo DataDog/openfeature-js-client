@@ -32,6 +32,7 @@ import {
 } from './experimentation-opt-out'
 import { registerDatadogProvider, supportsExposureAdmission } from './exposure-scope'
 import { stampExposureCacheVerdict } from './exposures'
+import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import { DatadogProviderBase } from './provider-base'
 
 export interface DatadogCoreProviderConfiguration
@@ -52,7 +53,11 @@ export class DatadogCoreProvider extends DatadogProviderBase {
   readonly hooks: Hook[] = [
     {
       finally: (context, details) => {
-        if (supportsExposureAdmission(context)) completeExposureDecision(details)
+        if (!supportsExposureAdmission(context)) return
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment) completeExposureDecision(dependency)
+        }
+        completeExposureDecision(details)
       },
     },
   ]

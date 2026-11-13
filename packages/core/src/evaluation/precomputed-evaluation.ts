@@ -14,6 +14,7 @@ import {
   INVALID_EXPERIMENTATION_OPT_OUT,
 } from './experimentation-opt-out'
 import { getOwnProperty } from './getOwnProperty'
+import { bindPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
 
 const NOOP_LOGGER: Logger = {
@@ -144,7 +145,44 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  const evaluationError = attributes.flagEvaluationErrors
+    ? getOwnProperty(attributes.flagEvaluationErrors, lookup.key)
+    : undefined
   const flag = getOwnProperty(attributes.flags, lookup.key)
+  if (evaluationError && flag) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: 'A precomputed flag cannot have both an assignment and an evaluation error',
+    }
+  }
+  if (evaluationError) {
+    const flagMetadata = {}
+    const dependencyError = bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      evaluationError.dependencyEvaluations,
+      attributes.flags,
+      precomputed.flagErrors,
+      logger,
+      { rootFlagKey: flagKey, encoding: encoding.encoding, allowDependencyErrors: true }
+    )
+    if (dependencyError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR' as ErrorCode,
+        errorMessage: dependencyError,
+      }
+    }
+    return {
+      value: defaultValue,
+      reason: evaluationError.reason,
+      errorCode: evaluationError.errorCode as ErrorCode,
+      ...(evaluationError.errorMessage === undefined ? {} : { errorMessage: evaluationError.errorMessage }),
+      ...(evaluationError.dependencyEvaluations?.length ? { flagMetadata } : {}),
+    }
+  }
   if (!flag) {
     return {
       value: defaultValue,
@@ -154,27 +192,62 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   }
 
   if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
+    const flagMetadata = {}
+    const dependencyError = bindPrecomputedDependencyEvaluations(
+      flagMetadata,
+      flag.dependencyEvaluations,
+      attributes.flags,
+      precomputed.flagErrors,
+      logger,
+      { rootFlagKey: flagKey, encoding: encoding.encoding }
+    )
+    if (dependencyError) {
+      return {
+        value: defaultValue,
+        reason: 'ERROR',
+        errorCode: 'PARSE_ERROR' as ErrorCode,
+        errorMessage: dependencyError,
+      }
+    }
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
+      ...(flag.dependencyEvaluations?.length ? { flagMetadata } : {}),
     }
   }
 
   const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(flag.features, logger)
+  const flagMetadata = {
+    __dd_allocation_key: flag.allocationKey,
+    __dd_do_log: flag.doLog,
+    allocationKey: flag.allocationKey,
+    variationType: flag.variationType,
+    doLog: flag.doLog,
+    ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
+    ...featureEntries,
+    ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
+  } as PrecomputedFlagMetadata
+  const dependencyError = bindPrecomputedDependencyEvaluations(
+    flagMetadata,
+    flag.dependencyEvaluations,
+    attributes.flags,
+    precomputed.flagErrors,
+    logger,
+    { rootFlagKey: flagKey, encoding: encoding.encoding }
+  )
+  if (dependencyError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR' as ErrorCode,
+      errorMessage: dependencyError,
+    }
+  }
   return {
     value: flag.variationValue as FlagTypeToValue<T>,
     variant: flag.variationKey,
-    flagMetadata: {
-      __dd_allocation_key: flag.allocationKey,
-      __dd_do_log: flag.doLog,
-      ...(typeof flag.serialId === 'number' ? { __dd_split_serial_id: flag.serialId } : {}),
-      allocationKey: flag.allocationKey,
-      variationType: flag.variationType,
-      doLog: flag.doLog,
-      ...featureEntries,
-      ...(hasEvaluationFeatures ? { [HAS_EVALUATION_FEATURES_METADATA_KEY]: true } : {}),
-    } as PrecomputedFlagMetadata,
+    flagMetadata,
     reason: flag.reason,
   } as ResolutionDetails<FlagTypeToValue<T>>
 }

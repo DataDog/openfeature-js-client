@@ -278,7 +278,9 @@ describe('DatadogProvider', () => {
       // Check that fetch was called with the correct URL and method
       expect(fetchMock).toHaveBeenCalled()
       const [url, requestOptions] = fetchMock.mock.calls[0]
-      expect(url.toString()).toBe(`https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test`)
+      expect(url.toString()).toBe(
+        `https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1`
+      )
       expect(requestOptions.method).toBe('POST')
 
       // Verify headers were set correctly
@@ -609,7 +611,7 @@ describe('DatadogProvider', () => {
 
       expect(globalFetch).not.toHaveBeenCalled()
       expect(customFetch).toHaveBeenCalledWith(
-        'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test',
+        'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         expect.objectContaining({
           method: 'POST',
           headers: {

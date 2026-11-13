@@ -40,8 +40,9 @@ export class IndexedDBFlagsCache {
       const legacyKey = buildConfigKey(this.clientToken, context)
       const configKey = this.signingNamespace
         ? await this.scopedKey(context, optedOut)
-        : `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
+        : `${policyPrefix(optedOut, 'v3')}-${legacyKey}${this.selectionSuffix}`
       if (!configKey) return undefined
+      const previousConfigKey = `${policyPrefix(optedOut, 'v2')}-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -53,24 +54,36 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (this.signingNamespace || optedOut || this.selectionSuffix) {
+            if (this.signingNamespace) {
               resolve(undefined)
               return
             }
-            // Read older plaintext entries on upgrade. Never expose encoded
-            // snapshots written by a prerelease SDK through the legacy key.
-            const legacy = store.get(legacyKey)
-            legacy.onerror = () => reject(legacy.error)
-            legacy.onsuccess = () => {
-              const config = legacy.result as FlagsConfiguration | undefined
-              const attributes = config?.precomputed?.response?.data?.attributes
-              resolve(
-                attributes &&
-                  (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
-                  attributes.obfuscation === undefined
-                  ? config
-                  : undefined
-              )
+            const previous = store.get(previousConfigKey)
+            previous.onerror = () => reject(previous.error)
+            previous.onsuccess = () => {
+              if (previous.result !== undefined) {
+                resolve(previous.result as FlagsConfiguration)
+                return
+              }
+              if (optedOut || this.selectionSuffix) {
+                resolve(undefined)
+                return
+              }
+              // Read older plaintext entries on upgrade. Never expose encoded
+              // snapshots written by a prerelease SDK through the legacy key.
+              const legacy = store.get(legacyKey)
+              legacy.onerror = () => reject(legacy.error)
+              legacy.onsuccess = () => {
+                const config = legacy.result as FlagsConfiguration | undefined
+                const attributes = config?.precomputed?.response?.data?.attributes
+                resolve(
+                  attributes &&
+                    (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
+                    attributes.obfuscation === undefined
+                    ? config
+                    : undefined
+                )
+              }
             }
           }
           request.onerror = () => reject(request.error)
@@ -94,9 +107,9 @@ export class IndexedDBFlagsCache {
     optedOut: ExperimentationOptOutPolicy = false,
     signal?: AbortSignal
   ): void {
-    // One namespace for new writes keeps plaintext rollback and encoded
-    // refreshes in the same slot without changing what older SDKs can read.
-    const prefix = policyPrefix(optedOut)
+    // New wire shapes use a new namespace so an older SDK cannot consume a
+    // snapshot it does not understand after an application rollback.
+    const prefix = policyPrefix(optedOut, 'v3')
     const configKey = `${prefix}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
     if (this.signingNamespace) {
       void this.scopedKey(context, optedOut)
@@ -115,7 +128,7 @@ export class IndexedDBFlagsCache {
   ): Promise<string | undefined> {
     const namespace = await this.signingNamespace?.()
     if (!namespace) return undefined
-    return `${namespace}-${policyPrefix(optedOut)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
+    return `${namespace}-${policyPrefix(optedOut, 'v3')}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
   }
 
   private persist(config: FlagsConfiguration, configKey: string, signal?: AbortSignal): void {
@@ -138,6 +151,7 @@ export class IndexedDBFlagsCache {
   }
 }
 
-function policyPrefix(policy: ExperimentationOptOutPolicy): string {
-  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
+function policyPrefix(policy: ExperimentationOptOutPolicy, version: 'v2' | 'v3'): string {
+  if (version === 'v2') return policy ? experimentationOptOutCacheKey(policy) : version
+  return policy ? `${version}-${experimentationOptOutCacheKey(policy)}` : version
 }

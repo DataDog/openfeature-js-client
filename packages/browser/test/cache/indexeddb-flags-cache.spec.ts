@@ -29,7 +29,8 @@ const testConfig: FlagsConfiguration = {
 
 const context = { targetingKey: 'user-123' }
 const legacyKey = `flags-config-${buildStorageKeySuffix('test-client-token')}-${getMD5Hash(JSON.stringify(context))}`
-const currentKey = `v2-${legacyKey}`
+const previousKey = `v2-${legacyKey}`
+const currentKey = `v3-${legacyKey}`
 const encodedConfig: FlagsConfiguration = {
   precomputed: {
     ...testConfig.precomputed!,
@@ -160,6 +161,16 @@ describe('IndexedDBFlagsCache', () => {
   })
 
   describe('older SDK compatibility', () => {
+    it('reads the previous cache namespace without writing new snapshots into it', async () => {
+      await writeEntry(previousKey, testConfig)
+      expect(await cache.get(context)).toEqual(testConfig)
+
+      cache.set(encodedConfig, context)
+      await flushAsync()
+      expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(previousKey)).toEqual(testConfig)
+    })
+
     it('reads legacy plaintext on upgrade without overwriting it with encoded keys', async () => {
       await writeEntry(legacyKey, testConfig)
       expect(await cache.get(context)).toEqual(testConfig)
@@ -175,6 +186,7 @@ describe('IndexedDBFlagsCache', () => {
       cache.set(encodedConfig, context)
       await flushAsync()
       expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(previousKey)).toBeUndefined()
       expect(await readEntry(legacyKey)).toBeUndefined()
     })
 
