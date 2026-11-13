@@ -163,7 +163,7 @@ describe('precomputeConfiguration', () => {
         onEvaluationError,
       })
       expect(result.precomputed!.response.data.attributes.flags).toEqual({})
-      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'PARSE_ERROR' }]])
+      expect(onEvaluationError.mock.calls).toEqual([[{ flagKey: 'child', errorCode: 'GENERAL' }]])
     })
 
     it.each([
