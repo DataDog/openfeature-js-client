@@ -197,13 +197,7 @@ export function precomputeConfiguration(
     }
   }
 
-  reconcileDependencySerializationFailures(
-    flags,
-    flagEvaluationErrors,
-    errors,
-    selectedFlagKeySet,
-    dependencyFailures
-  )
+  reconcileDependencySerializationFailures(flags, flagEvaluationErrors, errors, selectedFlagKeySet, dependencyFailures)
   const encoded = encodePrecomputedResults(
     flags,
     flagEvaluationErrors.filter(([flagKey]) => dependencyFailures.has(flagKey)),
