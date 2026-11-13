@@ -22,6 +22,8 @@ import { evaluateProtobufConfiguration } from '../../src/evaluation/evaluateProt
 import { OperatorType } from '../../src/evaluation/rules'
 import { timeStampNow } from '../../src/time'
 
+const INVALID_DEPTH_DEBUG_MESSAGE = 'Invalid evaluatorParams.maxDependencyDepth; using default'
+
 describe('dependent flag evaluation', () => {
   let logger: Logger
 
@@ -521,26 +523,47 @@ describe('dependent flag evaluation', () => {
     })
   })
 
-  it('validates an invalid protobuf maximum depth only when a dependency is reached', () => {
-    const ordinary = protobufDependentConfiguration(true)
-    ordinary.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    ordinary.flags.root.allocations[0].targetingConditionIndex = undefined
+  it('uses the default for an invalid protobuf maximum depth', () => {
+    const source = protobufDependentConfiguration(true)
+    source.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
+    const config = roundTrip(source)
 
-    expect(evaluateProtobuf(ordinary, logger).result).toMatchObject({ value: true, variant: 'on' })
-
-    const dependent = protobufDependentConfiguration(true)
-    dependent.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(256) })
-    expect(evaluateProtobuf(dependent, logger).result).toMatchObject({
-      value: false,
-      reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+      defaultMaxDependencyDepth: 10,
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
   })
+
+  it('accepts the protobuf maximum depth upper boundary', () => {
+    const config = protobufDependentConfiguration(true)
+    config.evaluatorParams = create(EvaluatorParamsSchema, { maxDependencyDepth: BigInt(255) })
+
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
+  })
+
+  it('rejects a JSON number representation in a protobuf configuration', () => {
+    const config = protobufDependentConfiguration(true)
+    config.evaluatorParams = { maxDependencyDepth: 0 } as never
+
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+      defaultMaxDependencyDepth: 10,
+    })
+  })
+
+  it.each([BigInt(-1), BigInt(256), BigInt(2) ** BigInt(64)])(
+    'uses the default for an out-of-range protobuf maximum depth %p',
+    (maximumDepth) => {
+      const config = protobufDependentConfiguration(true)
+      config.evaluatorParams = { maxDependencyDepth: maximumDepth } as never
+
+      expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+      expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+        defaultMaxDependencyDepth: 10,
+      })
+    }
+  )
 
   it('rejects an empty protobuf dependency key as malformed configuration', () => {
     const config = protobufDependentConfiguration(true)
@@ -737,27 +760,194 @@ describe('dependent flag evaluation', () => {
     expect(evaluate(configuration(flags), 'root', logger)).toMatchObject({ value: true, variant: 'on' })
   })
 
-  it.each([256, -1, 1.5])('validates JSON maximum depth %p only when a dependency is reached', (maximumDepth) => {
-    const ordinary = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
+  it('ignores an unrecognized evaluator parameter', () => {
+    const config = configuration({ root: booleanFlag('root', 'on') })
+    config.evaluatorParams = { futureParameter: { enabled: true } } as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
+  })
+
+  it('ignores an inherited maximum depth', () => {
+    const evaluatorParams = Object.create({ maxDependencyDepth: 0 })
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = evaluatorParams
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
+  })
+
+  it('reads the maximum depth once when each JSON dependency chain starts without caching it', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    let reads = 0
+    const evaluatorParams = Object.defineProperty({}, 'maxDependencyDepth', {
+      get: () => {
+        reads += 1
+        return 10
+      },
+    })
+    config.evaluatorParams = evaluatorParams as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(1)
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(2)
+  })
+
+  it('reads the maximum depth once when each protobuf dependency chain starts without caching it', () => {
+    const config = protobufDependentConfiguration(true)
+    let reads = 0
+    config.evaluatorParams = Object.defineProperty({}, 'maxDependencyDepth', {
+      get: () => {
+        reads += 1
+        return BigInt(10)
+      },
+    }) as never
+
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(1)
+    expect(evaluateProtobuf(config, logger).result).toMatchObject({ value: true, variant: 'on' })
+    expect(reads).toBe(2)
+  })
+
+  it('resolves a malformed maximum depth once per dependency chain without caching it', () => {
+    const ordinary = configuration({ root: booleanFlag('root', 'on') }, 256)
+
     expect(evaluate(ordinary, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
 
     const dependent = configuration(
       {
         prerequisite: booleanFlag('prerequisite', 'on'),
         root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
       },
-      maximumDepth
+      256
     )
-    expect(evaluate(dependent, 'root', logger)).toMatchObject({
+
+    expect(evaluate(dependent, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(evaluate(dependent, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(
+      jest.mocked(logger.debug).mock.calls.filter(([message]) => message === INVALID_DEPTH_DEBUG_MESSAGE)
+    ).toHaveLength(2)
+  })
+
+  it('keeps evaluation successful when reading or logging the maximum depth throws', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = Object.defineProperty({}, 'maxDependencyDepth', {
+      get: () => {
+        throw new Error('failed to read depth')
+      },
+    })
+    logger.debug = (message) => {
+      if (message === INVALID_DEPTH_DEBUG_MESSAGE) throw new Error('failed to log')
+    }
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+  })
+
+  it.each([null, [], 'invalid', { maxDependencyDepth: '10' }])(
+    'uses the default for a malformed evaluator parameters value %#',
+    (evaluatorParams) => {
+      const config = configuration({
+        prerequisite: booleanFlag('prerequisite', 'on'),
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+      })
+      config.evaluatorParams = evaluatorParams as never
+
+      expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+      expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+        defaultMaxDependencyDepth: 10,
+      })
+    }
+  )
+
+  it.each([256, -1, 1.5, NaN, Infinity, -Infinity])(
+    'uses the default for an invalid JSON maximum depth %p',
+    (maximumDepth) => {
+      const ordinary = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
+      expect(evaluate(ordinary, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+      expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
+      jest.mocked(logger.debug).mockClear()
+
+      const dependent = configuration(
+        {
+          prerequisite: booleanFlag('prerequisite', 'on'),
+          root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+        },
+        maximumDepth
+      )
+      expect(evaluate(dependent, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+      expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+        defaultMaxDependencyDepth: 10,
+      })
+    }
+  )
+
+  it.each([0, 255])('accepts the JSON maximum depth boundary %p', (maximumDepth) => {
+    const config = configuration({ root: booleanFlag('root', 'on') }, maximumDepth)
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, expect.anything())
+  })
+
+  it('enforces a JSON maximum dependency depth of zero', () => {
+    const config = configuration(
+      {
+        prerequisite: booleanFlag('prerequisite', 'on'),
+        root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+      },
+      0
+    )
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({
       value: false,
       reason: 'ERROR',
-      errorCode: 'PARSE_ERROR',
-      errorMessage: 'maxDependencyDepth must be an integer from 0 through 255',
+      errorCode: 'GENERAL',
+      errorMessage: 'maximum flag dependency depth exceeded',
     })
-    expect(logger.warn).toHaveBeenLastCalledWith(
-      'flag dependency graph evaluation failed',
-      expect.objectContaining({ flagKey: 'root', errorCode: 'PARSE_ERROR' })
-    )
+    expect(logger.debug).not.toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+      defaultMaxDependencyDepth: 10,
+    })
+  })
+
+  it('applies an accepted JSON maximum depth above the default', () => {
+    const config = configuration(elevenEdgeChain(), 11)
+
+    expect(evaluate(config, 'node0', logger)).toMatchObject({ value: true, variant: 'on' })
+  })
+
+  it.each([undefined, 256])('enforces the default depth when the JSON maximum depth override is %p', (maximumDepth) => {
+    const config = configuration(elevenEdgeChain(), maximumDepth)
+
+    expect(evaluate(config, 'node1', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(evaluate(config, 'node0', logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'maximum flag dependency depth exceeded',
+    })
+  })
+
+  it('rejects a protobuf bigint representation in a JSON configuration', () => {
+    const config = configuration({
+      prerequisite: booleanFlag('prerequisite', 'on'),
+      root: dependentBooleanFlag('root', [flagCondition('prerequisite', OperatorType.ONE_OF, ['on'])]),
+    })
+    config.evaluatorParams = { maxDependencyDepth: BigInt(0) } as never
+
+    expect(evaluate(config, 'root', logger)).toMatchObject({ value: true, variant: 'on' })
+    expect(logger.debug).toHaveBeenCalledWith(INVALID_DEPTH_DEBUG_MESSAGE, {
+      defaultMaxDependencyDepth: 10,
+    })
   })
 
   it('emits an error evaluation for the prerequisite rejected by the depth limit', () => {
@@ -1044,6 +1234,16 @@ function booleanFlag(key: string, variant: 'on' | 'off'): Flag {
     variations: { on: { key: 'on', value: true }, off: { key: 'off', value: false } },
     allocations: [{ key: 'default', doLog: true, rules: [], splits: [{ variationKey: variant, shards: [] }] }],
   }
+}
+
+function elevenEdgeChain(): Record<string, Flag> {
+  const flags: Record<string, Flag> = { node11: booleanFlag('node11', 'on') }
+  for (let index = 10; index >= 0; index -= 1) {
+    flags[`node${index}`] = dependentBooleanFlag(`node${index}`, [
+      flagCondition(`node${index + 1}`, OperatorType.ONE_OF, ['on']),
+    ])
+  }
+  return flags
 }
 
 function dependentBooleanFlag(
