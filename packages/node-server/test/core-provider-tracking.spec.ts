@@ -142,9 +142,16 @@ describe('DatadogCoreProvider optional tracking', () => {
       const client = clientFor(provider)
       const evaluations: string[] = []
       client.addHooks({
+        after: (hookContext, details) => {
+          tracking.providerOptions.dependencyTelemetrySidecar.associateDependencyEvaluations(
+            hookContext,
+            details.flagMetadata
+          )
+        },
         finally: (hookContext, details: EvaluationDetails<FlagValue>) => {
           for (const evaluation of tracking.providerOptions.dependencyTelemetrySidecar.takeDependencyEvaluations(
             details.flagMetadata,
+            hookContext,
             hookContext.context
           )) {
             evaluations.push(evaluation.flagKey)
@@ -157,6 +164,19 @@ describe('DatadogCoreProvider optional tracking', () => {
         'prerequisite',
         'test-flag',
       ])
+      await expect(
+        client.getBooleanDetails('test-flag', false, context, {
+          hooks: [
+            {
+              after: () => {
+                throw new Error('late hook failure')
+              },
+            },
+          ],
+        })
+      ).resolves.toMatchObject({ errorCode: 'GENERAL' })
+      expect(evaluations).toEqual(collect ? ['prerequisite', 'prerequisite'] : [])
+      expect(sink.publish).toHaveBeenCalledTimes(2)
     }
   )
 
@@ -326,7 +346,11 @@ describe('DatadogCoreProvider optional tracking', () => {
     const evaluations: string[] = []
     client.addHooks({
       finally: (hookContext, details: EvaluationDetails<FlagValue>) => {
-        for (const evaluation of sidecar.takeDependencyEvaluations(details.flagMetadata, hookContext.context)) {
+        for (const evaluation of sidecar.takeDependencyEvaluations(
+          details.flagMetadata,
+          hookContext,
+          hookContext.context
+        )) {
           evaluations.push(evaluation.flagKey)
         }
       },

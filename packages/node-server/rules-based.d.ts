@@ -1,7 +1,7 @@
-/** Opaque SDK identity and capabilities. Forward unchanged; this is not user or device identity. */
-export type ClientFingerprint = string;
 import { Channel } from 'node:diagnostics_channel';
 
+/** Opaque SDK identity and capabilities. Forward unchanged; this is not user or device identity. */
+export type ClientFingerprint = string;
 type Metadata = Record<string, string>;
 type Paradigm = "server" | "client";
 type PrimitiveValue = null | boolean | string | number;
@@ -1570,12 +1570,13 @@ declare class DependencyTelemetrySidecar {
 	readonly collectDependencyEvaluations: boolean;
 	private readonly batchesByMetadata;
 	private readonly batchesByContext;
+	private readonly evaluationAliases;
 	constructor(collectDependencyEvaluations?: boolean);
 	stage(rootMetadata: object, rootContext: object, telemetry: PreparedDependencyTelemetry): void;
-	takeDependencyEvaluations(metadata: object | undefined, context?: object): readonly DependencyEvaluation[];
+	associateDependencyEvaluations(alias: object, metadata: object | undefined): void;
+	takeDependencyEvaluations(metadata: object | undefined, alias?: object, context?: object): readonly DependencyEvaluation[];
 	takeDependencyExposures(metadata: object | undefined): readonly PreparedDependencyExposure[];
 	discardDependencyExposures(metadata: object | undefined): void;
-	private getBatch;
 	private deleteBatch;
 }
 type DependencyTelemetrySidecarApi = Pick<DependencyTelemetrySidecar, keyof DependencyTelemetrySidecar>;
