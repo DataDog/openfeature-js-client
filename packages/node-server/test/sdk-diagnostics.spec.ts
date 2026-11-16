@@ -207,6 +207,14 @@ describe('provider SDK diagnostics', () => {
     ])
   })
 
+  it('does not restart diagnostics when initialized again after close', async () => {
+    await ready()
+    await provider.onClose()
+    await provider.initialize()
+    failFetch()
+    expect(observations).toHaveLength(1)
+  })
+
   it('does not observe construction or close before initialization', () => {
     provider.onClose()
     expect(observations).toEqual([])

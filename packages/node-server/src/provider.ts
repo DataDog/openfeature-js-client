@@ -304,6 +304,10 @@ export class DatadogNodeServerProvider implements Provider {
     this.diagnostics?.fetchResult(success)
   }
 
+  /**
+   * Waits for initialization that already received configuration or an error, then stops diagnostics permanently.
+   * Await this before closing diagnostic delivery. Initializing again does not restart diagnostics.
+   */
   async onClose(): Promise<void> {
     const diagnostics = this.diagnostics
     if (!diagnostics) return

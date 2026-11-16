@@ -729,6 +729,10 @@ export declare class DatadogNodeServerProvider implements Provider {
 	reportConfigurationFetchStart(): void;
 	/** Called after the poll succeeds or exhausts retries; cancellations are not fetch failures. */
 	reportConfigurationFetchResult(success: boolean): void;
+	/**
+	 * Waits for initialization that already received configuration or an error, then stops diagnostics permanently.
+	 * Await this before closing diagnostic delivery. Initializing again does not restart diagnostics.
+	 */
 	onClose(): Promise<void>;
 	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<boolean>>;
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, _logger: Logger): Promise<ResolutionDetails<string>>;
