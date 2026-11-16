@@ -12,6 +12,7 @@ import {
   readFlagKeyObfuscation,
 } from '../configuration/flag-key-obfuscation'
 import { timeStampNow } from '../time'
+import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
 import { createEvaluationMetadata } from './evaluationMetadata'
 import {
   acknowledgesExperimentationOptOut,
@@ -36,7 +37,8 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   experimentationOptOutMode: ExperimentationOptOutOption = false,
-  logger: Logger = NOOP_LOGGER
+  logger: Logger = NOOP_LOGGER,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
@@ -75,7 +77,8 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
       flagKey,
       defaultValue,
       selection.encoding,
-      logger
+      logger,
+      diagnostics
     )
     return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
   }
@@ -148,7 +151,8 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
   encoding: FlagKeyObfuscation | undefined,
-  logger: Logger
+  logger: Logger,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const attributes = precomputed.response.data.attributes
   const lookup = encoding ? encodePrecomputedFlagKey(flagKey, encoding) : { key: flagKey }
@@ -166,6 +170,13 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   }
 
   const flag = getOwnProperty(attributes.flags, lookup.key)
+  traceEvaluation(diagnostics, 'precomputed flag lookup', () => ({
+    flagKey,
+    lookupKey: lookup.key,
+    encoding,
+    requestedType: type,
+    rawFlag: flag,
+  }))
   if (!flag) {
     return {
       value: defaultValue,

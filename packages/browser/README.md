@@ -233,6 +233,69 @@ const configuration = await fetchPrecomputedConfiguration({
 
 Invalid selections are reported once per standalone fetch call; the provider reports them once at initialization.
 
+### Local debug logging
+
+Set `debugMode: true` in the provider options to print feature-flag diagnostics to `console.log`. It defaults to
+`false` and does not require an OpenFeature logger or a global Datadog verbosity setting.
+
+```javascript
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  applicationId: 'app-id',
+  debugMode: true,
+})
+```
+
+Filter the developer console for `[Datadog Feature Flags]`. Each record includes an event name, timestamp, SDK
+version, provider instance ID and sequence. Context changes have request/revision IDs; evaluations have evaluation
+IDs shared with tracking decisions; exposures have event IDs, evaluations have aggregation IDs, and uploads have batch IDs. Correlation identifiers are local only and never enter intake payloads. The initial `debug.enabled` record confirms the option took effect before validation.
+
+Logs include **raw contexts, normalized targeting attributes, flag values, defaults, parsed configuration fields,
+assignment metadata and event payloads**. Transport credential values and custom-header values are omitted from
+configuration diagnostics. Response bodies are never cloned for logging, and unparsed/error bodies, unknown response-envelope fields, arbitrary exception details and response-header values are omitted because they can echo credentials. HTTP status, retry/cancellation decisions and fixed failure classifications remain visible. Configured string proxies show only their origin and route category; callback endpoints use a fixed marker, without changing request URLs.
+The reserved `dd_assignment_token` context member is a transport credential and is also excluded. Context attributes remain intact even if their names resemble credential fields.
+Parsed configuration fields are logged at fetch, installation and cache boundaries. Per-evaluation records reference their
+configuration ID/revision and retain raw context, defaults, results and the evaluated assignment without repeating
+unrelated flags. Values are snapshotted at logging time. Large records are emitted as `debug.chunk` records: group by
+`providerInstanceId` and `sequence`, order by `chunk`, concatenate `data`, then parse the resulting JSON.
+Ordinary records retain complete values. Exceptional records have limits of 64 levels, 10,000 visited nodes and a conservative 1 MiB encoded-size budget before chunking. Truncated records include explicit markers and `diagnosticTruncation` with omitted entries, subtrees and string code units; descendant counts inside omitted subtrees are not traversed.
+Accessors are marked without invoking them, and cycles/undefined/non-finite numbers/BigInts use explicit type markers.
+New raw evaluator traces use an optional diagnostic observer supplied only with `debugMode: true`; they are never forwarded to the OpenFeature application logger, whose existing operational logs remain unchanged.
+
+Useful events:
+
+| Event                                                             | What it explains                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `init.*`, `tracking.configured`                                   | Validation, effective settings and enabled channels                                  |
+| `context.*`                                                       | Original context, RUM enrichment and attributes actually sent                        |
+| `fetch.*`                                                         | HTTP status, timeout, retry attempts, cancellation and unknown transport failures    |
+| `configuration.*`, `cache.*`, `provider.*`                        | Decode/install versus rejection, memory/initial/IndexedDB fallback and state changes |
+| `evaluation.completed`, `evaluation.trace`, `evaluation.returned` | Value/default origin, variant metadata, local-rule trace and OpenFeature hook result |
+| `exposure.*`, `tracking.policy`, `rum.*`                          | Eligibility, duplicates, opt-outs and handoff to RUM                                 |
+| `evaluation.aggregated`, `batch.*`, `upload.*`                    | Aggregation, admission, flush, intake acceptance, retry and drop                     |
+| `signing.*`, `authorization.*`                                    | Verification/admission, proof expiry, credential rejection and subject isolation     |
+| `shutdown.*`                                                      | Close/cancellation and retained state                                                |
+
+Signing logs distinguish observe-mode continuation from required rejection and verified-memory fallback. Required signing retains bounded body reading; raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
+
+`intake_accepted` means an HTTP success response; it does not prove downstream processing. `browser_queued` means
+`sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures
+can be indistinguishable and are reported as an unknown transport failure. Precomputed assignments expose the
+server's returned metadata, not a reconstructed server rule trace. The provider emits configuration/state events;
+it cannot observe whether React rendered or an Angular subscription updated the UI. Listener-failure diagnostics cover
+handlers registered on the provider emitter; OpenFeature client listeners use OpenFeature's own error logging.
+
+`DatadogCoreProvider` also accepts `{ debugMode: true }`. For application-managed tracking, pass `debugMode: true`
+to each `createDatadogExposureLoggingHook`, `createDatadogEvaluationLoggingHook`, or `createDatadogRumTrackingHook`
+controller whose output you want. Standalone `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` accept
+the same option. `DatadogDevtools` inherits a Datadog provider's setting, with an optional second options argument
+to override it. Core-only mode still leaves configuration fetching and tracking ownership with the application.
+
+Debug logging itself does not enqueue remote events or change retry/targeting policy. Application console
+interceptors can still observe console output. Pending requests and persistence operations may finish after close
+and log their completion; `shutdown.completed` does not claim a guaranteed network drain.
+
 ## Usage Examples
 
 ### Flag Evaluation
@@ -608,6 +671,35 @@ Obfuscation removes readable flag-map keys. It is not encryption, authorization,
 or response signing. Values, variation names, allocation names, telemetry,
 and application code can still reveal a feature's purpose. Do not put sensitive
 information in client-facing variant values, including JSON objects.
+
+## Client fingerprint
+
+When your server generates or fetches a precomputed configuration for the browser,
+forward the browser SDK's fingerprint with your application's bootstrap request:
+
+```typescript
+import { getClientFingerprint } from '@datadog/openfeature-browser'
+
+const response = await fetch('/api/bootstrap', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    clientFingerprint: getClientFingerprint(),
+  }),
+})
+if (!response.ok) throw new Error('Cannot load bootstrap data')
+const { appData, flags: wire } = await response.json()
+```
+
+The getter returns an opaque, versioned string containing the SDK name, version,
+and supported capabilities. Forward it unchanged; do not parse or construct it in
+application code. The SDK-owned format can grow without changes to your request code.
+Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
+supported; a capability does not require the server to use that format or provide
+an authorization boundary. The fingerprint identifies the SDK, not a user or device,
+and is not authentication. Your application chooses its own client-server transport.
+The getter and `ClientFingerprint` type are available from both the root and
+`/rules-based` entry points. The root import does not load protobuf.
 
 ## Portable configuration parsing
 

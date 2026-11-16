@@ -1,3 +1,15 @@
+import { bindDebugRequest, bindDebugSignal, debugForRequest, debugForSignal } from '../debug'
+
+const fetchPolicies = new WeakMap<typeof globalThis.fetch, Record<string, unknown>>()
+export function describeFetch(fetch: typeof globalThis.fetch): Record<string, unknown> {
+  return (
+    fetchPolicies.get(fetch) ?? {
+      automaticRetry: fetch === globalThis.fetch ? false : 'custom_transport_unknown',
+      networkTimeoutMs: 'transport_default',
+    }
+  )
+}
+
 type Fetch = typeof globalThis.fetch
 type FetchInput = Parameters<Fetch>[0]
 type FetchInit = Parameters<Fetch>[1]
@@ -51,9 +63,12 @@ async function bufferResponseBody(response: Response): Promise<void> {
 export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetch {
   validateIntegerInRange(timeoutMs, 'timeoutMs', MAX_SET_TIMEOUT_DELAY_MS)
 
-  return async (input, init) => {
+  const wrapped: Fetch = async (input, init) => {
     const controller = new AbortController()
     const requestSignal = getEffectiveSignal(input, init)
+    const debug = debugForRequest(init).enabled ? debugForRequest(init) : debugForSignal(requestSignal)
+    bindDebugSignal(controller.signal, debug)
+    debug.event('fetch.timeout_policy', () => ({ timeoutMs, scope: 'request_and_body', disabled: timeoutMs === 0 }))
     const abortFromRequest = () => controller.abort(requestSignal?.reason)
 
     if (requestSignal?.aborted) {
@@ -66,11 +81,14 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
       timeoutMs === 0
         ? undefined
         : setTimeout(() => {
+            debug.event('fetch.timeout', () => ({ timeoutMs, underlyingTransportMustHonorSignal: true }))
             controller.abort(new DOMException(`The request timed out after ${timeoutMs} ms`, 'TimeoutError'))
           }, timeoutMs)
 
     try {
-      const response = await fetchImplementation(input, { ...init, signal: controller.signal })
+      const timedInit = { ...init, signal: controller.signal }
+      bindDebugRequest(timedInit, debug)
+      const response = await fetchImplementation(input, timedInit)
       await bufferResponseBody(response)
       return response
     } catch (error) {
@@ -85,6 +103,8 @@ export function withTimeout(fetchImplementation: Fetch, timeoutMs: number): Fetc
       requestSignal?.removeEventListener('abort', abortFromRequest)
     }
   }
+  fetchPolicies.set(wrapped, { ...describeFetch(fetchImplementation), networkTimeoutMs: timeoutMs })
+  return wrapped
 }
 
 function isRetryableResponse(response: Response): boolean {
@@ -181,7 +201,15 @@ function validateReplayableBody(init?: RequestInit): void {
 export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
   validateIntegerInRange(retries, 'retries', MAX_RETRIES)
 
-  return async (input, init) => {
+  const wrapped: Fetch = async (input, init) => {
+    const debug = debugForRequest(init).enabled
+      ? debugForRequest(init)
+      : debugForSignal(getEffectiveSignal(input, init))
+    debug.event('fetch.retry_policy', () => ({
+      retries,
+      statuses: [408, '5xx'],
+      errors: ['TypeError', 'TimeoutError'],
+    }))
     if (retries === 0) {
       return fetchImplementation(input, init)
     }
@@ -196,28 +224,56 @@ export function withRetry(fetchImplementation: Fetch, retries: number): Fetch {
       }
 
       const attemptInput = attempt === 0 || !requestTemplate ? input : requestTemplate.clone()
+      debug.event('fetch.attempt', () => ({ attempt: attempt + 1, retries }))
       let response: Response
       try {
         response = await fetchImplementation(attemptInput, init)
       } catch (error) {
         if (requestSignal?.aborted || attempt === retries || !isRetryableError(error)) {
+          debug.event('fetch.retry_stopped', () => ({
+            attempt: attempt + 1,
+            error,
+            cancelled: requestSignal?.aborted,
+            exhausted: attempt === retries,
+          }))
           throw error
         }
-        await waitForRetry(getBackoffMs(attempt), requestSignal)
+        const delayMs = getBackoffMs(attempt)
+        debug.event('fetch.retry_scheduled', () => ({ attempt: attempt + 1, delayMs, error }))
+        await waitForRetry(delayMs, requestSignal)
         continue
       }
 
       if (!isRetryableResponse(response) || attempt === retries || requestSignal?.aborted) {
+        debug.event('fetch.retry_stopped', () => ({
+          attempt: attempt + 1,
+          httpStatus: response.status,
+          cancelled: requestSignal?.aborted,
+          exhausted: attempt === retries,
+        }))
         return response
       }
 
       const retryAfterMs = getRetryAfterDelayMs(response)
       if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_AFTER_MS) {
+        debug.event('fetch.retry_stopped', () => ({
+          reason: 'retry_after_exceeds_budget',
+          retryAfterMs,
+          httpStatus: response.status,
+        }))
         return response
       }
       const delayMs = (retryAfterMs ?? 0) + getBackoffMs(attempt)
+      debug.event('fetch.retry_scheduled', () => ({
+        attempt: attempt + 1,
+        delayMs,
+        retryAfterMs,
+        httpStatus: response.status,
+      }))
       discardResponseBody(response)
       await waitForRetry(delayMs, requestSignal)
     }
   }
+  fetchPolicies.set(wrapped, { ...describeFetch(fetchImplementation), retries, automaticRetry: retries > 0 })
+  return wrapped
 }

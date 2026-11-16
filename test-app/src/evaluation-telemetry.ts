@@ -17,12 +17,14 @@ async function run() {
   const parameters = new URLSearchParams(location.search)
   const mode = parameters.get('mode') || 'online'
   const activated = parameters.get('activated') === 'true'
+  const debugMode = parameters.get('debugMode') === 'true'
   const optedOut = parameters.get('optedOut') === 'true'
   const wrapProvider = (provider: Provider) =>
     parameters.get('multi') === 'true' ? new MultiProvider([{ provider }]) : provider
   const subject = { targetingKey: 'browser-subject', country: 'US' }
   const context = { ...subject, dd_evaluation_telemetry_opt_out: optedOut }
   const options = {
+    debugMode,
     clientToken: 'local-telemetry-test',
     env: 'test',
     flagEvaluationTrackingInterval: 1000,
@@ -52,7 +54,7 @@ async function run() {
       context
     )
   } else {
-    const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated })
+    const provider = new DatadogCoreProvider({ enableEvaluationTelemetryOptOutParameter: activated, debugMode })
     coreProvider = provider
     const configuration =
       mode === 'rules' ? configurationFromString(JSON.stringify(rulesWire)) : await fetchAssignments(context)
@@ -61,7 +63,7 @@ async function run() {
     tracking = composeDatadogTrackingHooks(
       createDatadogEvaluationLoggingHook(options),
       createDatadogExposureLoggingHook(options),
-      createDatadogRumTrackingHook()
+      createDatadogRumTrackingHook({ debugMode })
     )
     await tracking.initialize()
     client.addHooks(...tracking.hooks)

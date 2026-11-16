@@ -1,3 +1,5 @@
+/** Opaque SDK identity and capabilities. Forward unchanged; this is not user or device identity. */
+export type ClientFingerprint = string;
 type PrimitiveValue = null | boolean | string | number;
 type JsonObject = {
 	[key: string]: JsonValue;
@@ -1049,7 +1051,7 @@ export type PrecomputeEvaluationError = {
 	flagKey: string;
 	errorCode: ErrorCode;
 };
-export type PrecomputeConfigurationOptions = {
+type PrecomputeConfigurationOptions = {
 	/**
 	 * Include only assignments whose whole key matches any pattern; only `*` is special.
 	 * Tags are unsupported: any defined tags value, including [] or null, throws invalid_options.
@@ -1069,12 +1071,6 @@ export type PrecomputeConfigurationOptions = {
 	onEvaluationError?: (error: PrecomputeEvaluationError) => void;
 };
 /**
- * Locally resolve rules for one context, without defaults, tracking, or network calls.
- * Returns a context-bound, precomputed-only snapshot. Failed and unassigned flags are omitted.
- * Recompute when the context or rules change; client-directed output requires client-safe source rules.
- */
-export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions): FlagsConfiguration$1;
-/**
  * Decode a binary flags configuration response.
  */
 export declare function configurationFromRulesBinary(response: Uint8Array): FlagsConfiguration$1;
@@ -1087,10 +1083,21 @@ export declare function configurationFromString(wire: FlagsConfigurationWire): F
  * `configurationFromString`.
  */
 export declare function configurationToString(configuration: FlagsConfiguration$1): FlagsConfigurationWire;
-interface ConfigurationFetchOptions {
-	env: string;
-	/** Datadog site. Defaults to datadoghq.com. */
-	site?: string;
+export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "decode" | "transport" | "cancelled" | "timeout";
+/** A configuration-loading failure, not an OpenFeature evaluation error. */
+export declare class ConfigurationFetchError extends Error {
+	readonly code: ConfigurationFetchErrorCode;
+	readonly status?: number | undefined;
+	constructor(code: ConfigurationFetchErrorCode, message: string, status?: number | undefined);
+}
+interface ConfigurationTransportOptions {
+	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
+	timeoutMs?: number;
+	signal?: AbortSignal;
+	/** Fetch-compatible transport. Must honor the supplied signal and redirect policy. */
+	fetch?: typeof globalThis.fetch;
+}
+interface ConfigurationSelectionOptions {
 	/**
 	 * Request flags matching any of these tags or key patterns.
 	 * Best-effort: an invalid or over-limit selection is not sent.
@@ -1100,6 +1107,34 @@ interface ConfigurationFetchOptions {
 	logger?: {
 		error(message: string): void;
 	};
+}
+export interface PrecomputedConfigurationFetchOptions extends ConfigurationTransportOptions, ConfigurationSelectionOptions {
+	/** Required for now. Only client-distributed flags are supported by this endpoint. */
+	distributionChannel: "client";
+	clientToken: string;
+	/** Reserved. API-key authentication is not supported for client distribution. */
+	apiKey?: never;
+	env: string;
+	/** Datadog site. Defaults to datadoghq.com. */
+	site?: string;
+	applicationId?: string;
+	/**
+	 * A detached snapshot is bound to the returned assignments. Only plain JSON values are accepted:
+	 * no Date, undefined, non-finite numbers, class instances, or cycles, including nested values.
+	 * Convert dates to strings before calling and use the same context in the receiving provider.
+	 */
+	context: EvaluationContext;
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+	clientFingerprint?: ClientFingerprint;
+	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
+	experimentationOptOutMode?: ExperimentationOptOutModeValue;
+}
+/** Fetch assignments for one client context, without initializing a provider or emitting tracking events. */
+export declare function fetchPrecomputedConfiguration(options: PrecomputedConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
+interface ConfigurationFetchOptions extends ConfigurationSelectionOptions {
+	env: string;
+	/** Datadog site. Defaults to datadoghq.com. */
+	site?: string;
 	/** Request and response-body deadline in milliseconds. Defaults to 5000. */
 	timeoutMs?: number;
 	signal?: AbortSignal;
@@ -1115,21 +1150,21 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
 	clientToken: string;
 	apiKey?: never;
 });
-export type ConfigurationFetchErrorCode = "invalid_options" | "http" | "invalid_response" | "decode" | "transport" | "cancelled" | "timeout";
-/** A configuration-loading failure, not an OpenFeature evaluation error. */
-export declare class ConfigurationFetchError extends Error {
-	readonly code: ConfigurationFetchErrorCode;
-	readonly status?: number | undefined;
-	constructor(code: ConfigurationFetchErrorCode, message: string, status?: number | undefined);
-}
 /**
  * Fetch and parse context-independent rules without initializing a provider or tracer.
  * Only client-distributed configurations are suitable for forwarding to a browser.
  */
 export declare function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
+type PrecomputeConfigurationOptions$1 = PrecomputeConfigurationOptions & {
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission preserves plaintext keys. */
+	clientFingerprint?: ClientFingerprint;
+};
+/** Resolve rules locally for one context, then encode keys for the target client without tracking or fetching. */
+export declare function precomputeConfiguration(configuration: FlagsConfiguration$1, context: EvaluationContext, options?: PrecomputeConfigurationOptions$1): FlagsConfiguration$1;
 
 export {
 	FlagsConfiguration$1 as FlagsConfiguration,
+	PrecomputeConfigurationOptions$1 as PrecomputeConfigurationOptions,
 };
 
 export {};
