@@ -328,9 +328,10 @@ function evaluateRules<T extends FlagValueType>(
 
   const { targetingKey: subjectKey, ...remainingContext } = context
 
-  // Include the subjectKey as an "id" attribute for rule matching only when present
+  // Expose the subjectKey to rule matching as both "id" and "targetingKey" when present.
+  // Explicit context attributes with those names take precedence.
   const subjectAttributes = {
-    ...(subjectKey != null ? { id: subjectKey } : {}),
+    ...(subjectKey != null ? { id: subjectKey, targetingKey: subjectKey } : {}),
     ...remainingContext,
   }
   if (!Object.prototype.hasOwnProperty.call(config.flags, flagKey)) {

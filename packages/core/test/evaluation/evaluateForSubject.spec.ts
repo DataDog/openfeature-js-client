@@ -312,4 +312,92 @@ describe('evaluateForSubject', () => {
       expect(result.flagMetadata?.allocationKey).toBeUndefined()
     })
   })
+
+  describe('targetingKey in targeting rules', () => {
+    const conditionFlag = (key: string, attribute: string, value: string[]): Flag =>
+      ({
+        key,
+        enabled: true,
+        variationType: 'STRING',
+        variations: { on: { key: 'on', value: 'on' } },
+        allocations: [
+          {
+            key: 'match',
+            doLog: false,
+            rules: [{ conditions: [{ operator: 'ONE_OF', attribute, value }] }],
+            splits: [{ variationKey: 'on', shards: [] }],
+          },
+        ],
+      }) as unknown as Flag
+
+    const config = {
+      createdAt: '2026-11-16T00:00:00Z',
+      format: 'SERVER',
+      environment: { name: 'test' },
+      flags: {
+        'targeting-key-equals': conditionFlag('targeting-key-equals', 'targetingKey', ['foo']),
+        'targeting-key-one-of': conditionFlag('targeting-key-one-of', 'targetingKey', ['foo', 'baz']),
+        'id-equals': conditionFlag('id-equals', 'id', ['foo']),
+        rollout: {
+          key: 'rollout',
+          enabled: true,
+          variationType: 'STRING',
+          variations: { a: { key: 'a', value: 'a' }, b: { key: 'b', value: 'b' } },
+          allocations: [
+            {
+              key: 'split',
+              doLog: false,
+              splits: [
+                {
+                  variationKey: 'a',
+                  shards: [{ salt: 'rollout', totalShards: 10000, ranges: [{ start: 0, end: 5000 }] }],
+                },
+                {
+                  variationKey: 'b',
+                  shards: [{ salt: 'rollout', totalShards: 10000, ranges: [{ start: 5000, end: 10000 }] }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as UniversalFlagConfigurationV1
+
+    const evaluate = (flagKey: string, context: EvaluationContext) =>
+      evaluateRulesBasedConfiguration(config, 'string', flagKey, 'default', context, logger)
+
+    it('matches a targetingKey rule against the context targeting key', () => {
+      expect(evaluate('targeting-key-equals', { targetingKey: 'foo' }).value).toBe('on')
+    })
+
+    it('does not match a targetingKey rule when the targeting key differs', () => {
+      expect(evaluate('targeting-key-equals', { targetingKey: 'bar' }).value).toBe('default')
+    })
+
+    it('does not match or error when the targeting key is missing', () => {
+      const result = evaluate('targeting-key-equals', {})
+      expect(result.value).toBe('default')
+      expect(result.errorCode).toBeUndefined()
+    })
+
+    it('still matches an id rule against the context targeting key', () => {
+      expect(evaluate('id-equals', { targetingKey: 'foo' }).value).toBe('on')
+    })
+
+    it('matches a targetingKey ONE_OF rule', () => {
+      expect(evaluate('targeting-key-one-of', { targetingKey: 'baz' }).value).toBe('on')
+    })
+
+    it('lets an explicit id attribute override the targeting key', () => {
+      expect(evaluate('id-equals', { targetingKey: 'foo', id: 'bar' }).value).toBe('default')
+    })
+
+    it('does not change split bucketing', () => {
+      for (const targetingKey of ['foo', 'bar', 'baz', 'subject-1', 'subject-2']) {
+        const flag = config.flags.rollout
+        const withoutRuleAttributes = evaluateForSubject(flag, 'string', targetingKey, {}, 'default', logger)
+        expect(evaluate('rollout', { targetingKey }).value).toBe(withoutRuleAttributes.value)
+      }
+    })
+  })
 })
