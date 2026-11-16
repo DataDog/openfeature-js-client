@@ -1,3 +1,5 @@
+import { type DebugLogger, NO_DEBUG } from '../debug'
+
 export enum ExperimentationOptOutMode {
   Disabled = 'disabled',
   Immediate = 'immediate',
@@ -9,7 +11,10 @@ export interface ExperimentationOptOutConfiguration {
   experimentationOptOutMode?: ExperimentationOptOutMode
 }
 
-export function getExperimentationOptOutMode(options: ExperimentationOptOutConfiguration): ExperimentationOptOutMode {
+export function getExperimentationOptOutMode(
+  options: ExperimentationOptOutConfiguration,
+  debug: DebugLogger = NO_DEBUG
+): ExperimentationOptOutMode {
   const mode =
     options.experimentationOptOutMode === undefined
       ? ExperimentationOptOutMode.Disabled
@@ -19,6 +24,7 @@ export function getExperimentationOptOutMode(options: ExperimentationOptOutConfi
     mode !== ExperimentationOptOutMode.Immediate &&
     mode !== ExperimentationOptOutMode.FutureExperimentsOnly
   ) {
+    debug.event('init.failed', () => ({ field: 'experimentationOptOutMode', value: mode, reason: 'unsupported_mode' }))
     throw new Error('experimentationOptOutMode must be disabled, immediate, or future_experiments_only')
   }
   return mode

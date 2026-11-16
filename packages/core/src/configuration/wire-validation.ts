@@ -1,5 +1,5 @@
 import type { EvaluationContext } from '@openfeature/core'
-import type { PrecomputedConfigurationResponse, PrecomputedFlag } from './configuration'
+import type { PrecomputedConfigurationResponse } from './configuration'
 import { isLowercaseHex, readFlagKeyObfuscation } from './flag-key-obfuscation'
 
 type WireEntry = {
@@ -27,7 +27,8 @@ export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWire
 
 /** @internal */
 export function parsePrecomputedConfigurationResponse(
-  value: unknown
+  value: unknown,
+  onInvalidFlag?: (key: string, issue: { field: string; expected: string; actual: unknown }) => void
 ): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | { error: string } {
   if (!isRecord(value)) return { error: 'Precomputed configuration response must be an object' }
   if (!isRecord(value.data)) return { error: 'Precomputed configuration response is missing data' }
@@ -47,8 +48,14 @@ export function parsePrecomputedConfigurationResponse(
     if (encoding.encoding && !isLowercaseHex(key, 32)) {
       return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
     }
-    if (!isPrecomputedFlag(flag)) {
+    const issue = precomputedFlagIssue(flag)
+    if (issue) {
       flagErrors.push([key, 'Invalid precomputed flag configuration'])
+      try {
+        onInvalidFlag?.(key, issue)
+      } catch {
+        /* Diagnostic observers cannot affect parsing. */
+      }
     }
   }
 
@@ -66,27 +73,29 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
   )
 }
 
-function isPrecomputedFlag(value: unknown): value is PrecomputedFlag {
-  if (
-    !isRecord(value) ||
-    typeof value.allocationKey !== 'string' ||
-    typeof value.variationKey !== 'string' ||
-    typeof value.variationType !== 'string' ||
-    typeof value.reason !== 'string' ||
-    typeof value.doLog !== 'boolean'
-  ) {
-    return false
+function precomputedFlagIssue(value: unknown): { field: string; expected: string; actual: unknown } | undefined {
+  if (!isRecord(value)) return { field: '$', expected: 'object', actual: value }
+  for (const field of ['allocationKey', 'variationKey', 'variationType', 'reason']) {
+    if (typeof value[field] !== 'string') return { field, expected: 'string', actual: value[field] }
   }
+  if (typeof value.doLog !== 'boolean') return { field: 'doLog', expected: 'boolean', actual: value.doLog }
   const type = value.variationType
-  if (type === 'STRING' || type === 'string') return typeof value.variationValue === 'string'
-  if (type === 'BOOLEAN' || type === 'boolean') return typeof value.variationValue === 'boolean'
-  if (['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'].includes(type)) {
-    return typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)
-  }
-  if (type === 'OBJECT' || type === 'JSON' || type === 'object') {
-    return isJsonValue(value.variationValue)
-  }
-  return false
+  let expected: string
+  let valid: boolean
+  if (type === 'STRING' || type === 'string') {
+    expected = 'string'
+    valid = typeof value.variationValue === 'string'
+  } else if (type === 'BOOLEAN' || type === 'boolean') {
+    expected = 'boolean'
+    valid = typeof value.variationValue === 'boolean'
+  } else if (['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'].includes(type as string)) {
+    expected = 'finite number'
+    valid = typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)
+  } else if (type === 'OBJECT' || type === 'JSON' || type === 'object') {
+    expected = 'JSON value'
+    valid = isJsonValue(value.variationValue)
+  } else return { field: 'variationType', expected: 'supported variation type', actual: type }
+  if (!valid) return { field: 'variationValue', expected, actual: value.variationValue }
 }
 
 function isJsonValue(value: unknown): boolean {

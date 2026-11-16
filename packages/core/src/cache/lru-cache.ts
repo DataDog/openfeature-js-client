@@ -16,6 +16,10 @@ export class LRUCache {
 
   constructor(protected readonly capacity: number) {}
 
+  get size(): number {
+    return this.cache.size
+  }
+
   entries(): IterableIterator<[string, string]> {
     return this.cache.entries()
   }

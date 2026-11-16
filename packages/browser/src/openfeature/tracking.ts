@@ -1,5 +1,6 @@
 import type { AssignmentCache } from '@datadog/flagging-core'
 import type { Hook } from '@openfeature/web-sdk'
+import { type DebugLogger, NO_DEBUG } from '../debug'
 import type { FlaggingTrackingInitConfiguration } from '../domain/configuration'
 
 type TrackingToggleOptions =
@@ -28,21 +29,30 @@ export interface ManagedTrackingHook extends Hook {
 }
 
 export function createTrackingHookController(
-  start: () => ManagedTrackingHook | Promise<ManagedTrackingHook>
+  start: () => ManagedTrackingHook | Promise<ManagedTrackingHook>,
+  debug: DebugLogger = NO_DEBUG
 ): DatadogTrackingHooks {
   let activeHook: ManagedTrackingHook | undefined
   let lifecycle = Promise.resolve()
 
   return {
     hooks: [
-      { before: (...args) => activeHook?.before?.(...args), finally: (...args) => activeHook?.finally?.(...args) },
+      {
+        before: (...args) => {
+          if (!activeHook)
+            debug.event('tracking.skipped', () => ({ reason: 'hook_not_initialized_or_stopped', context: args[0] }))
+          return activeHook?.before?.(...args)
+        },
+        finally: (...args) => activeHook?.finally?.(...args),
+      },
     ],
     initialize: () => {
       // Serialize setup and teardown so shutdown also waits for a pending cache read.
       lifecycle = lifecycle.then(() =>
         runTrackingLifecycleOperation(async () => {
           if (!activeHook) activeHook = await start()
-        })
+          debug.event('tracking.initialized')
+        }, debug)
       )
       return lifecycle
     },
@@ -52,7 +62,8 @@ export function createTrackingHookController(
           const hook = activeHook
           activeHook = undefined
           hook?.shutdown()
-        })
+          debug.event('tracking.stopped')
+        }, debug)
       )
       return lifecycle
     },
@@ -81,10 +92,16 @@ export function composeDatadogTrackingHooks(...trackingHooks: DatadogTrackingHoo
   }
 }
 
-export function runTrackingLifecycleOperation(operation: () => Promise<void> | void | undefined): Promise<void> {
+export function runTrackingLifecycleOperation(
+  operation: () => Promise<void> | void | undefined,
+  debug: DebugLogger = NO_DEBUG
+): Promise<void> {
   try {
-    return Promise.resolve(operation()).catch(() => {})
-  } catch {
+    return Promise.resolve(operation()).catch((error) => {
+      debug.event('tracking.lifecycle_failed', () => ({ error, action: 'continue_evaluation' }))
+    })
+  } catch (error) {
+    debug.event('tracking.lifecycle_failed', () => ({ error, action: 'continue_evaluation' }))
     return Promise.resolve()
   }
 }

@@ -1,4 +1,5 @@
 import { buildEndpointHost } from '@datadog/flagging-core'
+import { registerDebugEndpoint } from '../debug'
 
 export interface ConfigurationEndpointOptions {
   site?: string
@@ -8,6 +9,7 @@ export interface ConfigurationEndpointOptions {
 
 export function buildConfigurationUrl(options: ConfigurationEndpointOptions, endpoint: 'precomputed' | 'rules'): URL {
   let url: URL
+  let source: 'proxy' | 'sdk' = 'proxy'
   if (options.flaggingProxy?.match('https?://')) {
     // If flaggingProxy has a protocol, use it as-is
     url = new URL(`${options.flaggingProxy}`)
@@ -15,6 +17,7 @@ export function buildConfigurationUrl(options: ConfigurationEndpointOptions, end
     // Otherwise, prepend https:// to the proxy
     url = new URL(`https://${options.flaggingProxy}`)
   } else {
+    source = 'sdk'
     const host = buildEndpointHost(options.site || 'datadoghq.com', endpoint === 'rules' ? 'ufc-client' : 'preview')
     url = new URL(
       endpoint === 'rules'
@@ -24,5 +27,6 @@ export function buildConfigurationUrl(options: ConfigurationEndpointOptions, end
   }
 
   url.searchParams.set('dd_env', options.env || '')
+  registerDebugEndpoint(url, source)
   return url
 }
