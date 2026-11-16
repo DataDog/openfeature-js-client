@@ -673,7 +673,7 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     describe('standalone precompute POST', () => {
-      it('redacts a reflected ignored reason when the context carries an assignment token', async () => {
+      it('reports a reflected ignored header as unknown when the context carries an assignment token', async () => {
         const token = 'private.jwt.signature'
         const headers = new Headers({ 'DD-Flag-Selection-Ignored': `DD-Assignment-Token=${token}` })
         mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
@@ -687,7 +687,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(new Headers(mockFetch.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(token)
         expect(displayError).toHaveBeenCalledTimes(1)
         expect(displayError.mock.calls[0][0]).not.toContain(token)
-        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'redacted' })
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
         expectNoTelemetryValues(token)
       })
 
@@ -916,6 +916,149 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(displayError).toHaveBeenCalledTimes(2)
         expect(addTelemetryDebug).toHaveBeenCalledTimes(2)
         expect(addTelemetryDebug).toHaveBeenNthCalledWith(2, 'Flag selection dropped', { reason: 'invalid_tag' })
+      })
+    })
+
+    describe('ignored header', () => {
+      const ignoredMessage = (reason: string) =>
+        `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
+
+      // Returns the value exactly as given; a Headers object would normalize surrounding whitespace.
+      const rawIgnoredHeader = (value: string) => ({
+        get: (name: string) => (name.toLowerCase() === 'dd-flag-selection-ignored' ? value : null),
+      })
+
+      const fetchWithSelection = (headers: unknown) => {
+        mockFetch.mockResolvedValue({ ok: true, status: 200, headers, json: async () => validPrecomputedResponse })
+        return createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })(mockContext)
+      }
+
+      it.each(['malformed_selection', 'too_many_values', 'invalid_key_pattern', 'invalid_tag', 'tag_load_failed'])(
+        'reports the known reason %s as received',
+        async (reason) => {
+          await expect(fetchWithSelection(rawIgnoredHeader(reason))).resolves.toHaveProperty('precomputed')
+
+          expect(displayError).toHaveBeenCalledTimes(1)
+          expect(displayError).toHaveBeenCalledWith(ignoredMessage(reason))
+          expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+          expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason })
+        }
+      )
+
+      it.each([
+        ['a differently cased reason', 'Too_Many_Values'],
+        ['an upper-case reason', 'INVALID_TAG'],
+        ['a reason with a trailing space', 'too_many_values '],
+        ['a reason with a leading space', ' invalid_tag'],
+        ['a reason with a trailing tab', 'invalid_tag\t'],
+        ['a whitespace-only value', ' '],
+        ['a reason this SDK does not know', 'reason_from_a_newer_server'],
+        ['two reasons joined with a comma', 'invalid_tag,too_many_values'],
+        ['two reasons joined as repeated fields', 'invalid_tag, too_many_values'],
+        // Fetch joins repeated fields with ", ", including empty ones. The whatwg-fetch polyfill used here skips empty
+        // values when joining, so these two are given as the joined strings a browser returns.
+        ['an empty field followed by a reason', ', invalid_tag'],
+        ['two empty fields', ', '],
+        ['the former redaction placeholder', 'redacted'],
+        ['a 33-character value', 'a'.repeat(33)],
+        ['a 33-character value that starts with a known reason', `tag_load_failed${'_'.repeat(18)}`],
+        ['a very long value', 'x'.repeat(100_000)],
+        ['a reflected request header', 'DD-Assignment-Token=private.jwt.signature'],
+      ])('reports %s as unknown, never the raw value', async (_description, value) => {
+        await expect(fetchWithSelection(rawIgnoredHeader(value))).resolves.toHaveProperty('precomputed')
+
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+      })
+
+      it.each([
+        ['distinct repeated fields', ['invalid_tag', 'tag_load_failed']],
+        ['identical repeated fields', ['invalid_tag', 'invalid_tag']],
+      ])('reports %s as unknown', async (_description, fields) => {
+        const headers = new Headers()
+        for (const field of fields) headers.append('DD-Flag-Selection-Ignored', field)
+
+        await fetchWithSelection(headers)
+
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+      })
+
+      it.each([
+        ['an empty raw value', rawIgnoredHeader('')],
+        ['an empty header field', new Headers({ 'DD-Flag-Selection-Ignored': '' })],
+      ])('treats %s as absent', async (_description, headers) => {
+        await expect(fetchWithSelection(headers)).resolves.toHaveProperty('precomputed')
+
+        expect(displayError).not.toHaveBeenCalled()
+        expect(addTelemetryDebug).not.toHaveBeenCalled()
+      })
+
+      it('reports an unknown value from the rules endpoint as unknown', async () => {
+        const customFetch = jest
+          .fn()
+          .mockResolvedValue(rulesResponse({ 'DD-Flag-Selection-Ignored': 'reason_from_a_newer_server' }))
+
+        await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { tags: ['beta'] } })
+
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+        expectNoTelemetryValues('reason_from_a_newer_server')
+      })
+
+      describe('when the configuration is not accepted', () => {
+        const ignoredHeaders = () => new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+
+        it.each([
+          [
+            'the body is not JSON',
+            async () => {
+              throw new SyntaxError('Unexpected token')
+            },
+          ],
+          ['the body is not a precomputed configuration', async () => ({ data: null })],
+        ])('does not report when %s', async (_description, json) => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json })
+          const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })
+
+          await expect(fetcher(mockContext)).rejects.toThrow()
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it('does not report when the standalone fetch returns a parse error', async () => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => ({}) })
+
+          const result = await fetchPrecomputedConfiguration({
+            ...baseFetchOptions,
+            context: mockContext,
+            flagSelection: { tags: ['beta'] },
+          })
+
+          expect(result.precomputedError).toBeDefined()
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it('does not report when the rules response cannot be decoded', async () => {
+          const customFetch = jest.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            headers: ignoredHeaders(),
+            arrayBuffer: async () => Uint8Array.from([0xff, 0xff, 0xff, 0xff]).buffer,
+          })
+
+          await expect(
+            fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { tags: ['beta'] } })
+          ).rejects.toThrow()
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
       })
     })
   })
