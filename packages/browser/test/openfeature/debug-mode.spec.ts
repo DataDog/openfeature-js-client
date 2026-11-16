@@ -415,7 +415,8 @@ describe('browser debug-mode scenarios', () => {
     const value = provider()
     await expect(value.initialize(context)).rejects.toThrow('backend explanation')
     expect(events('fetch.completed').slice(-1)[0].details.httpStatus).toBe(status)
-    expect(events('fetch.response_body').slice(-1)[0].details.body).toContain('backend explanation')
+    expect(events('fetch.response_body')).toHaveLength(0)
+    expect(JSON.stringify(log.mock.calls)).not.toContain('backend explanation')
     expect(value.status).toBe(ProviderStatus.ERROR)
   })
 
@@ -614,6 +615,76 @@ describe('browser debug-mode scenarios', () => {
     fetch.mockResolvedValue(response(encoded))
     await expect(value.initialize(context)).rejects.toThrow()
     expect(events('configuration.decoded').slice(-1)[0].details.outcome).toBe('rejected')
+  })
+
+  it.each([false, true])('isolates raw rule traces from the application logger with debug=%s', async (debugMode) => {
+    const value = new DatadogCoreProvider({ debugMode })
+    value.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+    await value.initialize({ targetingKey: 'user-1', country: 'US' })
+    const applicationLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+    log.mockClear()
+    const result = value.resolveBooleanEvaluation(
+      'test-flag',
+      false,
+      { targetingKey: 'user-1', country: 'US' },
+      applicationLogger
+    )
+    expect(result.value).toBe(true)
+    const rawMessages = ['condition operand', 'condition evaluated', 'bucket evaluated', 'split evaluated']
+    expect(applicationLogger.debug.mock.calls.every(([message]) => !rawMessages.includes(message))).toBe(true)
+    // Existing operational logs remain on the application logger.
+    expect(applicationLogger.debug).toHaveBeenCalledWith('evaluated a flag', expect.any(Object))
+    if (debugMode)
+      expect(events('evaluation.trace').some((record) => rawMessages.includes(record.details.message))).toBe(true)
+    else expect(log).not.toHaveBeenCalled()
+  })
+
+  it.each(['provider', 'precomputed', 'rules'] as const)(
+    'omits credential-bearing errors in %s fetch paths',
+    async (mode) => {
+      const failure = Object.assign(new TypeError('transport-secret'), { headers: { authorization: 'header-secret' } })
+      fetch.mockRejectedValue(failure)
+      const custom = withRetry(globalThis.fetch, 0)
+      const operation =
+        mode === 'provider'
+          ? provider({ fetch: custom }).initialize(context)
+          : mode === 'precomputed'
+            ? fetchPrecomputedConfiguration({ ...options, context, fetch: custom })
+            : fetchRulesConfiguration({ ...options, fetch: custom })
+      await expect(operation).rejects.toBe(failure)
+      expect(events('fetch.failed')).toHaveLength(1)
+      for (const secret of ['transport-secret', 'header-secret'])
+        expect(JSON.stringify(log.mock.calls)).not.toContain(secret)
+    }
+  )
+
+  it('sanitizes accepted response envelopes while retaining complete flag values', async () => {
+    const body = JSON.parse(JSON.stringify(precomputed))
+    body.headers = { token: 'echoed-credential' }
+    body.data.attributes.headers = { token: 'echoed-credential' }
+    body.data.attributes.flags['string-flag'].headers = { token: 'echoed-credential' }
+    const clone = jest.fn()
+    fetch.mockResolvedValue({ ...response(body), clone })
+    const value = provider()
+    await value.initialize(context)
+    expect(value.resolveStringEvaluation('string-flag', 'fallback', context, logger).value).toBe('red')
+    expect(clone).not.toHaveBeenCalled()
+    expect(JSON.stringify(log.mock.calls)).not.toContain('echoed-credential')
+    expect(
+      events('configuration.decoded')[0].details.response.data.attributes.flags['string-flag'].variationValue
+    ).toBe('red')
+  })
+
+  it('omits configured proxy paths, queries and fragments from setup and fetch diagnostics', async () => {
+    const value = provider({
+      proxy: 'https://proxy.test/path-secret?key=query-secret#fragment-secret',
+      flaggingProxy: 'https://flags.test/path-secret?key=query-secret#fragment-secret',
+    })
+    await value.initialize(context)
+    expect(fetch.mock.calls[0][0]).toContain('path-secret')
+    expect(events('fetch.started')[0].details.endpoint).toBe('https://flags.test/[proxy]')
+    for (const secret of ['path-secret', 'query-secret', 'fragment-secret'])
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret)
   })
 
   it('explains local rules and a devtools override', async () => {

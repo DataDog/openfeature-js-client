@@ -1,4 +1,9 @@
-import type { AssignmentCache, FlagsConfiguration, FlagTypeToValue } from '@datadog/flagging-core'
+import type {
+  AssignmentCache,
+  EvaluationDiagnostics,
+  FlagsConfiguration,
+  FlagTypeToValue,
+} from '@datadog/flagging-core'
 import {
   completeExposureDecision,
   evaluate,
@@ -190,11 +195,21 @@ export class DatadogCoreProvider extends DatadogProviderBase {
     flagKey: string,
     defaultValue: FlagTypeToValue<T>,
     context: EvaluationContext,
-    logger: Logger
+    logger: Logger,
+    diagnostics?: EvaluationDiagnostics
   ): ResolutionDetails<FlagTypeToValue<T>> {
     context = extractAssignmentToken(context).context
     const result = withCoreConfigurationId(
-      evaluate(this.flagsConfiguration, type, flagKey, defaultValue, context, logger, this.experimentationOptOutMode),
+      evaluate(
+        this.flagsConfiguration,
+        type,
+        flagKey,
+        defaultValue,
+        context,
+        logger,
+        this.experimentationOptOutMode,
+        diagnostics
+      ),
       this.flagsConfigurationId
     )
     // Stamp after the configuration id so the cache entry includes it; before

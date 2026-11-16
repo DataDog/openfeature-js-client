@@ -2,7 +2,14 @@ import type { Configuration, EndpointBuilder, InitConfiguration } from '@datadog
 import { buildEndpointHost, validateAndBuildConfiguration } from '@datadog/browser-core'
 import type { FlagSelection, FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
-import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugOptions, debugUrl } from '../debug'
+import {
+  createDebugLogger,
+  type DebugConfiguration,
+  type DebugLogger,
+  debugOptions,
+  debugUrl,
+  registerDebugEndpoint,
+} from '../debug'
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
@@ -188,6 +195,21 @@ export function validateAndBuildFlaggingTrackingConfiguration(
     ...baseConfiguration,
     debug,
   }
+  if (debug.enabled) {
+    const descriptor = Object.getOwnPropertyDescriptor(initConfiguration, 'proxy')
+    const source =
+      descriptor && 'value' in descriptor
+        ? typeof descriptor.value === 'function'
+          ? 'callback'
+          : descriptor.value
+            ? 'proxy'
+            : 'sdk'
+        : 'proxy' in initConfiguration
+          ? 'unknown'
+          : 'sdk'
+    registerDebugEndpoint(configuration.exposuresEndpointBuilder, source)
+    registerDebugEndpoint(configuration.flagEvaluationEndpointBuilder, source)
+  }
   debug.event('init.effective_configuration', () => {
     const properties = Object.getOwnPropertyDescriptors(initConfiguration)
     const proxy = properties.proxy
@@ -195,7 +217,7 @@ export function validateAndBuildFlaggingTrackingConfiguration(
     const route = (path: string) => {
       if (proxy && !('value' in proxy)) return { resolution: 'at_send', reason: 'proxy_accessor' }
       if (typeof proxyValue === 'function') return { resolution: 'at_send', reason: 'custom_proxy_callback' }
-      if (typeof proxyValue === 'string' && proxyValue) return { proxy: debugUrl(proxyValue), path }
+      if (typeof proxyValue === 'string' && proxyValue) return { proxy: debugUrl(proxyValue, 'proxy'), path }
       return `https://${buildEndpointHost({ clientToken: '', site: configuration.site })}${path}`
     }
     const defaultUsed = (field: string) => {

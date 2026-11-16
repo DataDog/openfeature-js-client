@@ -1,7 +1,7 @@
 import { canonicalizeFlagSelection, type FlagsConfiguration } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
 import { timeStampNow } from '@datadog/js-core/time'
-import { createDebugLogger } from '../debug'
+import { createDebugLogger, debugEndpointSource } from '../debug'
 import { debugFetch } from './debugFetch'
 import {
   buildConfigurationHeaders,
@@ -36,7 +36,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
       ),
       signal: options.signal,
     },
-    debug
+    debug,
+    debugEndpointSource(url)
   )
   if (!response.ok) {
     const errorMessage = await getErrorMessage(response)
@@ -58,7 +59,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     }))
     throw error
   }
-  debug.event('configuration.decoded', () => ({ rawBytes: bytes, configuration }))
+  debug.event('configuration.decoded', () => ({ configuration }))
   if (configuration.rules) {
     configuration.rules.fetchedAt = fetchedAt
   }

@@ -1,4 +1,5 @@
 import { display } from '@datadog/browser-core'
+import type { EvaluationDiagnostics } from '@datadog/flagging-core'
 import {
   type AssignmentCache,
   acknowledgesExperimentationOptOut,
@@ -627,7 +628,8 @@ export class DatadogProvider extends DatadogProviderBase {
     flagKey: string,
     defaultValue: FlagTypeToValue<T>,
     _context: EvaluationContext,
-    _logger: Logger
+    _logger: Logger,
+    diagnostics?: EvaluationDiagnostics
   ): ResolutionDetails<FlagTypeToValue<T>> {
     if (
       this.assignmentSubjectIsolationRequired &&
@@ -685,7 +687,8 @@ export class DatadogProvider extends DatadogProviderBase {
           defaultValue,
           context,
           this.experimentationOptOutMode,
-          _logger
+          _logger,
+          diagnostics
         )
     // A well-formed context is waiting for usable assignments, not invalid.
     const awaitingAssignments =

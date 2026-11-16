@@ -12,7 +12,15 @@ import {
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { InvalidContextError, ParseError } from '@openfeature/web-sdk'
-import { createDebugLogger, type DebugConfiguration, type DebugLogger, debugForSignal, NO_DEBUG } from '../debug'
+import {
+  createDebugLogger,
+  type DebugConfiguration,
+  type DebugLogger,
+  debugEndpointSource,
+  debugForSignal,
+  diagnosticResponse,
+  NO_DEBUG,
+} from '../debug'
 import {
   ASSIGNMENT_AUTHORIZATION_FAILED,
   ASSIGNMENT_TOKEN_HEADER,
@@ -252,8 +260,7 @@ async function requestPrecomputedConfiguration(
         ...(signing && { redirect: 'error' as const }),
       },
       debug,
-      assignmentToken !== undefined,
-      signing?.mode !== 'required'
+      debugEndpointSource(url)
     )
   } catch (error) {
     if (assignmentToken === undefined) throw error
@@ -319,8 +326,8 @@ async function requestPrecomputedConfiguration(
     const acceptedKeys =
       'error' in parsed ? [] : Object.keys(parsed.response.data.attributes.flags).filter((key) => !rejected.has(key))
     return {
-      raw: responseBody,
-      parsed,
+      response: 'error' in parsed ? undefined : diagnosticResponse(parsed.response),
+      parseError: 'error' in parsed ? parsed.error : undefined,
       outcome: 'error' in parsed ? 'rejected' : 'decoded',
       receivedCount: receivedKeys.length,
       acceptedCount: acceptedKeys.length,
@@ -336,7 +343,7 @@ async function requestPrecomputedConfiguration(
     debug.event('configuration.rejected', () => ({
       reason: 'experimentation_policy_mismatch',
       optedOut,
-      response: parsed,
+      response: diagnosticResponse(parsed.response),
     }))
     throw new ParseError('The assignment response did not acknowledge experimentation opt-out')
   }

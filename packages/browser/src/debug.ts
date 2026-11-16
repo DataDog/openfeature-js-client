@@ -1,5 +1,5 @@
 import type { FlagsConfiguration } from '@datadog/flagging-core'
-import type { Logger, ProviderMetadata } from '@openfeature/web-sdk'
+import type { ProviderMetadata } from '@openfeature/web-sdk'
 
 export interface DebugConfiguration {
   /** Print complete flag diagnostics to the local console. Disabled by default. */
@@ -12,14 +12,12 @@ export interface DebugLogger {
   readonly instanceId?: string
   event(name: string, fields?: () => unknown): void
   child(fields: Record<string, unknown>): DebugLogger
-  logger(original: Logger): Logger
 }
 
 export const NO_DEBUG: DebugLogger = {
   enabled: false,
   event: () => {},
   child: () => NO_DEBUG,
-  logger: (original) => original,
 }
 
 const providers = new WeakMap<ProviderMetadata, DebugLogger>()
@@ -60,7 +58,24 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
           event: name,
           details: diagnosticFields(name, fields?.()),
         }
-        const serialized = JSON.stringify(snapshot(envelope))
+        const budget: SnapshotBudget = {
+          nodes: 0,
+          bytes: 0,
+          omittedEntries: 0,
+          omittedSubtrees: 0,
+          omittedStringCodeUnits: 0,
+        }
+        const record = snapshot(envelope, budget) as Record<string, unknown>
+        if (budget.omittedEntries || budget.omittedSubtrees || budget.omittedStringCodeUnits) {
+          record.diagnosticTruncation = {
+            limits: SNAPSHOT_LIMITS,
+            omittedEntries: budget.omittedEntries,
+            omittedSubtrees: budget.omittedSubtrees,
+            omittedStringCodeUnits: budget.omittedStringCodeUnits,
+            descendantCounts: 'not_traversed',
+          }
+        }
+        const serialized = JSON.stringify(record)
         if (serialized.length <= CHUNK_SIZE) {
           console.log(PREFIX + serialized)
         } else {
@@ -93,15 +108,6 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
     child(fields) {
       return make({ ...context, ...fields })
     },
-    logger(original) {
-      const wrap =
-        (level: keyof Logger) =>
-        (message: string, ...args: unknown[]) => {
-          this.event('evaluation.trace', () => ({ level, message, args }))
-          original[level](message, ...args)
-        }
-      return { debug: wrap('debug'), info: wrap('info'), warn: wrap('warn'), error: wrap('error') }
-    },
   })
   const logger = make({})
   logger.event('debug.enabled', () => ({
@@ -117,11 +123,42 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
 /** Data descriptors avoid invoking getters/toJSON a second time merely to log a value. */
 const contextViews = new WeakMap<object, object>()
 
-function snapshot(value: unknown, ancestors = new Set<object>()): unknown {
+// Leave headroom for truncation markers and envelope metadata; charge strings at their
+// worst-case JSON UTF-8 size before JSON.stringify or chunking allocates the output.
+const SNAPSHOT_LIMITS = { depth: 64, nodes: 10000, encodedBytes: 1024 * 1024 }
+type SnapshotBudget = {
+  nodes: number
+  bytes: number
+  omittedEntries: number
+  omittedSubtrees: number
+  omittedStringCodeUnits: number
+}
+
+function snapshot(value: unknown, budget: SnapshotBudget, ancestors = new Set<object>(), depth = 0): unknown {
   const context = value && typeof value === 'object' ? contextViews.get(value) : undefined
   if (context) value = context
+  const exhausted = () => budget.nodes >= SNAPSHOT_LIMITS.nodes || budget.bytes >= SNAPSHOT_LIMITS.encodedBytes - 2048
+  if (depth >= SNAPSHOT_LIMITS.depth || exhausted()) {
+    budget.omittedSubtrees++
+    budget.nodes++
+    budget.bytes += 64
+    return { $type: 'truncated', reason: depth >= SNAPSHOT_LIMITS.depth ? 'depth_limit' : 'record_budget' }
+  }
+  budget.nodes++
+  budget.bytes += 64
+  if (typeof value === 'string') {
+    const remaining = Math.max(0, Math.floor((SNAPSHOT_LIMITS.encodedBytes - 2048 - budget.bytes) / 6))
+    if (value.length > remaining) {
+      budget.omittedStringCodeUnits += value.length - remaining
+      budget.bytes += remaining * 6
+      return { $type: 'truncated_string', value: value.slice(0, remaining), omittedCodeUnits: value.length - remaining }
+    }
+    budget.bytes += value.length * 6
+    return value
+  }
   if (value === undefined) return { $type: 'undefined' }
-  if (typeof value === 'bigint') return { $type: 'bigint', value: String(value) }
+  if (typeof value === 'bigint')
+    return snapshot({ $type: 'bigint', value: String(value) }, budget, ancestors, depth + 1)
   if (typeof value === 'number' && !Number.isFinite(value)) return { $type: 'number', value: String(value) }
   if (typeof value === 'function' || typeof value === 'symbol') return { $type: typeof value }
   if (typeof value !== 'object' || value === null) return value
@@ -132,35 +169,76 @@ function snapshot(value: unknown, ancestors = new Set<object>()): unknown {
       const time = Date.prototype.getTime.call(value)
       return { $type: 'date', value: Number.isFinite(time) ? Date.prototype.toISOString.call(value) : 'Invalid Date' }
     }
-    if (value instanceof Map)
-      return { $type: 'map', entries: snapshot(Array.from(Map.prototype.entries.call(value)), ancestors) }
-    if (value instanceof Set)
-      return { $type: 'set', values: snapshot(Array.from(Set.prototype.values.call(value)), ancestors) }
-    if (typeof DOMException !== 'undefined' && value instanceof DOMException) {
-      return {
-        $type: 'DOMException',
-        name: Object.getOwnPropertyDescriptor(DOMException.prototype, 'name')?.get?.call(value),
-        message: Object.getOwnPropertyDescriptor(DOMException.prototype, 'message')?.get?.call(value),
+    if (value instanceof Map || value instanceof Set) {
+      const isMap = value instanceof Map
+      const iterator = isMap ? Map.prototype.entries.call(value) : Set.prototype.values.call(value)
+      const size = Object.getOwnPropertyDescriptor(isMap ? Map.prototype : Set.prototype, 'size')!.get!.call(value)
+      const entries: unknown[] = []
+      for (let index = 0; index < size; index++) {
+        if (exhausted()) {
+          budget.omittedEntries += size - index
+          break
+        }
+        entries.push(snapshot(iterator.next().value, budget, ancestors, depth + 1))
       }
+      return isMap ? { $type: 'map', entries } : { $type: 'set', values: entries }
     }
-    const output: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : Object.create(null)
-    if (value instanceof Error)
-      Object.defineProperty(output, '$type', {
-        enumerable: true,
-        configurable: true,
-        value: Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), 'name')?.value ?? 'Error',
-      })
-    const descriptors = Object.getOwnPropertyDescriptors(value)
-    for (const key of Object.keys(descriptors)) {
+    if (typeof DOMException !== 'undefined' && value instanceof DOMException) {
+      return snapshot(
+        {
+          $type: 'DOMException',
+          name: Object.getOwnPropertyDescriptor(DOMException.prototype, 'name')?.get?.call(value),
+          message: Object.getOwnPropertyDescriptor(DOMException.prototype, 'message')?.get?.call(value),
+        },
+        budget,
+        ancestors,
+        depth + 1
+      )
+    }
+    if (Array.isArray(value)) {
+      const output: unknown[] = []
+      for (let index = 0; index < value.length; index++) {
+        if (exhausted()) {
+          budget.omittedEntries += value.length - index
+          break
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+        output.push(
+          !descriptor
+            ? null
+            : 'value' in descriptor
+              ? snapshot(descriptor.value, budget, ancestors, depth + 1)
+              : { $type: 'accessor', inspected: false }
+        )
+        // Sparse slots and accessors also consume the traversal budget.
+        if (!descriptor || !('value' in descriptor)) {
+          budget.nodes++
+          budget.bytes += 64
+        }
+      }
+      return output
+    }
+    const output: Record<string, unknown> = Object.create(null)
+    if (value instanceof Error) output.$type = 'Error'
+    const keys = Object.getOwnPropertyNames(value)
+    for (let index = 0; index < keys.length; index++) {
+      const key = keys[index]
       if (context && key === 'dd_assignment_token') continue
-      if (Array.isArray(value) && key === 'length') continue
-      const descriptor = descriptors[key]
-      Object.defineProperty(output, key, {
-        enumerable: true,
-        configurable: true,
-        writable: true,
-        value: 'value' in descriptor ? snapshot(descriptor.value, ancestors) : { $type: 'accessor', inspected: false },
-      })
+      if (exhausted() || budget.bytes + key.length * 6 >= SNAPSHOT_LIMITS.encodedBytes - 2048) {
+        budget.omittedEntries += keys.length - index
+        break
+      }
+      budget.bytes += key.length * 6
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)
+      if (!descriptor) continue
+      output[key] =
+        'value' in descriptor
+          ? snapshot(descriptor.value, budget, ancestors, depth + 1)
+          : { $type: 'accessor', inspected: false }
+      if (!('value' in descriptor)) {
+        budget.nodes++
+        budget.bytes += 64
+      }
     }
     return output
   } finally {
@@ -205,7 +283,7 @@ export function debugOptions(options: object): Record<string, unknown> {
     } else if (key === 'customHeaders') {
       result[key] = value && typeof value === 'object' ? Object.keys(value) : value
     } else if ((key === 'proxy' || key === 'flaggingProxy') && typeof value === 'string') {
-      result[key] = debugUrl(value)
+      result[key] = debugUrl(value, 'proxy')
     } else {
       result[key] = value
     }
@@ -213,23 +291,33 @@ export function debugOptions(options: object): Record<string, unknown> {
   return result
 }
 
-export function debugUrl(input: string, depth = 0): string {
+export type DebugEndpointSource = 'sdk' | 'proxy' | 'callback' | 'unknown'
+const endpointSources = new WeakMap<object, DebugEndpointSource>()
+export function registerDebugEndpoint(endpoint: object, source: DebugEndpointSource): void {
+  endpointSources.set(endpoint, source)
+}
+export function debugEndpointSource(endpoint: object): DebugEndpointSource {
+  return endpointSources.get(endpoint) ?? 'unknown'
+}
+
+export function debugUrl(input: string, source: DebugEndpointSource = 'sdk'): string {
+  if (source === 'callback' || source === 'unknown') return '[application endpoint]'
   try {
     const url = new URL(input, 'https://relative.invalid')
+    // A proxy's path, query and fragment can all contain credentials.
+    if (source === 'proxy') return url.origin + '/[proxy]'
     url.username = ''
     url.password = ''
+    url.hash = ''
     const keys: string[] = []
     url.searchParams.forEach((_value, key) => {
       keys.push(key)
     })
     for (const key of keys) {
       if (/token|api.?key|authorization|password|secret|cookie/i.test(key)) url.searchParams.set(key, '[credential]')
-      else if (key.toLowerCase() === 'ddforward') {
-        const forwarded = url.searchParams.get(key) ?? ''
-        url.searchParams.set(key, depth < 4 ? debugUrl(forwarded, depth + 1) : '[nested_forwarding]')
-      }
+      else if (key.toLowerCase() === 'ddforward') url.searchParams.set(key, '[forwarded route]')
     }
-    return depth > 0 && input.startsWith('/') ? url.pathname + url.search + url.hash : url.toString()
+    return url.toString()
   } catch {
     return '[unparseable endpoint]'
   }
@@ -305,10 +393,66 @@ function diagnosticContext(value: unknown): unknown {
   return view
 }
 
+function pickDiagnosticFields(value: unknown, names: readonly string[]): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const result = Object.create(null)
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, name)
+    if (descriptor) Object.defineProperty(result, name, descriptor)
+  }
+  return result
+}
+
+function diagnosticFlag(value: unknown): unknown {
+  return pickDiagnosticFields(value, [
+    'allocationKey',
+    'variationKey',
+    'variationType',
+    'variationValue',
+    'reason',
+    'doLog',
+    'serialId',
+    'features',
+  ])
+}
+
+export function diagnosticResponse(value: unknown): unknown {
+  return mapDiagnosticProperties(pickDiagnosticFields(value, ['data']), (_key, data) =>
+    mapDiagnosticProperties(pickDiagnosticFields(data, ['attributes']), (_name, attributes) =>
+      mapDiagnosticProperties(
+        pickDiagnosticFields(attributes, [
+          'createdAt',
+          'format',
+          'environment',
+          'observeFullEvaluationData',
+          'evaluation_options',
+          'obfuscated',
+          'obfuscation',
+          'flags',
+        ]),
+        (name, field) => {
+          if (name === 'flags') return mapDiagnosticProperties(field, (_flagKey, flag) => diagnosticFlag(flag))
+          if (name === 'environment') return pickDiagnosticFields(field, ['name'])
+          if (name === 'obfuscation') return pickDiagnosticFields(field, ['scheme', 'salt'])
+          if (name === 'evaluation_options')
+            return pickDiagnosticFields(field, [
+              'experimentation_opt_out',
+              'experimentation_opt_out_mode',
+              'dd_experimentation_opt_out_at',
+            ])
+          return field
+        }
+      )
+    )
+  )
+}
+
 function diagnosticConfiguration(value: unknown): unknown {
   return mapDiagnosticProperties(value, (key, item) =>
     key === 'precomputed'
-      ? mapDiagnosticProperties(item, (name, field) => (name === 'context' ? diagnosticContext(field) : field))
+      ? mapDiagnosticProperties(item, (name, field) =>
+          name === 'context' ? diagnosticContext(field) : name === 'response' ? diagnosticResponse(field) : field
+        )
       : item
   )
 }
@@ -330,6 +474,18 @@ const contextFields = new Set([
 ])
 function diagnosticFields(event: string, value: unknown): unknown {
   return mapDiagnosticProperties(value, (key, item) => {
+    if ((key === 'error' && event !== 'configuration.selection') || key === 'cacheError')
+      return { classification: 'error_details_omitted' }
+    if (event === 'provider.event' && key === 'payload') {
+      return mapDiagnosticProperties(item, (name, field) =>
+        name === 'error' || name === 'message' ? '[error details omitted]' : field
+      )
+    }
+    if (event === 'evaluation.trace' && key === 'args' && Array.isArray(item)) {
+      return item.map((arg) =>
+        mapDiagnosticProperties(arg, (name, field) => (name === 'rawFlag' ? diagnosticFlag(field) : field))
+      )
+    }
     if (
       key === 'context' &&
       (event === 'evaluation.requested' || event === 'evaluation.returned' || event === 'tracking.skipped')

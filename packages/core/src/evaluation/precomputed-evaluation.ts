@@ -7,6 +7,7 @@ import {
   type PrecomputedFlagMetadata,
 } from '../configuration'
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
+import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
 import {
   acknowledgesExperimentationOptOut,
   type ExperimentationOptOutOption,
@@ -30,7 +31,8 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   experimentationOptOutMode: ExperimentationOptOutOption = false,
-  logger: Logger = NOOP_LOGGER
+  logger: Logger = NOOP_LOGGER,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
@@ -55,7 +57,7 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, logger)
+    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, logger, diagnostics)
   }
 
   const { error } = selection
@@ -117,7 +119,8 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   type: T,
   flagKey: string,
   defaultValue: FlagTypeToValue<T>,
-  logger: Logger
+  logger: Logger,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const attributes = precomputed.response.data.attributes
   // Initial configurations and persistent caches can bypass the wire parser.
@@ -145,13 +148,13 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
   }
 
   const flag = getOwnProperty(attributes.flags, lookup.key)
-  logger.debug('precomputed flag lookup', {
+  traceEvaluation(diagnostics, 'precomputed flag lookup', () => ({
     flagKey,
     lookupKey: lookup.key,
     encoding: encoding.encoding,
     requestedType: type,
     rawFlag: flag,
-  })
+  }))
   if (!flag) {
     return {
       value: defaultValue,

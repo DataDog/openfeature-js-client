@@ -1,4 +1,4 @@
-import type { FlagTypeToValue } from '@datadog/flagging-core'
+import type { EvaluationDiagnostics, FlagTypeToValue } from '@datadog/flagging-core'
 import type {
   EvaluationContext,
   FlagValueType,
@@ -57,7 +57,9 @@ export abstract class DatadogProviderBase implements Provider {
     const started = performance.now()
     const debug = evaluationDebug(context, this.debug, 'resolve').child({ flagKey })
     try {
-      const result = this.resolve(type, flagKey, defaultValue, context, debug.logger(logger))
+      const result = this.resolve(type, flagKey, defaultValue, context, logger, (message, details) => {
+        debug.event('evaluation.trace', () => ({ level: 'debug', message, args: [details] }))
+      })
       debug.event('evaluation.completed', () => ({
         ...this.debugEvaluationFields(),
         requestedType: type,
@@ -122,6 +124,7 @@ export abstract class DatadogProviderBase implements Provider {
     flagKey: string,
     defaultValue: FlagTypeToValue<T>,
     context: EvaluationContext,
-    logger: Logger
+    logger: Logger,
+    diagnostics?: EvaluationDiagnostics
   ): ResolutionDetails<FlagTypeToValue<T>>
 }

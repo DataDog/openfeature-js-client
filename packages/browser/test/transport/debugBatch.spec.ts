@@ -1,6 +1,6 @@
 import type { Context, EndpointBuilder, PageMayExitEvent } from '@datadog/browser-core'
 import { Observable, validateAndBuildConfiguration } from '@datadog/browser-core'
-import { createDebugLogger } from '../../src/debug'
+import { createDebugLogger, registerDebugEndpoint } from '../../src/debug'
 import { createTrackedBatch, createTrackedRequest } from '../../src/transport/debugBatch'
 
 const endpoint = {
@@ -44,7 +44,7 @@ describe('debug event transport', () => {
       httpStatus: status,
       outcome: status < 300 ? 'intake_accepted' : 'dropped',
     })
-    expect(events('upload.response_body')[0].details.body).toBe('response details')
+    expect(events('upload.response_body')).toHaveLength(0)
     expect(JSON.stringify(log.mock.calls)).not.toContain('transport-secret')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
@@ -81,15 +81,55 @@ describe('debug event transport', () => {
   it.each(['fetch', 'beacon'] as const)('omits client credentials in real string-proxy %s URLs', async (mode) => {
     const proxyEndpoint = validateAndBuildConfiguration({
       clientToken: 'proxy-client-secret',
-      proxy: 'https://proxy.test/intake',
+      proxy: 'https://proxy.test/path-secret?query=secret#fragment-secret',
     })!.exposuresEndpointBuilder
+    registerDebugEndpoint(proxyEndpoint, 'proxy')
     const request = createTrackedRequest(proxyEndpoint, jest.fn(), createDebugLogger(true))
     if (mode === 'fetch') request.send({ data: '{}', bytesCount: 2 })
     else request.sendOnExit({ data: '{}', bytesCount: 2 })
     await settle()
     const url = events(mode === 'fetch' ? 'upload.started' : 'upload.beacon')[0].details.endpoint
-    expect(decodeURIComponent(url)).toContain('/api/v2/exposures')
+    expect(url).toBe('https://proxy.test/[proxy]')
+    for (const secret of ['path-secret', 'query=secret', 'fragment-secret'])
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret)
     expect(JSON.stringify(log.mock.calls)).not.toContain('proxy-client-secret')
+  })
+
+  it.each(['fetch', 'beacon'] as const)(
+    'omits callback-generated %s endpoint secrets without changing requests',
+    async (mode) => {
+      const proxy = jest.fn(() => 'https://proxy.test/callback-secret?key=secret#fragment-secret')
+      const proxyEndpoint = validateAndBuildConfiguration({ clientToken: 'token', proxy })!.exposuresEndpointBuilder
+      registerDebugEndpoint(proxyEndpoint, 'callback')
+      const request = createTrackedRequest(proxyEndpoint, jest.fn(), createDebugLogger(true))
+      if (mode === 'fetch') request.send({ data: '{}', bytesCount: 2 })
+      else request.sendOnExit({ data: '{}', bytesCount: 2 })
+      await settle()
+      expect(proxy).toHaveBeenCalledTimes(1)
+      const actual = mode === 'fetch' ? fetch.mock.calls[0][0] : (navigator.sendBeacon as jest.Mock).mock.calls[0][0]
+      expect(actual).toContain('callback-secret')
+      expect(events(mode === 'fetch' ? 'upload.started' : 'upload.beacon')[0].details.endpoint).toBe(
+        '[application endpoint]'
+      )
+      expect(JSON.stringify(log.mock.calls)).not.toContain('callback-secret')
+    }
+  )
+
+  it('omits upload errors and echoed response bodies without cloning streams', async () => {
+    const clone = jest.fn(() => {
+      throw new Error('must not clone')
+    })
+    fetch.mockResolvedValue({ ...response(400), clone })
+    const request = createTrackedRequest(endpoint, jest.fn(), createDebugLogger(true))
+    request.send({ data: '{}', bytesCount: 2 })
+    await settle()
+    expect(clone).not.toHaveBeenCalled()
+    fetch.mockRejectedValue(Object.assign(new Error('client-secret'), { headers: { token: 'header-secret' } }))
+    request.send({ data: '{}', bytesCount: 2 })
+    await settle()
+    for (const secret of ['client-secret', 'header-secret'])
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret)
+    expect(events('upload.completed').slice(-1)[0].details.cause).toBe('unknown_transport_failure')
   })
 
   it('logs queue overflow', () => {

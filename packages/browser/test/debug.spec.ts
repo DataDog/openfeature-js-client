@@ -97,6 +97,40 @@ describe('local flag debug logger', () => {
     expect(JSON.parse(chunks.map((chunk) => chunk.data).join('')).details.value).toBe(value)
   })
 
+  it.each(['deep', 'deep-wide', 'wide', 'string', 'map', 'sparse'] as const)(
+    'bounds %s records with explicit omissions',
+    (kind) => {
+      let value: unknown
+      if (kind === 'deep') {
+        value = { leaf: 'end' }
+        for (let index = 0; index < 10000; index++) value = { nested: value }
+      } else if (kind === 'deep-wide') {
+        value = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [index, { leaf: index }]))
+        for (let index = 0; index < 60; index++) value = { nested: value }
+      } else if (kind === 'wide')
+        value = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [index, index]))
+      else if (kind === 'string') value = 'x'.repeat(2000000)
+      else if (kind === 'map') value = new Map(Array.from({ length: 20000 }, (_, index) => [index, index]))
+      else value = new Array(1000000000)
+      const debug = createDebugLogger(true)
+      log.mockClear()
+      debug.event('bounded', () => ({ value }))
+      const emitted = records(log)
+      expect(emitted.every((record) => record.event !== 'debug.serialization_or_sink_failed')).toBe(true)
+      const json =
+        emitted[0].event === 'debug.chunk' ? emitted.map((chunk) => chunk.data).join('') : JSON.stringify(emitted[0])
+      const result = JSON.parse(json)
+      expect(result.event).toBe('bounded')
+      expect(result.diagnosticTruncation.limits).toEqual({ depth: 64, nodes: 10000, encodedBytes: 1048576 })
+      expect(
+        result.diagnosticTruncation.omittedEntries +
+          result.diagnosticTruncation.omittedSubtrees +
+          result.diagnosticTruncation.omittedStringCodeUnits
+      ).toBeGreaterThan(0)
+      expect(Buffer.byteLength(json)).toBeLessThanOrEqual(1048576)
+    }
+  )
+
   it('omits transport credential values while retaining raw targeting data', () => {
     const options = debugOptions({
       clientToken: 'client-secret',
@@ -129,7 +163,7 @@ describe('local flag debug logger', () => {
       'https://proxy.test/intake?ddforward=' +
       encodeURIComponent('/api/v2/exposures?dd-api-key=proxy-secret&ddsource=browser')
     expect(decodeURIComponent(debugUrl(proxy))).not.toContain('proxy-secret')
-    expect(decodeURIComponent(debugUrl(proxy))).toContain('ddsource=browser')
+    expect(debugUrl(proxy, 'proxy')).toBe('https://proxy.test/[proxy]')
     expect(debugOptions({ replica: { clientToken: 'replica-secret', applicationId: 'app' } })).toEqual({
       replica: { clientToken: { present: true }, applicationId: 'app' },
     })
@@ -144,13 +178,11 @@ describe('local flag debug logger', () => {
     expect(JSON.stringify(result)).not.toContain('secret')
   })
 
-  it('isolates provider identities and preserves original logger calls', () => {
+  it('isolates provider identities', () => {
     const a = createDebugLogger(true)
     const b = createDebugLogger(true)
     expect(a.instanceId).not.toBe(b.instanceId)
-    const original = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-    a.child({ evaluationId: 2 }).logger(original).debug('trace', { value: true })
-    expect(original.debug).toHaveBeenCalledWith('trace', { value: true })
+    a.child({ evaluationId: 2 }).event('evaluation.trace', () => ({ value: true }))
     expect(records(log).slice(-1)[0]).toMatchObject({
       providerInstanceId: a.instanceId,
       evaluationId: 2,

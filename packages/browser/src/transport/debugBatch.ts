@@ -11,7 +11,14 @@ import {
 // Pinned browser-core 7.1.0 does not expose response statuses on HttpRequest.observable.
 // Reuse its retry state machine; observe only this client's send strategy, never global fetch.
 import { newRetryState, sendWithRetryStrategy } from '@datadog/browser-core/cjs/transport/sendWithRetryStrategy'
-import { bindEventCorrelation, type DebugLogger, debugUrl, eventCorrelation, NO_DEBUG } from '../debug'
+import {
+  bindEventCorrelation,
+  type DebugLogger,
+  debugEndpointSource,
+  debugUrl,
+  eventCorrelation,
+  NO_DEBUG,
+} from '../debug'
 
 export function createTrackedRequest(
   endpoint: EndpointBuilder,
@@ -50,7 +57,7 @@ export function createTrackedRequest(
     const url = endpoint.build('fetch', payload)
     debug.event('upload.started', () => ({
       batchId: id(payload),
-      endpoint: debugUrl(url),
+      endpoint: debugUrl(url, debugEndpointSource(endpoint)),
       bytesCount: payload.bytesCount,
       payload: payload.data,
       attempt: (payload.retry?.count ?? 0) + 1,
@@ -77,20 +84,6 @@ export function createTrackedRequest(
                   : 'dropped',
             backendProcessing: 'not_observable',
           }))
-          try {
-            void response
-              .clone()
-              .text()
-              .then(
-                (body) =>
-                  debug.event('upload.response_body', () => ({
-                    batchId: id(payload),
-                    httpStatus: response.status,
-                    body,
-                  })),
-                (error) => debug.event('upload.response_body_unavailable', () => ({ batchId: id(payload), error }))
-              )
-          } catch {}
           onResponse?.({ status: response.status, type: response.type })
           nextAttemptAt = state.transportStatus === 2 ? Date.now() + state.currentBackoffTime : undefined
           reportQueue()
@@ -140,7 +133,7 @@ export function createTrackedRequest(
           const queued = navigator.sendBeacon(url, payload.data)
           debug.event('upload.beacon', () => ({
             batchId: id(payload),
-            endpoint: debugUrl(url),
+            endpoint: debugUrl(url, debugEndpointSource(endpoint)),
             payload: payload.data,
             bytesCount: payload.bytesCount,
             outcome: queued ? 'browser_queued' : 'declined',
