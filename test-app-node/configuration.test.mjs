@@ -33,6 +33,9 @@ for (const mode of ['require', 'import']) {
           assert.equal('fetchRulesConfiguration' in root, false)
           assert.equal('configurationFromString' in root, false)
           assert.equal('precomputeConfiguration' in root, false)
+          // The Node package consumes core through CommonJS in both loading modes.
+          const core = require('@datadog/flagging-core')
+          assert.equal('encodePrecomputedFlagKey' in core, false)
           const protobufModules = () => Object.keys(require.cache).filter((file) =>
             /@bufbuild[/\\\\]protobuf|configuration[/\\\\](generated|protobuf-text-encoding|rules-wire|ufc-protobuf)/.test(file)
           )
@@ -47,6 +50,8 @@ for (const mode of ['require', 'import']) {
           assert.deepEqual(restored.precomputed.response.data.attributes.flags, {})
           assert.deepEqual(restored.precomputed.context, { targetingKey: 'subject' })
           assert.ok(protobufModules().length > 0)
+          const coreHelpers = require('@datadog/flagging-core/rules-based')
+          assert.equal(typeof coreHelpers.encodePrecomputedFlagKey, 'function')
         `,
       ],
       { cwd: new URL('.', import.meta.url), stdio: 'pipe' }

@@ -37,7 +37,7 @@ export function readFlagKeyObfuscation(
   return { encoding: descriptor as FlagKeyObfuscation }
 }
 
-/** Hash only the lookup key. Values and telemetry retain their original meaning. */
+/** Hash only the lookup key. Values and telemetry retain their original meaning. @internal */
 export function encodePrecomputedFlagKey(
   key: string,
   encoding: FlagKeyObfuscation
