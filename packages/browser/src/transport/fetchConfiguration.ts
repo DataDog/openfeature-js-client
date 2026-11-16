@@ -94,6 +94,8 @@ export interface PrecomputedConfigurationFetchOptions
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
+  /** The RUM application ID. It is sent as `dd-application-id`, so usage can be split by application. */
+  applicationId?: string
   /**
    * Load only the flags that match these tags or key patterns. See the README for the matching rules and limits.
    * A selection over a limit is not sent, and the full configuration is loaded.
@@ -126,7 +128,7 @@ export function buildConfigurationHeaders(
       ? {}
       : {
           'dd-client-token': options.clientToken,
-          ...(endpoint === 'precomputed' && options.applicationId && { 'dd-application-id': options.applicationId }),
+          ...(options.applicationId && { 'dd-application-id': options.applicationId }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,

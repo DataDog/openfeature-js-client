@@ -60,6 +60,13 @@ The custom Fetch implementation applies only to flag configuration requests. Exp
 requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
 authentication and any configured custom headers, and may route or transform the request as needed.
 
+### Usage attribution
+
+When `applicationId` is set, precomputed and rules-based configuration requests send it in the `dd-application-id`
+header, so Usage Attribution can split Feature Flags usage by `application.name`. The standalone
+`fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers accept the same option. With
+`overwriteRequestHeaders: true`, the header is not sent.
+
 ### Request Timeouts and Retries for npm Consumers
 
 The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose
