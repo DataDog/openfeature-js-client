@@ -32,7 +32,7 @@ export abstract class DatadogProviderBase implements Provider {
         debug: () => {},
         info: () => {},
         warn: () => {},
-        error: (message, ...args) => this.debug.event('provider.listener_failed', () => ({ message, args })),
+        error: () => this.debug.event('provider.listener_failed', () => ({ classification: 'listener_exception' })),
       })
       const emit = this.events.emit.bind(this.events)
       this.events.emit = ((...args: Parameters<typeof emit>) => {

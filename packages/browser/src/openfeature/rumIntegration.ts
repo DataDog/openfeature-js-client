@@ -68,11 +68,13 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy, debug:
         }
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
         try {
-          globalObject.DD_RUM?.addFeatureFlagEvaluation?.(details.flagKey, details.variant)
+          const rum = globalObject.DD_RUM
+          const annotate = rum?.addFeatureFlagEvaluation
+          if (annotate != null) Reflect.apply(annotate, rum, [details.flagKey, details.variant])
           evaluation.event('rum.annotation', () => ({
             flagKey: details.flagKey,
             value: details.variant,
-            outcome: globalObject.DD_RUM?.addFeatureFlagEvaluation ? 'handed_to_rum' : 'rum_unavailable',
+            outcome: annotate != null ? 'handed_to_rum' : 'rum_unavailable',
             downstreamDelivery: 'not_observable',
           }))
         } catch (error) {

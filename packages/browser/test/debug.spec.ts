@@ -1,4 +1,4 @@
-import { createDebugLogger, debugOptions, debugUrl, NO_DEBUG } from '../src/debug'
+import { createDebugLogger, debugOptions, debugUrl, diagnosticResponse, NO_DEBUG } from '../src/debug'
 
 function records(log: jest.SpyInstance) {
   return log.mock.calls.map(([line]) => JSON.parse(String(line).slice('[Datadog Feature Flags] '.length)))
@@ -131,6 +131,78 @@ describe('local flag debug logger', () => {
     }
   )
 
+  it.each(['configuration', 'initialOptions', 'decodedResponse'] as const)(
+    'bounds per-flag schema inspection for a wide %s',
+    (kind) => {
+      let inspections = 0
+      const flags = Object.fromEntries(
+        Array.from({ length: 20000 }, (_, index) => [
+          String(index),
+          new Proxy(
+            {
+              allocationKey: 'allocation',
+              variationKey: 'on',
+              variationType: 'object',
+              variationValue: { dd_assignment_token: 'ordinary-flag-value' },
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+              serialId: 1,
+              features: [],
+              headers: { authorization: 'envelope-secret' },
+            },
+            {
+              getOwnPropertyDescriptor(target, key) {
+                inspections++
+                return Reflect.getOwnPropertyDescriptor(target, key)
+              },
+            }
+          ),
+        ])
+      )
+      const response = { data: { attributes: { createdAt: 'now', flags } } }
+      const configuration = { precomputed: { response } }
+      const debug = createDebugLogger(true)
+      log.mockClear()
+      if (kind === 'configuration') debug.event('configuration.installed', () => ({ configuration }))
+      else if (kind === 'initialOptions')
+        debug.event('init.configuration', () => debugOptions({ initialFlagsConfiguration: configuration }))
+      else debug.event('configuration.decoded', () => ({ response: diagnosticResponse(response) }))
+      expect(inspections).toBeGreaterThan(0)
+      expect(inspections).toBeLessThan(10000)
+      const emitted = records(log)
+      const json =
+        emitted[0].event === 'debug.chunk' ? emitted.map((chunk) => chunk.data).join('') : JSON.stringify(emitted[0])
+      const result = JSON.parse(json)
+      expect(result.diagnosticTruncation.omittedEntries).toBeGreaterThan(10000)
+      expect(json).toContain('ordinary-flag-value')
+      expect(json).not.toContain('envelope-secret')
+      expect(Buffer.byteLength(json)).toBeLessThanOrEqual(1048576)
+    }
+  )
+
+  it('retains accessors and cycle identity through lazy configuration views', () => {
+    const read = jest.fn(() => 'must not read')
+    const flag = Object.defineProperty(
+      {
+        variationValue: { ordinary: { dd_assignment_token: 'raw-value' } },
+      },
+      'variationKey',
+      { enumerable: true, get: read }
+    )
+    const configuration: { precomputed: { response: unknown }; self?: unknown } = {
+      precomputed: { response: { data: { attributes: { flags: { sample: flag } } } } },
+    }
+    configuration.self = configuration
+    createDebugLogger(true).event('configuration.installed', () => ({ configuration }))
+    const result = records(log).slice(-1)[0].details.configuration
+    expect(result.self).toEqual({ $type: 'circular' })
+    expect(result.precomputed.response.data.attributes.flags.sample).toEqual({
+      variationValue: flag.variationValue,
+      variationKey: { $type: 'accessor', inspected: false },
+    })
+    expect(read).not.toHaveBeenCalled()
+  })
+
   it('omits transport credential values while retaining raw targeting data', () => {
     const options = debugOptions({
       clientToken: 'client-secret',
@@ -138,7 +210,8 @@ describe('local flag debug logger', () => {
       flaggingProxy: 'https://user:password@example.com/config?api_key=key-secret&env=prod',
       initialFlagsConfiguration: { context: { password: 'raw-targeting-value' } },
     })
-    const serialized = JSON.stringify(options)
+    createDebugLogger(true).event('init.configuration', () => ({ options }))
+    const serialized = JSON.stringify(records(log).slice(-1)[0].details.options)
     for (const secret of ['client-secret', 'bearer-secret', 'header-value', 'key-secret', 'user:password'])
       expect(serialized).not.toContain(secret)
     expect(serialized).toContain('raw-targeting-value')

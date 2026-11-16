@@ -40,11 +40,8 @@ export function createResponseSigningController(
   debug: DebugLogger = NO_DEBUG
 ) {
   const mode = options?.mode ?? 'off'
-  debug.event('signing.configured', () => ({
-    mode,
-    trustSource: options?.trustedRootCertificates === undefined ? 'bundled_endpoint_roots' : 'explicit_roots',
-    trustAnchorCount: options?.trustedRootCertificates?.length,
-  }))
+  // Trust metadata is emitted below from the roots resolved by the operational path.
+  debug.event('signing.configured', () => ({ mode }))
   if (!['off', 'observe', 'required'].includes(mode)) {
     debug.event('init.failed', () => ({ field: 'responseSigning.mode', reason: 'invalid_signing_mode' }))
     throw new Error('Invalid response signing mode')

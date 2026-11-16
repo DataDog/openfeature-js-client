@@ -120,8 +120,28 @@ export function createDebugLogger(enabled: boolean | undefined, component = 'pro
   return logger
 }
 
-/** Data descriptors avoid invoking getters/toJSON a second time merely to log a value. */
-const contextViews = new WeakMap<object, object>()
+/** Private lazy views apply schema filtering inside the bounded, descriptor-safe snapshot walk. */
+type DiagnosticProjection = {
+  source: object
+  keys?: readonly string[]
+  transform?: (key: string, value: unknown) => unknown
+  context?: boolean
+}
+const diagnosticViews = new WeakMap<object, DiagnosticProjection>()
+
+function diagnosticView(value: object, projection: Omit<DiagnosticProjection, 'source'>): object {
+  const previous = diagnosticViews.get(value)
+  const before = previous?.transform
+  const after = projection.transform
+  const view = Object.create(null)
+  diagnosticViews.set(view, {
+    source: previous?.source ?? value,
+    keys: projection.keys ?? previous?.keys,
+    context: projection.context ?? previous?.context,
+    transform: before && after ? (key, item) => after(key, before(key, item)) : (after ?? before),
+  })
+  return view
+}
 
 // Leave headroom for truncation markers and envelope metadata; charge strings at their
 // worst-case JSON UTF-8 size before JSON.stringify or chunking allocates the output.
@@ -135,8 +155,8 @@ type SnapshotBudget = {
 }
 
 function snapshot(value: unknown, budget: SnapshotBudget, ancestors = new Set<object>(), depth = 0): unknown {
-  const context = value && typeof value === 'object' ? contextViews.get(value) : undefined
-  if (context) value = context
+  const projection = value && typeof value === 'object' ? diagnosticViews.get(value) : undefined
+  if (projection) value = projection.source
   const exhausted = () => budget.nodes >= SNAPSHOT_LIMITS.nodes || budget.bytes >= SNAPSHOT_LIMITS.encodedBytes - 2048
   if (depth >= SNAPSHOT_LIMITS.depth || exhausted()) {
     budget.omittedSubtrees++
@@ -220,10 +240,10 @@ function snapshot(value: unknown, budget: SnapshotBudget, ancestors = new Set<ob
     }
     const output: Record<string, unknown> = Object.create(null)
     if (value instanceof Error) output.$type = 'Error'
-    const keys = Object.getOwnPropertyNames(value)
+    const keys = projection?.keys ?? Object.getOwnPropertyNames(value)
     for (let index = 0; index < keys.length; index++) {
       const key = keys[index]
-      if (context && key === 'dd_assignment_token') continue
+      if (projection?.context && key === 'dd_assignment_token') continue
       if (exhausted() || budget.bytes + key.length * 6 >= SNAPSHOT_LIMITS.encodedBytes - 2048) {
         budget.omittedEntries += keys.length - index
         break
@@ -233,7 +253,12 @@ function snapshot(value: unknown, budget: SnapshotBudget, ancestors = new Set<ob
       if (!descriptor) continue
       output[key] =
         'value' in descriptor
-          ? snapshot(descriptor.value, budget, ancestors, depth + 1)
+          ? snapshot(
+              projection?.transform ? projection.transform(key, descriptor.value) : descriptor.value,
+              budget,
+              ancestors,
+              depth + 1
+            )
           : { $type: 'accessor', inspected: false }
       if (!('value' in descriptor)) {
         budget.nodes++
@@ -369,38 +394,21 @@ export function eventCorrelation(event: object): Record<string, unknown> | undef
   return eventCorrelations.get(event)
 }
 
-/** Copy only diagnostic structure; accessors stay descriptors for snapshot() to mark without invoking. */
+/** Defer property projection until snapshot() has checked its depth, node and byte budgets. */
 function mapDiagnosticProperties(value: unknown, transform: (key: string, value: unknown) => unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  const descriptors = Object.getOwnPropertyDescriptors(value)
-  const copy = Object.create(null)
-  let changed = false
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    if ('value' in descriptor) {
-      const item = transform(key, descriptor.value)
-      changed ||= item !== descriptor.value
-      Object.defineProperty(copy, key, { ...descriptor, value: item })
-    } else Object.defineProperty(copy, key, descriptor)
-  }
-  return changed ? copy : value
+  return diagnosticView(value, { transform })
 }
 
 function diagnosticContext(value: unknown): unknown {
-  // A private view lets snapshot omit only the context root's credential, retaining cycle identity.
+  // Keep source identity for cycle detection while omitting only this context root's credential.
   if (!value || typeof value !== 'object') return value
-  const view = Object.create(null)
-  contextViews.set(view, value)
-  return view
+  return diagnosticView(value, { context: true })
 }
 
-function pickDiagnosticFields(value: unknown, names: readonly string[]): unknown {
+function pickDiagnosticFields(value: unknown, keys: readonly string[]): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  const result = Object.create(null)
-  for (const name of names) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, name)
-    if (descriptor) Object.defineProperty(result, name, descriptor)
-  }
-  return result
+  return diagnosticView(value, { keys })
 }
 
 function diagnosticFlag(value: unknown): unknown {
@@ -474,6 +482,7 @@ const contextFields = new Set([
 ])
 function diagnosticFields(event: string, value: unknown): unknown {
   return mapDiagnosticProperties(value, (key, item) => {
+    if (event === 'context.rum_enrichment' && key === 'accepted') return diagnosticContext(item)
     if ((key === 'error' && event !== 'configuration.selection') || key === 'cacheError')
       return { classification: 'error_details_omitted' }
     if (event === 'provider.event' && key === 'payload') {

@@ -16,17 +16,15 @@ export default class SimpleAssignmentCache extends LRUInMemoryAssignmentCache {
   }
 
   set(entry: AssignmentCacheEntry): void {
-    const before = this.debug.enabled ? Array.from(this.entries()) : undefined
+    // An LRU update can evict only the oldest entry; do not scan the whole cache to find it.
+    const oldest = this.debug.enabled ? this.delegate.entries().next().value : undefined
     super.set(entry)
-    this.debug.event('exposure.cache_recorded', () => {
-      const after = new Map(this.entries())
-      return {
-        entry,
-        capacity: MAX_EXPOSURE_CACHE_ENTRIES,
-        size: after.size,
-        evicted: before?.filter(([key]) => !after.has(key)),
-      }
-    })
+    this.debug.event('exposure.cache_recorded', () => ({
+      entry,
+      capacity: MAX_EXPOSURE_CACHE_ENTRIES,
+      size: this.delegate.size,
+      evicted: oldest && !this.delegate.has(oldest[0]) ? [oldest] : [],
+    }))
   }
 
   clear(): void {

@@ -305,10 +305,13 @@ describe('browser debug-mode scenarios', () => {
     async (debugMode) => {
       const value = new DatadogCoreProvider({ debugMode })
       const sync = jest.fn(() => {
-        throw new Error('sync handler failure')
+        throw Object.assign(new Error('sync-listener-secret'), {
+          cause: new Error('cause-secret'),
+          headers: { authorization: 'authorization-secret' },
+        })
       })
       const asyncHandler = jest.fn(async () => {
-        throw new Error('async handler failure')
+        throw Object.assign(new Error('async-listener-secret'), { request: { clientToken: 'client-secret' } })
       })
       const healthy = jest.fn()
       value.events.addHandler(ProviderEvents.ConfigurationChanged, sync)
@@ -325,8 +328,16 @@ describe('browser debug-mode scenarios', () => {
       const failures = events('provider.listener_failed')
       expect(failures).toHaveLength(debugMode ? 2 : 0)
       if (debugMode) {
-        expect(JSON.stringify(failures)).toContain('sync handler failure')
-        expect(JSON.stringify(failures)).toContain('async handler failure')
+        expect(failures.every((failure) => failure.details.classification === 'listener_exception')).toBe(true)
+        for (const secret of [
+          'sync-listener-secret',
+          'async-listener-secret',
+          'cause-secret',
+          'authorization-secret',
+          'client-secret',
+        ]) {
+          expect(JSON.stringify(log.mock.calls)).not.toContain(secret)
+        }
       }
       value.events.removeAllHandlers()
       value.events.emit(ProviderEvents.ConfigurationChanged)
@@ -537,7 +548,12 @@ describe('browser debug-mode scenarios', () => {
 
   it('explains RUM enrichment and exposure deduplication at the OpenFeature boundary', async () => {
     const rum = {
-      getUser: () => ({ id: 'rum-user', plan: 'rum-plan', nested: { ignored: true } }),
+      getUser: () => ({
+        id: 'rum-user',
+        plan: 'rum-plan',
+        dd_assignment_token: 'rum-assignment-secret',
+        nested: { ignored: true, dd_assignment_token: 'ordinary-nested-value' },
+      }),
       addFeatureFlagEvaluation: jest.fn(),
     }
     const scope = globalThis as typeof globalThis & { DD_RUM?: typeof rum }
@@ -550,13 +566,47 @@ describe('browser debug-mode scenarios', () => {
       client.getStringValue('string-flag', 'default')
       expect(events('context.rum_enrichment').slice(-1)[0].details).toMatchObject({
         precedence: 'application',
-        user: { id: 'rum-user' },
+        user: { id: 'rum-user', nested: { dd_assignment_token: 'ordinary-nested-value' } },
       })
+      expect(events('context.rum_enrichment').slice(-1)[0].details.accepted).not.toHaveProperty('dd_assignment_token')
+      expect(JSON.stringify(log.mock.calls)).not.toContain('rum-assignment-secret')
+      expect(JSON.stringify(fetch.mock.calls)).not.toContain('rum-assignment-secret')
       expect(events('exposure.decision').map((record) => record.details.outcome)).toEqual(['record_only', 'duplicate'])
       expect(events('evaluation.aggregated')).toHaveLength(2)
       expect(events('evaluation.returned')).toHaveLength(2)
       expect(rum.addFeatureFlagEvaluation).toHaveBeenCalledWith('string-flag', 'variation-123')
       expect(events('rum.annotation').slice(-1)[0].details.outcome).toBe('handed_to_rum')
+    } finally {
+      delete scope.DD_RUM
+    }
+  })
+
+  it.each([false, true])('reads the RUM method once per handoff with debugMode=%s', async (debugMode) => {
+    let reads = 0
+    const annotate = jest.fn(function (this: unknown) {
+      expect(this).toBe(rum)
+    })
+    const rum = {
+      get addFeatureFlagEvaluation() {
+        return ++reads === 1 ? annotate : undefined
+      },
+    }
+    const scope = globalThis as typeof globalThis & { DD_RUM?: unknown }
+    scope.DD_RUM = rum
+    try {
+      const value = provider({ debugMode, enableRumFeatureFlagTracking: true })
+      await OpenFeature.setProviderAndWait('rum-getter-parity', value, context)
+      const client = OpenFeature.getClient('rum-getter-parity')
+      client.getStringValue('string-flag', 'default')
+      expect(reads).toBe(1)
+      expect(annotate).toHaveBeenCalledTimes(1)
+      expect(annotate).toHaveBeenCalledWith('string-flag', 'variation-123')
+      if (debugMode) expect(events('rum.annotation').slice(-1)[0].details.outcome).toBe('handed_to_rum')
+      client.getStringValue('string-flag', 'default')
+      expect(reads).toBe(2)
+      expect(annotate).toHaveBeenCalledTimes(1)
+      if (debugMode) expect(events('rum.annotation').slice(-1)[0].details.outcome).toBe('rum_unavailable')
+      else expect(log).not.toHaveBeenCalled()
     } finally {
       delete scope.DD_RUM
     }
