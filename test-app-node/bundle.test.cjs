@@ -17,7 +17,7 @@ for (const name of ['precomputed-fetch', 'precomputed-fetch-rules-based']) {
       clientToken: 'token',
       env: 'prod',
       context,
-      clientCompatibility: { capabilities: ['assignment-encoding-flag-key-256-v1'] },
+      clientFingerprint: getClientFingerprint(),
       fetch: async (url, request) => {
         calls++
         assert.equal(new URL(url).pathname, '/precompute-assignments')
@@ -25,7 +25,7 @@ for (const name of ['precomputed-fetch', 'precomputed-fetch-rules-based']) {
         assert.equal(request.redirect, 'manual')
         const { precomputeConfiguration } = require('@datadog/openfeature-node-server/rules-based')
         const configuration = precomputeConfiguration(configurationFromString(JSON.stringify(fixture)), context, {
-          clientCompatibility: { capabilities: ['assignment-encoding-flag-key-256-v1'] },
+          clientFingerprint: getClientFingerprint(),
         })
         return new Response(JSON.stringify(configuration.precomputed.response), {
           headers: { 'Content-Type': 'application/json' },

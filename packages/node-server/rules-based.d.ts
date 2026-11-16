@@ -1123,8 +1123,8 @@ export interface PrecomputedConfigurationFetchOptions extends ConfigurationTrans
 	 * Convert dates to strings before calling and use the same context in the receiving provider.
 	 */
 	context: EvaluationContext;
-	/** Target client's response support, not the fetching Node SDK's capabilities. */
-	clientCompatibility?: ClientCompatibility;
+	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission requests plaintext. */
+	clientFingerprint?: ClientFingerprint;
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
 }
