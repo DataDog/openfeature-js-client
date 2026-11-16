@@ -9,9 +9,9 @@ import {
   configurationFromRulesBinary,
   configurationFromString,
   configurationToString,
-  fetchPrecomputedConfiguration,
   createExposureTracking,
   DatadogCoreProvider,
+  fetchPrecomputedConfiguration,
   fetchRulesConfiguration,
   precomputeConfiguration,
 } from '@datadog/openfeature-node-server/rules-based'
