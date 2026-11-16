@@ -32,7 +32,7 @@ const next = await fetchRulesConfiguration({ apiKey: process.env.DD_API_KEY, env
 provider.setConfiguration(next)
 ```
 
-Unlike the browser provider, Node requires a valid configuration at construction, throws `TypeError` for invalid replacements, and returns a full detached copy from `getConfiguration()`. Failed fetches or invalid replacements leave the active configuration and provider status unchanged; handle refresh errors in the calling application. Mixed configurations retain only their rules. Applications own refresh timing and ordering; snapshots do not expire automatically. Evaluation errors use the caller's default.
+Unlike the browser provider, Node requires a valid configuration at construction, throws `TypeError` for invalid replacements, and returns a full detached copy from `getConfiguration()`. Construction, `setConfiguration()`, and `getConfiguration()` synchronously copy the configuration and can block the event loop for large snapshots; keep them outside the per-request evaluation path. Failed fetches or invalid replacements leave the active configuration and provider status unchanged; handle refresh errors in the calling application. Mixed configurations retain only their rules. Applications own refresh timing and ordering; snapshots do not expire automatically. Evaluation errors use the caller's default.
 
 To use a [locally precomputed snapshot](#local-precomputation) instead:
 
@@ -45,7 +45,7 @@ provider.setConfiguration(precomputeConfiguration(configuration, context))
 
 Helper-generated snapshots require the same evaluation context; a mismatch returns the caller's default with `INVALID_CONTEXT`. External snapshots without a stored context apply to every request, so retain the context for subject-specific assignments. Use rules for a shared provider serving multiple users, not per-user snapshot swaps. Keep server-distributed rules and their precomputed results on the server.
 
-Tracking is off by default. Internal tracer integrations can use `createExposureTracking({ collectDependencyEvaluations: true })` and pass its `providerOptions` unchanged, then explicitly register `createHook(sink)` with `client.addHooks()`. Dependency evaluation collection defaults to false. Alternatively, `exposureChannel` installs a hook; do not register the same sink twice. Shared tracking state shares deduplication and configuration-generation resets. The integration owns telemetry opt-out, delivery, writer cleanup, and clearing supplied caches; provider shutdown clears only its own cache.
+Tracking is off by default. Internal tracer integrations can use `createExposureTracking({ collectDependencyEvaluations: true })` and spread its `providerOptions` into the provider options without replacing the cache or sidecar. Attach `createHook(sink)` with `provider.hooks.push()` or, for a single client, `client.addHooks()`. Do not use global `OpenFeature.addHooks()`: the hook would also receive unrelated providers' evaluations. Dependency evaluation collection defaults to false. Alternatively, `exposureChannel` installs a hook; do not register the same sink twice. Shared tracking state shares deduplication and configuration-generation resets. The integration owns telemetry opt-out, delivery, writer cleanup, and clearing supplied caches; provider shutdown clears only its own cache.
 
 ## Standalone Configuration Helpers
 

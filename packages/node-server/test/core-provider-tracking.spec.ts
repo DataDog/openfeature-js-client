@@ -132,6 +132,42 @@ describe('DatadogCoreProvider optional tracking', () => {
     ])
   })
 
+  it('scopes a client exposure hook to its provider and rolls back late hook errors', async () => {
+    const tracking = createExposureTracking()
+    const sink = channel()
+    const provider = new DatadogCoreProvider(dependentRules(), { ...tracking.providerOptions })
+    const client = clientFor(provider)
+    client.addHooks(tracking.createHook(sink))
+    const unrelatedSink = channel()
+    OpenFeature.setProvider('unrelated-tracking', new DatadogCoreProvider(rules(), { exposureChannel: unrelatedSink }))
+    await expect(
+      OpenFeature.getClient('unrelated-tracking').getBooleanValue('test-flag', false, context)
+    ).resolves.toBe(true)
+    expect(unrelatedSink.publish).toHaveBeenCalledTimes(1)
+    expect(sink.publish).not.toHaveBeenCalled()
+
+    await expect(
+      client.getBooleanDetails('test-flag', false, context, {
+        hooks: [
+          {
+            after: () => {
+              throw new Error('late hook failure')
+            },
+          },
+        ],
+      })
+    ).resolves.toMatchObject({ errorCode: 'GENERAL' })
+    expect(sink.publish).not.toHaveBeenCalled()
+    await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+    expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+      'prerequisite',
+      'test-flag',
+    ])
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(2)
+    expect(unrelatedSink.publish).toHaveBeenCalledTimes(1)
+  })
+
   it.each([undefined, false, true])(
     'collects dependency evaluations=%s alongside explicit exposures',
     async (collect) => {
@@ -199,6 +235,20 @@ describe('DatadogCoreProvider optional tracking', () => {
     const provider = new DatadogCoreProvider(rules(), { exposureChannel: channel() })
     await provider.onClose()
     expect(clear).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a supplied cache on close when exposureChannel installs the hook', async () => {
+    const tracking = createExposureTracking()
+    const clear = jest.spyOn(tracking.providerOptions.exposureCache, 'clear')
+    const sink = channel()
+    const provider = new DatadogCoreProvider(rules(), { ...tracking.providerOptions, exposureChannel: sink })
+    const client = clientFor(provider)
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(1)
+    await provider.onClose()
+    expect(clear).not.toHaveBeenCalled()
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(1)
   })
 
   it('leaves a shared cache on close, but resets all sharing providers for a new generation', async () => {
