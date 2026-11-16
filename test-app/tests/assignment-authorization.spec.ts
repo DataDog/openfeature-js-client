@@ -1,4 +1,4 @@
-import { createServer, type IncomingHttpHeaders } from 'node:http'
+import { createServer, type IncomingHttpHeaders, request } from 'node:http'
 import { test as base, expect } from '@playwright/test'
 import response from '../../packages/browser/test/data/precomputed-v1.json' with { type: 'json' }
 
@@ -33,6 +33,7 @@ type Origin = {
   telemetry: string[]
   hold: boolean
   releases: Array<() => void>
+  pendingBodies: number
 }
 // Use actual HTTP on another origin: Playwright route interception can bypass
 // the browser's CORS enforcement and cannot validate the header allowlist.
@@ -49,7 +50,9 @@ const test = base.extend<{ origin: Origin }>({
       telemetry: [],
       hold: false,
       releases: [],
+      pendingBodies: 0,
     }
+    let tearingDown = false
     const server = createServer(async (req, res) => {
       const intake = req.url?.startsWith('/intake')
       if (intake || origin.mode === 'success' || origin.allowError || req.method === 'OPTIONS') {
@@ -67,7 +70,16 @@ const test = base.extend<{ origin: Origin }>({
         return
       }
       let body = ''
-      for await (const chunk of req) body += chunk.toString()
+      origin.pendingBodies++
+      try {
+        for await (const chunk of req) body += chunk.toString()
+      } catch (error) {
+        // Teardown intentionally aborts in-flight intake; keep unexpected read failures visible.
+        if (tearingDown && req.destroyed) return
+        throw error
+      } finally {
+        origin.pendingBodies--
+      }
       if (intake) {
         origin.telemetry.push(body)
         res.writeHead(202).end()
@@ -97,6 +109,7 @@ const test = base.extend<{ origin: Origin }>({
     try {
       await use(origin)
     } finally {
+      tearingDown = true
       server.closeAllConnections()
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
     }
@@ -109,6 +122,14 @@ const token = (offset = 3600) =>
 test.beforeEach(async ({ page }) => {
   await page.goto('/assignment-authorization.html')
   await page.waitForFunction(() => Boolean(window.authorizationTest))
+})
+
+test('teardown can abort an incomplete intake body', async ({ origin }) => {
+  const pending = request(origin.url + '/intake', { method: 'POST', headers: { 'Content-Length': '1000' } })
+  // The fixture deliberately closes this connection; its server-side reader must settle safely.
+  pending.on('error', () => {})
+  pending.write('partial')
+  await expect.poll(() => origin.pendingBodies).toBe(1)
 })
 
 for (const withToken of [false, true]) {
