@@ -616,6 +616,10 @@ export type SDKDiagnostic = {
 	initialization: Initialization & {
 		outcome: "ready";
 		final: true;
+		milestones: {
+			configuration_received: Milestone;
+			provider_ready: Milestone;
+		};
 	};
 } | {
 	event_type: "sdk_initialization";

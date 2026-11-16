@@ -16,7 +16,11 @@ type Initialization = {
 export type SDKDiagnostic = { timestamp: number } & (
   | {
       event_type: 'sdk_initialization'
-      initialization: Initialization & { outcome: 'ready'; final: true }
+      initialization: Initialization & {
+        outcome: 'ready'
+        final: true
+        milestones: { configuration_received: Milestone; provider_ready: Milestone }
+      }
     }
   | {
       event_type: 'sdk_initialization'
@@ -71,11 +75,18 @@ export class SDKDiagnostics {
       initialization.milestones.configuration_received = { elapsed_ms: this.configurationElapsed }
     }
     if (outcome === 'ready') {
-      initialization.milestones.provider_ready = { elapsed_ms: duration }
       this.emit({
         timestamp,
         event_type: 'sdk_initialization',
-        initialization: { ...initialization, outcome, final: true },
+        initialization: {
+          ...initialization,
+          outcome,
+          final: true,
+          milestones: {
+            configuration_received: { elapsed_ms: this.configurationElapsed ?? duration },
+            provider_ready: { elapsed_ms: duration },
+          },
+        },
       })
     } else if (outcome === 'failed') {
       this.emit({

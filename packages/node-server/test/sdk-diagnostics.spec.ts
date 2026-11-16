@@ -84,6 +84,74 @@ describe('provider SDK diagnostics', () => {
     ])
   })
 
+  it('keeps the preloaded configuration milestone at zero when readiness takes time', async () => {
+    provider.setConfiguration(configuration)
+    jest.mocked(performance.now).mockReturnValueOnce(5).mockReturnValueOnce(10)
+    await provider.initialize()
+    expect(observations).toEqual([
+      {
+        timestamp: NOW,
+        event_type: 'sdk_initialization',
+        initialization: {
+          outcome: 'ready',
+          started_at_ms: NOW,
+          duration_ms: 5,
+          final: true,
+          milestones: { configuration_received: { elapsed_ms: 0 }, provider_ready: { elapsed_ms: 5 } },
+        },
+      },
+    ])
+  })
+
+  it('separates configuration receipt from readiness when cache setup is slow', async () => {
+    let finishCache!: () => void
+    jest.spyOn(LRUInMemoryAssignmentCache.prototype, 'init').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCache = resolve
+        })
+    )
+    const pending = provider.initialize()
+    await advance(10)
+    provider.setConfiguration(configuration)
+    await advance(15)
+    finishCache()
+    await pending
+    expect(observations).toEqual([
+      expect.objectContaining({
+        timestamp: NOW + 25,
+        initialization: expect.objectContaining({
+          outcome: 'ready',
+          duration_ms: 25,
+          milestones: { configuration_received: { elapsed_ms: 10 }, provider_ready: { elapsed_ms: 25 } },
+        }),
+      }),
+    ])
+  })
+
+  it('keeps waiting when a null configuration arrives during initialization', async () => {
+    const pending = provider.initialize()
+    provider.setConfiguration(null)
+    await advance(10)
+    expect(observations).toEqual([])
+    provider.setConfiguration(configuration)
+    await pending
+    expect(observations[0]).toMatchObject({
+      initialization: { outcome: 'ready', milestones: { configuration_received: { elapsed_ms: 10 } } },
+    })
+  })
+
+  it('suppresses fetch failures before initialization finishes, with or without a start', async () => {
+    const pending = provider.initialize()
+    provider.reportConfigurationFetchResult(false)
+    provider.reportConfigurationFetchStart()
+    provider.reportConfigurationFetchResult(false)
+    provider.setConfiguration(configuration)
+    await pending
+    failFetch()
+    expect(observations.map((observation) => observation.event_type)).toEqual(['sdk_initialization', 'provider_error'])
+  })
+
   for (const outcome of ['preloaded', 'ready', 'failed', 'rules removed', 'cache failed'] as const) {
     it(`preserves ${outcome} when closed in the same turn`, async () => {
       const error = new Error('initialization failure')
