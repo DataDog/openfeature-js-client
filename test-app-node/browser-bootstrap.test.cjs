@@ -6,11 +6,11 @@ const {
   precomputeConfiguration,
 } = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
-const { getClientCompatibility } = require('../packages/browser/cjs')
+const { getClientFingerprint } = require('../packages/browser/cjs')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
 
-for (const clientCompatibility of [undefined, getClientCompatibility()]) {
-  test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientCompatibility}) without requests or tracking`, async () => {
+for (const clientFingerprint of [undefined, getClientFingerprint()]) {
+  test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientFingerprint}) without requests or tracking`, async () => {
     const originalFetch = globalThis.fetch
     let calls = 0
     globalThis.fetch = async () => {
@@ -21,7 +21,9 @@ for (const clientCompatibility of [undefined, getClientCompatibility()]) {
       const rules = configurationFromString(JSON.stringify(fixture))
       const context = { targetingKey: 'user-1', country: 'US' }
       const snapshot = configurationFromString(
-        configurationToString(precomputeConfiguration(rules, context, { clientCompatibility }))
+        configurationToString(
+          precomputeConfiguration(rules, context, JSON.parse(JSON.stringify({ clientFingerprint })))
+        )
       )
       assert.equal(snapshot.rules, undefined)
       const provider = new DatadogCoreProvider()
