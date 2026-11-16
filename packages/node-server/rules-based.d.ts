@@ -1586,7 +1586,7 @@ interface ExposureSink {
 export interface DatadogCoreProviderOptions {
 	/** Experiment exclusion policy. Defaults to Disabled. */
 	experimentationOptOutMode?: ExperimentationOptOutMode;
-	/** Shared with explicitly registered exposure hooks. Does not install a hook or initialize an uploader. @internal */
+	/** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
 	exposureCache?: AssignmentCache;
 	/** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
 	exposureChannel?: Channel<ExposureEvent>;
@@ -1604,11 +1604,12 @@ export declare class DatadogCoreProvider implements Provider {
 	private configuration;
 	private readonly experimentationOptOutMode;
 	private readonly exposureCache;
+	private readonly ownsExposureCache;
 	private readonly dependencyTelemetrySidecar;
 	constructor(configuration: FlagsConfiguration$1, options?: DatadogCoreProviderOptions);
-	/** Return a detached copy; apply replacements with setConfiguration(). */
+	/** Allocate a full validated, detached copy. Use outside the evaluation path; apply changes with setConfiguration(). */
 	getConfiguration(): FlagsConfiguration$1;
-	/** Validate before replacing the active snapshot. Failure leaves it unchanged. */
+	/** Validate and copy before replacement. Invalid input throws TypeError and leaves the active snapshot unchanged. */
 	setConfiguration(configuration: FlagsConfiguration$1): void;
 	onClose(): Promise<void>;
 	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<boolean>>;
@@ -1617,8 +1618,16 @@ export declare class DatadogCoreProvider implements Provider {
 	resolveObjectEvaluation<T extends JsonValue>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 	private resolve;
 }
-/** Shared provider/hook state for the tracer integration. Creates no uploader and installs no hooks. @internal */
-export declare function createExposureTracking(): {
+/**
+ * Shared provider/hook state for the tracer integration. Creates no uploader and installs no hooks.
+ * Pass providerOptions without replacing its cache or sidecar. Register each sink only once,
+ * through either createHook() or exposureChannel. Sharing this state also shares deduplication
+ * and configuration-generation resets; the integration owns clear() at shutdown.
+ * @internal
+ */
+export declare function createExposureTracking(options?: {
+	collectDependencyEvaluations?: boolean;
+}): {
 	providerOptions: {
 		exposureCache: AssignmentCache;
 		dependencyTelemetrySidecar: DependencyTelemetrySidecarApi;

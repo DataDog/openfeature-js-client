@@ -1,5 +1,5 @@
 import type { Channel } from 'node:diagnostics_channel'
-import type { ExposureEvent, FlagsConfiguration } from '@datadog/flagging-core'
+import { type ExposureEvent, type FlagsConfiguration, LRUInMemoryAssignmentCache } from '@datadog/flagging-core'
 import { type EvaluationDetails, type FlagValue, OpenFeature } from '@openfeature/server-sdk'
 import rulesWire from '../../browser/test/data/rules-v1-wire.json'
 import { createExposureTracking } from '../src/exposure-tracking'
@@ -130,6 +130,78 @@ describe('DatadogCoreProvider optional tracking', () => {
       'prerequisite',
       'test-flag',
     ])
+  })
+
+  it.each([undefined, false, true])(
+    'collects dependency evaluations=%s alongside explicit exposures',
+    async (collect) => {
+      const tracking = createExposureTracking({ collectDependencyEvaluations: collect })
+      const sink = channel()
+      const provider = new DatadogCoreProvider(dependentRules(), tracking.providerOptions)
+      provider.hooks.push(tracking.createHook(sink))
+      const client = clientFor(provider)
+      const evaluations: string[] = []
+      client.addHooks({
+        finally: (hookContext, details: EvaluationDetails<FlagValue>) => {
+          for (const evaluation of tracking.providerOptions.dependencyTelemetrySidecar.takeDependencyEvaluations(
+            details.flagMetadata,
+            hookContext.context
+          )) {
+            evaluations.push(evaluation.flagKey)
+          }
+        },
+      })
+      await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+      expect(evaluations).toEqual(collect ? ['prerequisite'] : [])
+      expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+        'prerequisite',
+        'test-flag',
+      ])
+    }
+  )
+
+  it('uses a supplied cache with the implicit exposure channel', async () => {
+    const tracking = createExposureTracking()
+    const set = jest.spyOn(tracking.providerOptions.exposureCache, 'set')
+    const sink = channel()
+    const provider = new DatadogCoreProvider(rules(), { ...tracking.providerOptions, exposureChannel: sink })
+    const client = clientFor(provider)
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(1)
+    expect(set).toHaveBeenCalledTimes(1)
+    tracking.clear()
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears a provider-owned cache on close', async () => {
+    const clear = jest.spyOn(LRUInMemoryAssignmentCache.prototype, 'clear')
+    const provider = new DatadogCoreProvider(rules(), { exposureChannel: channel() })
+    await provider.onClose()
+    expect(clear).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a shared cache on close, but resets all sharing providers for a new generation', async () => {
+    const tracking = createExposureTracking()
+    const clear = jest.spyOn(tracking.providerOptions.exposureCache, 'clear')
+    const a = new DatadogCoreProvider(rules(), tracking.providerOptions)
+    const b = new DatadogCoreProvider(rules(), tracking.providerOptions)
+    const sink = channel()
+    b.hooks.push(tracking.createHook(sink))
+    const client = clientFor(b)
+    await client.getBooleanValue('test-flag', false, context)
+    await a.onClose()
+    expect(clear).not.toHaveBeenCalled()
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(1)
+    const next = rules()
+    next.rules!.response.createdAt!.seconds += BigInt(1)
+    a.setConfiguration(next)
+    expect(clear).toHaveBeenCalledTimes(1)
+    await client.getBooleanValue('test-flag', false, context)
+    expect(sink.publish).toHaveBeenCalledTimes(2)
+    await b.onClose()
+    expect(clear).toHaveBeenCalledTimes(1)
   })
 
   it.each([true, false])('deduplicates concurrent exposures with subscribers=%s', async (hasSubscribers) => {

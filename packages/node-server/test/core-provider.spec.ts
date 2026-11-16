@@ -252,12 +252,16 @@ describe('DatadogCoreProvider offline initialization', () => {
   it('uses rules rather than context-specific assignments in a mixed configuration', async () => {
     const configuration = rules()
     const precomputed = precomputeConfiguration(rules(false), context)
-    const client = clientFor(new DatadogCoreProvider({ ...configuration, ...precomputed }))
+    const provider = new DatadogCoreProvider({ ...configuration, ...precomputed })
+    const client = clientFor(provider)
+    expect(provider.getConfiguration().precomputed).toBeUndefined()
 
     await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
     await expect(
       client.getBooleanValue('test-flag', false, { ...context, targetingKey: 'another-user' })
     ).resolves.toBe(true)
+    provider.setConfiguration({ ...configuration, ...precomputed })
+    expect(provider.getConfiguration().precomputed).toBeUndefined()
   })
 
   it('keeps using the last configuration as it ages without an implicit expiry', async () => {

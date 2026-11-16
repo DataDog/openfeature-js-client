@@ -7,8 +7,14 @@ import {
   type ExposureSink,
 } from './tracking'
 
-/** Shared provider/hook state for the tracer integration. Creates no uploader and installs no hooks. @internal */
-export function createExposureTracking(): {
+/**
+ * Shared provider/hook state for the tracer integration. Creates no uploader and installs no hooks.
+ * Pass providerOptions without replacing its cache or sidecar. Register each sink only once,
+ * through either createHook() or exposureChannel. Sharing this state also shares deduplication
+ * and configuration-generation resets; the integration owns clear() at shutdown.
+ * @internal
+ */
+export function createExposureTracking(options: { collectDependencyEvaluations?: boolean } = {}): {
   providerOptions: {
     exposureCache: AssignmentCache
     dependencyTelemetrySidecar: DependencyTelemetrySidecarApi
@@ -17,7 +23,7 @@ export function createExposureTracking(): {
   clear(): void
 } {
   const exposureCache = new LRUInMemoryAssignmentCache(50_000)
-  const dependencyTelemetrySidecar = new DependencyTelemetrySidecar(false)
+  const dependencyTelemetrySidecar = new DependencyTelemetrySidecar(options.collectDependencyEvaluations ?? false)
   return {
     providerOptions: { exposureCache, dependencyTelemetrySidecar },
     createHook(sink: ExposureSink): Hook {

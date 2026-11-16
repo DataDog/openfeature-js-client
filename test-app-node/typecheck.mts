@@ -38,7 +38,7 @@ export async function loadProvider(fetchOptions: RulesConfigurationFetchOptions,
 }
 
 export async function loadTrackedProvider(fetchOptions: RulesConfigurationFetchOptions) {
-  const tracking = createExposureTracking()
+  const tracking = createExposureTracking({ collectDependencyEvaluations: true })
   const options: DatadogCoreProviderOptions = tracking.providerOptions
   const provider = new DatadogCoreProvider(await fetchRulesConfiguration(fetchOptions), options)
   provider.hooks.push(

@@ -35,7 +35,7 @@ import {
 export interface DatadogCoreProviderOptions {
   /** Experiment exclusion policy. Defaults to Disabled. */
   experimentationOptOutMode?: ExperimentationOptOutMode
-  /** Shared with explicitly registered exposure hooks. Does not install a hook or initialize an uploader. @internal */
+  /** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
   exposureCache?: AssignmentCache
   /** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
   exposureChannel?: Channel<ExposureEvent>
@@ -52,6 +52,7 @@ export class DatadogCoreProvider implements Provider {
   private configuration: FlagsConfiguration
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
   private readonly exposureCache: AssignmentCache | undefined
+  private readonly ownsExposureCache: boolean
   private readonly dependencyTelemetrySidecar: DependencyTelemetrySidecarApi
 
   // No initialize(): a valid configuration is required before OpenFeature registration.
@@ -60,6 +61,7 @@ export class DatadogCoreProvider implements Provider {
     this.configuration = snapshotConfiguration(configuration)
     this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
     this.exposureCache = options.exposureCache
+    this.ownsExposureCache = options.exposureCache === undefined && options.exposureChannel !== undefined
     if (options.exposureChannel) {
       this.exposureCache ??= new LRUInMemoryAssignmentCache(50_000)
       this.hooks.push(
@@ -68,12 +70,12 @@ export class DatadogCoreProvider implements Provider {
     }
   }
 
-  /** Return a detached copy; apply replacements with setConfiguration(). */
+  /** Allocate a full validated, detached copy. Use outside the evaluation path; apply changes with setConfiguration(). */
   getConfiguration(): FlagsConfiguration {
     return snapshotConfiguration(this.configuration)
   }
 
-  /** Validate before replacing the active snapshot. Failure leaves it unchanged. */
+  /** Validate and copy before replacement. Invalid input throws TypeError and leaves the active snapshot unchanged. */
   setConfiguration(configuration: FlagsConfiguration): void {
     const next = snapshotConfiguration(configuration)
     const previousGeneration = configurationGeneration(this.configuration)
@@ -85,7 +87,7 @@ export class DatadogCoreProvider implements Provider {
   }
 
   async onClose(): Promise<void> {
-    this.exposureCache?.clear()
+    if (this.ownsExposureCache) await this.exposureCache?.clear()
   }
 
   async resolveBooleanEvaluation(
