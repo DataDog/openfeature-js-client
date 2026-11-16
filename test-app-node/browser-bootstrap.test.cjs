@@ -7,7 +7,60 @@ const {
 } = require('@datadog/openfeature-node-server/rules-based')
 const { configurationFromString, DatadogCoreProvider } = require('../packages/browser/cjs/rules-based')
 const { getClientFingerprint } = require('../packages/browser/cjs')
+const { fetchPrecomputedConfiguration } = require('@datadog/openfeature-node-server')
 const fixture = require('../packages/browser/test/data/rules-v1-wire.json')
+
+for (const clientFingerprint of [undefined, getClientFingerprint()]) {
+  for (const experimentationOptOutMode of [undefined, 'immediate', 'future_experiments_only']) {
+    test(`the browser consumes Node-fetched assignments (compatibility=${!!clientFingerprint}, opt-out=${experimentationOptOutMode})`, async () => {
+      const context = {
+        targetingKey: 'user-1',
+        country: 'US',
+        ...(experimentationOptOutMode && { dd_experimentation_opt_out_at: '2026-11-06T12:00:00.123456789Z' }),
+      }
+      const prepared = precomputeConfiguration(configurationFromString(JSON.stringify(fixture)), context, {
+        clientFingerprint,
+        experimentationOptOutMode,
+      })
+      let calls = 0
+      const result = await fetchPrecomputedConfiguration({
+        distributionChannel: 'client',
+        clientToken: 'token',
+        env: 'prod',
+        context,
+        clientFingerprint,
+        experimentationOptOutMode,
+        flagSelection: { tags: [' test '], keyPatterns: [' test-* ', 'test-*'] },
+        fetch: async (_url, request) => {
+          calls++
+          assert.deepEqual(JSON.parse(request.body).data.attributes.flag_selection, {
+            tags: ['test'],
+            key_patterns: ['test-*'],
+          })
+          assert.deepEqual(
+            JSON.parse(request.body).data.attributes.evaluation_options,
+            experimentationOptOutMode ? { experimentation_opt_out_mode: experimentationOptOutMode } : undefined
+          )
+          return new Response(JSON.stringify(prepared.precomputed.response), {
+            headers: { 'Content-Type': 'application/json' },
+          })
+        },
+      })
+      const provider = new DatadogCoreProvider({ experimentationOptOutMode })
+      provider.setConfiguration(configurationFromString(configurationToString(result)))
+      await provider.initialize(context)
+      const details = provider.resolveBooleanEvaluation('test-flag', false, context, {
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+      })
+      assert.equal(details.value, true)
+      assert.equal(details.variant, 'on')
+      assert.equal(calls, 1)
+    })
+  }
+}
 
 for (const clientFingerprint of [undefined, getClientFingerprint()]) {
   test(`the browser consumes a Node precomputed snapshot (compatibility=${!!clientFingerprint}) without requests or tracking`, async () => {

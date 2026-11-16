@@ -4,24 +4,27 @@ import {
   type FlagSelection,
   type FlagSelectionError,
   type FlagsConfiguration,
-  MAX_FLAG_SELECTION_KEY_PATTERN_BYTES,
-  MAX_FLAG_SELECTION_TAG_BYTES,
-  MAX_FLAG_SELECTION_VALUES,
-  timeStampNow,
 } from '@datadog/flagging-core'
 import { configurationFromRulesBinary } from '@datadog/flagging-core/rules-based'
+import {
+  ConfigurationFetchError,
+  invalidOption,
+  requestConfiguration,
+  transportError,
+  validateTransportOptions,
+} from './configuration-fetch'
+import {
+  type ConfigurationSelectionOptions,
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+} from './flag-selection'
 
-interface ConfigurationFetchOptions {
+export { ConfigurationFetchError, type ConfigurationFetchErrorCode } from './configuration-fetch'
+
+interface ConfigurationFetchOptions extends ConfigurationSelectionOptions {
   env: string
   /** Datadog site. Defaults to datadoghq.com. */
   site?: string
-  /**
-   * Request flags matching any of these tags or key patterns.
-   * Best-effort: an invalid or over-limit selection is not sent.
-   */
-  flagSelection?: FlagSelection
-  /** Reports dropped or server-ignored selections. Defaults to console. */
-  logger?: { error(message: string): void }
   /** Request and response-body deadline in milliseconds. Defaults to 5000. */
   timeoutMs?: number
   signal?: AbortSignal
@@ -35,89 +38,17 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions &
     | { distributionChannel: 'client'; clientToken: string; apiKey?: never }
   )
 
-export type ConfigurationFetchErrorCode =
-  'invalid_options' | 'http' | 'invalid_response' | 'decode' | 'transport' | 'cancelled' | 'timeout'
-
-/** A configuration-loading failure, not an OpenFeature evaluation error. */
-export class ConfigurationFetchError extends Error {
-  constructor(
-    readonly code: ConfigurationFetchErrorCode,
-    message: string,
-    readonly status?: number
-  ) {
-    super(message)
-    this.name = 'ConfigurationFetchError'
-  }
-}
-
-function abortError(signal?: AbortSignal): ConfigurationFetchError {
-  return signal?.reason?.name === 'TimeoutError'
-    ? new ConfigurationFetchError('timeout', 'Configuration fetch timed out')
-    : new ConfigurationFetchError('cancelled', 'Configuration fetch cancelled')
-}
-
-// Raw errors can contain credentials or response bytes. Copy only a fixed diagnostic code.
-const TRANSPORT_CODES = new Set([
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'EHOSTUNREACH',
-  'ENETUNREACH',
-  'EPIPE',
-  'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_HEADERS_TIMEOUT',
-  'UND_ERR_BODY_TIMEOUT',
-  'UND_ERR_SOCKET',
-  'UND_ERR_CLOSED',
-  'CERT_HAS_EXPIRED',
-  'DEPTH_ZERO_SELF_SIGNED_CERT',
-  'SELF_SIGNED_CERT_IN_CHAIN',
-  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
-  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
-  'ERR_TLS_CERT_ALTNAME_INVALID',
-])
-
-function transportError(message: string, error: unknown): ConfigurationFetchError {
-  const { code, cause } = (error ?? {}) as { code?: unknown; cause?: { code?: unknown } }
-  const known = [cause?.code, code].find((value) => typeof value === 'string' && TRANSPORT_CODES.has(value))
-  return new ConfigurationFetchError('transport', known ? `${message} (${known})` : message)
-}
-
-function invalidOption(option: string): ConfigurationFetchError {
-  return new ConfigurationFetchError('invalid_options', `Invalid configuration fetch options: ${option}`)
-}
-
 // Fastly answers URLs over 8 KB with 414 URI Too Long: https://docs.fastly.com/products/network-services-resource-limits
 // Keep URL encoding and this limit in sync with packages/browser/src/transport/flagSelection.ts.
 const MAX_RULES_URL_BYTES = 8192
-
-const SELECTION_LIMIT_DESCRIPTIONS: Record<FlagSelectionError, string> = {
-  malformed_selection: 'flagSelection must be an object with optional tags and keyPatterns string arrays',
-  too_many_values: `each list accepts at most ${MAX_FLAG_SELECTION_VALUES} values`,
-  invalid_key_pattern: `each key pattern is at most ${MAX_FLAG_SELECTION_KEY_PATTERN_BYTES} UTF-8 bytes`,
-  invalid_tag: `each tag is at most ${MAX_FLAG_SELECTION_TAG_BYTES} UTF-8 bytes`,
-}
-
-function reportSelectionError(logger: NonNullable<ConfigurationFetchOptions['logger']>, message: string): void {
-  try {
-    logger.error(message)
-  } catch {
-    // Diagnostics must not prevent configuration loading or replace a fetch error.
-  }
-}
 
 function applyFlagSelection(
   url: URL,
   input: FlagSelection | undefined,
   logger: NonNullable<ConfigurationFetchOptions['logger']>
 ): { url: URL; selected: boolean } {
-  const drop = (reason: FlagSelectionError, limit = SELECTION_LIMIT_DESCRIPTIONS[reason]) => {
-    reportSelectionError(
-      logger,
-      `flagSelection was not sent (${reason}: ${limit}). Loading the full flag configuration.`
-    )
+  const drop = (reason: FlagSelectionError, limit?: string) => {
+    reportDroppedFlagSelection(logger, reason, limit)
     return { url, selected: false }
   }
   try {
@@ -176,18 +107,8 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     throw invalidOption(distributionChannel === 'client' ? 'clientToken' : 'apiKey')
   }
   if (typeof env !== 'string' || !env.trim()) throw invalidOption('env')
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) throw invalidOption('timeoutMs')
-  if (typeof requestFetch !== 'function') throw invalidOption('fetch')
+  validateTransportOptions(timeoutMs, signal, requestFetch)
   if (!logger || typeof logger.error !== 'function') throw invalidOption('logger')
-  if (
-    signal !== undefined &&
-    (signal === null ||
-      typeof signal.aborted !== 'boolean' ||
-      typeof signal.addEventListener !== 'function' ||
-      typeof signal.removeEventListener !== 'function')
-  ) {
-    throw invalidOption('signal')
-  }
   let host: string
   try {
     host = buildEndpointHost(site, `ufc-${distributionChannel}`)
@@ -197,91 +118,45 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   const url = new URL(`https://${host}/api/v2/feature-flagging/config/rules-based/${distributionChannel}`)
   url.searchParams.set('dd_env', env)
   const { url: requestUrl, selected } = applyFlagSelection(url, flagSelection, logger)
-  if (signal?.aborted) throw abortError(signal)
+  return requestConfiguration(
+    requestUrl.toString(),
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/protobuf',
+        [distributionChannel === 'client' ? 'dd-client-token' : 'dd-api-key']: credential,
+        'DD-Client-Library-Language': 'nodejs',
+        'DD-Client-Library-Version': __BUILD_ENV__SDK_VERSION__,
+      },
+    },
+    { fetch: requestFetch, timeoutMs, signal },
+    async (response, fetchedAt, checkAborted) => {
+      if (selected) reportIgnoredFlagSelection(logger, response)
+      const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
+      if (contentType !== 'application/protobuf') {
+        throw new ConfigurationFetchError('invalid_response', 'Expected a protobuf configuration response')
+      }
 
-  const controller = new AbortController()
-  const cancel = () => controller.abort(abortError(signal))
-  signal?.addEventListener('abort', cancel, { once: true })
-  const timeout = setTimeout(
-    () => controller.abort(new ConfigurationFetchError('timeout', 'Configuration fetch timed out')),
-    timeoutMs
+      let bytes: Uint8Array
+      try {
+        bytes = new Uint8Array(await response.arrayBuffer())
+      } catch (error) {
+        throw transportError('Configuration response could not be read', error)
+      }
+      checkAborted()
+      if (bytes.length === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
+      let configuration: FlagsConfiguration
+      try {
+        configuration = configurationFromRulesBinary(bytes)
+      } catch {
+        throw new ConfigurationFetchError('decode', 'Configuration protobuf could not be decoded')
+      }
+      if (configuration.rules) {
+        configuration.rules.fetchedAt = fetchedAt
+        const etag = response.headers.get('etag')
+        if (etag !== null) configuration.rules.etag = etag
+      }
+      return configuration
+    }
   )
-  const fetchedAt = timeStampNow()
-  let response: Response | undefined
-  try {
-    try {
-      response = await requestFetch(requestUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Accept: 'application/protobuf',
-          [distributionChannel === 'client' ? 'dd-client-token' : 'dd-api-key']: credential,
-          'DD-Client-Library-Language': 'nodejs',
-          'DD-Client-Library-Version': __BUILD_ENV__SDK_VERSION__,
-        },
-        signal: controller.signal,
-        // Never forward a credential to a redirect destination.
-        redirect: 'manual',
-      })
-    } catch (error) {
-      throw transportError('Configuration request failed', error)
-    }
-    controller.signal.throwIfAborted()
-    if (response.status !== 200) {
-      throw new ConfigurationFetchError('http', `Configuration fetch returned HTTP ${response.status}`, response.status)
-    }
-    if (selected) {
-      const reason = response.headers.get('DD-Flag-Selection-Ignored')
-      if (reason) {
-        reportSelectionError(
-          logger,
-          `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
-        )
-      }
-    }
-    const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
-    if (contentType !== 'application/protobuf') {
-      throw new ConfigurationFetchError('invalid_response', 'Expected a protobuf configuration response')
-    }
-
-    let bytes: Uint8Array
-    try {
-      bytes = new Uint8Array(await response.arrayBuffer())
-    } catch (error) {
-      throw transportError('Configuration response could not be read', error)
-    }
-    controller.signal.throwIfAborted()
-    if (bytes.length === 0) throw new ConfigurationFetchError('invalid_response', 'Configuration response was empty')
-    let configuration: FlagsConfiguration
-    try {
-      configuration = configurationFromRulesBinary(bytes)
-    } catch {
-      throw new ConfigurationFetchError('decode', 'Configuration protobuf could not be decoded')
-    }
-    if (configuration.rules) {
-      configuration.rules.fetchedAt = fetchedAt
-      const etag = response.headers.get('etag')
-      if (etag !== null) configuration.rules.etag = etag
-    }
-    return configuration
-  } catch (error) {
-    if (controller.signal.aborted) throw controller.signal.reason
-    if (error instanceof ConfigurationFetchError) throw error
-    throw transportError('Configuration request failed', error)
-  } finally {
-    clearTimeout(timeout)
-    signal?.removeEventListener('abort', cancel)
-    // Aborting also releases an unfinished response after a validation failure.
-    controller.abort()
-    // Custom transports can use Web streams or Node streams (for example, node-fetch).
-    // Cleanup must not replace the result or delay it if cancellation never settles.
-    try {
-      const body = response?.body as (ReadableStream & { destroy?: () => void }) | null | undefined
-      if (body && !response?.bodyUsed) {
-        if (typeof body.cancel === 'function') void body.cancel().catch(() => {})
-        else body.destroy?.()
-      }
-    } catch {
-      // Ignore synchronous cleanup failures from custom transports as well.
-    }
-  }
 }

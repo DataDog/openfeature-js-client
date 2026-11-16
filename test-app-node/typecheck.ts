@@ -20,8 +20,12 @@
 
 import diagnostics_channel from 'node:diagnostics_channel'
 import {
+  type ClientFingerprint,
   DatadogNodeServerProvider,
   type DatadogNodeServerProviderOptions,
+  fetchPrecomputedConfiguration,
+  type PrecomputedConfigurationFetchOptions,
+  type FlagSelection as RootFlagSelection,
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
 import {
@@ -165,3 +169,36 @@ const conflictingCredentials: RulesConfigurationFetchOptions = {
 // @ts-expect-error: The existing Node provider still expects legacy UFC JSON, not FlagsConfiguration.
 provider.setConfiguration(restored)
 void [pendingConfiguration, timeoutCode, missingDistributionChannel, conflictingCredentials]
+
+// Forwarded unchanged from the target SDK's getClientFingerprint() result.
+declare const clientFingerprint: ClientFingerprint
+const precomputedSelection: RootFlagSelection = {
+  tags: ['team:checkout'] as const,
+  keyPatterns: ['checkout-*'] as const,
+}
+const precomputedFetchOptions: PrecomputedConfigurationFetchOptions = {
+  distributionChannel: 'client',
+  clientToken: 'token',
+  env: 'prod',
+  context: {},
+  clientFingerprint,
+  flagSelection: precomputedSelection,
+  logger: { error: (_message: string) => {} },
+  experimentationOptOutMode: 'future_experiments_only',
+}
+void fetchPrecomputedConfiguration(precomputedFetchOptions)
+void precomputeConfiguration(decoded, {}, { clientFingerprint })
+// @ts-expect-error: Fingerprints are opaque strings, not application-constructed capability objects.
+void precomputeConfiguration(decoded, {}, { clientFingerprint: { capabilities: [] } })
+// @ts-expect-error: The fetch helper takes the same opaque string contract.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, clientFingerprint: { capabilities: [] } })
+// @ts-expect-error: Precomputed fetching requires an explicit client channel.
+void fetchPrecomputedConfiguration({ clientToken: 'token', env: 'prod', context: {} })
+// @ts-expect-error: Server-distributed precomputed fetching is not implemented.
+void fetchPrecomputedConfiguration({ distributionChannel: 'server', apiKey: 'key', env: 'prod', context: {} })
+// @ts-expect-error: Opt-out mode must be one of the supported policy names.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, experimentationOptOutMode: true })
+// @ts-expect-error: Selection lists contain strings, not numbers.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, flagSelection: { tags: [42] } })
+// @ts-expect-error: Selection diagnostics require an error method.
+void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, logger: {} })
