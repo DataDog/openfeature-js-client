@@ -12,6 +12,7 @@
 
 - Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [BROWSER]
 - Support `flagSelection.keyPatterns` in `precomputeConfiguration` to produce selected assignments from reusable source rules while retaining dependency evaluation. Tags are unsupported; invalid selections throw `invalid_options` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [CORE] [NODE-SERVER]
+- Send `dd-application-id` on rules-based configuration requests when `applicationId` is set, as precomputed requests do, so Usage Attribution can split this usage by `application.name`. `fetchRulesConfiguration` accepts `applicationId` ([#475](https://github.com/DataDog/openfeature-js-client/pull/475)) [BROWSER]
 
 ## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
 
