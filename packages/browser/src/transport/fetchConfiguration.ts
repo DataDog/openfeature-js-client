@@ -64,6 +64,7 @@ type JSONAPIError = {
 interface ConfigurationRequestOptions {
   clientToken: string
   applicationId?: string
+  service?: string | null
   env?: string | null
   site?: string
   customHeaders?: Record<string, string>
@@ -76,6 +77,8 @@ interface ConfigurationRequestOptions {
 interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
+  /** The service name. It is sent as `dd-service` when it is printable ASCII, so usage can be split by service. */
+  service?: string | null
   site?: string
   fetch?: typeof globalThis.fetch
   signal?: AbortSignal
@@ -132,6 +135,8 @@ export function buildConfigurationHeaders(
           'dd-client-token': options.clientToken,
           ...(options.applicationId &&
             !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
+          // Customer proxies can opt in through customHeaders after allowing it in CORS.
+          ...(!options.flaggingProxy && isServiceHeaderValue(options.service) && { 'dd-service': options.service }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,
@@ -139,6 +144,15 @@ export function buildConfigurationHeaders(
         }),
     ...options.customHeaders,
   }
+}
+
+/**
+ * Fetch rejects a header value with characters above U+00FF or with control characters, and then no flags load.
+ * The Datadog edges keep only printable ASCII. So a service outside that range sends no header; the request still
+ * goes out. The edges check the rest of their rule, for example the length.
+ */
+function isServiceHeaderValue(service: string | null | undefined): service is string {
+  return typeof service === 'string' && /^[!-~]+$/.test(service)
 }
 
 export async function fetchPrecomputedConfiguration(

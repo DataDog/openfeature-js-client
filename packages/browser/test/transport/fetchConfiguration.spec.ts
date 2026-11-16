@@ -558,6 +558,60 @@ describe('createFlagsConfigurationFetcher', () => {
       expect(new Headers(headers).get('dd-application-id')).toBe('manual-app')
       expect(headers).toMatchObject({ [name]: 'manual-app' })
     })
+
+    describe('dd-service', () => {
+      const endpoints = ['precomputed', 'rules'] as const
+
+      it.each(endpoints)('sends a printable ASCII service on %s requests', (endpoint) => {
+        for (const service of ['checkout', '_svc', 'My-Service', 'web-store.v2:prod/api']) {
+          expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).toMatchObject({
+            'dd-service': service,
+          })
+        }
+      })
+
+      it.each(endpoints)('sends no header on %s requests for other services', (endpoint) => {
+        for (const service of [undefined, null, '', 'my service', ' checkout', 'checkout\n', 'café-api', '支付']) {
+          expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).not.toHaveProperty(
+            'dd-service'
+          )
+        }
+      })
+
+      it.each(endpoints)('sends no header on %s requests with overwriteRequestHeaders', (endpoint) => {
+        expect(
+          buildConfigurationHeaders({ clientToken: 'test-token', service: 'checkout', overwriteRequestHeaders: true }, {}, endpoint)
+        ).toEqual({})
+      })
+
+      it.each(endpoints)('sends no header through a proxy on %s requests unless configured', (endpoint) => {
+        const proxy = { clientToken: 'test-token', service: 'checkout', flaggingProxy: 'https://proxy.example.com' }
+
+        expect(buildConfigurationHeaders(proxy, {}, endpoint)).not.toHaveProperty('dd-service')
+        expect(
+          buildConfigurationHeaders({ ...proxy, customHeaders: { 'dd-service': 'checkout' } }, {}, endpoint)
+        ).toMatchObject({ 'dd-service': 'checkout' })
+      })
+
+      it('sends the provider service on precomputed requests', async () => {
+        await createFlagsConfigurationFetcher({ ...baseConfig, service: 'checkout' })(mockContext)
+
+        expect(mockFetch.mock.calls[0][1].headers).toMatchObject({ 'dd-service': 'checkout' })
+      })
+
+      it('sends the service on standalone rules requests', async () => {
+        const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+        const customFetch = jest.fn().mockResolvedValue({
+          ok: true,
+          headers: new Headers(),
+          arrayBuffer: async () => bytes.buffer,
+        })
+
+        await fetchRulesConfiguration({ ...baseFetchOptions, service: 'checkout', fetch: customFetch })
+
+        expect(customFetch.mock.calls[0][1].headers).toMatchObject({ 'dd-service': 'checkout' })
+      })
+    })
   })
 
   describe('flagSelection', () => {

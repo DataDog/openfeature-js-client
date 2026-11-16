@@ -73,6 +73,22 @@ test.each(corpus.cases)('$id', async (vector) => {
   }
 })
 
+test('dd-service is not part of the signed request', async () => {
+  // The edge does not sign dd-service, so an accepted response must stay valid when the request carries it.
+  const vector = corpus.cases.find((c) => c.expected_accept)!
+  const request = {
+    ...vector.request,
+    headers: new Headers([...vector.request.headers, ['dd-service', 'checkout']]),
+    body: decodeBase64(vector.request.body_base64, 1024 * 1024),
+  }
+  const response = {
+    ...vector.response,
+    headers: new Headers(vector.response.headers),
+    body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
+  }
+  await expect(verifyResponse(request, response, [corpus.anchor_der_base64], vector.now)).resolves.toBeDefined()
+})
+
 const nestedDerRaw = readFileSync(join(fixtureDirectory, 'nested-der.json'))
 const nestedDer = JSON.parse(nestedDerRaw.toString()) as typeof corpus
 test('the shared nested-DER regression inputs are unchanged', () => {

@@ -68,6 +68,14 @@ header, so Usage Attribution can split Feature Flags usage by `application.name`
 entry with that name, in any letter case, replaces the SDK value. With `overwriteRequestHeaders: true`, the header is
 not sent.
 
+When `service` is set, both requests also send it in the `dd-service` header, so Usage Attribution can split usage
+by `service`. The value is sent as configured, and Datadog normalizes it like other tags: `Checkout API` is not sent,
+but `Checkout-API` is, and it is shown as `checkout-api`. A service that is not printable ASCII (for example one with
+a space or `é`) sends no header, and the request still goes out. There is no default service: without `service`,
+no header is sent. Requests through `flaggingProxy` do not send `dd-service` by default. Proxy owners can opt in
+through `customHeaders`. The proxy must forward the header and, for cross-origin requests, allow it in its CORS
+response before enabling it.
+
 ### Request Timeouts and Retries for npm Consumers
 
 The npm package provides Fetch-compatible wrappers for adding a timeout and retries. The CDN bundle does not expose
