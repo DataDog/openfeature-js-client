@@ -178,22 +178,37 @@ describe('provider SDK diagnostics', () => {
     })
   }
 
-  it('suppresses repeated and rate-limited outages until success', async () => {
+  it('suppresses repeated outages until success and reports at most once per minute', async () => {
     await ready()
     failFetch()
     await advance(59_999)
     provider.reportConfigurationFetchResult(true)
     failFetch()
+    expect(observations).toHaveLength(2)
     await advance(1)
     failFetch()
-    expect(observations).toHaveLength(2)
+    failFetch()
+    expect(observations).toHaveLength(3)
     provider.reportConfigurationFetchResult(true)
     failFetch()
     expect(observations).toHaveLength(3)
     await advance(60_000)
     failFetch()
-    expect(observations).toHaveLength(3)
+    expect(observations).toHaveLength(4)
     expect(provider.getConfiguration()).toBe(configuration)
+  })
+
+  it('reports a sustained outage that begins inside the rate-limit window', async () => {
+    await ready()
+    failFetch()
+    await advance(10_000)
+    provider.reportConfigurationFetchResult(true)
+    await advance(10_000)
+    for (let i = 0; i < 120; i++) {
+      failFetch()
+      await advance(30_000)
+    }
+    expect(observations.filter((observation) => observation.event_type === 'provider_error')).toHaveLength(2)
   })
 
   it('does not classify arbitrary provider errors as fetch errors', async () => {
