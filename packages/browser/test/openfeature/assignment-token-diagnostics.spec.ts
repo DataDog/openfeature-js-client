@@ -1,6 +1,7 @@
 import { inspect, TextEncoder } from 'node:util'
 import { addTelemetryDebug, display } from '@datadog/browser-core'
 import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk'
+import { withStore } from '../../src/cache/indexeddb-store'
 import { DatadogProvider } from '../../src/openfeature/provider'
 import { fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import response from '../data/precomputed-v1.json'
@@ -61,6 +62,7 @@ describe('assignment credential diagnostic isolation', () => {
   })
   afterEach(async () => {
     await OpenFeature.clearProviders()
+    await withStore('readwrite', (store) => store.count())
     OpenFeature.setLogger(console)
     jest.restoreAllMocks()
   })
@@ -189,6 +191,43 @@ describe('assignment credential diagnostic isolation', () => {
     expect(diagnostics.some((record) => record.type === 'sdk_diagnostic')).toBe(true)
     expect(diagnostics.some((record) => record.flag?.key === 'boolean-flag')).toBe(true)
     expectNoCredential([errors.mock.calls, loggedData()])
+  })
+
+  it.each([
+    [
+      'transport failure',
+      async () => {
+        throw leakingError()
+      },
+    ],
+    ['invalid JSON', async () => new Response(jwt, { status: 200 })],
+    ['HTTP failure', async () => new Response(jwt, { status: 503 })],
+  ] as const)('keeps credentials out of enabled debug logs on %s', async (_name, fetch) => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    const caught = await fetchPrecomputedConfiguration({
+      ...options,
+      context,
+      debugMode: true,
+      fetch,
+    }).catch((error: unknown) => error)
+    expect(caught).toBeInstanceOf(Error)
+    expect(log).toHaveBeenCalled()
+    expectNoCredential([caught, log.mock.calls])
+  })
+
+  it('keeps reserved context credentials out of enabled provider and tracking logs', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    const provider = new DatadogProvider({
+      ...options,
+      debugMode: true,
+      trackExposures: false,
+      enableFlagEvaluationTracking: false,
+      flagConfigurationFetch: async () => success(),
+    })
+    await OpenFeature.setProviderAndWait(provider, context)
+    expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
+    await OpenFeature.clearProviders()
+    expectNoCredential(log.mock.calls)
   })
 
   it('also sanitizes standalone assignment fetching', async () => {

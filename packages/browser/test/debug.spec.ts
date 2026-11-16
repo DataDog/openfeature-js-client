@@ -1,0 +1,265 @@
+import { createDebugLogger, debugOptions, debugUrl, diagnosticResponse, NO_DEBUG } from '../src/debug'
+
+function records(log: jest.SpyInstance) {
+  return log.mock.calls.map(([line]) => JSON.parse(String(line).slice('[Datadog Feature Flags] '.length)))
+}
+
+describe('local flag debug logger', () => {
+  let log: jest.SpyInstance
+  beforeEach(() => {
+    log = jest.spyOn(console, 'log').mockImplementation(() => {})
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('is opt-in and does not construct disabled payloads', () => {
+    const fields = jest.fn(() => {
+      throw new Error('must not run')
+    })
+    expect(createDebugLogger(undefined)).toBe(NO_DEBUG)
+    createDebugLogger(false).event('ignored', fields)
+    expect(fields).not.toHaveBeenCalled()
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('snapshots full raw data without calling getters or toJSON', () => {
+    const debug = createDebugLogger(true)
+    const getter = jest.fn(() => {
+      throw new Error('getter')
+    })
+    const toJSON = jest.fn(() => {
+      throw new Error('toJSON')
+    })
+    const context = {
+      targetingKey: 'customer@example.com',
+      token: 'targeting-attribute',
+      nested: { value: 'before' },
+      toJSON,
+    }
+    Object.defineProperty(context, 'computed', { get: getter, enumerable: true })
+    debug.event('raw', () => ({ context, undefinedValue: undefined, bigint: BigInt(4), map: new Map([['a', 1]]) }))
+    context.nested.value = 'after'
+    expect(getter).not.toHaveBeenCalled()
+    expect(toJSON).not.toHaveBeenCalled()
+    expect(records(log).slice(-1)[0].details).toMatchObject({
+      context: {
+        targetingKey: 'customer@example.com',
+        token: 'targeting-attribute',
+        nested: { value: 'before' },
+        computed: { $type: 'accessor' },
+      },
+      undefinedValue: { $type: 'undefined' },
+      bigint: { $type: 'bigint', value: '4' },
+      map: { $type: 'map', entries: [['a', 1]] },
+    })
+  })
+
+  it('handles cycles and restores reentrancy guards after a throwing sink', () => {
+    const debug = createDebugLogger(true)
+    const circular: { self?: unknown } = {}
+    circular.self = circular
+    debug.event('circular', () => circular)
+    expect(records(log).slice(-1)[0].details.self).toEqual({ $type: 'circular' })
+    log.mockImplementation(() => {
+      throw new Error('sink unavailable')
+    })
+    expect(() => debug.event('ignored')).not.toThrow()
+    log.mockImplementation(() => {})
+    debug.event('recovered')
+    expect(records(log).slice(-1)[0].event).toBe('recovered')
+  })
+
+  it('does not recursively emit through console interceptors', () => {
+    const debug = createDebugLogger(true)
+    log.mockClear()
+    log.mockImplementation(() => debug.event('recursive'))
+    debug.event('outer')
+    expect(log).toHaveBeenCalledTimes(1)
+  })
+
+  it('contains failing diagnostic factories', () => {
+    const debug = createDebugLogger(true)
+    expect(() =>
+      debug.event('failure', () => {
+        throw new Error('diagnostic only')
+      })
+    ).not.toThrow()
+    expect(records(log).slice(-1)[0].event).toBe('debug.serialization_or_sink_failed')
+  })
+
+  it('chunks rather than truncates large values', () => {
+    const debug = createDebugLogger(true)
+    log.mockClear()
+    const value = '🦆raw'.repeat(20000)
+    debug.event('large', () => ({ value }))
+    const chunks = records(log)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.every((chunk) => chunk.event === 'debug.chunk')).toBe(true)
+    expect(JSON.parse(chunks.map((chunk) => chunk.data).join('')).details.value).toBe(value)
+  })
+
+  it.each(['deep', 'deep-wide', 'wide', 'string', 'map', 'sparse'] as const)(
+    'bounds %s records with explicit omissions',
+    (kind) => {
+      let value: unknown
+      if (kind === 'deep') {
+        value = { leaf: 'end' }
+        for (let index = 0; index < 10000; index++) value = { nested: value }
+      } else if (kind === 'deep-wide') {
+        value = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [index, { leaf: index }]))
+        for (let index = 0; index < 60; index++) value = { nested: value }
+      } else if (kind === 'wide')
+        value = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [index, index]))
+      else if (kind === 'string') value = 'x'.repeat(2000000)
+      else if (kind === 'map') value = new Map(Array.from({ length: 20000 }, (_, index) => [index, index]))
+      else value = new Array(1000000000)
+      const debug = createDebugLogger(true)
+      log.mockClear()
+      debug.event('bounded', () => ({ value }))
+      const emitted = records(log)
+      expect(emitted.every((record) => record.event !== 'debug.serialization_or_sink_failed')).toBe(true)
+      const json =
+        emitted[0].event === 'debug.chunk' ? emitted.map((chunk) => chunk.data).join('') : JSON.stringify(emitted[0])
+      const result = JSON.parse(json)
+      expect(result.event).toBe('bounded')
+      expect(result.diagnosticTruncation.limits).toEqual({ depth: 64, nodes: 10000, encodedBytes: 1048576 })
+      expect(
+        result.diagnosticTruncation.omittedEntries +
+          result.diagnosticTruncation.omittedSubtrees +
+          result.diagnosticTruncation.omittedStringCodeUnits
+      ).toBeGreaterThan(0)
+      expect(Buffer.byteLength(json)).toBeLessThanOrEqual(1048576)
+    }
+  )
+
+  it.each(['configuration', 'initialOptions', 'decodedResponse'] as const)(
+    'bounds per-flag schema inspection for a wide %s',
+    (kind) => {
+      let inspections = 0
+      const flags = Object.fromEntries(
+        Array.from({ length: 20000 }, (_, index) => [
+          String(index),
+          new Proxy(
+            {
+              allocationKey: 'allocation',
+              variationKey: 'on',
+              variationType: 'object',
+              variationValue: { dd_assignment_token: 'ordinary-flag-value' },
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+              serialId: 1,
+              features: [],
+              headers: { authorization: 'envelope-secret' },
+            },
+            {
+              getOwnPropertyDescriptor(target, key) {
+                inspections++
+                return Reflect.getOwnPropertyDescriptor(target, key)
+              },
+            }
+          ),
+        ])
+      )
+      const response = { data: { attributes: { createdAt: 'now', flags } } }
+      const configuration = { precomputed: { response } }
+      const debug = createDebugLogger(true)
+      log.mockClear()
+      if (kind === 'configuration') debug.event('configuration.installed', () => ({ configuration }))
+      else if (kind === 'initialOptions')
+        debug.event('init.configuration', () => debugOptions({ initialFlagsConfiguration: configuration }))
+      else debug.event('configuration.decoded', () => ({ response: diagnosticResponse(response) }))
+      expect(inspections).toBeGreaterThan(0)
+      expect(inspections).toBeLessThan(10000)
+      const emitted = records(log)
+      const json =
+        emitted[0].event === 'debug.chunk' ? emitted.map((chunk) => chunk.data).join('') : JSON.stringify(emitted[0])
+      const result = JSON.parse(json)
+      expect(result.diagnosticTruncation.omittedEntries).toBeGreaterThan(10000)
+      expect(json).toContain('ordinary-flag-value')
+      expect(json).not.toContain('envelope-secret')
+      expect(Buffer.byteLength(json)).toBeLessThanOrEqual(1048576)
+    }
+  )
+
+  it('retains accessors and cycle identity through lazy configuration views', () => {
+    const read = jest.fn(() => 'must not read')
+    const flag = Object.defineProperty(
+      {
+        variationValue: { ordinary: { dd_assignment_token: 'raw-value' } },
+      },
+      'variationKey',
+      { enumerable: true, get: read }
+    )
+    const configuration: { precomputed: { response: unknown }; self?: unknown } = {
+      precomputed: { response: { data: { attributes: { flags: { sample: flag } } } } },
+    }
+    configuration.self = configuration
+    createDebugLogger(true).event('configuration.installed', () => ({ configuration }))
+    const result = records(log).slice(-1)[0].details.configuration
+    expect(result.self).toEqual({ $type: 'circular' })
+    expect(result.precomputed.response.data.attributes.flags.sample).toEqual({
+      variationValue: flag.variationValue,
+      variationKey: { $type: 'accessor', inspected: false },
+    })
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('omits transport credential values while retaining raw targeting data', () => {
+    const options = debugOptions({
+      clientToken: 'client-secret',
+      customHeaders: { Authorization: 'bearer-secret', 'X-Custom': 'header-value' },
+      flaggingProxy: 'https://user:password@example.com/config?api_key=key-secret&env=prod',
+      initialFlagsConfiguration: { context: { password: 'raw-targeting-value' } },
+    })
+    createDebugLogger(true).event('init.configuration', () => ({ options }))
+    const serialized = JSON.stringify(records(log).slice(-1)[0].details.options)
+    for (const secret of ['client-secret', 'bearer-secret', 'header-value', 'key-secret', 'user:password'])
+      expect(serialized).not.toContain(secret)
+    expect(serialized).toContain('raw-targeting-value')
+    expect(debugUrl('/path?dd-api-key=secret&dd_env=prod')).not.toContain('=secret')
+  })
+
+  it('sanitizes nested transport credentials without changing ordinary flag/default/targeting values', () => {
+    const value = { dd_assignment_token: 'ordinary-value', nested: { 'dd-assignment-token': 'ordinary-header-name' } }
+    const debug = createDebugLogger(true)
+    debug.event('evaluation.completed', () => ({
+      defaultValue: value,
+      result: { value },
+      requestedContext: { targetingKey: 'user', dd_assignment_token: 'credential-secret', nested: value },
+    }))
+    const details = records(log).slice(-1)[0].details
+    expect(details.defaultValue).toEqual(value)
+    expect(details.result.value).toEqual(value)
+    expect(details.requestedContext.nested).toEqual(value)
+    expect(details.requestedContext).not.toHaveProperty('dd_assignment_token')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('credential-secret')
+    const proxy =
+      'https://proxy.test/intake?ddforward=' +
+      encodeURIComponent('/api/v2/exposures?dd-api-key=proxy-secret&ddsource=browser')
+    expect(decodeURIComponent(debugUrl(proxy))).not.toContain('proxy-secret')
+    expect(debugUrl(proxy, 'proxy')).toBe('https://proxy.test/[proxy]')
+    expect(debugOptions({ replica: { clientToken: 'replica-secret', applicationId: 'app' } })).toEqual({
+      replica: { clientToken: { present: true }, applicationId: 'app' },
+    })
+  })
+
+  it('retains cyclic context identity while excluding its reserved credential', () => {
+    const context: Record<string, unknown> = { dd_assignment_token: 'secret', targetingKey: 'user' }
+    context.self = context
+    createDebugLogger(true).event('init.started', () => ({ context }))
+    const result = records(log).slice(-1)[0].details.context
+    expect(result.self).toEqual({ $type: 'circular' })
+    expect(JSON.stringify(result)).not.toContain('secret')
+  })
+
+  it('isolates provider identities', () => {
+    const a = createDebugLogger(true)
+    const b = createDebugLogger(true)
+    expect(a.instanceId).not.toBe(b.instanceId)
+    a.child({ evaluationId: 2 }).event('evaluation.trace', () => ({ value: true }))
+    expect(records(log).slice(-1)[0]).toMatchObject({
+      providerInstanceId: a.instanceId,
+      evaluationId: 2,
+      event: 'evaluation.trace',
+    })
+  })
+})
