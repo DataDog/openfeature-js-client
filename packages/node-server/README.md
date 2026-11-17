@@ -309,6 +309,28 @@ the delivery mechanism so an initialization result already in progress can be re
 
 After `onClose()`, the provider reports no further diagnostics, even if it is initialized again.
 
+### Offline core provider
+
+`DatadogCoreProvider` accepts the same `onDiagnostic` callback and emits the same `SDKDiagnostic` observations.
+Timing starts inside its constructor and includes snapshot validation and provider setup. A valid snapshot records
+`configuration_received`; completed setup reports `ready`. Failed construction reports `INIT_FAILED` and throws the
+original constructor error. Fetching or parsing completed before construction is outside these timings.
+
+Observations are delivered synchronously during construction. Start diagnostic delivery before constructing the
+provider so the first observation can be buffered. Callback promises are not awaited, and callback errors do not
+affect construction. The provider has no `initialize()` method and remains ready on synchronous OpenFeature
+registration. It starts no fetch, poll, or uploader. Without `onDiagnostic`, measurement is disabled.
+
+Caller-owned refresh uses the same `reportConfigurationFetchStart()` and `reportConfigurationFetchResult(success)`
+methods as `DatadogNodeServerProvider`. Report one start per sequential refresh attempt, including its retries, and
+report the final fetch result. Do not report cancellation as failure. Report fetch success separately from applying
+the configuration: invalid replacements and evaluation errors are not fetch failures. A failed refresh leaves the
+active snapshot available. The shared outage suppression and cooldown rules above apply.
+
+Successful replacements do not emit another initialization observation. `onClose()` stops diagnostics permanently;
+await it before closing diagnostic delivery. Synchronous construction has already succeeded or failed, so closing
+the core provider does not create an incomplete initialization observation.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula

@@ -1556,6 +1556,48 @@ export declare enum ExperimentationOptOutMode {
 	Disabled = "disabled",
 	Immediate = "immediate"
 }
+type Milestone = {
+	elapsed_ms: number;
+};
+type Initialization = {
+	started_at_ms: number;
+	duration_ms: number;
+	milestones: {
+		configuration_received?: Milestone;
+		provider_ready?: Milestone;
+	};
+};
+/** A provider observation. The integration adds SDK and service identity and handles delivery. */
+export type SDKDiagnostic = {
+	timestamp: number;
+} & ({
+	event_type: "sdk_initialization";
+	initialization: Initialization & {
+		outcome: "ready";
+		final: true;
+		milestones: {
+			configuration_received: Milestone;
+			provider_ready: Milestone;
+		};
+	};
+} | {
+	event_type: "sdk_initialization";
+	error_code: "INIT_FAILED";
+	initialization: Initialization & {
+		outcome: "failed";
+		final: true;
+	};
+} | {
+	event_type: "sdk_initialization";
+	initialization: Initialization & {
+		outcome: "incomplete";
+		final: false;
+		reason: "provider_closed";
+	};
+} | {
+	event_type: "provider_error";
+	error_code: "CONFIG_FETCH_FAILED";
+});
 type PreparedDependencyExposure = {
 	details: Omit<EvaluationDetails<FlagValue>, "value"> & {
 		value?: FlagValue;
@@ -1585,6 +1627,8 @@ interface ExposureSink {
 	publish(event: ExposureEvent): void;
 }
 export interface DatadogCoreProviderOptions {
+	/** Receives diagnostic observations during construction without awaiting delivery. Omit to disable measurement. */
+	onDiagnostic?: (diagnostic: SDKDiagnostic) => void | Promise<void>;
 	/** Experiment exclusion policy. Defaults to Disabled. */
 	experimentationOptOutMode?: ExperimentationOptOutMode;
 	/** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
@@ -1602,6 +1646,7 @@ export declare class DatadogCoreProvider implements Provider {
 	readonly runsOn: "server";
 	readonly hooks: Hook[];
 	readonly events: ProviderEventEmitter<ServerProviderEvents>;
+	private readonly diagnostics?;
 	private configuration;
 	private readonly experimentationOptOutMode;
 	private readonly exposureCache;
@@ -1612,6 +1657,11 @@ export declare class DatadogCoreProvider implements Provider {
 	getConfiguration(): FlagsConfiguration$1;
 	/** Validate and copy before replacement. Invalid input throws TypeError and leaves the active snapshot unchanged. */
 	setConfiguration(configuration: FlagsConfiguration$1): void;
+	/** Called by the integration once before a sequential configuration poll, including its retries. */
+	reportConfigurationFetchStart(): void;
+	/** Called after the poll succeeds or exhausts retries; cancellations are not fetch failures. */
+	reportConfigurationFetchResult(success: boolean): void;
+	/** Stops diagnostics permanently and clears the provider-owned exposure cache. Await before closing delivery. */
 	onClose(): Promise<void>;
 	resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<boolean>>;
 	resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<string>>;
