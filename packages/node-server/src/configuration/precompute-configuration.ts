@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { type ClientFingerprint, FLAG_KEY_SHA256_CAPABILITY, type FlagsConfiguration } from '@datadog/flagging-core'
 import {
   ConfigurationPrecomputeError,
-  DEPENDENCY_KEY_ENCRYPTION_SCHEME,
   type PrecomputeConfigurationOptions as CorePrecomputeConfigurationOptions,
+  DEPENDENCY_KEY_ENCRYPTION_SCHEME,
   type FlagKeyObfuscation,
   precomputeConfiguration as precompute,
 } from '@datadog/flagging-core/rules-based'
