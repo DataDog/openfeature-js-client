@@ -122,13 +122,16 @@ export function buildConfigurationHeaders(
   contentHeaders: Record<string, string>,
   endpoint: 'precomputed' | 'rules'
 ): Record<string, string> {
+  // Fetch joins case-distinct keys into one value, so a custom header replaces the SDK header in any letter case.
+  const customHeaderNames = new Set(Object.keys(options.customHeaders ?? {}).map((name) => name.toLowerCase()))
   return {
     ...contentHeaders,
     ...(options.overwriteRequestHeaders
       ? {}
       : {
           'dd-client-token': options.clientToken,
-          ...(options.applicationId && { 'dd-application-id': options.applicationId }),
+          ...(options.applicationId &&
+            !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,

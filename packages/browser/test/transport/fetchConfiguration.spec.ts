@@ -525,9 +525,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
   describe('buildConfigurationHeaders', () => {
     it.each(['precomputed', 'rules'] as const)('sends dd-application-id on %s requests', (endpoint) => {
-      expect(buildConfigurationHeaders({ clientToken: 'test-token', applicationId: 'app-id' }, {}, endpoint)).toMatchObject(
-        { 'dd-application-id': 'app-id' }
-      )
+      expect(
+        buildConfigurationHeaders({ clientToken: 'test-token', applicationId: 'app-id' }, {}, endpoint)
+      ).toMatchObject({ 'dd-application-id': 'app-id' })
     })
 
     it.each(['precomputed', 'rules'] as const)(
@@ -542,6 +542,22 @@ describe('createFlagsConfigurationFetcher', () => {
         ).toEqual({})
       }
     )
+
+    it.each([
+      ['precomputed', 'dd-application-id'],
+      ['precomputed', 'DD-Application-ID'],
+      ['rules', 'DD-APPLICATION-ID'],
+      ['rules', 'Dd-Application-Id'],
+    ] as const)('lets a custom %s header named %s replace applicationId', (endpoint, name) => {
+      const headers = buildConfigurationHeaders(
+        { clientToken: 'test-token', applicationId: 'automatic-app', customHeaders: { [name]: 'manual-app' } },
+        {},
+        endpoint
+      )
+
+      expect(new Headers(headers).get('dd-application-id')).toBe('manual-app')
+      expect(headers).toMatchObject({ [name]: 'manual-app' })
+    })
   })
 
   describe('flagSelection', () => {

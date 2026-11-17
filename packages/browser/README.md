@@ -64,8 +64,9 @@ authentication and any configured custom headers, and may route or transform the
 
 When `applicationId` is set, precomputed and rules-based configuration requests send it in the `dd-application-id`
 header, so Usage Attribution can split Feature Flags usage by `application.name`. The standalone
-`fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers accept the same option. With
-`overwriteRequestHeaders: true`, the header is not sent.
+`fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers accept the same option. A `customHeaders`
+entry with that name, in any letter case, replaces the SDK value. With `overwriteRequestHeaders: true`, the header is
+not sent.
 
 ### Request Timeouts and Retries for npm Consumers
 
