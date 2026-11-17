@@ -4,6 +4,7 @@ import {
   DependencyTelemetrySidecar,
   fetchPrecomputedConfiguration,
   type PrecomputedConfigurationFetchOptions,
+  type SDKDiagnostic as RootSDKDiagnostic,
   configurationToString as serializePrecomputed,
 } from '@datadog/openfeature-node-server'
 import {
@@ -15,6 +16,7 @@ import {
   fetchRulesConfiguration,
   precomputeConfiguration,
   type RulesConfigurationFetchOptions,
+  type SDKDiagnostic,
 } from '@datadog/openfeature-node-server/rules-based'
 
 export async function loadConfiguration(options: RulesConfigurationFetchOptions): Promise<string> {
@@ -61,3 +63,16 @@ import { fetchRulesConfiguration as rootFetch } from '@datadog/openfeature-node-
 void root.createExposureTracking
 
 void [DatadogNodeServerProvider, rootFetch]
+
+export function loadDiagnosticProvider(
+  configuration: ConstructorParameters<typeof DatadogCoreProvider>[0],
+  onDiagnostic: (observation: RootSDKDiagnostic) => void | Promise<void>
+) {
+  const callback: (observation: SDKDiagnostic) => void | Promise<void> = onDiagnostic
+  const provider = new DatadogCoreProvider(configuration, { onDiagnostic: callback })
+  const reporter: Pick<DatadogNodeServerProvider, 'reportConfigurationFetchStart' | 'reportConfigurationFetchResult'> =
+    provider
+  reporter.reportConfigurationFetchStart()
+  reporter.reportConfigurationFetchResult(true)
+  return provider
+}
