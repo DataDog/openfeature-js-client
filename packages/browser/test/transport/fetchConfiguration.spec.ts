@@ -580,7 +580,11 @@ describe('createFlagsConfigurationFetcher', () => {
 
       it.each(endpoints)('sends no header on %s requests with overwriteRequestHeaders', (endpoint) => {
         expect(
-          buildConfigurationHeaders({ clientToken: 'test-token', service: 'checkout', overwriteRequestHeaders: true }, {}, endpoint)
+          buildConfigurationHeaders(
+            { clientToken: 'test-token', service: 'checkout', overwriteRequestHeaders: true },
+            {},
+            endpoint
+          )
         ).toEqual({})
       })
 
