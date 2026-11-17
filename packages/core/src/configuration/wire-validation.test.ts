@@ -133,8 +133,15 @@ describe('precomputed dependency wire validation', () => {
     })
   })
 
-  it('rejects an unknown dependency encryption scheme', () => {
-    const encoded = response({})
+  it('rejects only dependent flags under an unknown dependency encryption scheme', () => {
+    const dependent = 'b'.repeat(64)
+    const encoded = response({
+      ['a'.repeat(64)]: assignment,
+      [dependent]: {
+        ...assignment,
+        dependencyEvaluations: [{ flagKey: 'A'.repeat(38), isPresentInAssignment: true }],
+      },
+    })
     encoded.data.attributes = {
       ...encoded.data.attributes,
       obfuscated: true,
@@ -146,7 +153,8 @@ describe('precomputed dependency wire validation', () => {
     } as typeof encoded.data.attributes
 
     expect(parsePrecomputedConfigurationResponse(encoded)).toEqual({
-      error: 'Unsupported precomputed dependency flag-key encryption scheme',
+      response: encoded,
+      flagErrors: { [dependent]: 'Invalid precomputed flag configuration' },
     })
   })
 })

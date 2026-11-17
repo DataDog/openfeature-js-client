@@ -1013,6 +1013,7 @@ type PrecomputedConfigurationResponse = {
 			environment?: {
 				name: string;
 			};
+			/** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
 			observeFullEvaluationData?: boolean;
 			/** Effective server evaluation options, retained in portable and persisted configurations. */
 			evaluation_options?: {

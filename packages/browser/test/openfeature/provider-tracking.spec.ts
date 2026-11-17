@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getGlobalObject } from '@datadog/browser-core'
 import type { FlagEvaluationEvent } from '@datadog/flagging-core'
 import { OpenFeature, ProviderStatus } from '@openfeature/web-sdk'
@@ -49,10 +50,10 @@ describe('online provider tracking context', () => {
       const ready = OpenFeature.setProviderAndWait(domain, provider, context)
       const client = OpenFeature.getClient(domain)
       const expectedContext = {
-        targeting_key: rumEnabled ? 'startup-rum-user' : 'startup-user',
-        context: expect.objectContaining({
-          evaluation: { country: 'US', ...(rumEnabled && { user_email: 'rum@example.com' }) },
-        }),
+        targeting_key: `sha256_${createHash('sha256')
+          .update(rumEnabled ? 'startup-rum-user' : 'startup-user')
+          .digest('hex')}`,
+        context: expect.not.objectContaining({ evaluation: expect.anything() }),
       }
 
       try {
@@ -84,6 +85,39 @@ describe('online provider tracking context', () => {
     }
   )
 
+  it.each([false, true])(
+    'keeps the requested context after the initial configuration fetch fails (RUM enabled: %s)',
+    async (rumEnabled) => {
+      const rumUser = { id: 'failed-startup-rum-user', user_email: 'rum@example.com' }
+      getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+        getUser: () => rumUser,
+        addFeatureFlagEvaluation: jest.fn(),
+      }
+      const provider = new DatadogProvider({
+        ...options,
+        enableRumFeatureFlagTracking: rumEnabled,
+        flagConfigurationFetch: jest.fn().mockRejectedValue(new Error('offline')),
+      })
+      const subject = rumEnabled ? rumUser.id : 'failed-startup-user'
+      const context = { country: 'US', ...(!rumEnabled && { targetingKey: subject }) }
+
+      await expect(OpenFeature.setProviderAndWait(domain, provider, context)).rejects.toThrow('offline')
+      const details = OpenFeature.getClient(domain).getBooleanDetails('boolean-flag', false)
+      expect(details.errorCode).toBe('PROVIDER_NOT_READY')
+      jest.advanceTimersByTime(31_000)
+
+      expect(evaluationEvents()).toEqual([
+        expect.objectContaining({
+          targeting_key: `sha256_${createHash('sha256').update(subject).digest('hex')}`,
+          context: expect.not.objectContaining({ evaluation: expect.anything() }),
+          evaluation_count: 1,
+          runtime_default_used: true,
+          error: { message: 'PROVIDER_NOT_READY' },
+        }),
+      ])
+    }
+  )
+
   it('keeps the active context during a pending update and switches when the new configuration is accepted', async () => {
     const pending = createDeferred<typeof response>()
     const provider = new DatadogProvider({
@@ -103,7 +137,10 @@ describe('online provider tracking context', () => {
 
       expect(evaluationEvents()).toHaveLength(2)
       for (const event of evaluationEvents()) {
-        expect(event).toMatchObject({ targeting_key: 'first-user', context: { evaluation: { country: 'US' } } })
+        expect(event).toMatchObject({
+          targeting_key: `sha256_${createHash('sha256').update('first-user').digest('hex')}`,
+          context: expect.not.objectContaining({ evaluation: expect.anything() }),
+        })
       }
     } finally {
       pending.resolve(response)
@@ -116,7 +153,10 @@ describe('online provider tracking context', () => {
     jest.advanceTimersByTime(31_000)
     expect(evaluationEvents()).toHaveLength(2)
     for (const event of evaluationEvents()) {
-      expect(event).toMatchObject({ targeting_key: 'next-user', context: { evaluation: { country: 'CA' } } })
+      expect(event).toMatchObject({
+        targeting_key: `sha256_${createHash('sha256').update('next-user').digest('hex')}`,
+        context: expect.not.objectContaining({ evaluation: expect.anything() }),
+      })
     }
   })
 

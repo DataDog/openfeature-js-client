@@ -1046,6 +1046,13 @@ describe('precomputeConfiguration', () => {
     { onEvaluationError: true },
     { obfuscation: { scheme: 'unknown', salt: '0'.repeat(32) } },
     { obfuscation: { scheme: 'flag-key-sha256-v1', salt: 'short' } },
+    {
+      obfuscation: {
+        scheme: 'flag-key-sha256-v1',
+        salt: '0'.repeat(32),
+        dependencyKeyEncryption: { scheme: 'unknown' },
+      },
+    },
   ])('rejects invalid options %j', (options) => {
     expect(() => precomputeConfiguration(rules(), context, options as PrecomputeConfigurationOptions)).toThrow(
       expect.objectContaining({ code: 'invalid_options' })

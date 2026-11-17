@@ -22,12 +22,19 @@ export function precomputeConfiguration(
   options: PrecomputeConfigurationOptions = {}
 ): FlagsConfiguration {
   let capabilities: readonly string[]
+  let precomputeOptions: CorePrecomputeConfigurationOptions
   try {
-    capabilities = readPrecomputedCapabilities(options.clientFingerprint)
+    if (!isPlainOptions(options)) throw new Error('Invalid precomputation options')
+    const {
+      clientFingerprint,
+      obfuscation: _obfuscation,
+      ...rest
+    } = options as CorePrecomputeConfigurationOptions & PrecomputeConfigurationOptions
+    capabilities = readPrecomputedCapabilities(clientFingerprint)
+    precomputeOptions = rest
   } catch {
     throw new ConfigurationPrecomputeError('invalid_options')
   }
-  const { clientFingerprint: _clientFingerprint, ...precomputeOptions } = options
   if (!capabilities.includes(FLAG_KEY_SHA256_CAPABILITY)) {
     return precompute(configuration, context, precomputeOptions)
   }
@@ -38,4 +45,10 @@ export function precomputeConfiguration(
     dependencyKeyEncryption: { scheme: DEPENDENCY_KEY_ENCRYPTION_SCHEME },
   }
   return precompute(configuration, context, { ...precomputeOptions, obfuscation })
+}
+
+function isPlainOptions(value: unknown): value is PrecomputeConfigurationOptions {
+  if (typeof value !== 'object' || value === null) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }

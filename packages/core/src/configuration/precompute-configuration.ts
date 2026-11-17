@@ -20,6 +20,7 @@ import {
   encodePrecomputedFlagKey,
   type FlagKeyObfuscation,
   readFlagKeyObfuscation,
+  supportsDependencyKeyEncryption,
 } from './flag-key-obfuscation'
 import { canonicalizeFlagSelection, type FlagSelection } from './flag-selection'
 import type { PreparedRulesResponse } from './prepared-rules-response'
@@ -280,6 +281,7 @@ function validateOptions(
       if (
         ['disabled', 'immediate', 'future_experiments_only'].includes(experimentationOptOutMode) &&
         (obfuscation === undefined || encoding !== undefined) &&
+        (encoding?.dependencyKeyEncryption === undefined || supportsDependencyKeyEncryption(encoding)) &&
         (onEvaluationError === undefined || typeof onEvaluationError === 'function') &&
         !error
       )

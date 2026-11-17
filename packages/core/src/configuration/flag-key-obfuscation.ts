@@ -1,5 +1,5 @@
 import { sha256Hex } from '../evaluation/sha256'
-import { encodeUtf8 } from '../utf8'
+import { encodeUtf8, isWellFormedUnicode } from '../utf8'
 
 const SCHEME = 'flag-key-sha256-v1'
 export const DEPENDENCY_KEY_ENCRYPTION_SCHEME = 'dependency-key-hkdf-sha256-aes-256-gcm-v1'
@@ -40,13 +40,8 @@ export function readFlagKeyObfuscation(
   if (!isLowercaseHex(descriptor.salt, 16)) {
     return { error: 'Precomputed flag-key salt must contain 32 lowercase hexadecimal characters' }
   }
-  if (
-    descriptor.dependencyKeyEncryption !== undefined &&
-    (!isRecord(descriptor.dependencyKeyEncryption) ||
-      descriptor.dependencyKeyEncryption.scheme !== DEPENDENCY_KEY_ENCRYPTION_SCHEME)
-  ) {
-    return { error: 'Unsupported precomputed dependency flag-key encryption scheme' }
-  }
+  // Unknown dependency-key schemes leave top-level lookup usable. The wire parser
+  // rejects only entries that actually contain dependency evaluations.
   // Keep descriptor identity stable so repeated lookups share a bounded cache.
   return { encoding: descriptor as FlagKeyObfuscation }
 }
@@ -89,21 +84,4 @@ export function encodePrecomputedFlagKey(
 /** Check the exact byte length and alphabet of a hex-encoded wire value. */
 export function isLowercaseHex(value: unknown, bytes: number): value is string {
   return typeof value === 'string' && value.length === bytes * 2 && /^[0-9a-f]+$/.test(value)
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index++) {
-    const codeUnit = value.charCodeAt(index)
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(++index)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false
-    }
-  }
-  return true
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
