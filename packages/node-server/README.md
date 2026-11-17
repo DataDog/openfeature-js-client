@@ -72,10 +72,10 @@ are ignored. Datadog controls its encoding rollout: an encoding-capable client c
 receive plaintext. A response using an encoding the target did not advertise is
 rejected with `ConfigurationFetchError` (`decode`).
 
-The helper decodes the SDK-owned wire internally. It sends supported assignment
-encoding capabilities in `X-DD-FEATURE-FLAGS-CAPABILITIES`, not the whole fingerprint.
-The request source still identifies the requesting Node SDK. Dependent-flag query
-negotiation is a separate follow-up.
+The helper decodes the SDK-owned wire internally. The target SDK fingerprint is used
+locally to reject a response encoding the target did not advertise; target capabilities
+are not forwarded to the Datadog origin. The request source still identifies the
+requesting Node SDK.
 
 `flagSelection` optionally requests flags matching any of the `tags` or whole-key
 glob `keyPatterns`. The helper trims, deduplicates, and sorts each list, then sends
@@ -150,7 +150,7 @@ const wire = configurationToString(precomputed)
 You can also pass rules parsed with `configurationFromString()` or `configurationFromRulesBinary()`. The existing browser initialization example above accepts the resulting wire. A configuration containing both capabilities is evaluated using its rules, not its existing precomputed assignments.
 
 - The helper captures one evaluation time and a detached JSON-compatible context. Recompute when rules or context change; a precomputed-only provider cannot reevaluate rules for a different subject. Dates, undefined values, nonfinite numbers, custom class instances, and cycles are not portable context values and are rejected.
-- Complete successful assignments are included in `attributes.flags`. Individual failures are retained in the `attributes.flagEvaluationErrors` map for emitting flag evaluation telemetry; receivers can return the caller's default with the original error. A flag with no matching assignment is not included in the precomputed response. This is Datadog's assignment-only format, not an OFREP bulk response.
+- Complete successful assignments are included in `attributes.flags`. A failed dependency graph root is retained in `attributes.flagEvaluationErrors` so receivers can return the caller's default with the original error; ordinary flag failures remain absent and are reported only through `onEvaluationError`. A flag with no matching assignment is not included in the precomputed response. This is Datadog's assignment-only format, not an OFREP bulk response.
 - `onEvaluationError` receives the flag key and error code for each evaluation failure after the entire snapshot has been computed. It receives no context, values, or raw error messages; no-assignment outcomes do not invoke it. Exceptions thrown by the callback propagate.
 - Missing or malformed rules, invalid contexts, and invalid options throw `ConfigurationPrecomputeError` with `invalid_configuration`, `invalid_context`, or `invalid_options`, respectively. A valid configuration with no flags produces an empty, context-bound snapshot.
 - `flagSelection` supports only `keyPatterns` for local precomputation: source rules do not contain tag metadata. Patterns match the whole flag key, case-sensitively, with only `*` special; any matching pattern selects the flag. Patterns use the same Unicode whitespace trimming, deduplication, and limits as fetch selection (31 distinct nonempty patterns, 200 UTF-8 bytes each). Omitted selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated as absent at runtime. No matches produce an empty snapshot. Any defined `tags` value, including `[]` or `null`, malformed selections, and selections over a limit throw `invalid_options`, rather than falling back to all flags. Tags are also rejected by the TypeScript type.

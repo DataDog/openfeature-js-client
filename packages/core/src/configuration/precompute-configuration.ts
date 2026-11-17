@@ -49,11 +49,12 @@ export type PrecomputeEvaluationError = {
 
 export type PrecomputeConfigurationOptions = {
   /**
-   * Include only assignments whose whole key matches any pattern; only `*` is special.
+   * Select initial root flags whose whole key matches any pattern; only `*` is special.
    * Tags are unsupported: any defined tags value, including [] or null, throws invalid_options.
    * Malformed or over-limit selections also throw invalid_options. With tags absent, omitted selections or no
    * nonempty keyPatterns include all assignments; a null selection is treated as absent at runtime.
-   * Dependencies can use any flag in the source rules.
+   * Precomputation also includes transitive configured prerequisite assignments needed by selected roots,
+   * even when their keys do not match.
    */
   flagSelection?: Pick<FlagSelection, 'keyPatterns'> & { tags?: never }
   /** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
@@ -61,7 +62,8 @@ export type PrecomputeConfigurationOptions = {
   /** Encode top-level keys and encrypt root-relative prerequisite keys using this descriptor. */
   obfuscation?: FlagKeyObfuscation
   /**
-   * Called for each retained evaluation error, after all flags have been evaluated.
+   * Called for each evaluation error in the selected-root and prerequisite closure, after all flags have been evaluated.
+   * Failed dependency graph roots are retained in the wire; ordinary failures are callback-only.
    * Contains no context, values, or raw error messages. Exceptions from this callback propagate.
    */
   onEvaluationError?: (error: PrecomputeEvaluationError) => void
