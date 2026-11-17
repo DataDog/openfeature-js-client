@@ -22,6 +22,7 @@ import type { PreparedRulesResponse } from '../configuration/prepared-rules-resp
 import { type TimeStamp, timeStampNow } from '../time'
 import { compareBytes, encodeUtf8 } from '../utf8'
 import { coerceToNumber, coerceToString, compileRegex } from './condition-helpers'
+import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
 import { DependencyGraphError, FlagConfigurationError, InvalidContextError, TargetingKeyMissingError } from './errors'
 import { createEvaluationTimestampMetadata } from './evaluationMetadata'
 import { type ExperimentationOptOutPolicy, excludesExperimentAt, needsActivation } from './experimentation-opt-out'
@@ -58,7 +59,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
   logger: Logger,
   evaluationTimestampMs: TimeStamp = timeStampNow(),
   excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
-  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const result = resolveProtobufAssignment(
     configuration,
@@ -68,7 +70,8 @@ export function evaluateProtobufConfiguration<T extends FlagValueType>(
     evaluationTimestampMs,
     excludeExperiments,
     type,
-    resolveFlagEvaluation
+    resolveFlagEvaluation,
+    diagnostics
   )
   if (result.kind !== 'assignment') {
     return {
@@ -117,7 +120,8 @@ export function resolveProtobufAssignment(
   evaluationTimestampMs: TimeStamp,
   excludeExperiments: ExperimentationOptOutPolicy | boolean = false,
   expectedType?: FlagValueType,
-  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation,
+  diagnostics?: EvaluationDiagnostics
 ): RulesAssignmentResult {
   const { targetingKey } = context
   const flag = getOwnProperty(configuration.flags, flagKey)
@@ -153,7 +157,14 @@ export function resolveProtobufAssignment(
     }
     const conditionResults = new Map<number, ConditionOutcome>()
     for (const { allocation, activation } of prepared.allocations) {
-      if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) continue
+      if (excludesExperimentAt(excludeExperiments, allocation.logExposureEvent, activation)) {
+        traceEvaluation(diagnostics, 'allocation excluded by experimentation policy', () => ({
+          allocationKey: allocation.key,
+          excludeExperiments,
+          activation,
+        }))
+        continue
+      }
       const exposureCheckpoint = resolveFlagEvaluation?.checkpoint?.()
       if (
         !matchesCondition(
@@ -161,14 +172,25 @@ export function resolveProtobufAssignment(
           configuration,
           context,
           conditionResults,
-          resolveFlagEvaluation
+          resolveFlagEvaluation,
+          diagnostics
         )
       ) {
         resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
       }
-      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs)
-      const split = allocation.splits.find((candidate) => matchesSplit(candidate, partitionKey))
+      const partitionKey = computePartitionKey(allocation, configuration, context, evaluationTimestampMs, diagnostics)
+      const split = allocation.splits.find((candidate) => {
+        const matched = matchesSplit(candidate, partitionKey)
+        traceEvaluation(diagnostics, 'split evaluated', () => ({
+          allocationKey: allocation.key,
+          candidate,
+          partitionKey,
+          matched,
+          evaluationTimestampMs,
+        }))
+        return matched
+      })
       if (!split) {
         resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
         continue
@@ -235,9 +257,10 @@ function matchesCondition(
   configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
   results: Map<number, ConditionOutcome>,
-  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+  resolveFlagEvaluation: ResolveProtobufFlagEvaluation | undefined,
+  diagnostics?: EvaluationDiagnostics
 ): boolean {
-  return conditionOutcome(index, configuration, attributes, results, resolveFlagEvaluation).matches
+  return conditionOutcome(index, configuration, attributes, results, resolveFlagEvaluation, diagnostics).matches
 }
 
 function conditionOutcome(
@@ -245,7 +268,8 @@ function conditionOutcome(
   configuration: PreparedRulesResponse,
   attributes: EvaluationContext,
   results: Map<number, ConditionOutcome>,
-  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+  resolveFlagEvaluation: ResolveProtobufFlagEvaluation | undefined,
+  diagnostics?: EvaluationDiagnostics
 ): ConditionOutcome {
   if (index === undefined) return { matches: true, dependencyKeys: [] }
   const retainDependencyKeys = resolveFlagEvaluation?.checkpoint !== undefined
@@ -265,7 +289,14 @@ function conditionOutcome(
     outcome = { matches: true, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
+      const childOutcome = conditionOutcome(
+        child,
+        configuration,
+        attributes,
+        results,
+        resolveFlagEvaluation,
+        diagnostics
+      )
       if (!childOutcome.matches) {
         outcome = { matches: false, dependencyKeys: [] }
         break
@@ -281,14 +312,21 @@ function conditionOutcome(
     outcome = { matches: false, dependencyKeys: [] }
     for (const child of condition.kind.value.conditionIndexes) {
       if (child >= index) throw new FlagConfigurationError('Condition must only reference preceding conditions')
-      const childOutcome = conditionOutcome(child, configuration, attributes, results, resolveFlagEvaluation)
+      const childOutcome = conditionOutcome(
+        child,
+        configuration,
+        attributes,
+        results,
+        resolveFlagEvaluation,
+        diagnostics
+      )
       if (childOutcome.matches) {
         outcome = childOutcome
         break
       }
     }
   } else {
-    const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation)
+    const matches = matchesLeafCondition(condition, configuration, attributes, resolveFlagEvaluation, diagnostics)
     outcome = {
       matches,
       dependencyKeys:
@@ -302,6 +340,7 @@ function conditionOutcome(
     // exposures from a failed ALL and from each failed branch visited by ANY.
     resolveFlagEvaluation?.rollback?.(exposureCheckpoint)
   }
+  traceEvaluation(diagnostics, 'condition evaluated', () => ({ index, condition, matched: outcome.matches }))
   results.set(index, outcome)
   return outcome
 }
@@ -324,7 +363,8 @@ function matchesLeafCondition(
   condition: Condition,
   configuration: PreparedRulesResponse,
   context: EvaluationContext,
-  resolveFlagEvaluation?: ResolveProtobufFlagEvaluation
+  resolveFlagEvaluation: ResolveProtobufFlagEvaluation | undefined,
+  diagnostics?: EvaluationDiagnostics
 ): boolean {
   const kind = condition.kind
   if (kind.case === undefined || kind.case === 'all' || kind.case === 'any') {
@@ -341,6 +381,7 @@ function matchesLeafCondition(
   }
   const attribute = atIndex(configuration.attributes, kind.value.attributeIndex, 'condition attribute')
   const value = attributeValue(attribute, configuration, context)
+  traceEvaluation(diagnostics, 'condition operand', () => ({ condition, value, attribute }))
   if (kind.case === 'attributePresence') return kind.value.expectNull ? value == null : value != null
   if (value == null) return false
 
@@ -348,6 +389,7 @@ function matchesLeafCondition(
     const expected = kind.value.comparand
     if (Number.isNaN(expected)) throw new FlagConfigurationError('Invalid numeric comparator')
     const actual = coerceToNumber(value)
+    traceEvaluation(diagnostics, 'numeric condition coercion', () => ({ rawValue: value, actual, expected }))
     if (actual === undefined) return false
     const comparator = kind.value.comparator as number
     if (comparator === UFC_NUMERIC_COMPARATOR.LESS_THAN) return actual < expected
@@ -462,7 +504,8 @@ function computePartitionKey(
   allocation: Allocation,
   configuration: PreparedRulesResponse,
   context: EvaluationContext,
-  evaluationTimestampMs: TimeStamp
+  evaluationTimestampMs: TimeStamp,
+  diagnostics?: EvaluationDiagnostics
 ): number[] {
   const partitionKey: number[] = []
   for (const partition of allocation.partitionKey) {
@@ -479,7 +522,16 @@ function computePartitionKey(
       if (upperBound <= 0) throw new FlagConfigurationError('Total shards must be positive')
       const partitionValue = coerceToString(value)
       if (partitionValue === undefined) throw new InvalidContextError()
-      partitionKey.push(new MD5Sharder().getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound))
+      const salt = partition.kind.value.salt
+      const bucket = new MD5Sharder().getShard(`${partition.kind.value.salt}${partitionValue}`, upperBound)
+      traceEvaluation(diagnostics, 'bucket evaluated', () => ({
+        rawValue: value,
+        partitionValue,
+        salt,
+        totalShards: upperBound,
+        bucket,
+      }))
+      partitionKey.push(bucket)
     } else {
       throw new FlagConfigurationError('Unsupported partition key')
     }

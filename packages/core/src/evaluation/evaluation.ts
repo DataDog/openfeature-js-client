@@ -16,6 +16,7 @@ import {
 import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../configuration/generated/ufc_pb'
 import { type PreparedRulesResponse, prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
+import type { EvaluationDiagnostics } from './diagnostics'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import {
@@ -51,7 +52,8 @@ export function evaluate<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger = NOOP_LOGGER,
-  experimentationOptOutMode: ExperimentationOptOutOption = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   const selection = selectFlagsConfiguration(flagsConfiguration, context, experimentationOptOutMode)
   if (selection.kind === 'precomputed') {
@@ -62,7 +64,8 @@ export function evaluate<T extends FlagValueType>(
       defaultValue,
       context,
       experimentationOptOutMode,
-      logger
+      logger,
+      diagnostics
     )
   }
 
@@ -74,7 +77,8 @@ export function evaluate<T extends FlagValueType>(
       defaultValue,
       context,
       logger,
-      experimentationOptOutMode
+      experimentationOptOutMode,
+      diagnostics
     )
   }
 
@@ -174,7 +178,8 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
   defaultValue: FlagTypeToValue<T>,
   context: EvaluationContext,
   logger: Logger,
-  experimentationOptOutMode: ExperimentationOptOutOption = false
+  experimentationOptOutMode: ExperimentationOptOutOption = false,
+  diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
   return evaluateRulesBasedConfigurationWithTrace(
     config,
@@ -184,7 +189,7 @@ export function evaluateRulesBasedConfiguration<T extends FlagValueType>(
     context,
     logger,
     experimentationOptOutMode,
-    { collectDependencyEvaluations: false, collectDependencyExposures: false }
+    { collectDependencyEvaluations: false, collectDependencyExposures: false, diagnostics }
   ).details
 }
 
@@ -195,6 +200,7 @@ export type EvaluationTrace<T extends FlagValue = FlagValue> = {
 }
 
 export type EvaluationTraceOptions = {
+  diagnostics?: EvaluationDiagnostics
   collectDependencyEvaluations?: boolean
   collectDependencyExposures?: boolean
 }
@@ -242,7 +248,8 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
       excludeExperiments,
       observeFullEvaluationData,
       options.collectDependencyEvaluations !== false,
-      options.collectDependencyExposures !== false
+      options.collectDependencyExposures !== false,
+      options.diagnostics
     )
   } catch (error) {
     logger.error('Error evaluating flag', { error })
@@ -269,7 +276,8 @@ function evaluateRules<T extends FlagValueType>(
   excludeExperiments: ExperimentationOptOutPolicy,
   observeFullEvaluationData: boolean,
   collectDependencyEvaluations: boolean,
-  collectDependencyExposures: boolean
+  collectDependencyExposures: boolean,
+  diagnostics?: EvaluationDiagnostics
 ): EvaluationTrace<FlagTypeToValue<T>> {
   if (!config) {
     return {
@@ -295,7 +303,8 @@ function evaluateRules<T extends FlagValueType>(
       excludeExperiments,
       observeFullEvaluationData,
       collectDependencyExposures,
-      collectDependencyEvaluations
+      collectDependencyEvaluations,
+      diagnostics
     )
     let details: ResolutionDetails<FlagTypeToValue<T>>
     try {
@@ -308,7 +317,8 @@ function evaluateRules<T extends FlagValueType>(
         logger,
         evaluationTimestampMs,
         excludeExperiments,
-        dependencies.resolve
+        dependencies.resolve,
+        diagnostics
       )
     } catch (error) {
       if (error instanceof DependencyGraphError) {
@@ -369,7 +379,8 @@ function evaluateRules<T extends FlagValueType>(
             logger,
             evaluationTimestampMs,
             excludeExperiments,
-            asFlagEvaluationResolver(resolveFlagEvaluation)
+            asFlagEvaluationResolver(resolveFlagEvaluation),
+            diagnostics
           ) as ResolutionDetails<FlagValue>,
         logger,
         evaluationTimestampMs,
@@ -391,7 +402,8 @@ function evaluateRules<T extends FlagValueType>(
       logger,
       evaluationTimestampMs,
       excludeExperiments,
-      resolveDependency
+      resolveDependency,
+      diagnostics
     )
     details = {
       ...evaluated,
@@ -439,7 +451,8 @@ export function createProtobufDependencyResolver(
   excludeExperiments: ExperimentationOptOutPolicy,
   observeFullEvaluationData: boolean,
   collectDependencyExposures = false,
-  collectDependencyEvaluations = false
+  collectDependencyEvaluations = false,
+  diagnostics?: EvaluationDiagnostics
 ) {
   let dependencySession: DependencyEvaluationSession | undefined
   const createDependencySession = (maxDependencyDepth: number) =>
@@ -462,7 +475,8 @@ export function createProtobufDependencyResolver(
           logger,
           evaluationTimestampMs,
           excludeExperiments,
-          resolveFlagEvaluation
+          resolveFlagEvaluation,
+          diagnostics
         ),
       logger,
       evaluationTimestampMs,

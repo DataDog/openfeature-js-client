@@ -13,7 +13,15 @@ const {
 } = require('../report-node-entrypoint-bundle-sizes')
 
 const protobufModule = { name: './node_modules/@bufbuild/protobuf/dist/esm/from-binary.js' }
-const scenarioNames = ['provider', 'ssr', 'provider-with-ssr', 'precompute', 'provider-with-precompute']
+const scenarioNames = [
+  'provider',
+  'ssr',
+  'provider-with-ssr',
+  'precompute',
+  'provider-with-precompute',
+  'precomputed-fetch',
+  'precomputed-fetch-rules-based',
+]
 
 test('finds Protobuf runtime and schema modules, including concatenated modules and Windows paths', () => {
   assert.equal(hasProtobufModules([protobufModule]), true)
@@ -64,6 +72,8 @@ function writeBundles(t) {
     `provider + SSR helpers ${filler('c', 7)}`,
     `precompute ${filler('e', 2)}`,
     `provider + precompute ${filler('b', 5)}`,
+    `precomputed fetch ${filler('f', 3)}`,
+    `precomputed fetch rules-based ${filler('r', 3)}`,
   ]
   const builds = []
   for (const [index, name] of scenarioNames.entries()) {
@@ -87,7 +97,7 @@ test('reports actual raw/gzip sizes, same-build opt-in cost, and measurement lim
   }
   assert.deepEqual(
     measurements.map(({ hasProtobuf }) => hasProtobuf),
-    [false, true, true, false, false]
+    [false, true, true, false, false, false, false]
   )
   const report = renderMarkdown(measurements)
   assert.match(report, /Node provider only \| .* \| no \|/)
@@ -95,6 +105,8 @@ test('reports actual raw/gzip sizes, same-build opt-in cost, and measurement lim
   assert.match(report, /Node provider \+ SSR helpers \| .* \| yes \|/)
   assert.match(report, /Precompute only \(parsed rules\) \| .* \| no \|/)
   assert.match(report, /Node provider \+ precompute \| .* \| no \|/)
+  assert.match(report, /Precomputed fetch \+ serialize \(root\) \| .* \| no \|/)
+  assert.match(report, /Precomputed fetch \+ serialize \(\/rules-based\) \| .* \| no \|/)
   const provider = measurements.find(({ name }) => name === 'provider')
   for (const [name, label] of [
     ['provider-with-ssr', 'SSR helpers'],
@@ -118,7 +130,7 @@ test('reports actual raw/gzip sizes, same-build opt-in cost, and measurement lim
   assert.match(report, /do not fetch, parse, or serialize configuration/)
   assert.match(
     report,
-    /no Protobuf runtime or generated schema modules in the provider-only or either precompute bundle/
+    /no Protobuf runtime or generated schema modules in the provider-only, precompute, or precomputed-fetch bundles/
   )
 })
 

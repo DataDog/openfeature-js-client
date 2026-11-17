@@ -93,6 +93,63 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Local debug logging
+
+Set `debugMode: true` in the provider options to print feature-flag diagnostics to `console.log`. It defaults to
+`false` and does not require an OpenFeature logger or a global Datadog verbosity setting.
+
+```javascript
+const provider = new DatadogProvider({
+  clientToken: 'pub_...',
+  env: 'production',
+  applicationId: 'app-id',
+  debugMode: true,
+})
+```
+
+Filter the developer console for `[Datadog Feature Flags]`. Each record includes an event name, timestamp, SDK
+version, provider instance ID and sequence. Context changes have request/revision IDs; evaluations have evaluation
+IDs; uploads have batch IDs. The initial `debug.enabled` record confirms the option took effect before validation.
+
+Logs include **complete raw contexts, normalized targeting attributes, flag values, defaults, configuration responses,
+assignment metadata and event payloads**. Transport credential values and custom-header values are omitted from
+configuration diagnostics. Context attributes remain intact even if their names resemble credential fields.
+Full configurations are logged at fetch, installation and cache boundaries. Per-evaluation records reference their
+configuration ID/revision and retain raw context, defaults, results and the evaluated assignment without repeating
+unrelated flags. Values are snapshotted at logging time. Large records are emitted as `debug.chunk` records: group by
+`providerInstanceId` and `sequence`, order by `chunk`, concatenate `data`, then parse the resulting JSON.
+Accessors are marked without invoking them, and cycles/undefined/non-finite numbers/BigInts use explicit type markers.
+
+Useful events:
+
+| Event                                                             | What it explains                                                                       |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `init.*`, `tracking.configured`                                   | Validation, effective settings and enabled channels                                    |
+| `context.*`                                                       | Original context, RUM enrichment and attributes actually sent                          |
+| `fetch.*`                                                         | HTTP status/body, timeout, retry attempts, cancellation and unknown transport failures |
+| `configuration.*`, `cache.*`, `provider.*`                        | Decode/install versus rejection, memory/initial/IndexedDB fallback and state changes   |
+| `evaluation.completed`, `evaluation.trace`, `evaluation.returned` | Value/default origin, variant metadata, local-rule trace and OpenFeature hook result   |
+| `exposure.*`, `tracking.policy`, `rum.*`                          | Eligibility, duplicates, opt-outs and handoff to RUM                                   |
+| `evaluation.aggregated`, `batch.*`, `upload.*`                    | Aggregation, admission, flush, intake acceptance, retry and drop                       |
+| `shutdown.*`                                                      | Close/cancellation and retained state                                                  |
+
+`intake_accepted` means an HTTP success response; it does not prove downstream processing. `browser_queued` means
+`sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures
+can be indistinguishable and are reported as an unknown transport failure. Precomputed assignments expose the
+server's returned metadata, not a reconstructed server rule trace. The provider emits configuration/state events;
+it cannot observe whether React rendered or an Angular subscription updated the UI. Listener-failure diagnostics cover
+handlers registered on the provider emitter; OpenFeature client listeners use OpenFeature's own error logging.
+
+`DatadogCoreProvider` also accepts `{ debugMode: true }`. For application-managed tracking, pass `debugMode: true`
+to each `createDatadogExposureLoggingHook`, `createDatadogEvaluationLoggingHook`, or `createDatadogRumTrackingHook`
+controller whose output you want. Standalone `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` accept
+the same option. `DatadogDevtools` inherits a Datadog provider's setting, with an optional second options argument
+to override it. Core-only mode still leaves configuration fetching and tracking ownership with the application.
+
+Debug logging itself does not enqueue remote events or change retry/targeting policy. Application console
+interceptors can still observe console output. Pending requests and persistence operations may finish after close
+and log their completion; `shutdown.completed` does not claim a guaranteed network drain.
+
 ## Usage Examples
 
 ### Flag Evaluation

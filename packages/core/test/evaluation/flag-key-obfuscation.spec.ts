@@ -3,8 +3,10 @@ import type { FlagValueType } from '@openfeature/core'
 import {
   configurationFromString,
   configurationToString,
+  FLAG_KEY_SHA256_CAPABILITY,
   type FlagsConfiguration,
   parsePrecomputedConfigurationResponse,
+  SUPPORTED_FLAGS_CAPABILITIES,
 } from '../../src/configuration'
 import { encodePrecomputedFlagKey, type FlagKeyObfuscation } from '../../src/configuration/flag-key-obfuscation'
 import { evaluatePrecomputedConfiguration } from '../../src/evaluation/precomputed-evaluation'
@@ -57,6 +59,11 @@ function hash(key: string, publicSalt = salt): string {
 
 describe('precomputed flag-key obfuscation', () => {
   afterEach(() => jest.restoreAllMocks())
+
+  it('advertises the capability required for SHA-256 flag-key encoding', () => {
+    expect(FLAG_KEY_SHA256_CAPABILITY).toBe('assignment-encoding-flag-key-256-v1')
+    expect(SUPPORTED_FLAGS_CAPABILITIES).toContain(FLAG_KEY_SHA256_CAPABILITY)
+  })
 
   it('caches repeated lookups separately for concurrent configurations', () => {
     const configurations = [salt, 'f'.repeat(32)].map((publicSalt) =>

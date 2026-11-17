@@ -2,6 +2,11 @@
 import './configuration/protobuf-text-encoding'
 
 export {
+  DEPENDENCY_KEY_ENCRYPTION_SCHEME,
+  encodePrecomputedFlagKey,
+  type FlagKeyObfuscation,
+} from './configuration/flag-key-obfuscation'
+export {
   ConfigurationPrecomputeError,
   type ConfigurationPrecomputeErrorCode,
   type PrecomputeConfigurationOptions,

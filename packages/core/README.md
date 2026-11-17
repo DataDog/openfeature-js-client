@@ -32,7 +32,7 @@ not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
 ## Local Precomputation
 
-The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package re-exports the same implementation; see its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
+The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package wraps this helper and adds `clientFingerprint` support for encoding flag-map keys; the core helper continues to return plaintext assignments. See its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
 
 The helper follows the Rust assignment-only precomputation contract: complete successful assignments are included in `attributes.flags`, flag failures are included in the sibling `attributes.flagEvaluationErrors` map, and no application defaults are fabricated. Typed single-flag evaluation and precomputation share the protobuf assignment resolver. The JSON scalar/null cases in the helper's tests mirror `precomputed_object_variation_preserves_scalar_json_values` in the Rust evaluator's `rules_based/precomputed.rs` tests.
 

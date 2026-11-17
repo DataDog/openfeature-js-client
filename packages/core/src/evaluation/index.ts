@@ -1,3 +1,4 @@
+export type { EvaluationDiagnostics } from './diagnostics'
 export * from './errors'
 export * from './evaluateForSubject'
 export {

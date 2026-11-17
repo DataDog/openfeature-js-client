@@ -253,7 +253,7 @@ describe('fetchRulesConfiguration', () => {
       new Response(body, { headers: { 'Content-Type': 'Application/Protobuf; charset=binary' } })
     )
     const result = await fetchRulesConfiguration({ ...options, fetch: requestFetch })
-    expect(result.rules?.etag).toBeUndefined()
+    expect(result.rules).not.toHaveProperty('etag')
   })
 
   it.each([null, ''])('rejects an empty response (%j)', async (value) => {
