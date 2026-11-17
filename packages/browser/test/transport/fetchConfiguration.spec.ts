@@ -597,6 +597,32 @@ describe('createFlagsConfigurationFetcher', () => {
         ).toMatchObject({ 'dd-service': 'checkout' })
       })
 
+      it.each([
+        ['precomputed', 'DD-Service'],
+        ['precomputed', 'DD-SERVICE'],
+        ['rules', 'Dd-Service'],
+        ['rules', 'dd-Service'],
+      ] as const)('lets a custom %s header named %s replace service', (endpoint, name) => {
+        const headers = buildConfigurationHeaders(
+          { clientToken: 'test-token', service: 'automatic-service', customHeaders: { [name]: 'manual-service' } },
+          {},
+          endpoint
+        )
+
+        expect(new Headers(headers).get('dd-service')).toBe('manual-service')
+        expect(headers).toMatchObject({ [name]: 'manual-service' })
+      })
+
+      it('lets a custom header replace the provider service on precomputed requests', async () => {
+        await createFlagsConfigurationFetcher({
+          ...baseConfig,
+          service: 'automatic-service',
+          customHeaders: { 'DD-Service': 'manual-service' },
+        })(mockContext)
+
+        expect(new Headers(mockFetch.mock.calls[0][1].headers).get('dd-service')).toBe('manual-service')
+      })
+
       it('sends the provider service on precomputed requests', async () => {
         await createFlagsConfigurationFetcher({ ...baseConfig, service: 'checkout' })(mockContext)
 

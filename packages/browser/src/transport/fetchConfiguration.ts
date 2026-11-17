@@ -136,7 +136,9 @@ export function buildConfigurationHeaders(
           ...(options.applicationId &&
             !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
           // Customer proxies can opt in through customHeaders after allowing it in CORS.
-          ...(!options.flaggingProxy && isServiceHeaderValue(options.service) && { 'dd-service': options.service }),
+          ...(!options.flaggingProxy &&
+            !customHeaderNames.has('dd-service') &&
+            isServiceHeaderValue(options.service) && { 'dd-service': options.service }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,
