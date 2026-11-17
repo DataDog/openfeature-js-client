@@ -58,7 +58,11 @@ function hash(key: string, publicSalt = salt): string {
 }
 
 describe('precomputed flag-key obfuscation', () => {
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => jest.useFakeTimers({ now: 1790000000000 }))
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
 
   it('advertises the capability required for SHA-256 flag-key encoding', () => {
     expect(FLAG_KEY_SHA256_CAPABILITY).toBe('assignment-encoding-flag-key-256-v1')

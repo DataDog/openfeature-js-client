@@ -705,13 +705,14 @@ export class DatadogProvider extends DatadogProviderBase {
     // Prepare the exposure decision before the SDK freezes the metadata for
     // hooks: the one verdict shared by the Datadog path and the customer hook.
     stampExposureCacheVerdict({ ...boundResult, flagKey }, this.effectiveTrackingContext(), this.exposureCache)
-    // Bind the evaluated context (for example the RUM-enriched subject) to
-    // successful results so customer hooks read the same identity the exposure
-    // event reports. Error results without metadata keep their existing shape.
+    // Bind the effective context (for example the RUM-enriched subject) to
+    // metadata-bearing results so tracking keeps the requested identity before
+    // the first configuration is accepted and the accepted identity during refresh.
+    // Error results without metadata keep their existing shape.
     return bindEvaluationTelemetryResult(
       boundResult,
       this.telemetryPolicy,
-      optOutEnabled || boundResult.flagMetadata !== undefined ? context : undefined
+      optOutEnabled || boundResult.flagMetadata !== undefined ? this.effectiveTrackingContext() : undefined
     )
   }
 }
