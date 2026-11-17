@@ -325,6 +325,8 @@ describe('DatadogProvider', () => {
         flagMetadata: {
           __dd_allocation_key: 'allocation-123',
           __dd_do_log: true,
+          __dd_environment_id: '',
+          __dd_environment_name: 'prod',
           __dd_exposure_cache_hit: false,
           allocationKey: 'allocation-123',
           doLog: true,

@@ -168,6 +168,10 @@ describe('DatadogCoreProvider', () => {
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
       errorMessage: 'Precomputed flags configuration does not match the current context',
+      flagMetadata: {
+        __dd_environment_id: '',
+        __dd_environment_name: 'prod',
+      },
     })
   })
 

@@ -9,6 +9,10 @@ const configuration = configurationFromString(
   JSON.stringify(configurationWire)
 )
 const matchingContext = configuration.precomputed?.context ?? {}
+const legacyEnvironmentMetadata = {
+  __dd_environment_id: '',
+  __dd_environment_name: 'prod',
+}
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
 
@@ -95,6 +99,7 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 
@@ -103,6 +108,7 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 
@@ -135,9 +141,9 @@ describe('evaluate', () => {
       value: 'default',
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
     expect(result).not.toHaveProperty('variant')
-    expect(result).not.toHaveProperty('flagMetadata')
   })
 
   it('resolves boolean flag', () => {
@@ -147,6 +153,7 @@ describe('evaluate', () => {
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-124',
         __dd_do_log: true,
         allocationKey: 'allocation-124',
@@ -163,6 +170,7 @@ describe('evaluate', () => {
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-123',
         __dd_do_log: true,
         allocationKey: 'allocation-123',
@@ -179,6 +187,7 @@ describe('evaluate', () => {
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-127',
         __dd_do_log: true,
         allocationKey: 'allocation-127',
@@ -245,6 +254,7 @@ describe('evaluate', () => {
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       errorMessage: 'Precomputed flags configuration does not match the current context',
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 
