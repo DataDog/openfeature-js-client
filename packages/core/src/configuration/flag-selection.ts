@@ -27,10 +27,6 @@ export const MAX_FLAG_SELECTION_TAG_BYTES = 200
 /** @internal */
 export const MAX_FLAG_SELECTION_KEY_PATTERN_BYTES = 200
 
-// The Unicode White_Space property, which Compute trims with Rust's str::trim.
-// String.prototype.trim differs: it also trims U+FEFF and does not trim U+0085.
-const WHITE_SPACE = '[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]'
-const SURROUNDING_WHITE_SPACE = new RegExp(`^${WHITE_SPACE}+|${WHITE_SPACE}+$`, 'g')
 // Not String.prototype.isWellFormed (ES2024, outside the ES2018 target) or lookbehind (unsupported before Safari 16.4).
 const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
@@ -78,8 +74,36 @@ function isOptionalStringList(value: unknown): value is readonly string[] | unde
 function canonicalizeList(values: readonly string[]): string[] {
   const unique = new Set<string>()
   for (const value of values) {
-    const trimmed = value.replace(SURROUNDING_WHITE_SPACE, '')
+    const trimmed = trimWhiteSpace(value)
     if (trimmed) unique.add(trimmed)
   }
   return [...unique].sort((left, right) => compareBytes(encodeUtf8(left), encodeUtf8(right)))
+}
+
+// A trailing-anchored regular expression retries every interior white space run to its end, which is quadratic
+// in the run length. This scan is linear.
+function trimWhiteSpace(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && isWhiteSpace(value.charCodeAt(start))) start++
+  while (end > start && isWhiteSpace(value.charCodeAt(end - 1))) end--
+  return value.slice(start, end)
+}
+
+// The Unicode White_Space property, which Compute trims with Rust's str::trim. All 25 code points are in the BMP,
+// so each is one UTF-16 code unit. String.prototype.trim differs: it also trims U+FEFF and does not trim U+0085.
+function isWhiteSpace(code: number): boolean {
+  return (
+    (code >= 0x0009 && code <= 0x000d) ||
+    code === 0x0020 ||
+    code === 0x0085 ||
+    code === 0x00a0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000
+  )
 }

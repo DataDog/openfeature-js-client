@@ -1,5 +1,6 @@
 import { canonicalizeFlagSelection, type FlagSelection } from '../../src/configuration/flag-selection'
 
+// The 25 code points with the Unicode White_Space property.
 const UNICODE_WHITE_SPACE = [
   '\t',
   '\n',
@@ -8,16 +9,24 @@ const UNICODE_WHITE_SPACE = [
   '\r',
   ' ',
   '\u0085',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  ' ',
-  '　',
+  '\u00A0',
+  '\u1680',
+  '\u2000',
+  '\u2001',
+  '\u2002',
+  '\u2003',
+  '\u2004',
+  '\u2005',
+  '\u2006',
+  '\u2007',
+  '\u2008',
+  '\u2009',
+  '\u200A',
+  '\u2028',
+  '\u2029',
+  '\u202F',
+  '\u205F',
+  '\u3000',
 ]
 
 describe('canonicalizeFlagSelection', () => {
@@ -58,6 +67,62 @@ describe('canonicalizeFlagSelection', () => {
 
     it('keeps interior white space', () => {
       expect(canonicalizeFlagSelection({ tags: [' a b '] }).selection?.tags).toEqual(['a b'])
+    })
+
+    it('lists every Unicode White_Space code point', () => {
+      const whiteSpace = /^\p{White_Space}$/u
+      const codePoints: number[] = []
+      for (let code = 0; code <= 0x10ffff; code++) {
+        if (whiteSpace.test(String.fromCodePoint(code))) codePoints.push(code)
+      }
+      expect(codePoints).toEqual(UNICODE_WHITE_SPACE.map((char) => char.codePointAt(0)))
+    })
+
+    it('trims no other BMP code point', () => {
+      const whiteSpace = new Set(UNICODE_WHITE_SPACE)
+      const trimmed: string[] = []
+      for (let code = 0; code <= 0xffff; code++) {
+        const char = String.fromCharCode(code)
+        // Lone surrogates are malformed_selection.
+        if ((code >= 0xd800 && code <= 0xdfff) || whiteSpace.has(char)) continue
+        const value = `${char}x${char}`
+        if (canonicalizeFlagSelection({ tags: [value] }).selection?.tags[0] !== value) {
+          trimmed.push(code.toString(16))
+        }
+      }
+      expect(trimmed).toEqual([])
+    })
+
+    describe('long white space runs', () => {
+      // Every White_Space code point, repeated to the requested length.
+      const run = (length: number) =>
+        Array.from({ length }, (_, index) => UNICODE_WHITE_SPACE[index % UNICODE_WHITE_SPACE.length]).join('')
+      const RUN_LENGTH = 16_000
+
+      // A quadratic trim takes hundreds of milliseconds at this length; a linear one takes well under one.
+      // The best of three runs keeps a single garbage collection pause from failing the test.
+      const expectFast = (canonicalize: () => void) => {
+        let fastest = Number.POSITIVE_INFINITY
+        for (let attempt = 0; attempt < 3 && fastest >= 50; attempt++) {
+          const startedAt = performance.now()
+          canonicalize()
+          fastest = Math.min(fastest, performance.now() - startedAt)
+        }
+        expect(fastest).toBeLessThan(50)
+      }
+
+      it.each([
+        ['an interior run', `a${run(RUN_LENGTH)}b`, { error: 'invalid_tag' }],
+        ['a value that is only white space', run(RUN_LENGTH), {}],
+        [
+          'leading and trailing runs',
+          `${run(RUN_LENGTH)}a${run(RUN_LENGTH)}`,
+          { selection: { tags: ['a'], keyPatterns: [] } },
+        ],
+      ])('canonicalizes %s in linear time', (_, value, expected) => {
+        expect(canonicalizeFlagSelection({ tags: [value] })).toEqual(expected)
+        expectFast(() => canonicalizeFlagSelection({ tags: [value] }))
+      })
     })
 
     it.each([
