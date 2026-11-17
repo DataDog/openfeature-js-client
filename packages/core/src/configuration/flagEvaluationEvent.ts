@@ -4,6 +4,10 @@ import type { TimeStamp } from '../time'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 interface FlagEvaluationAggregationData {
+  environment?: {
+    id?: string
+    name: string
+  }
   flagKey: string
   variantKey?: string
   allocationKey?: string
@@ -31,6 +35,10 @@ export function createFlagEvaluationEvent(
     evaluation_count: data.count,
     runtime_default_used: data.runtimeDefaultUsed,
     timestamp,
+  }
+
+  if (data.environment) {
+    event.environment = data.environment
   }
 
   if (data.targetingKey != null) {

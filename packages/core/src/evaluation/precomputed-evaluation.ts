@@ -8,6 +8,7 @@ import {
 } from '../configuration'
 import { encodePrecomputedFlagKey, readFlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
+import { precomputedEnvironmentIdentity, withEnvironmentIdentity } from './environment-identity'
 import {
   acknowledgesExperimentationOptOut,
   type ExperimentationOptOutOption,
@@ -34,39 +35,44 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   logger: Logger = NOOP_LOGGER,
   diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const environmentIdentity = precomputedEnvironmentIdentity(flagsConfiguration?.precomputed?.response)
+  const withIdentity = (details: ResolutionDetails<FlagTypeToValue<T>>) =>
+    withEnvironmentIdentity(details, environmentIdentity)
   const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
-    return {
+    return withIdentity({
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
-    }
+    })
   }
   if (
     (optedOut && !flagsConfiguration?.precomputed?.context) ||
     !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut)
   ) {
-    return {
+    return withIdentity({
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       errorMessage:
         'Precomputed configuration must match the subject and acknowledge the requested experimentation opt-out policy',
-    }
+    })
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   if (selection.kind === 'precomputed') {
-    return evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, logger, diagnostics)
+    return withIdentity(
+      evaluatePrecomputedFlag(selection.configuration, type, flagKey, defaultValue, logger, diagnostics)
+    )
   }
 
   const { error } = selection
-  return {
+  return withIdentity({
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
-  }
+  })
 }
 
 type PrecomputedFlagsConfigurationError = {

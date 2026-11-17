@@ -124,6 +124,7 @@ function protobufVersion(value: string): number[] {
 }
 
 type RulesResponseOptions = {
+  environmentId?: string | null
   conditionKind?:
     2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25
   shardAttribute?: boolean
@@ -297,6 +298,9 @@ function rulesResponse(options: RulesResponseOptions = {}): string {
   const configuration = [
     ...protobufMessage(1, timestamp),
     ...protobufString(2, 'prod'),
+    ...(options.environmentId === null
+      ? []
+      : protobufString(12, options.environmentId ?? '11111111-1111-4111-8111-111111111111')),
     ...protobufMessage(3, flagEntry),
     ...(options.futureFlagFeatureLevel === undefined ? [] : protobufMessage(3, futureFlagEntry)),
     ...protobufMessage(4, attributePathReference),
@@ -376,6 +380,7 @@ describe('flags configuration protobuf decoder', () => {
     expect(configuration).toMatchObject({
       $typeName: 'datadog.ffe.flagging.ufc.v1.FlagsConfiguration',
       environmentName: 'prod',
+      environmentId: '11111111-1111-4111-8111-111111111111',
       attributes: [{ kind: { case: 'attributePath' } }, { kind: { case: 'targetingKey' } }],
       strings: ['on', 'off', 'US', 'country'],
       observeFullEvaluationData: false,
@@ -1296,6 +1301,20 @@ describe('flags configuration protobuf decoder', () => {
     expect(decodeRules({ observeFullEvaluationData: true }).observeFullEvaluationData).toBe(true)
   })
 
+  it('preserves available environment identity on current and legacy protobuf evaluations', () => {
+    const current = evaluateBoolean({}, { targetingKey: 'user', country: 'US' })
+    const legacy = evaluateBoolean({ environmentId: null }, { targetingKey: 'user', country: 'US' })
+
+    expect(current.flagMetadata).toMatchObject({
+      __dd_environment_id: '11111111-1111-4111-8111-111111111111',
+      __dd_environment_name: 'prod',
+    })
+    expect(legacy.flagMetadata).toMatchObject({
+      __dd_environment_id: '',
+      __dd_environment_name: 'prod',
+    })
+  })
+
   describe.each([true, false])('evaluation consent %p', (consent) => {
     it.each([
       ['success', {}, { targetingKey: 'user', country: 'US' }, undefined],
@@ -1375,6 +1394,8 @@ describe('split features', () => {
       '__dd_do_log',
       '__dd_split_serial_id',
       '__dd_observe_full_evaluation_data',
+      '__dd_environment_id',
+      '__dd_environment_name',
     ])
   })
 

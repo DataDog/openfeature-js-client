@@ -75,7 +75,10 @@ export function precomputeConfiguration(
 
   const now = timeStampNow()
   const observeFullEvaluationData = rules.observeFullEvaluationData === true
-  const environment = { name: rules.environmentName }
+  const environment = {
+    ...(rules.environmentId ? { id: rules.environmentId } : {}),
+    name: rules.environmentName,
+  }
   const flags: Array<[string, PrecomputedFlag]> = []
   const errors: PrecomputeEvaluationError[] = []
   for (const flagKey of Object.keys(rules.flags)) {

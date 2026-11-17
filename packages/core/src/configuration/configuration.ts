@@ -52,7 +52,7 @@ export type PrecomputedConfigurationResponse = {
       /** When configuration was generated. */
       createdAt: string
       format?: 'PRECOMPUTED'
-      environment?: { name: string }
+      environment?: { id?: string; name: string }
       observeFullEvaluationData?: boolean
       /** Effective server evaluation options, retained in portable and persisted configurations. */
       evaluation_options?: {
@@ -97,6 +97,8 @@ export type PrecomputedFlagMetadata = {
   __dd_split_serial_id?: number
   __dd_eval_timestamp_ms?: TimeStamp
   __dd_observe_full_evaluation_data?: boolean
+  __dd_environment_id?: string
+  __dd_environment_name?: string
   // Stamped by the provider after a successful evaluation of an allocation that
   // logs exposures: true when this subject's exposure was already recorded.
   __dd_exposure_cache_hit?: boolean

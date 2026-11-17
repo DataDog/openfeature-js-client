@@ -3,6 +3,10 @@ import type { FeatureValue } from '../evaluation/split-features'
 import type { TimeStamp } from '../time'
 
 export interface FlagEvaluationEvent {
+  environment?: {
+    id?: string
+    name: string
+  }
   flag: {
     key: string
   }

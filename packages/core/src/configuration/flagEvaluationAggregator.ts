@@ -17,8 +17,16 @@ import { createFlagEvaluationEvent } from './flagEvaluationEvent'
 import type { FlagEvaluationEvent } from './flagEvaluationEvent.types'
 
 const EVALUATION_TIMESTAMP_METADATA_KEY = '__dd_eval_timestamp_ms'
+const ENVIRONMENT_ID_METADATA_KEY = '__dd_environment_id'
+const ENVIRONMENT_NAME_METADATA_KEY = '__dd_environment_name'
+
+type EnvironmentIdentity = {
+  id?: string
+  name: string
+}
 
 interface FlagEvaluationAggregationData {
+  environment?: EnvironmentIdentity
   flagKey: string
   variantKey?: string
   allocationKey?: string
@@ -88,8 +96,10 @@ export class FlagEvaluationAggregator {
       const allocationKey = details.flagMetadata?.allocationKey as string
       const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
       const { targetingKey, ...targetingContext } = context
+      const environment = readEnvironmentIdentity(details.flagMetadata)
 
       this.aggregatedData.set(keyString, {
+        environment,
         flagKey: details.flagKey,
         variantKey: details.variant,
         allocationKey,
@@ -154,10 +164,12 @@ export class FlagEvaluationAggregator {
     const allocationKey = details.flagMetadata?.allocationKey as string
     const targetingRuleKey = details.flagMetadata?.targetingRuleKey as string
     const { targetingKey, ...targetingContext } = context
+    const environment = readEnvironmentIdentity(details.flagMetadata)
 
     // Hash the deterministic object representation
     return getMD5Hash(
       JSON.stringify({
+        environment,
         flagKey: details.flagKey,
         variant: details.variant || '',
         allocationKey: allocationKey || '',
@@ -171,6 +183,13 @@ export class FlagEvaluationAggregator {
       })
     )
   }
+}
+
+function readEnvironmentIdentity(metadata: FlagMetadata | undefined): EnvironmentIdentity | undefined {
+  const id = metadata?.[ENVIRONMENT_ID_METADATA_KEY]
+  const name = metadata?.[ENVIRONMENT_NAME_METADATA_KEY]
+  if (typeof id !== 'string' || typeof name !== 'string' || (!id && !name)) return undefined
+  return { ...(id ? { id } : {}), name }
 }
 
 function readEvaluationFeatures(metadata: FlagMetadata | undefined): Record<string, FeatureValue> | undefined {

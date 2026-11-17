@@ -234,6 +234,13 @@ type FlagsConfiguration = Message<"datadog.ffe.flagging.ufc.v1.FlagsConfiguratio
 	 * @generated from field: datadog.ffe.flagging.ufc.v1.EvaluatorParams evaluator_params = 11;
 	 */
 	evaluatorParams?: EvaluatorParams | undefined;
+	/**
+	 * Stable environment UUID, unchanged when the environment is renamed.
+	 * Empty in configurations produced before identity was included.
+	 *
+	 * @generated from field: string environment_id = 12;
+	 */
+	environmentId: string;
 };
 type EvaluatorParams = Message<"datadog.ffe.flagging.ufc.v1.EvaluatorParams"> & {
 	/**
@@ -1007,6 +1014,7 @@ type PrecomputedConfigurationResponse = {
 			createdAt: string;
 			format?: "PRECOMPUTED";
 			environment?: {
+				id?: string;
 				name: string;
 			};
 			observeFullEvaluationData?: boolean;

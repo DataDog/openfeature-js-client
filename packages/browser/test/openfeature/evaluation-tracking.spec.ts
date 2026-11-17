@@ -17,6 +17,7 @@ import rulesWire from '../data/rules-v1-wire.json'
 
 const domain = 'evaluation-tracking'
 const options = { clientToken: 'tracking-token', env: 'test', flagEvaluationTrackingInterval: 1000 }
+const environment = { id: '11111111-1111-4111-8111-111111111111', name: 'prod' }
 
 describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (kind) => {
   const flagKey = kind === 'core' ? 'test-flag' : 'boolean-flag'
@@ -24,6 +25,7 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
   const rumEvaluation = jest.fn()
   let client: ReturnType<typeof OpenFeature.getClient>
   let tracking: DatadogTrackingHooks | undefined
+  let coreProvider: DatadogCoreProvider | undefined
   let originalFetch: typeof globalThis.fetch
   let fetchMock: jest.Mock
 
@@ -42,9 +44,11 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     }
 
     if (kind === 'core') {
-      const provider = new DatadogCoreProvider()
-      provider.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
-      await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'core-user', country: 'US' })
+      coreProvider = new DatadogCoreProvider()
+      const configuration = configurationFromString(JSON.stringify(rulesWire))
+      configuration.rules!.response.environmentId = environment.id
+      coreProvider.setConfiguration(configuration)
+      await OpenFeature.setProviderAndWait(domain, coreProvider, { targetingKey: 'core-user', country: 'US' })
       tracking = composeDatadogTrackingHooks(
         createDatadogExposureLoggingHook(options),
         createDatadogEvaluationLoggingHook(options),
@@ -55,7 +59,16 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     } else {
       const provider = new DatadogProvider({
         ...options,
-        flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+        flagConfigurationFetch: jest.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            ...precomputedResponse,
+            data: {
+              ...precomputedResponse.data,
+              attributes: { ...precomputedResponse.data.attributes, environment },
+            },
+          }),
+        }),
       })
       await OpenFeature.setProviderAndWait(domain, provider, { country: 'US' })
     }
@@ -86,6 +99,7 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     expect(events[0]).toMatchObject({
       flag: { key: flagKey },
       variant: { key: variant },
+      environment,
       evaluation_count: 2,
       runtime_default_used: false,
       ...expectedContext(),
@@ -126,6 +140,7 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
         evaluation_count: 2,
         runtime_default_used: true,
         error: { message: errorCode },
+        ...(errorCode === 'GENERAL' ? {} : { environment }),
         ...expectedContext(),
       })
       expect(events[0].variant).toBeUndefined()
@@ -158,6 +173,30 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     )
     expect(evaluationEvents()).toHaveLength(2)
   })
+
+  if (kind === 'core') {
+    it('does not relabel buffered evaluations after a configuration switch', () => {
+      client.getBooleanValue(flagKey, false)
+
+      const replacement = configurationFromString(JSON.stringify(rulesWire))
+      replacement.rules!.response.environmentId = '22222222-2222-4222-8222-222222222222'
+      replacement.rules!.response.environmentName = 'prod'
+      coreProvider!.setConfiguration(replacement)
+      client.getBooleanValue(flagKey, false)
+      jest.advanceTimersByTime(31_000)
+
+      expect(evaluationEvents()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ environment, evaluation_count: 1 }),
+          expect.objectContaining({
+            environment: { id: '22222222-2222-4222-8222-222222222222', name: 'prod' },
+            evaluation_count: 1,
+          }),
+        ])
+      )
+      expect(evaluationEvents()).toHaveLength(2)
+    })
+  }
 
   it('keeps different failures of the same flag and context separate', () => {
     client.getStringDetails(flagKey, 'fallback')

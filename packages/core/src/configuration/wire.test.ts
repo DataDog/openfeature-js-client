@@ -10,6 +10,7 @@ const configuration: FlagsConfiguration = {
       data: {
         attributes: {
           createdAt: '2026-07-06T23:01:56.822Z',
+          environment: { id: '11111111-1111-4111-8111-111111111111', name: 'production' },
           flags: {
             'my-flag': {
               allocationKey: 'alloc-1',
