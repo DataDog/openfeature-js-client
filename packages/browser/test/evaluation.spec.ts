@@ -10,6 +10,8 @@ const configuration = configurationFromString(
 )
 const matchingContext = configuration.precomputed?.context ?? {}
 const legacyEnvironmentMetadata = {
+  __dd_eval_timestamp_ms: expect.any(Number),
+  __dd_observe_full_evaluation_data: false,
   __dd_environment_id: '',
   __dd_environment_name: 'prod',
 }
@@ -86,6 +88,7 @@ describe('evaluate', () => {
   it('returns default for missing configuration', () => {
     const result = evaluate(undefined, 'boolean', 'boolean-flag', true, {})
     expect(result).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: true,
       reason: 'ERROR',
       errorCode: 'PROVIDER_NOT_READY' as ErrorCode,
@@ -119,6 +122,7 @@ describe('evaluate', () => {
       reason: 'STATIC',
     })
     expect(evaluate(configurationWithMalformedFlag, 'boolean', 'malformed', false, {})).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
@@ -128,6 +132,7 @@ describe('evaluate', () => {
 
   it('returns a parse error for a malformed precomputed response', () => {
     expect(evaluate(configurationWithMalformedResponse, 'boolean', 'flag', false, {})).toEqual({
+      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: false,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
@@ -144,6 +149,7 @@ describe('evaluate', () => {
       flagMetadata: legacyEnvironmentMetadata,
     })
     expect(result).not.toHaveProperty('variant')
+    expect(result.flagMetadata).not.toHaveProperty('allocationKey')
   })
 
   it('resolves boolean flag', () => {
@@ -224,6 +230,8 @@ describe('evaluate', () => {
     it('carries the serial id from the precomputed flag onto the evaluation metadata', () => {
       const result = evaluate(configurationWithSerialId(340132), 'string', 'string-flag', 'default', {})
       expect(result.flagMetadata).toEqual({
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
         __dd_allocation_key: 'allocation-123',
         __dd_do_log: true,
         allocationKey: 'allocation-123',
@@ -364,6 +372,7 @@ describe('evaluate', () => {
       expect(
         evaluate({ precomputedError: 'Malformed precomputed data' }, 'boolean', 'test-flag', false, matrixContext)
       ).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -373,6 +382,7 @@ describe('evaluate', () => {
 
     it('returns provider not ready when both capabilities are absent', () => {
       expect(evaluate(undefined, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PROVIDER_NOT_READY',
@@ -386,6 +396,7 @@ describe('evaluate', () => {
       [{}, 'Flags configuration contains no usable capability'],
     ] as const)('returns a parse error for unusable configured data', (configured, errorMessage) => {
       expect(evaluate(configured, 'boolean', 'test-flag', false, matrixContext)).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -403,6 +414,7 @@ describe('evaluate', () => {
           { targetingKey: 'other-user' }
         )
       ).toEqual({
+        flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
         value: false,
         reason: 'ERROR',
         errorCode: 'PARSE_ERROR',
@@ -486,10 +498,16 @@ describe('precomputed split features', () => {
     expect(keys).not.toContain('__dd_feature.a')
   })
 
-  it('adds no metadata entries when the flag has no features', () => {
+  it('adds no feature metadata entries when the flag has no features', () => {
     const result = evaluateFeatures(undefined)
 
     const keys = Object.keys(result.flagMetadata ?? {}).filter((key) => key.startsWith('__dd_'))
-    expect(keys).toEqual(['__dd_allocation_key', '__dd_do_log', '__dd_split_serial_id'])
+    expect(keys).toEqual([
+      '__dd_allocation_key',
+      '__dd_do_log',
+      '__dd_split_serial_id',
+      '__dd_eval_timestamp_ms',
+      '__dd_observe_full_evaluation_data',
+    ])
   })
 })
