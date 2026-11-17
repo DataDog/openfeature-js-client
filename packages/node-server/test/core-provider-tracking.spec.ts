@@ -1,6 +1,11 @@
 import type { Channel } from 'node:diagnostics_channel'
-import { type ExposureEvent, type FlagsConfiguration, LRUInMemoryAssignmentCache } from '@datadog/flagging-core'
-import { type EvaluationDetails, type FlagValue, OpenFeature } from '@openfeature/server-sdk'
+import {
+  type AssignmentCache,
+  type ExposureEvent,
+  type FlagsConfiguration,
+  LRUInMemoryAssignmentCache,
+} from '@datadog/flagging-core'
+import { type EvaluationDetails, type FlagValue, OpenFeature, ProviderEvents } from '@openfeature/server-sdk'
 import rulesWire from '../../browser/test/data/rules-v1-wire.json'
 import { createExposureTracking } from '../src/exposure-tracking'
 import { DependencyTelemetrySidecar } from '../src/provider'
@@ -229,6 +234,34 @@ describe('DatadogCoreProvider optional tracking', () => {
     await client.getBooleanValue('test-flag', false, context)
     expect(sink.publish).toHaveBeenCalledTimes(2)
   })
+
+  it.each(['throw', 'reject'])(
+    'replaces configuration and notifies when a supplied cache reset fails: %s',
+    async (failure) => {
+      const resetError = new Error('cache reset failed')
+      const clear = jest.fn(() => {
+        if (failure === 'throw') throw resetError
+        return Promise.reject(resetError)
+      })
+      const cache: AssignmentCache = { init: async () => {}, set: jest.fn(), has: () => false, clear }
+      const provider = new DatadogCoreProvider(rules(), { exposureCache: cache })
+      const client = clientFor(provider)
+      const changed = jest.fn()
+      provider.events.addHandler(ProviderEvents.ConfigurationChanged, changed)
+      const next = rules()
+      next.rules!.response.createdAt!.seconds += BigInt(1)
+      next.rules!.response.flags['test-flag'].variations[0].value = { case: 'booleanValue', value: false }
+
+      expect(() => provider.setConfiguration(next)).not.toThrow()
+      expect(clear).toHaveBeenCalledTimes(1)
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(provider.getConfiguration().rules!.response.createdAt).toEqual(next.rules!.response.createdAt)
+      await expect(client.getBooleanValue('test-flag', true, context)).resolves.toBe(false)
+      // Allow an unhandled rejection from the reset to surface before the test completes.
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(changed).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it('clears a provider-owned cache on close', async () => {
     const clear = jest.spyOn(LRUInMemoryAssignmentCache.prototype, 'clear')
