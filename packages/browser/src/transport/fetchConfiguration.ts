@@ -77,7 +77,7 @@ interface ConfigurationRequestOptions {
 interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
-  /** The service name. It is sent as `dd-service` when it is printable ASCII, so usage can be split by service. */
+  /** The service name. It is sent as `dd-service` when fetch can send it, so usage can be split by service. */
   service?: string | null
   site?: string
   fetch?: typeof globalThis.fetch
@@ -127,6 +127,9 @@ export function buildConfigurationHeaders(
 ): Record<string, string> {
   // Fetch joins case-distinct keys into one value, so a custom header replaces the SDK header in any letter case.
   const customHeaderNames = new Set(Object.keys(options.customHeaders ?? {}).map((name) => name.toLowerCase()))
+  // Customer proxies can opt in through customHeaders after allowing it in CORS.
+  const service =
+    options.flaggingProxy || customHeaderNames.has('dd-service') ? undefined : serviceHeaderValue(options.service)
   return {
     ...contentHeaders,
     ...(options.overwriteRequestHeaders
@@ -135,10 +138,7 @@ export function buildConfigurationHeaders(
           'dd-client-token': options.clientToken,
           ...(options.applicationId &&
             !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
-          // Customer proxies can opt in through customHeaders after allowing it in CORS.
-          ...(!options.flaggingProxy &&
-            !customHeaderNames.has('dd-service') &&
-            isServiceHeaderValue(options.service) && { 'dd-service': options.service }),
+          ...(service && { 'dd-service': service }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,
@@ -149,12 +149,17 @@ export function buildConfigurationHeaders(
 }
 
 /**
- * Fetch rejects a header value with characters above U+00FF or with control characters, and then no flags load.
- * The Datadog edges keep only printable ASCII. So a service outside that range sends no header; the request still
- * goes out. The edges check the rest of their rule, for example the length.
+ * The service as fetch sends it, or undefined when it is empty. Fetch's own Headers check decides: it trims the
+ * value, and a value it rejects would fail the request so that no flags load. Such a service sends no header, and
+ * the request still goes out. The edges check the rest, and Datadog normalizes the tag.
  */
-function isServiceHeaderValue(service: string | null | undefined): service is string {
-  return typeof service === 'string' && /^[!-~]+$/.test(service)
+function serviceHeaderValue(service: string | null | undefined): string | undefined {
+  if (typeof service !== 'string') return undefined
+  try {
+    return new Headers({ 'dd-service': service }).get('dd-service') || undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function fetchPrecomputedConfiguration(

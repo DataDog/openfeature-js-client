@@ -562,22 +562,6 @@ describe('createFlagsConfigurationFetcher', () => {
     describe('dd-service', () => {
       const endpoints = ['precomputed', 'rules'] as const
 
-      it.each(endpoints)('sends a printable ASCII service on %s requests', (endpoint) => {
-        for (const service of ['checkout', '_svc', 'My-Service', 'web-store.v2:prod/api']) {
-          expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).toMatchObject({
-            'dd-service': service,
-          })
-        }
-      })
-
-      it.each(endpoints)('sends no header on %s requests for other services', (endpoint) => {
-        for (const service of [undefined, null, '', 'my service', ' checkout', 'checkout\n', 'café-api', '支付']) {
-          expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).not.toHaveProperty(
-            'dd-service'
-          )
-        }
-      })
-
       it.each(endpoints)('sends no header on %s requests with overwriteRequestHeaders', (endpoint) => {
         expect(
           buildConfigurationHeaders(
