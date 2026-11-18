@@ -17,6 +17,7 @@ import { nextWrite } from '../cache/indexeddb-test-helpers'
 import rulesWire from '../data/rules-v1-wire.json'
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
+if (rulesConfiguration.rules) rulesConfiguration.rules.response.observeFullEvaluationData = true
 const DOMAIN = 'datadog-core-tracking'
 
 const precomputedConfiguration: FlagsConfiguration = {
@@ -25,6 +26,7 @@ const precomputedConfiguration: FlagsConfiguration = {
     response: {
       data: {
         attributes: {
+          observeFullEvaluationData: true,
           createdAt: '2026-07-06T23:01:56.822Z',
           flags: {
             'static-flag': {
