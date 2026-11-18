@@ -241,6 +241,29 @@ Disabled mode ignores the attribute.
 Evaluation telemetry remains independent.
 Immediate withdrawal can change an enrolled subject's experience; account for this in experiment analysis.
 
+## Diagnostic observations for integrations
+
+Pass `onDiagnostic` in the `DatadogNodeServerProvider` options to receive initialization outcomes and
+configuration-fetch errors. Initialization timing starts when `initialize()` is called.
+The provider measures initialization duration and configuration arrival. It reports `ready`, `failed`, or
+`incomplete` when closed while waiting for configuration. The callback can return a promise; delivery is never
+awaited. Synchronous errors and rejected callback promises do not affect provider behavior.
+Without a callback, diagnostic measurement is disabled.
+
+An integration that polls for configuration calls `reportConfigurationFetchStart()` once before each sequential
+poll and `reportConfigurationFetchResult(success)` after the poll completes, including its retries. Do not report
+cancellation as a failed fetch. Configuration-fetch errors are reported only after initialization finishes.
+Startup fetch failures are covered by the initialization observation. Each later outage is reported once, with at
+most one error report per minute per provider. If a new outage starts during the cooldown, a later failed poll
+reports it after the cooldown ends. A successful fetch allows the next outage to be reported.
+
+The callback receives an `SDKDiagnostic` observation with a timestamp, event type, and initialization or error
+fields. The integration supplies SDK, service, and environment identity and handles buffering and delivery.
+The provider does not send network requests for diagnostics. Call `onClose()` and await its result before closing
+the delivery mechanism so an initialization result already in progress can be reported.
+
+After `onClose()`, the provider reports no further diagnostics, even if it is initialized again.
+
 ## End-user license agreement
 
 https://www.datadoghq.com/legal/eula

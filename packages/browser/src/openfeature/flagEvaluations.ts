@@ -79,12 +79,10 @@ export function createFlagEvalEVPHook(
 
   aggregator.start()
 
-  const pageExitSubscription = (
-    sharedTransport
-      ? flagEvaluationBatch.flushController.preparePageExitFlushObservable
-      : transport.pageMayExitObservable
-  ).subscribe(() => {
-    aggregator.stop('page_exit')
+  // Drain aggregation before the transport uploads its page-exit batch.
+  // A hidden tab or canceled navigation may return, so keep the periodic timer active.
+  const pageExitSubscription = flagEvaluationBatch.flushController.preparePageExitFlushObservable.subscribe(() => {
+    aggregator.flush('page_exit')
   })
 
   return withEvaluationTelemetryPolicy(
