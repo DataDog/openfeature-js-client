@@ -62,8 +62,8 @@ describe('chain fixture table (test-CA-issued credentials)', () => {
     ['rotated-lower-intermediate', ['A'], true, undefined],
     ['other-product', ['A'], false, 'invalid-certificate'],
     ['missing-upper-intermediate', ['A'], false, 'invalid-certificate'],
-    ['single-int-ffe', ['A'], true, undefined],
-    ['v1-codesigning', ['A'], false, 'invalid-certificate'],
+    ['one-intermediate', ['A'], true, undefined],
+    ['codesigning-leaf', ['A'], false, 'invalid-certificate'],
     ['unrelated-root', ['A', 'B'], false, 'invalid-certificate'],
   ]
   test.each(table)('%s with pinned roots %j: accept=%s', async (name, roots, accept, reason) => {
@@ -153,7 +153,7 @@ describe('wire format and transcript', () => {
   })
   test('a response with only the removed signing-intermediate header is rejected', async () => {
     const request = signingRequest()
-    const credential = loadCredential('single-int-ffe')
+    const credential = loadCredential('one-intermediate')
     const response = signedResponse(request, credential)
     response.headers.delete('x-datadog-feature-flags-signing-chain')
     response.headers.set('x-datadog-feature-flags-signing-intermediate', credential.intermediatesBase64[0])
@@ -396,7 +396,7 @@ test('hashes exactly the supplied view, including a Buffer subclass', async () =
 
 test('the independent transcript helper is self-consistent with the response helper', () => {
   const request = signingRequest()
-  const credential = loadCredential('single-int-ffe')
+  const credential = loadCredential('one-intermediate')
   const response = signedResponse(request, credential)
   const again = expectedTranscript(
     request,
@@ -449,7 +449,7 @@ describe('shared v1 fixtures', () => {
   test('the pinned manifest is unchanged and lists every suite', () => {
     // Byte changes to the shared fixtures require a deliberate pin update and review.
     expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
-      '37e73d02c82491b743f7e2a933ca3e9427fab6d3c8fd9e4ee4fe907216503fb4'
+      'cd97bbe1893671c57cf02d23ba06cf5c71e8961c3afc069aadb9ad4a18e17fde'
     )
     expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })

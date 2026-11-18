@@ -17,8 +17,8 @@ export const CREDENTIAL_NAMES = [
   'rotated-lower-intermediate',
   'other-product',
   'missing-upper-intermediate',
-  'single-int-ffe',
-  'v1-codesigning',
+  'one-intermediate',
+  'codesigning-leaf',
   'unrelated-root',
 ] as const
 export type CredentialName = (typeof CREDENTIAL_NAMES)[number]
