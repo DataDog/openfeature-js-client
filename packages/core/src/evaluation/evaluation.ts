@@ -87,6 +87,7 @@ export function evaluate<T extends FlagValueType>(
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
+    flagMetadata: createEvaluationMetadata(timeStampNow(), false),
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
   }
 }
@@ -541,7 +542,9 @@ class DependencyEvaluationSession {
   private readonly active: Set<string>
   private readonly frames: DependencyEvaluationFrame[] = []
   private readonly evaluations: DependencyEvaluation[] = []
+  private readonly evaluationKeys = new Set<string>()
   private readonly exposures: DependencyExposureCandidate[] | undefined
+  private readonly exposureKeys: Set<string> | undefined
 
   constructor(
     rootFlagKey: string,
@@ -556,6 +559,7 @@ class DependencyEvaluationSession {
   ) {
     this.active = new Set([rootFlagKey])
     this.exposures = collectDependencyExposures ? [] : undefined
+    this.exposureKeys = collectDependencyExposures ? new Set() : undefined
   }
 
   complete<T extends FlagValue>(commitExposures: boolean, details: ResolutionDetails<T>): EvaluationTrace<T> {
@@ -584,10 +588,10 @@ class DependencyEvaluationSession {
     const resolved = isDependencyExposureCheckpoint(checkpoint)
       ? checkpoint
       : { exposureCount: 0, frameExposureCount: undefined }
-    this.exposures.splice(resolved.exposureCount)
+    truncateDependencyExposureTrace(this.exposures, this.exposureKeys!, resolved.exposureCount)
     const frame = this.frames[this.frames.length - 1]
     if (frame?.exposureTrace !== undefined && resolved.frameExposureCount !== undefined) {
-      frame.exposureTrace.splice(resolved.frameExposureCount)
+      truncateDependencyExposureTrace(frame.exposureTrace, frame.exposureKeys!, resolved.frameExposureCount)
     }
   }
 
@@ -616,7 +620,7 @@ class DependencyEvaluationSession {
     this.active.add(flagKey)
     const frame: DependencyEvaluationFrame = {
       maxReachedDepth: depth,
-      ...(this.exposures === undefined ? {} : { exposureTrace: [] }),
+      ...(this.exposures === undefined ? {} : { exposureTrace: [], exposureKeys: new Set<string>() }),
     }
     this.frames.push(frame)
     try {
@@ -642,13 +646,13 @@ class DependencyEvaluationSession {
           'prerequisite flag evaluation returned no variant'
         )
       }
-      const exposureTrace =
-        frame.exposureTrace === undefined
-          ? undefined
-          : appendDependencyExposureUnique(frame.exposureTrace, {
-              flagKey,
-              details: withoutValue(result),
-            })
+      if (frame.exposureTrace !== undefined) {
+        appendDependencyExposureUnique(frame.exposureTrace, frame.exposureKeys!, {
+          flagKey,
+          details: withoutValue(result),
+        })
+      }
+      const exposureTrace = frame.exposureTrace
       const memoizedResult: MemoizedDependency = {
         details: result,
         descendantDepth: frame.maxReachedDepth - depth,
@@ -731,29 +735,30 @@ class DependencyEvaluationSession {
     if (this.exposures === undefined) {
       return
     }
-    appendDependencyExposureTrace(this.exposures, trace)
+    appendDependencyExposureTrace(this.exposures, this.exposureKeys!, trace)
     const frame = this.frames[this.frames.length - 1]
     if (frame?.exposureTrace !== undefined) {
-      appendDependencyExposureTrace(frame.exposureTrace, trace)
+      appendDependencyExposureTrace(frame.exposureTrace, frame.exposureKeys!, trace)
     }
   }
 
   private recordEvaluation(evaluation: DependencyEvaluation): void {
-    if (!this.collectDependencyEvaluations || this.evaluations.some(({ flagKey }) => flagKey === evaluation.flagKey)) {
+    if (!this.collectDependencyEvaluations || this.evaluationKeys.has(evaluation.flagKey)) {
       return
     }
-    try {
-      const details: DependencyEvaluation['details'] = {
-        ...evaluation.details,
-        ...(evaluation.details.value === undefined ? {} : { value: cloneFlagValue(evaluation.details.value) }),
-        ...(evaluation.details.flagMetadata === undefined
-          ? {}
-          : { flagMetadata: { ...evaluation.details.flagMetadata } }),
-      }
-      this.evaluations.push({ flagKey: evaluation.flagKey, details })
-    } catch {
-      // A value that cannot be detached is omitted without affecting evaluation semantics.
+    const { value, flagMetadata, ...evaluationDetails } = evaluation.details
+    const details: DependencyEvaluation['details'] = {
+      ...evaluationDetails,
+      ...(flagMetadata === undefined ? {} : { flagMetadata: { ...flagMetadata } }),
     }
+    try {
+      if (value !== undefined) details.value = cloneFlagValue(value)
+    } catch {
+      // Retain status and key when a value cannot be detached. Consumers use
+      // this record to reconcile prerequisite failures after evaluation.
+    }
+    this.evaluations.push({ flagKey: evaluation.flagKey, details })
+    this.evaluationKeys.add(evaluation.flagKey)
   }
 
   private recordMissingFlagEvaluation(flagKey: string): void {
@@ -804,6 +809,7 @@ type MemoizedDependency = {
 type DependencyEvaluationFrame = {
   maxReachedDepth: number
   exposureTrace?: DependencyExposureCandidate[]
+  exposureKeys?: Set<string>
 }
 
 type DependencyExposureCheckpoint = {
@@ -836,10 +842,13 @@ function isDependencyExposureCheckpoint(value: unknown): value is DependencyExpo
 }
 
 function appendDependencyExposureUnique(
-  target: readonly DependencyExposureCandidate[],
+  target: DependencyExposureCandidate[],
+  keys: Set<string>,
   candidate: DependencyExposureCandidate
-): DependencyExposureCandidate[] {
-  return target.some(({ flagKey }) => flagKey === candidate.flagKey) ? [...target] : [...target, candidate]
+): void {
+  if (keys.has(candidate.flagKey)) return
+  target.push(candidate)
+  keys.add(candidate.flagKey)
 }
 
 function withoutValue(details: ResolutionDetails<FlagValue>): Omit<ResolutionDetails<FlagValue>, 'value'> {
@@ -849,12 +858,21 @@ function withoutValue(details: ResolutionDetails<FlagValue>): Omit<ResolutionDet
 
 function appendDependencyExposureTrace(
   target: DependencyExposureCandidate[],
+  keys: Set<string>,
   trace: readonly DependencyExposureCandidate[]
 ): void {
   for (const candidate of trace) {
-    if (!target.some(({ flagKey }) => flagKey === candidate.flagKey)) {
-      target.push(candidate)
-    }
+    appendDependencyExposureUnique(target, keys, candidate)
+  }
+}
+
+function truncateDependencyExposureTrace(
+  target: DependencyExposureCandidate[],
+  keys: Set<string>,
+  length: number
+): void {
+  for (const candidate of target.splice(length)) {
+    keys.delete(candidate.flagKey)
   }
 }
 

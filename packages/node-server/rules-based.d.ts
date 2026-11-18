@@ -425,9 +425,13 @@ type TimeStamp = number & {
 	t: "Epoch time";
 };
 declare const SCHEME = "flag-key-sha256-v1";
+declare const DEPENDENCY_KEY_ENCRYPTION_SCHEME = "dependency-key-hkdf-sha256-aes-256-gcm-v1";
 type FlagKeyObfuscation = {
 	scheme: typeof SCHEME;
 	salt: string;
+	dependencyKeyEncryption?: {
+		scheme: typeof DEPENDENCY_KEY_ENCRYPTION_SCHEME;
+	};
 };
 declare enum WireType {
 	/**
@@ -1336,6 +1340,7 @@ type PrecomputedConfigurationResponse = {
 			environment?: {
 				name: string;
 			};
+			/** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
 			observeFullEvaluationData?: boolean;
 			/** Effective server evaluation options, retained in portable and persisted configurations. */
 			evaluation_options?: {
@@ -1347,7 +1352,10 @@ type PrecomputedConfigurationResponse = {
 			obfuscated?: boolean;
 			/** Required when obfuscated is true; retained with the map in caches. */
 			obfuscation?: FlagKeyObfuscation;
+			/** Complete successful assignments only. */
 			flags: Record<string, PrecomputedFlag>;
+			/** Terminal per-flag evaluation failures for dependent-flags-capable clients. */
+			flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>;
 		};
 	};
 };
@@ -1359,8 +1367,26 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
 	/** Split features of the selected assignment; parsed leniently at evaluation time. */
 	features?: unknown;
+};
+type PrecomputedErrorFlag = {
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
+};
+type PrecomputedDependencyEvaluation = {
+	flagKey: string;
+	/** Whether this dependency belongs to the root flag's selected assignment path. */
+	isPresentInAssignment: boolean;
+} | {
+	flagKey: string;
+	/** Root-relative prerequisite failure; error entries never belong to an assignment. */
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
 };
 interface ExposureEvent {
 	allocation: {
@@ -1418,19 +1444,23 @@ export type PrecomputeEvaluationError = {
 };
 type PrecomputeConfigurationOptions = {
 	/**
-	 * Include only assignments whose whole key matches any pattern; only `*` is special.
+	 * Select initial root flags whose whole key matches any pattern; only `*` is special.
 	 * Tags are unsupported: any defined tags value, including [] or null, throws invalid_options.
 	 * Malformed or over-limit selections also throw invalid_options. With tags absent, omitted selections or no
 	 * nonempty keyPatterns include all assignments; a null selection is treated as absent at runtime.
-	 * Dependencies can use any flag in the source rules.
+	 * Precomputation also includes transitive configured prerequisite assignments needed by selected roots,
+	 * even when their keys do not match.
 	 */
 	flagSelection?: Pick<FlagSelection, "keyPatterns"> & {
 		tags?: never;
 	};
 	/** Defaults to disabled. The receiving provider must use the same effective opt-out policy. */
 	experimentationOptOutMode?: ExperimentationOptOutModeValue;
+	/** Encode top-level keys and encrypt root-relative prerequisite keys using this descriptor. */
+	obfuscation?: FlagKeyObfuscation;
 	/**
-	 * Called for each omitted evaluation error, after all flags have been evaluated.
+	 * Called for each evaluation error in the selected-root and prerequisite closure, after all flags have been evaluated.
+	 * Failed dependency graph roots are retained in the wire; ordinary failures are callback-only.
 	 * Contains no context, values, or raw error messages. Exceptions from this callback propagate.
 	 */
 	onEvaluationError?: (error: PrecomputeEvaluationError) => void;
@@ -1520,7 +1550,7 @@ export type RulesConfigurationFetchOptions = ConfigurationFetchOptions & ({
  * Only client-distributed configurations are suitable for forwarding to a browser.
  */
 export declare function fetchRulesConfiguration(options: RulesConfigurationFetchOptions): Promise<FlagsConfiguration$1>;
-type PrecomputeConfigurationOptions$1 = PrecomputeConfigurationOptions & {
+type PrecomputeConfigurationOptions$1 = Omit<PrecomputeConfigurationOptions, "obfuscation"> & {
 	/** Opaque target SDK fingerprint. Forward unchanged from its getter; omission preserves plaintext keys. */
 	clientFingerprint?: ClientFingerprint;
 };

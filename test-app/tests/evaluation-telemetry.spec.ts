@@ -39,6 +39,7 @@ test('online: suppresses evaluation telemetry for opted-out assignments during s
         json: {
           data: {
             attributes: {
+              observeFullEvaluationData: true,
               createdAt: '2026-10-14T00:00:00Z',
               flags: {
                 'browser-flag': {

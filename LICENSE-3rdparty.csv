@@ -147,6 +147,7 @@
 "@npmcli/run-script","@npmcli/run-script","['ISC']","['npm, Inc.']"
 "@nx/devkit","@nx/devkit","['MIT']","[]"
 "@nx/nx-darwin-arm64","@nx/nx-darwin-arm64","['MIT']","[]"
+"@noble/ciphers","@noble/ciphers","['MIT']","['Paul Miller (https://paulmillr.com)', 'Thomas Pornin <pornin@bolet.org>']"
 "@nx/nx-darwin-x64","@nx/nx-darwin-x64","['MIT']","[]"
 "@nx/nx-freebsd-x64","@nx/nx-freebsd-x64","['MIT']","[]"
 "@nx/nx-linux-arm-gnueabihf","@nx/nx-linux-arm-gnueabihf","['MIT']","[]"

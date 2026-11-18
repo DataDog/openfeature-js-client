@@ -32,16 +32,13 @@ not replace execution tests on an actual Hermes or JavaScriptCore runtime.
 
 ## Local Precomputation
 
-The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package wraps this helper and adds `clientFingerprint` support for encoding flag-map keys; the core helper continues to return plaintext assignments. See its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
+The `/rules-based` entry point exports `precomputeConfiguration(configuration, context, options?)` alongside the parsers and serializer. It resolves rules for one context into a precomputed-only configuration without network calls, provider initialization, or tracking. The Node package wraps this helper and adds `clientFingerprint` support for encoding flag-map keys; the core helper returns plaintext keys unless `options.obfuscation` is supplied. See its [local precomputation guide](../node-server/README.md#local-precomputation) for input validation, omission diagnostics, opt-out policy, and SSR safety constraints.
 
-The helper follows the Rust assignment-only precomputation contract: successful assignments are included, no-assignment outcomes and individual errors are omitted, and no application defaults are fabricated. Typed single-flag evaluation and precomputation share the protobuf assignment resolver. The JSON scalar/null cases in the helper's tests mirror `precomputed_object_variation_preserves_scalar_json_values` in the Rust evaluator's `rules_based/precomputed.rs` tests.
+The helper follows the Rust assignment-only precomputation contract: complete successful assignments are included in `attributes.flags`, failed dependency-graph roots are included in the sibling `attributes.flagEvaluationErrors` map, other failed flags remain absent and are reported through `onEvaluationError` when supplied, and no application defaults are fabricated. Typed single-flag evaluation and precomputation share the protobuf assignment resolver. The JSON scalar/null cases in the helper's tests mirror `precomputed_object_variation_preserves_scalar_json_values` in the Rust evaluator's `rules_based/precomputed.rs` tests.
 
-Pass `options.flagSelection: { keyPatterns: ['checkout-*'] }` to include only matching assignments. Patterns are
-case-sensitive whole-key globs with only `*` special and use the shared selection normalization and limits. Omitted
-selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated
-as absent at runtime. Tags are unsupported because rules contain no tag metadata: any defined `tags` value, including
-`[]` or `null`, throws `ConfigurationPrecomputeError` with `invalid_options`, as do malformed selections and selections
-over a limit. Source rules remain available for dependencies and can be reused for other selections.
+`flagSelection` patterns select initial root flags. Successfully assigned transitive prerequisites needed by those roots are included even when their keys do not match a pattern.
+
+Passing an `obfuscation` descriptor hashes keys in both top-level maps using `flag-key-sha256-v1`. Each nested dependency `flagKey` is instead authenticated ciphertext bound to the plaintext root key: AES-256-GCM with a key derived by HKDF-SHA256 from the root key and response salt, the shared dependency-key domain as AAD, and the unpadded base64url envelope `nonce || ciphertext || tag`. Plain precomputed packets retain plaintext dependency keys. This local helper produces the capable packet shape directly; HTTP capability forwarding and cache partitioning remain the responsibility of the delivery layer.
 
 ## Preparing activation timestamps
 
@@ -55,6 +52,19 @@ Direct JSON core consumers can call `prepareUniversalFlagConfiguration(configura
 receiving configuration. Existing low-level evaluation calls still accept raw configurations
 and prepare each flag once on first use. Replace changed flags instead of mutating prepared
 flags in place. Preparation does not change the serialized configuration.
+
+## Evaluation telemetry
+
+`FlagEvaluationAggregator` reads `__dd_observe_full_evaluation_data` from the evaluation result.
+Only literal `true` allows full data. Otherwise it hashes valid nonempty targeting keys with
+SHA-256 over exact UTF-8, preserves empty keys, omits invalid/missing keys, and discards evaluation
+context before aggregation. It keeps full-data and protected evaluations in separate groups.
+
+Full-data context is captured as an owned JSON copy; unserializable context is omitted while retaining
+the evaluation. The aggregator never consults a newer configuration during flush. Both modes use only
+`PROVIDER_NOT_READY`, `PROVIDER_FATAL`, `FLAG_NOT_FOUND`, `PARSE_ERROR`, `TYPE_MISMATCH`,
+`TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, or `GENERAL` for telemetry errors. Successful evaluations
+have no error field. This behavior applies to evaluation telemetry, not targeting inputs or exposures.
 
 ## Adding a public entry point
 

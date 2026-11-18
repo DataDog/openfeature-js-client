@@ -105,7 +105,6 @@ export async function fetchPrecomputedConfiguration(
         'Content-Type': 'application/vnd.api+json',
         'dd-client-token': clientToken,
         ...(applicationId !== undefined && { 'dd-application-id': applicationId }),
-        ...(capabilities.length > 0 && { 'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilities.join(',') }),
       },
       body,
     },

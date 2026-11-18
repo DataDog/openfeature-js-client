@@ -73,4 +73,34 @@ describe('standalone precomputation', () => {
     expect(empty.precomputed!.response.data.attributes.flags).toEqual({})
     expect(evaluate(rules, 'boolean', 'test-flag', false, context).value).toBe(true)
   })
+
+  describe('option boundary', () => {
+    const rules = () => configurationFromString(JSON.stringify(wire))
+    const context = { targetingKey: 'subject', country: 'US' }
+
+    it.each([[], new (class Options {})()])('rejects non-plain options %#', (options) => {
+      expect(() => precomputeConfiguration(rules(), context, options as never)).toThrow(
+        expect.objectContaining({ code: 'invalid_options' })
+      )
+    })
+
+    it('sanitizes a throwing option getter', () => {
+      const options = Object.defineProperty({}, 'flagSelection', {
+        enumerable: true,
+        get() {
+          throw new Error('private input')
+        },
+      })
+      expect(() => precomputeConfiguration(rules(), context, options)).toThrow(
+        expect.objectContaining({ code: 'invalid_options' })
+      )
+    })
+
+    it('ignores an untyped obfuscation descriptor without a capable fingerprint', () => {
+      const result = precomputeConfiguration(rules(), context, {
+        obfuscation: { scheme: 'flag-key-sha256-v1', salt: '0'.repeat(32) },
+      } as never)
+      expect(result.precomputed!.response.data.attributes.obfuscated).toBe(false)
+    })
+  })
 })

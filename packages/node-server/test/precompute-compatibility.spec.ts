@@ -50,6 +50,7 @@ describe('target-client compatibility for precomputation', () => {
     expect(attributes.obfuscation).toEqual({
       scheme: 'flag-key-sha256-v1',
       salt: expect.stringMatching(/^[a-f0-9]{32}$/),
+      dependencyKeyEncryption: { scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1' },
     })
     expect(Object.keys(attributes.flags)).not.toContain('test-flag')
     const hash = crypto

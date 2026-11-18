@@ -127,7 +127,6 @@ describe('fetchPrecomputedConfiguration', () => {
         'Content-Type': 'application/vnd.api+json',
         'dd-client-token': 'test-token',
         'dd-application-id': 'app',
-        'X-DD-FEATURE-FLAGS-CAPABILITIES': capability,
       },
     })
     expect(JSON.parse(init!.body as string)).toEqual({
