@@ -5,10 +5,7 @@
  * The chain tests use the real Vault-issued credentials in `chain-fixtures/` and synthetic chains
  * that change one certificate-profile rule at a time.
  *
- * The shared ffe-system-test-data corpora at the current `ffe-response-signing-data` pin, the local
- * `key-usage-supplement.json` and `shared-fixtures/` still use the removed single
- * `x-datadog-feature-flags-signing-intermediate` format and transcript tail. They are kept below and
- * skipped. A follow-up commit updates the pin to the regenerated chain fixtures and enables them again.
+ * The shared ffe-system-test-data v1 fixtures run from the pinned `ffe-response-signing-data` submodule.
  */
 import { createHash, generateKeyPairSync, type KeyObject, sign, webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -329,6 +326,14 @@ describe('certificate profile (synthetic re-signed chains)', () => {
   test('leaf EKU of codeSigning only is rejected', () => rejects({ leaf: [eku(CODE_SIGNING)] }))
   test('leaf EKU of another product only is rejected', () => rejects({ leaf: [eku('1.3.6.1.4.1.99999.1.2')] }))
   test('leaf without EKU is rejected', () => rejects({ leaf: [], leafRemove: ['2.5.29.37'] }))
+  // X.690 11.2.2: DER omits every trailing zero bit of a named-bit list. This replaces the former
+  // single-intermediate key-usage-supplement.json regression with the same two encodings.
+  const keyUsage = (hex: string) =>
+    new Extension({ extnID: '2.5.29.15', critical: true, extnValue: new OctetString(Buffer.from(hex, 'hex')) })
+  test('canonical leaf KeyUsage digitalSignature (03 02 07 80) is accepted', () =>
+    accepts({ leaf: [eku(FFE_EKU), keyUsage('03020780')] }))
+  test('nonminimal leaf KeyUsage digitalSignature (03 03 00 80 00) is rejected', () =>
+    rejects({ leaf: [eku(FFE_EKU), keyUsage('0303008000')] }))
 
   test('intermediate pathLen above its index is accepted', () =>
     accepts({ intermediates: [[caBasic(5)], [caBasic(1)]] }))
@@ -405,163 +410,58 @@ test('the independent transcript helper is self-consistent with the response hel
   expect(again[again.length - 33]).toBe(1)
 })
 
-const SHARED_V1_FIXTURES_DISABLED =
-  'disabled: the pinned fixtures use the removed signing-intermediate format; ' +
-  'a follow-up commit updates the ffe-response-signing-data pin to the chain fixtures'
-const chainOf = (headers: Headers) =>
-  (headers.get('x-datadog-feature-flags-signing-chain') ?? '').split(',').map((value) => decodeBase64(value, 4096))
-describe.skip(`shared v1 fixture suites (${SHARED_V1_FIXTURES_DISABLED})`, () => {
+/**
+ * Shared ffe-system-test-data response-signing v1 fixtures, from the pinned
+ * `ffe-response-signing-data` submodule. Verifiers run `cases` only; `signing_cases` are for signers.
+ * A case `anchor_der_base64` overrides the file anchor. `rejection_reason` is a rule code, not a native
+ * error message, so rejected cases assert only the rejection.
+ */
+describe('shared v1 fixtures', () => {
+  interface SharedCase {
+    id: string
+    now: number
+    expected_accept: boolean
+    rejection_reason?: string
+    anchor_der_base64?: string
+    transcript_base64?: string
+    request: { url: string; method: string; headers: [string, string][]; body_base64: string }
+    response: { status: number; headers: [string, string][]; body_base64: string }
+  }
   const fixtureDirectory = join(__dirname, '../../ffe-response-signing-data/response-signing/v1')
-  const raw = readFileSync(join(fixtureDirectory, 'corpus.json'))
-  const corpus = JSON.parse(raw.toString()) as {
-    anchor_der_base64: string
-    cases: Array<{
-      id: string
-      now: number
-      expected_accept: boolean
-      transcript_base64?: string
-      request: { url: string; method: string; headers: [string, string][]; body_base64: string }
-      response: { status: number; headers: [string, string][]; body_base64: string }
-    }>
+  const manifestRaw = readFileSync(join(fixtureDirectory, 'manifest.json'))
+  const manifest = JSON.parse(manifestRaw.toString()) as {
+    files: Record<string, { sha256: string; response_cases: number; accepted: number }>
   }
+  const FILES = [
+    'corpus.json',
+    'isolated-certificate-rules.json',
+    'nested-der.json',
+    'subject-der.json',
+    'near-expiry.json',
+    'extension-profile.json',
+  ]
+  const chainOf = (headers: Headers) =>
+    headers
+      .get('x-datadog-feature-flags-signing-chain')!
+      .split(',')
+      .map((value) => decodeBase64(value, 4096))
 
-  test('the independent corpus and applicability counts are unchanged', () => {
-    expect(createHash('sha256').update(raw).digest('hex')).toBe(
-      '393490bfefe382b9b75cf2964c131a910faa679888689457f99c2da2dc57fbbd'
+  test('the pinned manifest is unchanged and lists every suite', () => {
+    // Byte changes to the shared fixtures require a deliberate pin update and review.
+    expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
+      '37e73d02c82491b743f7e2a933ca3e9427fab6d3c8fd9e4ee4fe907216503fb4'
     )
-    expect(corpus.cases).toHaveLength(46)
-    expect(corpus.cases.filter((c) => c.expected_accept)).toHaveLength(6)
+    expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })
-  test.each(corpus.cases)('$id', async (vector) => {
-    const request = {
-      ...vector.request,
-      headers: new Headers(vector.request.headers),
-      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
-    }
-    const response = {
-      ...vector.response,
-      headers: new Headers(vector.response.headers),
-      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
-    }
-    if (vector.expected_accept) {
-      await expect(verifyResponse(request, response, [corpus.anchor_der_base64], vector.now)).resolves.toEqual({
-        expiresAt: Number(response.headers.get('x-datadog-feature-flags-expires-at')),
-        verifiedAt: vector.now,
-      })
-      const transcript = await buildSigningTranscript(
-        request,
-        response,
-        Number(response.headers.get('x-datadog-feature-flags-issued-at')),
-        Number(response.headers.get('x-datadog-feature-flags-expires-at')),
-        decodeBase64(response.headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
-        chainOf(response.headers)
-      )
-      expect(Buffer.from(transcript).toString('base64')).toBe(vector.transcript_base64)
-    } else {
-      await expect(verifyResponse(request, response, [corpus.anchor_der_base64], vector.now)).rejects.toThrow()
-    }
-  })
-
-  const nestedDerRaw = readFileSync(join(fixtureDirectory, 'nested-der.json'))
-  const nestedDer = JSON.parse(nestedDerRaw.toString()) as typeof corpus
-  test('the shared nested-DER regression inputs are unchanged', () => {
-    expect(createHash('sha256').update(nestedDerRaw).digest('hex')).toBe(
-      '16a5de8b346087c4e4145e5c7bb43ac2dfd945a780fb56a75f38b1f7061302c4'
-    )
-    expect(nestedDer.cases).toHaveLength(2)
-  })
-  test.each(nestedDer.cases)('shared certificate regression: $id', async (vector) => {
-    const request = {
-      ...vector.request,
-      headers: new Headers(vector.request.headers),
-      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
-    }
-    const response = {
-      ...vector.response,
-      headers: new Headers(vector.response.headers),
-      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
-    }
-    const result = verifyResponse(request, response, [nestedDer.anchor_der_base64], vector.now)
-    if (vector.expected_accept) await expect(result).resolves.toHaveProperty('expiresAt')
-    else await expect(result).rejects.toThrow('invalid-certificate')
-  })
-
-  // Independent reviewer regression: X.690 11.2.2 requires minimal encoding of named-bit lists.
-  // Public-only synthetic chains/proofs; the pinned 46-case public-v1 corpus is independently generated.
-  const keyUsageRaw = readFileSync(join(__dirname, 'key-usage-supplement.json'))
-  const keyUsageSupplement = JSON.parse(keyUsageRaw.toString()) as { anchor: string; cases: typeof corpus.cases }
-  test('the independently reviewed KeyUsage supplemental oracle is unchanged', () => {
-    expect(createHash('sha256').update(keyUsageRaw).digest('hex')).toBe(
-      'f7b55015240951b90596692c5edec4209660a842b6f5e82e9d39da2be7c83cd1'
-    )
-  })
-  test.each(keyUsageSupplement.cases)('canonical DER control: $id', async (vector) => {
-    const request = {
-      ...vector.request,
-      headers: new Headers(vector.request.headers),
-      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
-    }
-    const response = {
-      ...vector.response,
-      headers: new Headers(vector.response.headers),
-      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
-    }
-    const result = verifyResponse(request, response, [keyUsageSupplement.anchor], vector.now)
-    if (vector.expected_accept) await expect(result).resolves.toHaveProperty('expiresAt')
-    else await expect(result).rejects.toThrow('invalid-certificate')
-  })
-
-  const isolatedRaw = readFileSync(join(fixtureDirectory, 'isolated-certificate-rules.json'))
-  const isolated = JSON.parse(isolatedRaw.toString()) as typeof corpus
-  test('isolated certificate fixture integrity', () => {
-    expect(createHash('sha256').update(isolatedRaw).digest('hex')).toBe(
-      '7304bb12f011688a39b53ebd5fb5d842febd0f5ae81e67126a7e24d1e79a225a'
-    )
-    expect(isolated.cases).toHaveLength(4)
-  })
-  test.each(isolated.cases)('$id', async (vector) => {
-    const request = {
-      ...vector.request,
-      headers: new Headers(vector.request.headers),
-      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
-    }
-    const response = {
-      ...vector.response,
-      headers: new Headers(vector.response.headers),
-      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
-    }
-    if (vector.expected_accept) {
-      await expect(verifyResponse(request, response, [isolated.anchor_der_base64], vector.now)).resolves.toEqual({
-        expiresAt: Number(response.headers.get('x-datadog-feature-flags-expires-at')),
-        verifiedAt: vector.now,
-      })
-      const transcript = await buildSigningTranscript(
-        request,
-        response,
-        Number(response.headers.get('x-datadog-feature-flags-issued-at')),
-        Number(response.headers.get('x-datadog-feature-flags-expires-at')),
-        decodeBase64(response.headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
-        chainOf(response.headers)
-      )
-      expect(Buffer.from(transcript).toString('base64')).toBe(vector.transcript_base64)
-    } else {
-      await expect(verifyResponse(request, response, [isolated.anchor_der_base64], vector.now)).rejects.toThrow()
-    }
-  })
-
-  const supplementDirectory = join(__dirname, 'shared-fixtures')
-  const manifest = JSON.parse(readFileSync(join(supplementDirectory, 'manifest.json'), 'utf8')) as {
-    files: Record<string, { sha256: string; response_cases: number }>
-  }
-  for (const name of ['subject-der', 'near-expiry', 'extension-profile']) {
-    const filename = `${name}.json`
-    const bytes = readFileSync(join(supplementDirectory, filename))
-    const supplement = JSON.parse(bytes.toString()) as typeof corpus
-    test(`shared ${name} fixture integrity`, () => {
-      expect(createHash('sha256').update(bytes).digest('hex')).toBe(manifest.files[filename].sha256)
-      expect(supplement.cases).toHaveLength(manifest.files[filename].response_cases)
+  for (const filename of FILES) {
+    const raw = readFileSync(join(fixtureDirectory, filename))
+    const suite = JSON.parse(raw.toString()) as { anchor_der_base64: string; cases: SharedCase[] }
+    test(`${filename} matches the manifest hash and counts`, () => {
+      expect(createHash('sha256').update(raw).digest('hex')).toBe(manifest.files[filename].sha256)
+      expect(suite.cases).toHaveLength(manifest.files[filename].response_cases)
+      expect(suite.cases.filter((c) => c.expected_accept)).toHaveLength(manifest.files[filename].accepted)
     })
-    test.each(supplement.cases)(`${name}: $id`, async (vector) => {
+    test.each(suite.cases)(`${filename}: $id`, async (vector) => {
       const request = {
         ...vector.request,
         headers: new Headers(vector.request.headers),
@@ -572,7 +472,8 @@ describe.skip(`shared v1 fixture suites (${SHARED_V1_FIXTURES_DISABLED})`, () =>
         headers: new Headers(vector.response.headers),
         body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
       }
-      const result = verifyResponse(request, response, [supplement.anchor_der_base64], vector.now)
+      const anchor = vector.anchor_der_base64 ?? suite.anchor_der_base64
+      const result = verifyResponse(request, response, [anchor], vector.now)
       if (!vector.expected_accept) {
         await expect(result).rejects.toThrow()
         return
@@ -589,7 +490,8 @@ describe.skip(`shared v1 fixture suites (${SHARED_V1_FIXTURES_DISABLED})`, () =>
         chainOf(response.headers)
       )
       expect(Buffer.from(transcript).toString('base64')).toBe(vector.transcript_base64)
-      await expect(verifyResponse(request, response, [supplement.anchor_der_base64], expires)).rejects.toThrow()
+      // No expiry grace: the same proof fails at its expiry time.
+      await expect(verifyResponse(request, response, [anchor], expires)).rejects.toThrow()
     })
   }
 })
