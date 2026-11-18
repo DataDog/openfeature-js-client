@@ -4,7 +4,11 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { withRetry } from '../../src/transport/fetch'
-import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
+import {
+  buildConfigurationHeaders,
+  createFlagsConfigurationFetcher,
+  fetchPrecomputedConfiguration,
+} from '../../src/transport/fetchConfiguration'
 import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
 import { createResponseSigningController } from '../../src/transport/responseSigning/controller'
 import { ResponseVerificationError } from '../../src/transport/responseSigning/verification'
@@ -501,9 +505,61 @@ describe('createFlagsConfigurationFetcher', () => {
             'DD-Client-Library-Language': 'browser',
             'DD-Client-Library-Version': '1.0.0-test',
             'dd-client-token': 'test-token',
+            'dd-application-id': 'test-app-id',
           },
         })
       )
+    })
+
+    it('does not send dd-application-id on a rules request without applicationId', async () => {
+      const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        arrayBuffer: async () => bytes.buffer,
+      })
+      const { applicationId: _, ...options } = baseFetchOptions
+
+      await fetchRulesConfiguration({ ...options, fetch: customFetch })
+
+      expect(customFetch.mock.calls[0][1].headers).not.toHaveProperty('dd-application-id')
+    })
+  })
+
+  describe('buildConfigurationHeaders', () => {
+    it.each(['precomputed', 'rules'] as const)('sends dd-application-id on %s requests', (endpoint) => {
+      expect(
+        buildConfigurationHeaders({ clientToken: 'test-token', applicationId: 'app-id' }, {}, endpoint)
+      ).toMatchObject({ 'dd-application-id': 'app-id' })
+    })
+
+    it.each(['precomputed', 'rules'] as const)(
+      'does not send dd-application-id on %s requests with overwriteRequestHeaders',
+      (endpoint) => {
+        expect(
+          buildConfigurationHeaders(
+            { clientToken: 'test-token', applicationId: 'app-id', overwriteRequestHeaders: true },
+            {},
+            endpoint
+          )
+        ).toEqual({})
+      }
+    )
+
+    it.each([
+      ['precomputed', 'dd-application-id'],
+      ['precomputed', 'DD-Application-ID'],
+      ['rules', 'DD-APPLICATION-ID'],
+      ['rules', 'Dd-Application-Id'],
+    ] as const)('lets a custom %s header named %s replace applicationId', (endpoint, name) => {
+      const headers = buildConfigurationHeaders(
+        { clientToken: 'test-token', applicationId: 'automatic-app', customHeaders: { [name]: 'manual-app' } },
+        {},
+        endpoint
+      )
+
+      expect(new Headers(headers).get('dd-application-id')).toBe('manual-app')
+      expect(headers).toMatchObject({ [name]: 'manual-app' })
     })
   })
 

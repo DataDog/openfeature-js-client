@@ -60,6 +60,14 @@ The custom Fetch implementation applies only to flag configuration requests. Exp
 requests use their existing transports. It receives the provider-generated `RequestInit`, including Datadog
 authentication and any configured custom headers, and may route or transform the request as needed.
 
+### Usage attribution
+
+When `applicationId` is set, precomputed and rules-based configuration requests send it in the `dd-application-id`
+header, so Usage Attribution can split Feature Flags usage by `application.name`. The standalone
+`fetchPrecomputedConfiguration` and `fetchRulesConfiguration` helpers accept the same option. A `customHeaders`
+entry with that name, in any letter case, replaces the SDK value. With `overwriteRequestHeaders: true`, the header is
+not sent.
+
 ### Evaluation telemetry privacy
 
 Flag-evaluation telemetry uses the `observeFullEvaluationData` setting from the configuration used
