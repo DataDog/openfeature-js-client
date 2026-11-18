@@ -149,15 +149,17 @@ no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
 (including when empty), for custom proxies and tests. Additional Datadog aliases
 and production site roots must be provisioned before they enter the catalog.
 
-A response carries its leaf and intermediate certificates, so rotating either under
-the unchanged trusted root requires no SDK update or prior rotation history. The
+A response carries its leaf certificate and one to three intermediate certificates
+in `x-datadog-feature-flags-signing-chain`. Rotating the leaf or any intermediate
+under the unchanged trusted root requires no SDK update or prior rotation history.
+The leaf must carry the Feature Flags assignment-signing extended key usage. The
 SDK verifies the chain, exact request and response bytes, nonce, effective client
 token and semantic headers, and the original proof lifetime (at most five minutes).
 Signed requests require HTTPS and reject redirects. A custom fetch implementation
 must preserve the generated URL, body and headers and the exact returned bytes.
 Proxies must support the signing request headers and expose the proof headers in
-CORS. The `response-signing-v1` capability and signature version `1` are added only
-when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
+CORS, including `x-datadog-feature-flags-signing-chain`. The `response-signing-v1`
+capability and signature version `1` are added only when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
 and draft v3 formats are not supported compatibility targets. This protocol number
 is independent of X.509 v3 certificate encoding.
 

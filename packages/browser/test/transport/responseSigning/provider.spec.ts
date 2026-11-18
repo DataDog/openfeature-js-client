@@ -1,4 +1,4 @@
-import { createPrivateKey, sign, webcrypto } from 'node:crypto'
+import { createHash, sign, webcrypto } from 'node:crypto'
 import { ReadableStream } from 'node:stream/web'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { ErrorCode, OpenFeature, ProviderEvents, ProviderStatus, StandardResolutionReasons } from '@openfeature/web-sdk'
@@ -17,10 +17,12 @@ import {
   SIGNING_NONCE_HEADER,
   SIGNING_VERSION_HEADER,
 } from '../../../src/transport/responseSigning/verification'
-import corpus from '../../ffe-response-signing-data/response-signing/v1/corpus.json'
+import { FIXTURE_NOW, loadCredential, ROOT_A } from './chainFixtures'
 
-const vector = corpus.cases[0]
-const roots = [corpus.anchor_der_base64]
+// Real Vault-issued lukas-valid test credential (root A -> DC -> tls-vault -> leaf).
+const credential = loadCredential('lukas-valid')
+const vector = { now: FIXTURE_NOW }
+const roots = [ROOT_A]
 const context = { targetingKey: 'user-123', nested: { plan: 'team' } }
 const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 const payload = (value = true) => ({
@@ -118,7 +120,15 @@ async function signed(
   value = true,
   issuedAt = vector.now
 ): Promise<Response> {
-  const headers = new Headers(vector.response.headers as [string, string][])
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'x-datadog-feature-flags-signature-version': '1',
+    'x-datadog-feature-flags-signing-certificate': credential.leafBase64,
+    'x-datadog-feature-flags-signing-chain': credential.intermediatesBase64.join(','),
+    'x-datadog-feature-flags-certificate-id': createHash('sha256')
+      .update(Buffer.from(credential.leafBase64, 'base64'))
+      .digest('hex'),
+  })
   headers.set('x-datadog-feature-flags-issued-at', String(issuedAt))
   headers.set('x-datadog-feature-flags-expires-at', String(issuedAt + 300))
   const body = new TextEncoder().encode(JSON.stringify(payload(value)))
@@ -134,14 +144,12 @@ async function signed(
     issuedAt,
     issuedAt + 300,
     decodeBase64(headers.get('x-datadog-feature-flags-signing-certificate')!, 4096),
-    decodeBase64(headers.get('x-datadog-feature-flags-signing-intermediate')!, 4096)
+    credential.intermediatesBase64.map((value) => decodeBase64(value, 4096))
   )
-  const key = createPrivateKey({
-    key: Buffer.from(vector.credential!.private_key_pkcs8_der_base64, 'base64'),
-    type: 'pkcs8',
-    format: 'der',
-  })
-  headers.set('x-datadog-feature-flags-signature', sign('sha256', Buffer.from(transcript), key).toString('base64'))
+  headers.set(
+    'x-datadog-feature-flags-signature',
+    sign('sha256', Buffer.from(transcript), credential.privateKey).toString('base64')
+  )
   return response(new TextDecoder().decode(body), headers)
 }
 function evaluation(subject: DatadogProvider) {
