@@ -105,6 +105,47 @@ describe('DatadogCoreProvider precomputed configuration', () => {
     await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
   })
 
+  it('matches a helper-generated snapshot after an assignment token is added or rotated', async () => {
+    const configuration = precomputeConfiguration(rules(), { ...context, dd_assignment_token: 'first-token' })
+    const client = clientFor(new DatadogCoreProvider(configuration))
+
+    for (const token of [undefined, 'first-token', 'rotated-token']) {
+      await expect(
+        client.getBooleanDetails('test-flag', false, {
+          ...context,
+          ...(token === undefined ? {} : { dd_assignment_token: token }),
+        })
+      ).resolves.toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    }
+  })
+
+  it.each(['value', 'getter', 'cycle'])(
+    'discards a stored assignment token before copying snapshots: %s',
+    async (kind) => {
+      const configuration = precomputed()
+      const readToken = jest.fn(() => {
+        throw new Error('Discarded credentials must not be read')
+      })
+      const cycle: Record<string, unknown> = {}
+      cycle.self = cycle
+      Object.defineProperty(configuration.precomputed!.context!, 'dd_assignment_token', {
+        enumerable: true,
+        ...(kind === 'getter' ? { get: readToken } : { value: kind === 'cycle' ? cycle : 'secret-token' }),
+      })
+
+      const provider = new DatadogCoreProvider(configuration)
+      const client = clientFor(provider)
+      expect(provider.getConfiguration().precomputed!.context).toEqual(context)
+      provider.setConfiguration(configuration)
+      expect(provider.getConfiguration().precomputed!.context).toEqual(context)
+      await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+      expect(readToken).not.toHaveBeenCalled()
+      expect(Object.prototype.hasOwnProperty.call(configuration.precomputed!.context!, 'dd_assignment_token')).toBe(
+        true
+      )
+    }
+  )
+
   it('retains the shared format semantics for explicitly context-agnostic snapshots', async () => {
     const configuration = precomputed()
     delete configuration.precomputed!.context

@@ -30,6 +30,7 @@ import {
   ExposureLoggingHook,
   prepareExposure,
   stageDependencyTelemetry,
+  stripAssignmentToken,
 } from './tracking'
 
 export interface DatadogCoreProviderOptions {
@@ -144,6 +145,7 @@ export class DatadogCoreProvider implements Provider {
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
     const configuration = this.configuration
+    const targetingContext = stripAssignmentToken(context)
     let details: ResolutionDetails<FlagTypeToValue<T>>
     if (configuration.rules) {
       const trace = evaluateWithTrace(
@@ -151,7 +153,7 @@ export class DatadogCoreProvider implements Provider {
         type,
         flagKey,
         defaultValue,
-        context,
+        targetingContext,
         logger,
         this.experimentationOptOutMode,
         {
@@ -178,7 +180,7 @@ export class DatadogCoreProvider implements Provider {
         type,
         flagKey,
         defaultValue,
-        context,
+        targetingContext,
         this.experimentationOptOutMode,
         logger
       )
@@ -203,7 +205,16 @@ function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfigur
       const snapshot = configurationFromString(configurationToString({ rules }))
       if (snapshot.rules) return snapshot
     } else if (rules === undefined) {
-      const snapshot = configurationFromString(configurationToString({ precomputed: configuration.precomputed }))
+      const precomputed = configuration.precomputed
+      const context = precomputed?.context
+      const snapshot = configurationFromString(
+        configurationToString({
+          precomputed: precomputed && {
+            ...precomputed,
+            context: context === undefined ? undefined : stripAssignmentToken(context),
+          },
+        })
+      )
       if (snapshot.precomputed) return snapshot
     }
   } catch {
