@@ -1,14 +1,12 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
-  createEvaluationMetadata,
   type ExposureEvent,
   evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
   type FlagTypeToValue,
   getPrecomputedContext,
   LRUInMemoryAssignmentCache,
-  timeStampNow,
 } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -172,11 +170,7 @@ export class DatadogCoreProvider implements Provider {
       )
       details = trace.details
     } else {
-      const metadata = createEvaluationMetadata(
-        timeStampNow(),
-        configuration.precomputed!.response.data.attributes.observeFullEvaluationData
-      )
-      const result = evaluatePrecomputedConfiguration(
+      details = evaluatePrecomputedConfiguration(
         configuration,
         type,
         flagKey,
@@ -185,7 +179,6 @@ export class DatadogCoreProvider implements Provider {
         this.experimentationOptOutMode,
         logger
       )
-      details = { ...result, flagMetadata: { ...result.flagMetadata, ...metadata } }
     }
     if (this.exposureCache) {
       prepareExposure(

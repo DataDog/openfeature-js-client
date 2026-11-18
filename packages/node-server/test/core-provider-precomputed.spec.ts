@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Channel } from 'node:diagnostics_channel'
-import type { ExposureEvent, FlagsConfiguration } from '@datadog/flagging-core'
+import { type ExposureEvent, FlagEvaluationAggregator, type FlagsConfiguration } from '@datadog/flagging-core'
 import { type EvaluationContext, OpenFeature, ProviderEvents, ServerProviderStatus } from '@openfeature/server-sdk'
 import rulesWire from '../../browser/test/data/rules-v1-wire.json'
 import {
@@ -330,7 +330,6 @@ describe('DatadogCoreProvider precomputed configuration', () => {
       for (const evaluation of [
         client.getBooleanDetails('missing', false, context),
         client.getStringDetails('test-flag', 'default', context),
-        client.getBooleanDetails('test-flag', false, { ...context, targetingKey: 'another-user' }),
       ]) {
         expect((await evaluation).flagMetadata).toMatchObject({
           __dd_eval_timestamp_ms: Date.now(),
@@ -352,6 +351,77 @@ describe('DatadogCoreProvider precomputed configuration', () => {
       provider.setConfiguration(configuration)
       await client.getBooleanValue('test-flag', false, context)
       expect(sink.publish).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it.each(
+    [undefined, false, true].flatMap((consent) =>
+      ['context mismatch', 'invalid cutoff', 'policy mismatch'].map((rejection) => ({ consent, rejection }))
+    )
+  )('protects rejected snapshots for $rejection with consent=$consent', async ({ consent, rejection }) => {
+    const requestContext = {
+      ...context,
+      targetingKey: 'rejected-subject',
+      privateAttribute: 'private-value',
+      ...(rejection === 'context mismatch'
+        ? {}
+        : { dd_experimentation_opt_out_at: rejection === 'invalid cutoff' ? 'invalid' : '2026-01-01T00:00:00Z' }),
+    }
+    const configuration = precomputed()
+    if (rejection !== 'context mismatch') configuration.precomputed!.context = requestContext
+    const attributes = configuration.precomputed!.response.data.attributes
+    if (consent === undefined) delete attributes.observeFullEvaluationData
+    else attributes.observeFullEvaluationData = consent
+    const sink = { hasSubscribers: true, publish: jest.fn() } as unknown as jest.Mocked<Channel<ExposureEvent>>
+    const client = clientFor(
+      new DatadogCoreProvider(configuration, {
+        experimentationOptOutMode:
+          rejection === 'context mismatch' ? ExperimentationOptOutMode.Disabled : ExperimentationOptOutMode.Immediate,
+        exposureChannel: sink,
+      })
+    )
+
+    const details = await client.getBooleanDetails('test-flag', false, requestContext)
+    expect(details).toMatchObject({
+      value: false,
+      errorCode: 'INVALID_CONTEXT',
+      flagMetadata: { __dd_eval_timestamp_ms: Date.now(), __dd_observe_full_evaluation_data: false },
+    })
+    expect(sink.publish).not.toHaveBeenCalled()
+    const flush = jest.fn()
+    const aggregator = new FlagEvaluationAggregator(1000, flush)
+    aggregator.addEvaluation(requestContext, details)
+    aggregator.flush()
+    expect(flush).toHaveBeenCalledTimes(1)
+    const [event] = flush.mock.calls[0][0]
+    expect(event.targeting_key).toBe(`sha256_${createHash('sha256').update(requestContext.targetingKey).digest('hex')}`)
+    expect(event).not.toHaveProperty('context')
+    expect(event.error).toEqual({ message: 'INVALID_CONTEXT' })
+  })
+
+  it.each([undefined, false, true])(
+    'retains consent=%s for usable snapshots including per-flag errors',
+    async (consent) => {
+      const configuration = precomputed()
+      const attributes = configuration.precomputed!.response.data.attributes
+      if (consent === undefined) delete attributes.observeFullEvaluationData
+      else attributes.observeFullEvaluationData = consent
+      attributes.flags.bad = {} as never
+      const client = clientFor(new DatadogCoreProvider(configuration))
+
+      const evaluations = [
+        { result: await client.getBooleanDetails('test-flag', false, context), error: undefined },
+        { result: await client.getBooleanDetails('missing', false, context), error: 'FLAG_NOT_FOUND' },
+        { result: await client.getStringDetails('test-flag', 'default', context), error: 'TYPE_MISMATCH' },
+        { result: await client.getBooleanDetails('bad', false, context), error: 'PARSE_ERROR' },
+      ]
+      for (const { result, error } of evaluations) {
+        expect(result.errorCode).toBe(error)
+        expect(result.flagMetadata).toMatchObject({
+          __dd_eval_timestamp_ms: Date.now(),
+          __dd_observe_full_evaluation_data: consent === true,
+        })
+      }
     }
   )
 })
