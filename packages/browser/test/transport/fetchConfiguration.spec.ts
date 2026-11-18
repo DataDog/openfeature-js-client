@@ -2,9 +2,12 @@ import { addTelemetryDebug, display } from '@datadog/browser-core'
 import { type TimeStamp, timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { withRetry } from '../../src/transport/fetch'
 import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
 import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
+import { createResponseSigningController } from '../../src/transport/responseSigning/controller'
+import { ResponseVerificationError } from '../../src/transport/responseSigning/verification'
 import rulesWire from '../data/rules-v1-wire.json'
 
 jest.mock('@datadog/js-core/time', () => ({
@@ -1009,9 +1012,54 @@ describe('createFlagsConfigurationFetcher', () => {
         expectNoTelemetryValues('reason_from_a_newer_server')
       })
 
-      describe('when the configuration is not accepted', () => {
-        const ignoredHeaders = () => new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+      const ignoredHeaders = () => new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+      const immediateOptOut = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
+      const optedOutContext = { ...mockContext, dd_experimentation_opt_out_at: '2026-10-19T12:00:00Z' }
+      const withEvaluationOptions = (evaluationOptions?: Record<string, unknown>) => ({
+        data: {
+          attributes: {
+            ...validPrecomputedResponse.data.attributes,
+            ...(evaluationOptions && { evaluation_options: evaluationOptions }),
+          },
+        },
+      })
+      const acknowledgedResponse = withEvaluationOptions({
+        experimentation_opt_out: true,
+        experimentation_opt_out_mode: 'immediate',
+      })
 
+      const nowSeconds = () => Math.floor(Date.now() / 1000)
+      const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300 })
+      const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300 })
+
+      // jsdom lacks WebCrypto, so prepare and most reads are stubbed; admit, the gate under test, runs for real.
+      const requiredSigning = () => {
+        const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: ['test-root'] })!
+        jest
+          .spyOn(signing, 'prepare')
+          .mockReturnValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
+        return signing
+      }
+
+      it('reports once when an opted-out subject receives an acknowledged, signed configuration', async () => {
+        const signing = requiredSigning()
+        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof: validProof() })
+        mockFetch.mockResolvedValue({ ok: true, status: 200, redirected: false, headers: ignoredHeaders() })
+        const fetcher = createFlagsConfigurationFetcher(
+          { ...baseConfig, ...immediateOptOut, flagSelection: { tags: ['beta'] } },
+          signing
+        )
+
+        const configuration = await fetcher(optedOutContext)
+
+        expect(signing.isVerified(configuration, optedOutContext)).toBe(true)
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('invalid_tag'))
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
+      })
+
+      describe('when the configuration is not accepted', () => {
         it.each([
           [
             'the body is not JSON',
@@ -1058,6 +1106,89 @@ describe('createFlagsConfigurationFetcher', () => {
 
           expect(displayError).not.toHaveBeenCalled()
           expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it.each([
+          ['an opted-out subject receives no acknowledgement', optedOutContext, withEvaluationOptions()],
+          [
+            'an opted-out subject receives an acknowledgement for another mode',
+            optedOutContext,
+            withEvaluationOptions({
+              experimentation_opt_out: true,
+              experimentation_opt_out_mode: 'future_experiments_only',
+            }),
+          ],
+          ['a subject that did not opt out receives an acknowledgement', mockContext, acknowledgedResponse],
+        ])('does not report when %s', async (_description, context, body) => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => body })
+          const fetcher = createFlagsConfigurationFetcher({
+            ...baseConfig,
+            ...immediateOptOut,
+            flagSelection: { tags: ['beta'] },
+          })
+
+          await expect(fetcher(context)).rejects.toThrow('did not acknowledge experimentation opt-out')
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        describe('by response signing', () => {
+          const fetchSigned = (
+            signing: ReturnType<typeof requiredSigning>,
+            { redirected = false, signal }: { redirected?: boolean; signal?: AbortSignal } = {}
+          ) => {
+            mockFetch.mockResolvedValue({ ok: true, status: 200, redirected, headers: ignoredHeaders() })
+            return createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } }, signing)(
+              mockContext,
+              { signal }
+            )
+          }
+
+          it('does not report when verification rejects the response', async () => {
+            const signing = requiredSigning()
+            jest.spyOn(signing, 'read').mockRejectedValue(new ResponseVerificationError('invalid-proof'))
+
+            await expect(fetchSigned(signing)).rejects.toThrow(ResponseVerificationError)
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when read rejects a redirected response', async () => {
+            await expect(fetchSigned(requiredSigning(), { redirected: true })).rejects.toThrow(
+              'redirects are not supported'
+            )
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when admission rejects an expired proof', async () => {
+            const signing = requiredSigning()
+            jest.spyOn(signing, 'read').mockResolvedValue({ json: validPrecomputedResponse, proof: expiredProof() })
+
+            await expect(fetchSigned(signing)).rejects.toThrow('expired-proof')
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when the request is cancelled before admission', async () => {
+            const signing = requiredSigning()
+            const controller = new AbortController()
+            jest.spyOn(signing, 'read').mockImplementation(async () => {
+              controller.abort()
+              return { json: validPrecomputedResponse, proof: validProof() }
+            })
+
+            await expect(fetchSigned(signing, { signal: controller.signal })).rejects.toMatchObject({
+              name: 'AbortError',
+            })
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
         })
       })
     })
