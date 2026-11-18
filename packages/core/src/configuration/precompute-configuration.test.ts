@@ -593,7 +593,11 @@ describe('precomputeConfiguration', () => {
       [{ flagKey: 'unsafeInteger', errorCode: 'PARSE_ERROR' }],
       [{ flagKey: 'badJson', errorCode: 'PARSE_ERROR' }],
     ])
-    for (const key of ['unassigned', 'unsupported', 'unsafeInteger', 'badJson']) {
+    expect(evaluate(result, 'boolean', 'unassigned', false, context)).toMatchObject({
+      value: false,
+      errorCode: 'FLAG_NOT_FOUND',
+    })
+    for (const key of ['unsupported', 'unsafeInteger', 'badJson']) {
       expect(evaluate(result, 'boolean', key, false, context)).toMatchObject({
         value: false,
         errorCode: 'FLAG_NOT_FOUND',

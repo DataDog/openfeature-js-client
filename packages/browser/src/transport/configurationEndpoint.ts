@@ -1,6 +1,8 @@
 import { buildEndpointHost } from '@datadog/flagging-core'
 import { registerDebugEndpoint } from '../debug'
 
+const DEPENDENT_FLAGS_CAPABILITY_QUERY = 'cap_dependent-flags-variant-key'
+
 export interface ConfigurationEndpointOptions {
   site?: string
   flaggingProxy?: string
@@ -27,6 +29,7 @@ export function buildConfigurationUrl(options: ConfigurationEndpointOptions, end
   }
 
   url.searchParams.set('dd_env', options.env || '')
+  if (endpoint === 'precomputed') url.searchParams.set(DEPENDENT_FLAGS_CAPABILITY_QUERY, 'v1')
   registerDebugEndpoint(url, source)
   return url
 }

@@ -111,7 +111,7 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
   )
 }
 
-function precomputedFlagIssue(
+export function precomputedFlagIssue(
   value: unknown,
   encoding?: FlagKeyObfuscation
 ): { field: string; expected: string; actual: unknown } | undefined {
@@ -147,7 +147,7 @@ function precomputedFlagIssue(
   if (!valid) return { field: 'variationValue', expected, actual: value.variationValue }
 }
 
-function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedErrorFlag {
+export function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedErrorFlag {
   return (
     isRecord(value) &&
     value.reason === 'ERROR' &&
@@ -157,7 +157,7 @@ function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): 
   )
 }
 
-function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
+export function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
   if (value === undefined) return true
   if (!Array.isArray(value)) return false
   if (encoding !== undefined && value.length > 0 && !supportsDependencyKeyEncryption(encoding)) return false
