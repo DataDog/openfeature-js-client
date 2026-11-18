@@ -94,7 +94,12 @@ export class DatadogCoreProvider implements Provider {
     const previousGeneration = configurationGeneration(this.configuration)
     this.configuration = next
     if (previousGeneration !== configurationGeneration(next)) {
-      this.exposureCache?.clear()
+      try {
+        const reset = this.exposureCache?.clear()
+        if (reset) void reset.catch(() => {})
+      } catch {
+        // Cache failures must not interrupt replacement or its change notification.
+      }
     }
     this.events.emit('PROVIDER_CONFIGURATION_CHANGED' as ServerProviderEvents.ConfigurationChanged)
   }
