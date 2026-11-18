@@ -650,8 +650,11 @@ The provider accepts both plaintext and obfuscated responses without an
 application configuration change.
 
 Dependent precomputed assignments are negotiated through the URL query parameter
-`cap_dependent-flags-variant-key=v1`. The provider adds it to every precompute
-request, including requests sent through `flaggingProxy`.
+`cap_dependent-flags-variant-key=v1`. The provider derives this negotiation from
+its supported capabilities and adds it to every precompute request, including
+requests sent through `flaggingProxy`. For application-server precomputation,
+forward the opaque fingerprint described below; the Node helper reads the target
+browser's capabilities and adds the query parameter to its Datadog origin request.
 
 Continue evaluating the original flag key. The shared core hashes it with the
 response's public salt before lookup. Flag values do not change. Evaluation
