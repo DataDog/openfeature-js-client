@@ -8,7 +8,7 @@ certificate encoding is unchanged.
 Signature version `1` carries the intermediate certificates in
 `x-datadog-feature-flags-signing-chain`, and the transcript ends with
 `SHA256(leaf) || u8(n) || SHA256(intermediate[0]) || ... || SHA256(intermediate[n-1])`.
-`chain-fixtures/` holds real Vault-issued test credentials (credential JSON `version` 1)
+`chain-fixtures/` holds test credentials issued by a local test CA (credential JSON `version` 1)
 and the public test roots `root-a.pem` and `root-b.pem`. The private keys are test-only.
 Leaves are valid for 72 hours, so the tests inject `now` (`FIXTURE_NOW` in `chainFixtures.ts`).
 `verification.spec.ts` covers the chain fixture table, the transcript, and synthetic chains

@@ -1,7 +1,7 @@
 /**
  * Certificate-chain test helpers for response signing v1.
  *
- * `chain-fixtures/` holds real Vault-issued test credentials (credential JSON `version` 1) and the two
+ * `chain-fixtures/` holds test credentials issued by a local test CA (credential JSON `version` 1) and the two
  * public test roots. The private keys are test-only. The transcript builder below is written separately
  * from the SDK and does not call it.
  */
@@ -12,11 +12,11 @@ import { join } from 'node:path'
 const directory = join(__dirname, 'chain-fixtures')
 
 export const CREDENTIAL_NAMES = [
-  'lukas-valid',
-  'lukas-backup-root',
-  'lukas-rotated',
+  'two-intermediates',
+  'backup-root',
+  'rotated-lower-intermediate',
   'other-product',
-  'missing-dc-int',
+  'missing-upper-intermediate',
   'single-int-ffe',
   'v1-codesigning',
   'unrelated-root',
@@ -136,7 +136,7 @@ export function expectedTranscript(
   return Buffer.concat(parts)
 }
 
-export function signingRequest(url = 'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=fixture-env') {
+export function signingRequest(url = 'https://assignments.example.test/precompute-assignments?dd_env=fixture-env') {
   return {
     url,
     method: 'POST',

@@ -24,7 +24,7 @@ export const MAX_SIGNED_REQUEST = 1024 * 1024
 export const MAX_SIGNED_RESPONSE = 2 * 1024 * 1024
 /**
  * FFE assignment-signing extended key usage (DER 06 0a 2b 06 01 04 01 86 8d 1f 01 01).
- * PLACEHOLDER: 1.3.6.1.4.1.99999 is not a Datadog-owned arc. Identity-core must assign the
+ * PLACEHOLDER: 1.3.6.1.4.1.99999 is not a Datadog-owned arc. Datadog must assign the
  * production OID before merge. Keep this the only definition of the OID in the SDK.
  */
 const FFE_ASSIGNMENT_SIGNING_EKU = '1.3.6.1.4.1.99999.1.1'

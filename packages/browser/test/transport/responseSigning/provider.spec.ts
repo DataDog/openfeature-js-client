@@ -19,8 +19,8 @@ import {
 } from '../../../src/transport/responseSigning/verification'
 import { FIXTURE_NOW, loadCredential, ROOT_A } from './chainFixtures'
 
-// Real Vault-issued lukas-valid test credential (root A -> DC -> tls-vault -> leaf).
-const credential = loadCredential('lukas-valid')
+// Test-CA-issued credential: root A -> upper intermediate -> lower intermediate -> leaf.
+const credential = loadCredential('two-intermediates')
 const vector = { now: FIXTURE_NOW }
 const roots = [ROOT_A]
 const context = { targetingKey: 'user-123', nested: { plan: 'team' } }

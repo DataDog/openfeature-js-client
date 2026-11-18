@@ -2,7 +2,7 @@
 /**
  * Response signing v1 with a certificate chain: leaf -> 1 to 3 intermediates -> pinned root.
  *
- * The chain tests use the real Vault-issued credentials in `chain-fixtures/` and synthetic chains
+ * The chain tests use the test-CA-issued credentials in `chain-fixtures/` and synthetic chains
  * that change one certificate-profile rule at a time.
  *
  * The shared ffe-system-test-data v1 fixtures run from the pinned `ffe-response-signing-data` submodule.
@@ -52,16 +52,16 @@ test('fixture roots and the FFE EKU DER match the protocol constants', () => {
   expect(ROOT_A).not.toBe(ROOT_B)
 })
 
-describe('chain fixture table (real Vault-issued credentials)', () => {
+describe('chain fixture table (test-CA-issued credentials)', () => {
   const pinned = { A: ROOT_A, B: ROOT_B }
   const table: Array<[CredentialName, Array<keyof typeof pinned>, boolean, string | undefined]> = [
-    ['lukas-valid', ['A'], true, undefined],
-    ['lukas-backup-root', ['B'], true, undefined],
-    ['lukas-backup-root', ['A', 'B'], true, undefined],
-    ['lukas-backup-root', ['A'], false, 'invalid-certificate'],
-    ['lukas-rotated', ['A'], true, undefined],
+    ['two-intermediates', ['A'], true, undefined],
+    ['backup-root', ['B'], true, undefined],
+    ['backup-root', ['A', 'B'], true, undefined],
+    ['backup-root', ['A'], false, 'invalid-certificate'],
+    ['rotated-lower-intermediate', ['A'], true, undefined],
     ['other-product', ['A'], false, 'invalid-certificate'],
-    ['missing-dc-int', ['A'], false, 'invalid-certificate'],
+    ['missing-upper-intermediate', ['A'], false, 'invalid-certificate'],
     ['single-int-ffe', ['A'], true, undefined],
     ['v1-codesigning', ['A'], false, 'invalid-certificate'],
     ['unrelated-root', ['A', 'B'], false, 'invalid-certificate'],
@@ -83,7 +83,7 @@ describe('chain fixture table (real Vault-issued credentials)', () => {
 describe('wire format and transcript', () => {
   test('the SDK transcript equals the independent v1 transcript, including the chain tail', async () => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const response = signedResponse(request, credential)
     const leaf = decodeBase64(credential.leafBase64, 4096)
     const intermediates = credential.intermediatesBase64.map((value) => decodeBase64(value, 4096))
@@ -108,7 +108,7 @@ describe('wire format and transcript', () => {
   })
   test('the intermediate order is bound by the transcript and the path', async () => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const reversed = { ...credential, intermediatesBase64: [...credential.intermediatesBase64].reverse() }
     await expect(verifyResponse(request, signedResponse(request, reversed), [ROOT_A], FIXTURE_NOW)).rejects.toThrow(
       'invalid-certificate'
@@ -120,7 +120,7 @@ describe('wire format and transcript', () => {
   })
   test('a tampered body fails the signature', async () => {
     const request = signingRequest()
-    const response = signedResponse(request, loadCredential('lukas-valid'))
+    const response = signedResponse(request, loadCredential('two-intermediates'))
     await expect(
       verifyResponse(request, { ...response, body: new Uint8Array(Buffer.from('{}')) }, [ROOT_A], FIXTURE_NOW)
     ).rejects.toThrow('invalid-signature')
@@ -133,7 +133,7 @@ describe('wire format and transcript', () => {
     ['four entries', (chain: string[]) => [...chain, ...chain].join(','), 'invalid-proof'],
   ] as const)('the signing-chain header rejects %s', async (_label, value, reason) => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const response = signedResponse(request, credential)
     if (value === null) response.headers.delete('x-datadog-feature-flags-signing-chain')
     else
@@ -145,7 +145,7 @@ describe('wire format and transcript', () => {
   })
   test('an entry larger than 4096 bytes DER is rejected', async () => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const response = signedResponse(request, credential)
     const oversized = Buffer.alloc(4097, 1).toString('base64')
     response.headers.set('x-datadog-feature-flags-signing-chain', `${credential.intermediatesBase64[0]},${oversized}`)
@@ -163,7 +163,7 @@ describe('wire format and transcript', () => {
     'prototype signature version %s is rejected on the request and the response',
     async (version) => {
       const request = signingRequest()
-      const response = signedResponse(request, loadCredential('lukas-valid'))
+      const response = signedResponse(request, loadCredential('two-intermediates'))
       response.headers.set('x-datadog-feature-flags-signature-version', version)
       await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).rejects.toThrow('invalid-proof')
       const prototypeRequest = signingRequest()
@@ -173,7 +173,7 @@ describe('wire format and transcript', () => {
   )
   test.each(['v2', 'v3'])('a proof over the %s transcript domain is rejected', async (domain) => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const response = signedResponse(request, credential)
     const transcript = Buffer.from(response.transcript)
     transcript.write(`datadog.feature-flags.precomputed-assignments.${domain}\0`, 0, 'utf8')
@@ -184,12 +184,12 @@ describe('wire format and transcript', () => {
     await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).rejects.toThrow('invalid-signature')
   })
   test.each([
-    ['https://PREVIEW.ff-cdn.datad0g.com:443/precompute-assignments?dd_env=e', 'preview.ff-cdn.datad0g.com'],
-    ['https://preview.ff-cdn.datad0g.com:8443/precompute-assignments?dd_env=e', 'preview.ff-cdn.datad0g.com:8443'],
+    ['https://ASSIGNMENTS.example.test:443/precompute-assignments?dd_env=e', 'assignments.example.test'],
+    ['https://assignments.example.test:8443/precompute-assignments?dd_env=e', 'assignments.example.test:8443'],
     ['https://[::1]:443/precompute-assignments?dd_env=e', '[::1]'],
   ])('the transcript authority of %s is %s', async (url, authority) => {
     const request = signingRequest(url)
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     const response = signedResponse(request, credential)
     await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).resolves.toHaveProperty('expiresAt')
     const transcript = await buildSigningTranscript(
@@ -207,7 +207,7 @@ describe('wire format and transcript', () => {
   })
   test('the proof must cover now and stay within the leaf validity', async () => {
     const request = signingRequest()
-    const credential = loadCredential('lukas-valid')
+    const credential = loadCredential('two-intermediates')
     await expect(
       verifyResponse(
         request,
@@ -229,11 +229,11 @@ describe('certificate profile (synthetic re-signed chains)', () => {
     der: Uint8Array
     privateKey: KeyObject
   }
-  const template = loadCredential('lukas-valid')
+  const template = loadCredential('two-intermediates')
   const templates = {
     root: ROOT_A,
-    dc: template.intermediatesBase64[1],
-    tls: template.intermediatesBase64[0],
+    upper: template.intermediatesBase64[1],
+    lower: template.intermediatesBase64[0],
     leaf: template.leafBase64,
   }
   function ext(id: string, critical: boolean, value: object): Extension {
@@ -285,7 +285,7 @@ describe('certificate profile (synthetic re-signed chains)', () => {
     leafRemove?: string[]
     intermediateRemove?: string[][]
   }
-  /** Root -> intermediate[n-1] -> ... -> intermediate[0] -> leaf. Defaults mirror the Vault fixtures. */
+  /** Root -> intermediate[n-1] -> ... -> intermediate[0] -> leaf. Defaults mirror the chain fixtures. */
   function chain(shape: Shape = {}) {
     const root = forge(templates.root, 'self', shape.root ?? [caBasic(2)])
     const intermediateShapes = shape.intermediates ?? [[caBasic(0)], [caBasic(1)]]
@@ -293,7 +293,7 @@ describe('certificate profile (synthetic re-signed chains)', () => {
     let parent = root
     for (let index = intermediateShapes.length - 1; index >= 0; index--) {
       parent = forge(
-        index === 0 ? templates.tls : templates.dc,
+        index === 0 ? templates.lower : templates.upper,
         parent,
         intermediateShapes[index],
         shape.intermediateRemove?.[index]
@@ -317,7 +317,7 @@ describe('certificate profile (synthetic re-signed chains)', () => {
   const accepts = (shape: Shape) => expect(verify(shape)).resolves.toHaveProperty('expiresAt')
   const rejects = (shape: Shape) => expect(verify(shape)).rejects.toThrow('invalid-certificate')
 
-  test('the synthetic baseline (Vault fixture shape) is accepted', () => accepts({}))
+  test('the synthetic baseline (chain fixture shape) is accepted', () => accepts({}))
 
   test('leaf EKU with FFE plus other OIDs is accepted', () => accepts({ leaf: [eku(CODE_SIGNING, FFE_EKU)] }))
   test('leaf EKU criticality is not checked', () =>
