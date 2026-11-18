@@ -6,6 +6,7 @@ import {
   evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
   type FlagTypeToValue,
+  getPrecomputedContext,
   LRUInMemoryAssignmentCache,
   timeStampNow,
 } from '@datadog/flagging-core'
@@ -206,21 +207,37 @@ function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfigur
       if (snapshot.rules) return snapshot
     } else if (rules === undefined) {
       const precomputed = configuration.precomputed
-      const context = precomputed?.context
-      const snapshot = configurationFromString(
-        configurationToString({
-          precomputed: precomputed && {
-            ...precomputed,
-            context: context === undefined ? undefined : stripAssignmentToken(context),
-          },
-        })
-      )
-      if (snapshot.precomputed) return snapshot
+      if (precomputed) {
+        const context = precomputed.context
+        const input = { ...precomputed, context: context === undefined ? undefined : stripAssignmentToken(context) }
+        const snapshot = configurationFromString(configurationToString({ precomputed: input }))
+        if (snapshot.precomputed) {
+          // The portable wire validates the response but cannot preserve in-memory Date values.
+          const detachedContext = getPrecomputedContext({ precomputed: input })
+          if (
+            detachedContext !== undefined &&
+            ((detachedContext.targetingKey !== undefined && typeof detachedContext.targetingKey !== 'string') ||
+              !isContextValue(detachedContext))
+          ) {
+            throw new TypeError('Invalid precomputed context')
+          }
+          snapshot.precomputed.context = detachedContext
+          return snapshot
+        }
+      }
     }
   } catch {
     // Caller-controlled configuration and accessor errors must not leak into diagnostics.
   }
   throw new TypeError('DatadogCoreProvider requires a valid rules-based or precomputed configuration')
+}
+
+function isContextValue(value: unknown): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (value instanceof Date) return Number.isFinite(value.getTime())
+  if (Array.isArray(value)) return Array.from(value).every(isContextValue)
+  return typeof value === 'object' && value !== null && Object.values(value).every(isContextValue)
 }
 
 function configurationGeneration(configuration: FlagsConfiguration): string {

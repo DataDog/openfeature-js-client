@@ -154,6 +154,67 @@ describe('DatadogCoreProvider precomputed configuration', () => {
     await expect(client.getBooleanValue('test-flag', false, { targetingKey: 'another-user' })).resolves.toBe(true)
   })
 
+  it.each(['top-level', 'nested'])(
+    'preserves detached %s Dates through construction, replacement, and getters',
+    async (location) => {
+      const date = new Date('2026-01-01T00:00:00Z')
+      const datedContext = (value: Date): EvaluationContext => ({
+        ...context,
+        ...(location === 'top-level' ? { joinedAt: value } : { profile: { dates: [value] } }),
+      })
+      const configuration = precomputed()
+      configuration.precomputed!.context = datedContext(date)
+      const originalContext = structuredClone(configuration.precomputed!.context)
+      const provider = new DatadogCoreProvider(configuration)
+      const client = clientFor(provider)
+
+      expect(provider.getConfiguration().precomputed!.context).toEqual(originalContext)
+      date.setUTCFullYear(2000)
+      const copy = provider.getConfiguration().precomputed!.context!
+      const copiedDate =
+        location === 'top-level' ? (copy.joinedAt as Date) : (copy.profile as { dates: Date[] }).dates[0]
+      expect(copiedDate).toBeInstanceOf(Date)
+      copiedDate.setUTCFullYear(2001)
+      expect(provider.getConfiguration().precomputed!.context).toEqual(originalContext)
+      await expect(client.getBooleanDetails('test-flag', false, originalContext)).resolves.toMatchObject({
+        value: true,
+        reason: 'TARGETING_MATCH',
+      })
+
+      date.setUTCFullYear(2026)
+      configuration.precomputed!.response.data.attributes.flags['test-flag'].variationValue = false
+      provider.setConfiguration(configuration)
+      date.setUTCFullYear(2000)
+      expect(provider.getConfiguration().precomputed!.context).toEqual(originalContext)
+      await expect(client.getBooleanDetails('test-flag', true, originalContext)).resolves.toMatchObject({
+        value: false,
+        reason: 'TARGETING_MATCH',
+      })
+    }
+  )
+
+  it.each(['top-level', 'nested'])(
+    'rejects invalid %s Dates without replacing the active snapshot',
+    async (location) => {
+      const invalid = precomputed()
+      const date = new Date(Number.NaN)
+      invalid.precomputed!.context = {
+        ...context,
+        ...(location === 'top-level' ? { joinedAt: date } : { profile: { dates: [date] } }),
+      }
+      expect(() => new DatadogCoreProvider(invalid)).toThrow(TypeError)
+      const provider = new DatadogCoreProvider(precomputed())
+      const client = clientFor(provider)
+      const changed = jest.fn()
+      client.addHandler(ProviderEvents.ConfigurationChanged, changed)
+
+      expect(() => provider.setConfiguration(invalid)).toThrow(TypeError)
+      expect(changed).not.toHaveBeenCalled()
+      expect(provider.getConfiguration().precomputed!.context).toEqual(context)
+      await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+    }
+  )
+
   it.each([false, true])('reads all value types with encoded keys=%s and detaches object values', async (encoded) => {
     const configuration = precomputed()
     const flags = configuration.precomputed!.response.data.attributes.flags
