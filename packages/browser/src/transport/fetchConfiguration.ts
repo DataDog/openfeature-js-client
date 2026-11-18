@@ -77,7 +77,7 @@ interface ConfigurationRequestOptions {
 interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
-  /** The service name. It is sent as `dd-service` when fetch can send it, so usage can be split by service. */
+  /** The service name. It is sent as `dd-service`, trimmed, when it is printable ASCII, so usage can be split by service. */
   service?: string | null
   site?: string
   fetch?: typeof globalThis.fetch
@@ -148,18 +148,11 @@ export function buildConfigurationHeaders(
   }
 }
 
-/**
- * The service as fetch sends it, or undefined when it is empty. Fetch's own Headers check decides: it trims the
- * value, and a value it rejects would fail the request so that no flags load. Such a service sends no header, and
- * the request still goes out. The edges check the rest, and Datadog normalizes the tag.
- */
 function serviceHeaderValue(service: string | null | undefined): string | undefined {
-  if (typeof service !== 'string') return undefined
-  try {
-    return new Headers({ 'dd-service': service }).get('dd-service') || undefined
-  } catch {
-    return undefined
-  }
+  const value = typeof service === 'string' ? service.trim() : ''
+  // Printable ASCII plus space and tab, the same as OkHttp on Android. fetch throws above
+  // U+00FF and on CR/LF, and the edges keep only ASCII.
+  return /^[\t\x20-\x7e]+$/.test(value) ? value : undefined
 }
 
 export async function fetchPrecomputedConfiguration(
