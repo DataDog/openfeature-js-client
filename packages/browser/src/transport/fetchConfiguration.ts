@@ -283,7 +283,6 @@ async function requestPrecomputedConfiguration(
     const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
   let signedResponse: Awaited<ReturnType<ResponseSigningController['read']>> | undefined
   let responseBody: unknown
   try {
@@ -356,6 +355,7 @@ async function requestPrecomputedConfiguration(
     },
   }
   signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
+  if (flagSelection) reportIgnoredFlagSelection(response)
   return configuration
 }
 

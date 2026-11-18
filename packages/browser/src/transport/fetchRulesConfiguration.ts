@@ -43,7 +43,6 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
     const errorMessage = await getErrorMessage(response)
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (selected) reportIgnoredFlagSelection(response)
 
   let bytes: Uint8Array
   let configuration: FlagsConfiguration
@@ -63,6 +62,7 @@ export async function fetchRulesConfiguration(options: RulesConfigurationFetchOp
   if (configuration.rules) {
     configuration.rules.fetchedAt = fetchedAt
   }
+  if (selected) reportIgnoredFlagSelection(response)
   return configuration
 }
 
