@@ -2,6 +2,7 @@ import { sha256Hex } from '../evaluation/sha256'
 import { encodeUtf8, isWellFormedUnicode } from '../utf8'
 
 const SCHEME = 'flag-key-sha256-v1'
+export const DEPENDENCY_KEY_ENCRYPTION_SCHEME = 'dependency-key-hkdf-sha256-aes-256-gcm-v1'
 const DOMAIN = /* @__PURE__ */ encodeUtf8('datadog.feature-flags.flag-key.v1\0')
 const MAX_CACHED_KEYS = 1024
 const lookupCaches = new WeakMap<FlagKeyObfuscation, { salt: string; keys: Map<string, string> }>()
@@ -16,6 +17,9 @@ export const SUPPORTED_FLAGS_CAPABILITIES = [FLAG_KEY_SHA256_CAPABILITY] as cons
 export type FlagKeyObfuscation = {
   scheme: typeof SCHEME
   salt: string
+  dependencyKeyEncryption?: {
+    scheme: typeof DEPENDENCY_KEY_ENCRYPTION_SCHEME
+  }
 }
 
 /** Validate the response's encoding before parsing or looking up assignments. */
@@ -36,8 +40,15 @@ export function readFlagKeyObfuscation(
   if (!isLowercaseHex(descriptor.salt, 16)) {
     return { error: 'Precomputed flag-key salt must contain 32 lowercase hexadecimal characters' }
   }
+  // Unknown dependency-key schemes leave top-level lookup usable. The wire parser
+  // rejects only entries that actually contain dependency evaluations.
   // Keep descriptor identity stable so repeated lookups share a bounded cache.
   return { encoding: descriptor as FlagKeyObfuscation }
+}
+
+/** Whether an obfuscated packet declares the supported dependency-key envelope. */
+export function supportsDependencyKeyEncryption(encoding: FlagKeyObfuscation): boolean {
+  return encoding.dependencyKeyEncryption?.scheme === DEPENDENCY_KEY_ENCRYPTION_SCHEME
 }
 
 /** Hash only the lookup key. Values and telemetry retain their original meaning. @internal */
