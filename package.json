@@ -23,6 +23,7 @@
     "licenses:validate": "scripts/licenses-validate.sh",
     "lint": "biome check . --diagnostic-level=error",
     "lint:fix": "biome check --write .",
+    "lint:dynamic-code": "scripts/dynamic-code-lint-validate.sh",
     "typecheck": "lerna run typecheck --stream",
     "clean": "lerna run clean --stream",
     "release": "scripts/cli release",

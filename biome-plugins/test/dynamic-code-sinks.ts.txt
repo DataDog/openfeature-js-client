@@ -1,0 +1,16 @@
+// Each line below "// sinks" must produce exactly one error-level diagnostic.
+// scripts/dynamic-code-lint-validate.sh lints this file through stdin.
+declare const s: string
+declare const el: { innerHTML: string; outerHTML: string; insertAdjacentHTML(p: string, h: string): void }
+// sinks
+eval(s)
+globalThis.eval(s)
+new Function(s)
+Function(s)
+setTimeout('run()', 0)
+el.innerHTML = s
+el.outerHTML = s
+el.insertAdjacentHTML('beforeend', s)
+document.write(s)
+document.writeln(s)
+document.createElement('script')

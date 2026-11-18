@@ -6,6 +6,12 @@
       "recommended": true,
       "correctness": {
         "noUnusedImports": "error"
+      },
+      "security": {
+        "noGlobalEval": "error"
+      },
+      "nursery": {
+        "noImpliedEval": "error"
       }
     }
   },
@@ -45,5 +51,6 @@
       "!packages/browser/test/ffe-response-signing-data",
       "!packages/core/src/configuration/generated"
     ]
-  }
+  },
+  "plugins": ["./biome-plugins/no-dynamic-code.grit"]
 }
