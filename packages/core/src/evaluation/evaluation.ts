@@ -329,7 +329,7 @@ function evaluateRules<T extends FlagValueType>(
   const { targetingKey: subjectKey, ...remainingContext } = context
 
   // Expose the subjectKey to rule matching as both "id" and "targetingKey" when present.
-  // Explicit context attributes with those names take precedence.
+  // An explicit "id" context attribute takes precedence. "targetingKey" always comes from the context's targeting key.
   const subjectAttributes = {
     ...(subjectKey != null ? { id: subjectKey, targetingKey: subjectKey } : {}),
     ...remainingContext,

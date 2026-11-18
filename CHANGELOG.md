@@ -13,6 +13,14 @@
 - Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [BROWSER]
 - Support `flagSelection.keyPatterns` in `precomputeConfiguration` to produce selected assignments from reusable source rules while retaining dependency evaluation. Tags are unsupported; invalid selections throw `invalid_options` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [CORE] [NODE-SERVER]
 
+**Bug Fixes:**
+
+- Resolve the `targetingKey` attribute in JSON rules-based configurations from the evaluation context's targeting key, matching protobuf configurations ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [CORE]
+
+**Usage Notes:**
+
+- Behaviour change: rules on `targetingKey` in JSON configurations now see the context's targeting key instead of no value. `ONE_OF`, `MATCHES` and `IS_NULL: false` conditions can start matching, `NOT_ONE_OF` and `NOT_MATCHES` conditions can start matching keys they don't list, and `IS_NULL: true` conditions stop matching subjects with a targeting key. `id` resolution and bucketing are unchanged [CORE]
+
 ## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
 
 **Features:**
