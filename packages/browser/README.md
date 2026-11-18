@@ -698,10 +698,11 @@ const { appData, flags: wire } = await response.json()
 The getter returns an opaque, versioned string containing the SDK name, version,
 and supported capabilities. Forward it unchanged; do not parse or construct it in
 application code. The SDK-owned format can grow without changes to your request code.
-Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
-supported; a capability does not require the server to use that format or provide
-an authorization boundary. The fingerprint identifies the SDK, not a user or device,
-and is not authentication. Your application chooses its own client-server transport.
+Currently it advertises `assignment-encoding-flag-key-256-v1` and
+`dependent-flag-variant-key-v1`. Plaintext remains supported; a capability does not
+require the server to use that format or provide an authorization boundary. The
+fingerprint identifies the SDK, not a user or device, and is not authentication. Your
+application chooses its own client-server transport.
 The getter and `ClientFingerprint` type are available from both the root and
 `/rules-based` entry points. The root import does not load protobuf.
 

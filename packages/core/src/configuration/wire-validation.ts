@@ -151,8 +151,8 @@ export function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfusca
   return (
     isRecord(value) &&
     value.reason === 'ERROR' &&
-    typeof value.errorCode === 'string' &&
-    (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+    value.errorCode === 'GENERAL' &&
+    (value.errorMessage === undefined || isNonEmptyString(value.errorMessage)) &&
     isDependencyEvaluations(value.dependencyEvaluations, encoding)
   )
 }
@@ -180,11 +180,11 @@ function isEncryptedDependencyKey(value: string): boolean {
 }
 
 function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyEvaluation {
-  if (!isRecord(value) || typeof value.flagKey !== 'string') return false
+  if (!isRecord(value) || !isNonEmptyString(value.flagKey)) return false
   if (value.reason === 'ERROR') {
     return (
-      typeof value.errorCode === 'string' &&
-      (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+      isNonEmptyString(value.errorCode) &&
+      (value.errorMessage === undefined || isNonEmptyString(value.errorMessage)) &&
       value.isPresentInAssignment === undefined
     )
   }
@@ -194,6 +194,10 @@ function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyE
     value.errorCode == null &&
     value.errorMessage == null
   )
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
 }
 
 function isJsonValue(value: unknown): boolean {

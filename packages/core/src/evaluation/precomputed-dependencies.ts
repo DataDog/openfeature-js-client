@@ -114,8 +114,15 @@ function toEvaluationDetails(
     }
   }
   const flagError = flagErrors ? getOwnProperty(flagErrors, lookup.key) : undefined
-  if (flagError !== undefined || hasEvaluationError || !flag || precomputedFlagIssue(flag, encoding) !== undefined) {
-    return { bindingError: flagError ?? 'Successful dependency evaluation is missing its top-level assignment' }
+  const hasFlagError = flagErrors ? hasOwnKey(flagErrors, lookup.key) : false
+  if (hasFlagError || hasEvaluationError || !flag || precomputedFlagIssue(flag, encoding) !== undefined) {
+    return {
+      bindingError: hasFlagError
+        ? typeof flagError === 'string' && flagError.length > 0
+          ? flagError
+          : 'Invalid precomputed flag configuration'
+        : 'Successful dependency evaluation is missing its top-level assignment',
+    }
   }
   const { entries: featureEntries, hasEvaluationFeatures } = createSplitFeatureMetadata(flag.features, logger)
   return {

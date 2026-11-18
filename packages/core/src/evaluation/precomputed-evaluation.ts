@@ -167,12 +167,14 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     return { value: defaultValue, reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' as ErrorCode }
   }
   const flagError = precomputed.flagErrors ? getOwnProperty(precomputed.flagErrors, lookup.key) : undefined
-  if (flagError) {
+  const hasFlagError = precomputed.flagErrors ? hasOwnKey(precomputed.flagErrors, lookup.key) : false
+  if (hasFlagError) {
     return {
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'PARSE_ERROR' as ErrorCode,
-      errorMessage: flagError,
+      errorMessage:
+        typeof flagError === 'string' && flagError.length > 0 ? flagError : 'Invalid precomputed flag configuration',
     }
   }
 

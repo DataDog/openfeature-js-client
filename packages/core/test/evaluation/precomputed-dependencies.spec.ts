@@ -85,6 +85,29 @@ describe('precomputed dependent flags', () => {
     ])
   })
 
+  it.each([
+    ['root', 'root'],
+    ['prerequisite', 'parent'],
+  ])('fails closed for an own undefined %s quarantine entry', (_scope, quarantinedKey) => {
+    const flags = configuration({
+      allocationKey: 'root-allocation',
+      variationKey: 'root-on',
+      variationType: 'boolean',
+      variationValue: true,
+      reason: 'TARGETING_MATCH',
+      doLog: true,
+      dependencyEvaluations: [successfulDependency],
+    })
+    flags.precomputed!.flagErrors = { [quarantinedKey]: undefined as never }
+
+    expect(evaluatePrecomputedConfiguration(flags, 'boolean', 'root', false, context)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Invalid precomputed flag configuration',
+    })
+  })
+
   it.each([{}, [null], [{ flagKey: 'parent' }]])(
     'rejects malformed dependency traces in direct configurations: %j',
     (dependencyEvaluations) => {
@@ -439,7 +462,10 @@ describe('precomputed dependent flags', () => {
   it.each([
     { reason: 'ERROR' },
     { reason: 'STATIC', errorCode: 'GENERAL' },
+    { reason: 'ERROR', errorCode: '' },
+    { reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' },
     { reason: 'ERROR', errorCode: 12 },
+    { reason: 'ERROR', errorCode: 'GENERAL', errorMessage: '' },
     { reason: 'ERROR', errorCode: 'GENERAL', errorMessage: 12 },
     null,
     false,
@@ -449,6 +475,21 @@ describe('precomputed dependent flags', () => {
   ])('rejects malformed direct evaluation errors: %j', (malformedError) => {
     const flags = configuration({ reason: 'ERROR', errorCode: 'GENERAL' })
     flags.precomputed!.response.data.attributes.flagEvaluationErrors!.root = malformedError as never
+
+    expect(evaluatePrecomputedConfiguration(flags, 'boolean', 'root', false, context)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'PARSE_ERROR',
+      errorMessage: 'Invalid precomputed flag evaluation error',
+    })
+  })
+
+  it.each([
+    [{ flagKey: '', isPresentInAssignment: true }],
+    [{ flagKey: 'parent', reason: 'ERROR', errorCode: '' }],
+    [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'GENERAL', errorMessage: '' }],
+  ])('rejects malformed direct dependency error-contract values: %j', (dependencyEvaluations) => {
+    const flags = configuration({ reason: 'ERROR', errorCode: 'GENERAL', dependencyEvaluations })
 
     expect(evaluatePrecomputedConfiguration(flags, 'boolean', 'root', false, context)).toMatchObject({
       value: false,
