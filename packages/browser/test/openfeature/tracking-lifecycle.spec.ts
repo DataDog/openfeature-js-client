@@ -1,5 +1,13 @@
-import { OpenFeature, ProviderEvents, ProviderStatus } from '@openfeature/web-sdk'
+import {
+  type EvaluationDetails,
+  type FlagValue,
+  type HookContext,
+  OpenFeature,
+  ProviderEvents,
+  ProviderStatus,
+} from '@openfeature/web-sdk'
 import * as indexeddbStore from '../../src/cache/indexeddb-store'
+import { createTrackingHookController } from '../../src/openfeature/tracking'
 import {
   composeDatadogTrackingHooks,
   configurationFromString,
@@ -99,6 +107,19 @@ describe('tracking resource lifecycle', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     }
   )
+
+  it('forwards the after stage to an initialized managed hook', async () => {
+    const after = jest.fn()
+    const controller = createTrackingHookController(() => ({ after, shutdown: jest.fn() }))
+    controllers.push(controller)
+    await controller.initialize()
+    const context = {} as HookContext
+    const details = {} as EvaluationDetails<FlagValue>
+
+    controller.hooks[0].after?.(context, details)
+
+    expect(after).toHaveBeenCalledWith(context, details)
+  })
 
   it.each(['exposure', 'evaluation'] as const)(
     'cleans up %s resources when the final proxy call throws',

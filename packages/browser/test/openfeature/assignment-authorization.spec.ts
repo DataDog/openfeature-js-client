@@ -565,7 +565,7 @@ describe('assignment authorization', () => {
         ...args
       ) {
         const request = put.apply(this, args)
-        if (String(args[1]).startsWith('v2-flags-config-')) {
+        if (String(args[1]).startsWith('v3-flags-config-')) {
           spy.mockRestore()
           this.transaction.addEventListener('complete', () => resolve(), { once: true })
           this.transaction.addEventListener('abort', () => reject(this.transaction.error), { once: true })
