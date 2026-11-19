@@ -228,12 +228,12 @@ export class ExposureLoggingHook implements Hook {
   ): void {
     // One check-and-record after successful finalization; concurrent or nested
     // evaluations of the same assignment cannot both be admitted.
-    const sharedDecision = completeExposureDecision(details)
-    const metadata = details.flagMetadata as FlagMetadata | undefined
-    if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
-      return
-    }
     try {
+      const sharedDecision = completeExposureDecision(details)
+      const metadata = details.flagMetadata as FlagMetadata | undefined
+      if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
+        return
+      }
       if (this.exposureChannel.hasSubscribers) {
         // Features stay off the cache entry: a features change must not turn a
         // repeat exposure into a new one.

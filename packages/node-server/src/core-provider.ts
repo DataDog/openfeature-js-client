@@ -7,6 +7,7 @@ import {
   type FlagTypeToValue,
   getPrecomputedContext,
   LRUInMemoryAssignmentCache,
+  parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -35,7 +36,11 @@ import {
 export interface DatadogCoreProviderOptions {
   /** Experiment exclusion policy. Defaults to Disabled. */
   experimentationOptOutMode?: ExperimentationOptOutMode
-  /** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
+  /**
+   * Caller-owned cache; generation changes call clear() without awaiting it, but onClose() does not.
+   * clear() must synchronously invalidate has(); deferred persistence must preserve later admissions.
+   * Installs no hook or uploader. @internal
+   */
   exposureCache?: AssignmentCache
   /** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
   exposureChannel?: Channel<ExposureEvent>
@@ -201,10 +206,18 @@ function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfigur
     } else if (rules === undefined) {
       const precomputed = configuration.precomputed
       if (precomputed) {
+        const validated = parsePrecomputedConfigurationResponse(precomputed.response)
+        if ('error' in validated) throw new TypeError('Invalid precomputed response')
         const context = precomputed.context
         const input = { ...precomputed, context: context === undefined ? undefined : stripAssignmentToken(context) }
         const snapshot = configurationFromString(configurationToString({ precomputed: input }))
         if (snapshot.precomputed) {
+          const quarantinedKeys = Object.keys({ ...precomputed.flagErrors, ...validated.flagErrors })
+          const flagErrors = {
+            ...Object.fromEntries(quarantinedKeys.map((key) => [key, 'Invalid precomputed flag configuration'])),
+            ...snapshot.precomputed.flagErrors,
+          }
+          if (Object.keys(flagErrors).length > 0) snapshot.precomputed.flagErrors = flagErrors
           // The portable wire validates the response but cannot preserve in-memory Date values.
           const detachedContext = getPrecomputedContext({ precomputed: input })
           if (

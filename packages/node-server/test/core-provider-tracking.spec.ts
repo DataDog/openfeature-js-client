@@ -417,6 +417,35 @@ describe('DatadogCoreProvider optional tracking', () => {
     expect(sink.publish).toHaveBeenCalledTimes(1)
   })
 
+  it.each([undefined, 'has', 'set'])(
+    'attempts the root exposure after a prerequisite cache admission failure: %s',
+    async (failure) => {
+      const backing = new LRUInMemoryAssignmentCache(50)
+      let prerequisiteChecks = 0
+      const cache: AssignmentCache = {
+        init: () => backing.init(),
+        clear: () => backing.clear(),
+        has: (event) => {
+          if (event.flag.key === 'prerequisite' && ++prerequisiteChecks === 2 && failure === 'has') {
+            throw new Error('prerequisite cache check failed')
+          }
+          return backing.has(event)
+        },
+        set: (event) => {
+          if (event.flag.key === 'prerequisite' && failure === 'set') throw new Error('prerequisite cache write failed')
+          backing.set(event)
+        },
+      }
+      const sink = channel()
+      const provider = new DatadogCoreProvider(dependentRules(), { exposureCache: cache, exposureChannel: sink })
+
+      await expect(clientFor(provider).getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+      expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual(
+        failure === undefined ? ['prerequisite', 'test-flag'] : ['test-flag']
+      )
+    }
+  )
+
   it('preserves deduplication on identical refreshes and invalid replacements, and resets it for a new generation', async () => {
     const sink = channel()
     const provider = new DatadogCoreProvider(rules(), { exposureChannel: sink })

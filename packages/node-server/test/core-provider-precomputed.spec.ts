@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 import type { Channel } from 'node:diagnostics_channel'
-import { type ExposureEvent, FlagEvaluationAggregator, type FlagsConfiguration } from '@datadog/flagging-core'
+import {
+  type ExposureEvent,
+  FlagEvaluationAggregator,
+  type FlagsConfiguration,
+  parsePrecomputedConfigurationResponse,
+} from '@datadog/flagging-core'
 import { type EvaluationContext, OpenFeature, ProviderEvents, ServerProviderStatus } from '@openfeature/server-sdk'
 import rulesWire from '../../browser/test/data/rules-v1-wire.json'
 import {
@@ -180,6 +185,15 @@ describe('DatadogCoreProvider precomputed configuration', () => {
         value: true,
         reason: 'TARGETING_MATCH',
       })
+      const mismatchedContext = {
+        ...context,
+        ...(location === 'top-level' ? { joinedAt: {} } : { profile: { dates: [{}] } }),
+      }
+      await expect(client.getBooleanDetails('test-flag', false, mismatchedContext)).resolves.toMatchObject({
+        value: false,
+        errorCode: 'INVALID_CONTEXT',
+        flagMetadata: { __dd_observe_full_evaluation_data: false },
+      })
 
       date.setUTCFullYear(2026)
       configuration.precomputed!.response.data.attributes.flags['test-flag'].variationValue = false
@@ -296,6 +310,48 @@ describe('DatadogCoreProvider precomputed configuration', () => {
     await expect(client.getBooleanDetails('test-flag', false, context)).resolves.toMatchObject({
       errorCode: 'FLAG_NOT_FOUND',
     })
+  })
+
+  it.each(
+    [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY].flatMap((value) =>
+      [false, true].map((parsed) => ({ value, parsed }))
+    )
+  )('retains non-finite JSON quarantine for $value, parsed=$parsed', async ({ value, parsed }) => {
+    const configuration = precomputed()
+    const flags = configuration.precomputed!.response.data.attributes.flags
+    flags.bad = { ...flags['test-flag'], variationType: 'object', variationValue: { nested: { amount: value } } }
+    const validated = parsePrecomputedConfigurationResponse(configuration.precomputed!.response)
+    expect(validated).toHaveProperty('flagErrors.bad')
+    if (parsed && !('error' in validated)) Object.assign(configuration.precomputed!, validated)
+
+    const provider = new DatadogCoreProvider(configuration)
+    const client = clientFor(provider)
+    for (const snapshot of [undefined, configuration, provider.getConfiguration()]) {
+      if (snapshot) provider.setConfiguration(snapshot)
+      await expect(client.getObjectDetails('bad', { fallback: true }, context)).resolves.toMatchObject({
+        value: { fallback: true },
+        errorCode: 'PARSE_ERROR',
+      })
+      await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+      expect(provider.getConfiguration()).toHaveProperty('precomputed.flagErrors.bad')
+    }
+  })
+
+  it('retains overflow-number quarantine from a parsed portable wire', async () => {
+    const configuration = precomputed()
+    const flags = configuration.precomputed!.response.data.attributes.flags
+    flags.bad = { ...flags['test-flag'], variationType: 'object', variationValue: { amount: 0 } }
+    const wire = JSON.parse(configurationToString(configuration))
+    wire.precomputed.response = wire.precomputed.response.replace('"amount":0', '"amount":1e999')
+    const parsed = configurationFromString(JSON.stringify(wire))
+    expect(parsed).toHaveProperty('precomputed.flagErrors.bad')
+
+    const client = clientFor(new DatadogCoreProvider(parsed))
+    await expect(client.getObjectDetails('bad', { fallback: true }, context)).resolves.toMatchObject({
+      value: { fallback: true },
+      errorCode: 'PARSE_ERROR',
+    })
+    await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
   })
 
   it.each([

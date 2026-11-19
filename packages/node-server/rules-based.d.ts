@@ -1617,7 +1617,11 @@ interface ExposureSink {
 export interface DatadogCoreProviderOptions {
 	/** Experiment exclusion policy. Defaults to Disabled. */
 	experimentationOptOutMode?: ExperimentationOptOutMode;
-	/** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
+	/**
+	 * Caller-owned cache; generation changes call clear() without awaiting it, but onClose() does not.
+	 * clear() must synchronously invalidate has(); deferred persistence must preserve later admissions.
+	 * Installs no hook or uploader. @internal
+	 */
 	exposureCache?: AssignmentCache;
 	/** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
 	exposureChannel?: Channel<ExposureEvent>;
