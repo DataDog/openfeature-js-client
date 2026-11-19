@@ -13,6 +13,7 @@ import {
 } from '../configuration/flag-key-obfuscation'
 import { timeStampNow } from '../time'
 import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
+import { precomputedEnvironmentIdentity, withEnvironmentIdentity } from './environment-identity'
 import { createEvaluationMetadata } from './evaluationMetadata'
 import {
   acknowledgesExperimentationOptOut,
@@ -40,28 +41,31 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
   logger: Logger = NOOP_LOGGER,
   diagnostics?: EvaluationDiagnostics
 ): ResolutionDetails<FlagTypeToValue<T>> {
+  const environmentIdentity = precomputedEnvironmentIdentity(flagsConfiguration?.precomputed?.response)
+  const withIdentity = (details: ResolutionDetails<FlagTypeToValue<T>>) =>
+    withEnvironmentIdentity(details, environmentIdentity)
   const optedOut = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (optedOut === undefined) {
-    return {
+    return withIdentity({
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       flagMetadata: createEvaluationMetadata(timeStampNow(), false),
       errorMessage: INVALID_EXPERIMENTATION_OPT_OUT,
-    }
+    })
   }
   if (
     (optedOut && !flagsConfiguration?.precomputed?.context) ||
     !acknowledgesExperimentationOptOut(flagsConfiguration, optedOut)
   ) {
-    return {
+    return withIdentity({
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       flagMetadata: createEvaluationMetadata(timeStampNow(), false),
       errorMessage:
         'Precomputed configuration must match the subject and acknowledge the requested experimentation opt-out policy',
-    }
+    })
   }
   const selection = selectPrecomputedFlagsConfiguration(flagsConfiguration, context)
   // Capture the selected configuration's consent before evaluating the flag.
@@ -80,17 +84,17 @@ export function evaluatePrecomputedConfiguration<T extends FlagValueType>(
       logger,
       diagnostics
     )
-    return { ...details, flagMetadata: { ...details.flagMetadata, ...metadata } }
+    return withIdentity({ ...details, flagMetadata: { ...details.flagMetadata, ...metadata } })
   }
 
   const { error } = selection
-  return {
+  return withIdentity({
     value: defaultValue,
     reason: 'ERROR',
     errorCode: error.errorCode as ErrorCode,
     flagMetadata: metadata,
     ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
-  }
+  })
 }
 
 type PrecomputedFlagsConfigurationError = {

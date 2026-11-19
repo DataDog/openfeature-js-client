@@ -113,6 +113,21 @@ describe.each([
   })
 })
 
+it('carries JSON rules environment identity in evaluation metadata', () => {
+  const configuration = jsonRules()
+  configuration.environment = {
+    id: '11111111-1111-4111-8111-111111111111',
+    name: 'test',
+  }
+
+  expect(
+    evaluateRulesBasedConfiguration(configuration, 'boolean', 'flag', false, context, logger).flagMetadata
+  ).toMatchObject({
+    __dd_environment_id: '11111111-1111-4111-8111-111111111111',
+    __dd_environment_name: 'test',
+  })
+})
+
 describe.each(['disabled', 'immediate', 'future_experiments_only'] as const)(
   'invalid activation in %s mode',
   (optOutMode) => {

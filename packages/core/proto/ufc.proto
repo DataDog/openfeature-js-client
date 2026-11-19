@@ -35,6 +35,10 @@ message FlagsConfiguration {
   // Optional evaluator behavior overrides. Evaluators use their hard-coded
   // defaults when this message or one of its fields is absent.
   EvaluatorParams evaluator_params = 11;
+
+  // Stable environment UUID, unchanged when the environment is renamed.
+  // Empty in configurations produced before identity was included.
+  string environment_id = 12;
 }
 
 message EvaluatorParams {

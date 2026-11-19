@@ -9,6 +9,12 @@ const configuration = configurationFromString(
   JSON.stringify(configurationWire)
 )
 const matchingContext = configuration.precomputed?.context ?? {}
+const legacyEnvironmentMetadata = {
+  __dd_eval_timestamp_ms: expect.any(Number),
+  __dd_observe_full_evaluation_data: false,
+  __dd_environment_id: '',
+  __dd_environment_name: 'prod',
+}
 
 const rulesConfiguration = configurationFromString(JSON.stringify(rulesWire))
 
@@ -93,19 +99,19 @@ describe('evaluate', () => {
   it('returns default for unknown flag', () => {
     const result = evaluate(configuration, 'string', 'unknown-flag', 'default', matchingContext)
     expect(result).toEqual({
-      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 
   it.each(['constructor', '__proto__'])('treats inherited precomputed flag key %s as missing', (flagKey) => {
     expect(evaluate(configuration, 'string', flagKey, 'default', matchingContext)).toEqual({
-      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'FLAG_NOT_FOUND' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 
@@ -137,10 +143,10 @@ describe('evaluate', () => {
   it('returns default without variant metadata for type mismatch', () => {
     const result = evaluate(configuration, 'string', 'boolean-flag', 'default', matchingContext)
     expect(result).toEqual({
-      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
+      flagMetadata: legacyEnvironmentMetadata,
     })
     expect(result).not.toHaveProperty('variant')
     expect(result.flagMetadata).not.toHaveProperty('allocationKey')
@@ -153,8 +159,7 @@ describe('evaluate', () => {
       variant: 'variation-124',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_eval_timestamp_ms: expect.any(Number),
-        __dd_observe_full_evaluation_data: false,
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-124',
         __dd_do_log: true,
         allocationKey: 'allocation-124',
@@ -171,8 +176,7 @@ describe('evaluate', () => {
       variant: 'variation-123',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_eval_timestamp_ms: expect.any(Number),
-        __dd_observe_full_evaluation_data: false,
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-123',
         __dd_do_log: true,
         allocationKey: 'allocation-123',
@@ -189,8 +193,7 @@ describe('evaluate', () => {
       variant: 'variation-127',
       reason: 'TARGETING_MATCH',
       flagMetadata: {
-        __dd_eval_timestamp_ms: expect.any(Number),
-        __dd_observe_full_evaluation_data: false,
+        ...legacyEnvironmentMetadata,
         __dd_allocation_key: 'allocation-127',
         __dd_do_log: true,
         allocationKey: 'allocation-127',
@@ -255,11 +258,11 @@ describe('evaluate', () => {
     const result = evaluate(configuration, 'string', 'string-flag', 'default', { targetingKey: 'other-user' })
 
     expect(result).toEqual({
-      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT' as ErrorCode,
       errorMessage: 'Precomputed flags configuration does not match the current context',
+      flagMetadata: legacyEnvironmentMetadata,
     })
   })
 

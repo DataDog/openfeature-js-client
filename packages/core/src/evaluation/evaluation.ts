@@ -17,6 +17,12 @@ import type { FlagsConfiguration as ProtobufFlagsConfiguration } from '../config
 import { type PreparedRulesResponse, prepareRulesResponse } from '../configuration/prepared-rules-response'
 import { type TimeStamp, timeStampNow } from '../time'
 import type { EvaluationDiagnostics } from './diagnostics'
+import {
+  environmentIdentityMetadata,
+  precomputedEnvironmentIdentity,
+  rulesEnvironmentIdentity,
+  withEnvironmentIdentity,
+} from './environment-identity'
 import { DependencyGraphError, TargetingKeyMissingError } from './errors'
 import { evaluateForSubject } from './evaluateForSubject'
 import {
@@ -83,13 +89,16 @@ export function evaluate<T extends FlagValueType>(
   }
 
   const { error } = selection
-  return {
-    value: defaultValue,
-    reason: 'ERROR',
-    errorCode: error.errorCode as ErrorCode,
-    flagMetadata: createEvaluationMetadata(timeStampNow(), false),
-    ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
-  }
+  return withEnvironmentIdentity<ResolutionDetails<FlagTypeToValue<T>>>(
+    {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: error.errorCode as ErrorCode,
+      flagMetadata: createEvaluationMetadata(timeStampNow(), false),
+      ...(error.errorMessage === undefined ? {} : { errorMessage: error.errorMessage }),
+    },
+    precomputedEnvironmentIdentity(flagsConfiguration?.precomputed?.response)
+  )
 }
 
 export type FlagsConfigurationError = {
@@ -221,7 +230,11 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
   // Snapshot consent once at the start of this evaluation. The provider can receive a new
   // configuration later, but hooks must see the consent from the configuration that produced this result.
   const observeFullEvaluationData = config?.observeFullEvaluationData === true
-  const metadata = createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData)
+  const environmentIdentity = rulesEnvironmentIdentity(config)
+  const metadata = {
+    ...createEvaluationMetadata(evaluationTimestampMs, observeFullEvaluationData),
+    ...environmentIdentityMetadata(environmentIdentity),
+  }
   const excludeExperiments = experimentationOptOutPolicy(context, experimentationOptOutMode)
   if (excludeExperiments === undefined) {
     return {
@@ -263,6 +276,14 @@ export function evaluateRulesBasedConfigurationWithTrace<T extends FlagValueType
   return {
     ...trace,
     details: { ...trace.details, flagMetadata: { ...trace.details.flagMetadata, ...metadata } },
+    dependencyEvaluations: trace.dependencyEvaluations.map(({ flagKey, details }) => ({
+      flagKey,
+      details: withEnvironmentIdentity(details, environmentIdentity),
+    })),
+    dependencyExposures: trace.dependencyExposures.map(({ flagKey, details }) => ({
+      flagKey,
+      details: withEnvironmentIdentity(details, environmentIdentity),
+    })),
   }
 }
 

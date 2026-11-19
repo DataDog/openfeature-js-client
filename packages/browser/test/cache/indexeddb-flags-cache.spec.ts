@@ -9,6 +9,7 @@ const testConfig: FlagsConfiguration = {
       data: {
         attributes: {
           createdAt: '1731939805123',
+          environment: { id: '11111111-1111-4111-8111-111111111111', name: 'production' },
           flags: {
             'test-flag': {
               allocationKey: 'allocation-1',
@@ -121,6 +122,10 @@ describe('IndexedDBFlagsCache', () => {
       expect(result!.precomputed).toBeDefined()
       expect(result!.precomputed!.response.data.attributes.flags['test-flag'].variationValue).toBe(true)
       expect(result!.precomputed!.response.data.attributes.flags['test-flag'].reason).toBe('TARGETING_MATCH')
+      expect(result!.precomputed!.response.data.attributes.environment).toEqual({
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'production',
+      })
       expect(result!.precomputed!.context).toEqual({ targetingKey: 'user-123' })
     })
 

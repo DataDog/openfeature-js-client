@@ -55,6 +55,7 @@ export interface UniversalFlagConfigurationV1 {
     maxDependencyDepth?: number
   }
   environment: {
+    id?: string
     name: string
   }
   flags: Record<string, Flag>

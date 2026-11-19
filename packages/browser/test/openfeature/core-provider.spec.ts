@@ -165,11 +165,16 @@ describe('DatadogCoreProvider', () => {
     await expect(provider.initialize({})).rejects.toBeInstanceOf(InvalidContextError)
 
     expect(provider.resolveStringEvaluation('string-flag', 'default', {}, logger)).toEqual({
-      flagMetadata: { __dd_eval_timestamp_ms: expect.any(Number), __dd_observe_full_evaluation_data: false },
       value: 'default',
       reason: 'ERROR',
       errorCode: 'INVALID_CONTEXT',
       errorMessage: 'Precomputed flags configuration does not match the current context',
+      flagMetadata: {
+        __dd_eval_timestamp_ms: expect.any(Number),
+        __dd_observe_full_evaluation_data: false,
+        __dd_environment_id: '',
+        __dd_environment_name: 'prod',
+      },
     })
   })
 

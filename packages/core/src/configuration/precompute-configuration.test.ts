@@ -18,6 +18,7 @@ import { configurationFromString, configurationToString } from './wire'
 
 const now = new Date('2026-10-30T12:00:00Z')
 const context = { targetingKey: 'subject', country: 'US' }
+const environmentId = '11111111-1111-4111-8111-111111111111'
 
 function flag(overrides: JsonObject = {}): JsonObject {
   return {
@@ -33,6 +34,7 @@ function rules(flags: JsonObject = { flag: flag() }, overrides: JsonObject = {})
     encodeFlagsConfiguration(
       fromJson(FlagsConfigurationSchema, {
         environmentName: 'test',
+        environmentId,
         createdAt: '2026-01-01T00:00:00Z',
         strings: ['on', 'off', 'hello', 'country', 'US'],
         flags,
@@ -436,7 +438,7 @@ describe('precomputeConfiguration', () => {
               createdAt: now.toISOString(),
               format: 'PRECOMPUTED',
               obfuscated: false,
-              environment: { name: 'test' },
+              environment: { id: environmentId, name: 'test' },
               observeFullEvaluationData: false,
               flags: {
                 flag: {
@@ -458,6 +460,16 @@ describe('precomputeConfiguration', () => {
       value,
       variant: 'on',
       reason: 'STATIC',
+    })
+  })
+
+  it('retains the environment name when evaluating a legacy precomputed configuration without an id', () => {
+    const result = precomputeConfiguration(rules(), context)
+    delete result.precomputed?.response.data.attributes.environment?.id
+
+    expect(evaluate(roundTrip(result), 'boolean', 'flag', false, context).flagMetadata).toMatchObject({
+      __dd_environment_id: '',
+      __dd_environment_name: 'test',
     })
   })
 
@@ -523,6 +535,8 @@ describe('precomputeConfiguration', () => {
         },
       })
       expect(evaluate(result, 'boolean', 'flag', false, context).flagMetadata).toMatchObject({
+        __dd_environment_id: environmentId,
+        __dd_environment_name: 'test',
         __dd_split_serial_id: serialId,
         '__dd_feature.experiment': 'checkout',
         '__dd_exposure_feature.experiment': 'checkout',
