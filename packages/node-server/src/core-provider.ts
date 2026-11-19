@@ -208,10 +208,37 @@ function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfigur
       if (precomputed) {
         const validated = parsePrecomputedConfigurationResponse(precomputed.response)
         if ('error' in validated) throw new TypeError('Invalid precomputed response')
+        const response = validated.response
+        const attributes = response.data.attributes
+        const consent = attributes.observeFullEvaluationData
+        const featuresByKey = new Map<string, ReturnType<typeof snapshotFeatures>>()
+        const flags = Object.fromEntries(
+          Object.entries(attributes.flags).map(([key, flag]) => {
+            if (flag === null || typeof flag !== 'object' || Array.isArray(flag)) return [key, flag]
+            const { features, ...assignment } = flag
+            featuresByKey.set(key, snapshotFeatures(features))
+            return [key, assignment]
+          })
+        )
         const context = precomputed.context
-        const input = { ...precomputed, context: context === undefined ? undefined : stripAssignmentToken(context) }
+        const input = {
+          ...precomputed,
+          response: { ...response, data: { ...response.data, attributes: { ...attributes, flags } } },
+          context: context === undefined ? undefined : stripAssignmentToken(context),
+        }
         const snapshot = configurationFromString(configurationToString({ precomputed: input }))
         if (snapshot.precomputed) {
+          // Serialization hooks must not turn normalized consent back on.
+          const copiedAttributes = snapshot.precomputed.response.data.attributes
+          if (consent === undefined) delete copiedAttributes.observeFullEvaluationData
+          else copiedAttributes.observeFullEvaluationData = consent === true
+          for (const [key, features] of featuresByKey) {
+            if (!Object.prototype.hasOwnProperty.call(copiedAttributes.flags, key)) continue
+            const flag = copiedAttributes.flags[key]
+            if (flag !== null && typeof flag === 'object' && !Array.isArray(flag) && features !== undefined) {
+              flag.features = features
+            }
+          }
           const quarantinedKeys = Object.keys({ ...precomputed.flagErrors, ...validated.flagErrors })
           const flagErrors = {
             ...Object.fromEntries(quarantinedKeys.map((key) => [key, 'Invalid precomputed flag configuration'])),
@@ -244,6 +271,36 @@ function isContextValue(value: unknown): boolean {
   if (value instanceof Date) return Number.isFinite(value.getTime())
   if (Array.isArray(value)) return Array.from(value).every(isContextValue)
   return typeof value === 'object' && value !== null && Object.values(value).every(isContextValue)
+}
+
+function snapshotFeatures(features: unknown):
+  | Array<{
+      key: string
+      value: string | number | boolean
+      destinations: string[]
+    }>
+  | undefined {
+  if (!Array.isArray(features)) return undefined
+  const result = []
+  for (const item of features) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) continue
+    const { key, value, destinations } = item
+    if (
+      typeof key !== 'string' ||
+      key === '' ||
+      (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') ||
+      !Array.isArray(destinations)
+    )
+      continue
+    result.push({
+      key,
+      value,
+      destinations: destinations.filter(
+        (destination): destination is string => typeof destination === 'string' && destination !== ''
+      ),
+    })
+  }
+  return result
 }
 
 function configurationGeneration(configuration: FlagsConfiguration): string {

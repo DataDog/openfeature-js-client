@@ -47,6 +47,33 @@ function configuration(
 }
 
 describe.each([false, true])('precomputed consent (obfuscated: %s)', (obfuscated) => {
+  it('returns retained terminal errors without bypassing quarantine or context checks', () => {
+    const config = configuration(true, obfuscated)
+    const attributes = config.precomputed.response.data.attributes
+    const key = Object.keys(attributes.flags)[0]
+    delete attributes.flags[key]
+    attributes.flagEvaluationErrors = {
+      [key]: { reason: 'ERROR', errorCode: 'GENERAL', errorMessage: 'Prerequisite unavailable' },
+    }
+    for (const evaluator of [evaluate, evaluatePrecomputedConfiguration]) {
+      expect(evaluator(config, 'boolean', 'flag', false, context)).toMatchObject({
+        value: false,
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        errorMessage: 'Prerequisite unavailable',
+        flagMetadata: { [metadataKey]: true },
+      })
+      expect(evaluator(config, 'boolean', 'missing', false, context)).toMatchObject({ errorCode: 'FLAG_NOT_FOUND' })
+      expect(evaluator(config, 'boolean', 'flag', false, { targetingKey: 'other' })).toMatchObject({
+        errorCode: 'INVALID_CONTEXT',
+        flagMetadata: { [metadataKey]: false },
+      })
+      config.precomputed.flagErrors = { [key]: 'Invalid precomputed flag evaluation error' }
+      expect(evaluator(config, 'boolean', 'flag', false, context)).toMatchObject({ errorCode: 'PARSE_ERROR' })
+      delete config.precomputed.flagErrors
+    }
+  })
+
   it.each([true, false, undefined, null, 'true', 1, [], { $serde_json: true }])(
     'accepts assignments and fails closed for consent %p through wire round trips',
     (consent) => {

@@ -169,6 +169,18 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
+  const terminalError = attributes.flagEvaluationErrors
+    ? getOwnProperty(attributes.flagEvaluationErrors, lookup.key)
+    : undefined
+  if (terminalError) {
+    return {
+      value: defaultValue,
+      reason: 'ERROR',
+      errorCode: terminalError.errorCode as ErrorCode,
+      ...(terminalError.errorMessage === undefined ? {} : { errorMessage: terminalError.errorMessage }),
+    }
+  }
+
   const flag = getOwnProperty(attributes.flags, lookup.key)
   traceEvaluation(diagnostics, 'precomputed flag lookup', () => ({
     flagKey,

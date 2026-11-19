@@ -212,12 +212,7 @@ function contextDateValue(value: unknown): number | undefined {
   try {
     // Avoid intrinsic-call exceptions for ordinary context containers.
     if (Array.isArray(value)) return undefined
-    const prototype = Object.getPrototypeOf(value)
-    if (
-      (prototype === Object.prototype || prototype === null) &&
-      !(Symbol.toStringTag in value) &&
-      Object.prototype.toString.call(value) !== '[object Date]'
-    ) {
+    if (!(Symbol.toStringTag in value) && Object.prototype.toString.call(value) !== '[object Date]') {
       return undefined
     }
     return Date.prototype.getTime.call(value)

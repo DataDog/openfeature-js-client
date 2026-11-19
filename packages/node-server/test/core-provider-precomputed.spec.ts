@@ -37,16 +37,20 @@ function encodeFlagKeys(configuration: FlagsConfiguration): FlagsConfiguration {
   const salt = '00112233445566778899aabbccddeeff'
   attributes.obfuscated = true
   attributes.obfuscation = { scheme: 'flag-key-sha256-v1', salt }
+  const encode = (key: string) =>
+    createHash('sha256')
+      .update('datadog.feature-flags.flag-key.v1\0')
+      .update(Buffer.from(salt, 'hex'))
+      .update(key)
+      .digest('hex')
   attributes.flags = Object.fromEntries(
-    Object.entries(attributes.flags).map(([key, assignment]) => [
-      createHash('sha256')
-        .update('datadog.feature-flags.flag-key.v1\0')
-        .update(Buffer.from(salt, 'hex'))
-        .update(key)
-        .digest('hex'),
-      assignment,
-    ])
+    Object.entries(attributes.flags).map(([key, assignment]) => [encode(key), assignment])
   )
+  if (attributes.flagEvaluationErrors) {
+    attributes.flagEvaluationErrors = Object.fromEntries(
+      Object.entries(attributes.flagEvaluationErrors).map(([key, error]) => [encode(key), error])
+    )
+  }
   return configuration
 }
 
@@ -453,6 +457,131 @@ describe('DatadogCoreProvider precomputed configuration', () => {
     expect(event.targeting_key).toBe(`sha256_${createHash('sha256').update(requestContext.targetingKey).digest('hex')}`)
     expect(event).not.toHaveProperty('context')
     expect(event.error).toEqual({ message: 'INVALID_CONTEXT' })
+  })
+
+  it.each([
+    ['boxed true', Object(true), false],
+    ['serialized true', { toJSON: () => true }, false],
+    ['attributes serializer', false, false],
+    ['true', true, true],
+    ['false', false, false],
+    ['absent', undefined, false],
+    ['string true', 'true', false],
+  ] as const)('preserves strict consent normalization for %s', async (name, consent, fullData) => {
+    const requestContext = { ...context, privateAttribute: 'private-value' }
+    const configuration = precomputeConfiguration(rules(), requestContext)
+    const attributes = configuration.precomputed!.response.data.attributes
+    if (consent === undefined) delete attributes.observeFullEvaluationData
+    else attributes.observeFullEvaluationData = consent as boolean
+    if (name === 'attributes serializer') {
+      Object.assign(attributes, {
+        toJSON: () => ({ ...attributes, toJSON: undefined, observeFullEvaluationData: true }),
+      })
+    }
+    const provider = new DatadogCoreProvider(configuration)
+    const client = clientFor(provider)
+    for (const replacement of [undefined, configuration, provider.getConfiguration()]) {
+      if (replacement) provider.setConfiguration(replacement)
+      const details = await client.getBooleanDetails('test-flag', false, requestContext)
+      expect(details.value).toBe(true)
+      expect(details.errorCode).toBeUndefined()
+      const flush = jest.fn()
+      const aggregator = new FlagEvaluationAggregator(1000, flush)
+      aggregator.addEvaluation(requestContext, details)
+      aggregator.flush()
+      expect(flush).toHaveBeenCalledTimes(1)
+      const [event] = flush.mock.calls[0][0]
+      expect({
+        consent: details.flagMetadata.__dd_observe_full_evaluation_data,
+        identity: event.targeting_key,
+        attributes: event.context?.evaluation,
+      }).toEqual({
+        consent: fullData,
+        identity: fullData
+          ? requestContext.targetingKey
+          : `sha256_${createHash('sha256').update(requestContext.targetingKey).digest('hex')}`,
+        attributes: fullData
+          ? { country: context.country, privateAttribute: requestContext.privateAttribute }
+          : undefined,
+      })
+    }
+  })
+
+  it.each([false, true])('returns terminal root errors with encoded keys=%s', async (encoded) => {
+    const configuration = precomputed()
+    const attributes = configuration.precomputed!.response.data.attributes
+    attributes.observeFullEvaluationData = true
+    attributes.flags.healthy = attributes.flags['test-flag']
+    delete attributes.flags['test-flag']
+    attributes.flagEvaluationErrors = {
+      'test-flag': { reason: 'ERROR', errorCode: 'GENERAL', errorMessage: 'Prerequisite unavailable' },
+    }
+    if (encoded) encodeFlagKeys(configuration)
+    const client = clientFor(new DatadogCoreProvider(configurationFromString(configurationToString(configuration))))
+    await expect(client.getBooleanDetails('test-flag', false, context)).resolves.toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: 'GENERAL',
+      errorMessage: 'Prerequisite unavailable',
+      flagMetadata: { __dd_observe_full_evaluation_data: true },
+    })
+    await expect(client.getBooleanValue('healthy', false, context)).resolves.toBe(true)
+    await expect(client.getBooleanDetails('absent', false, context)).resolves.toMatchObject({
+      errorCode: 'FLAG_NOT_FOUND',
+    })
+    await expect(
+      client.getBooleanDetails('test-flag', false, { ...context, targetingKey: 'other' })
+    ).resolves.toMatchObject({
+      errorCode: 'INVALID_CONTEXT',
+      flagMetadata: { __dd_observe_full_evaluation_data: false },
+    })
+  })
+
+  it.each([
+    ['bigint field', BigInt(1), undefined],
+    [
+      'bigint entry',
+      [
+        { key: 'bad', value: BigInt(1), destinations: ['HOOK'] },
+        { key: 'ok', value: 7, destinations: ['HOOK', 'EXPOSURE'] },
+      ],
+      7,
+    ],
+    [
+      'invalid then valid duplicate',
+      [
+        { key: 'ok', value: new Date(0), destinations: ['HOOK', 'EXPOSURE'] },
+        { key: 'ok', value: 7, destinations: ['HOOK', 'EXPOSURE'] },
+      ],
+      7,
+    ],
+    ['valid primitives', [{ key: 'ok', value: 7, destinations: ['HOOK', 'EXPOSURE'] }], 7],
+  ] as const)('ignores unsupported optional features: %s', async (_name, features, expected) => {
+    const configuration = precomputed()
+    configuration.precomputed!.response.data.attributes.flags['test-flag'].features = features
+    const sink = { hasSubscribers: true, publish: jest.fn() } as unknown as jest.Mocked<Channel<ExposureEvent>>
+    const provider = new DatadogCoreProvider(configuration, { exposureChannel: sink })
+    const client = clientFor(provider)
+    for (const replacement of [undefined, configuration, provider.getConfiguration()]) {
+      if (replacement) provider.setConfiguration(replacement)
+      const details = await client.getBooleanDetails('test-flag', false, context)
+      expect(details).toMatchObject({ value: true, reason: 'TARGETING_MATCH', variant: 'on' })
+      expect(details.flagMetadata['__dd_feature.ok']).toBe(expected)
+    }
+    expect((sink.publish.mock.calls[0][0] as ExposureEvent).features?.ok).toBe(expected)
+  })
+
+  it('keeps malformed serialized flags from rejecting healthy siblings', async () => {
+    const configuration = precomputed()
+    const flags = configuration.precomputed!.response.data.attributes.flags
+    flags.bad = {
+      ...flags['test-flag'],
+      features: [{ key: 'ok', value: 7, destinations: ['HOOK'] }],
+      toJSON: () => 1,
+    } as (typeof flags)[string]
+    const client = clientFor(new DatadogCoreProvider(configuration))
+    await expect(client.getBooleanDetails('bad', false, context)).resolves.toMatchObject({ errorCode: 'PARSE_ERROR' })
+    await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
   })
 
   it.each([undefined, false, true])(

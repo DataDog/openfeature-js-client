@@ -61,6 +61,28 @@ describe('configMatchesContext', () => {
     )
   })
 
+  it('avoids Date intrinsic calls for ordinary cross-realm records', () => {
+    const getTime = jest.spyOn(Date.prototype, 'getTime')
+    try {
+      const context = { targetingKey: 'subject', records: [{ index: 0, enabled: true }] }
+      const configuration = configurationWithContext(context)
+      expect(configMatchesContext(configuration, runInNewContext(`(${JSON.stringify(context)})`))).toBe(true)
+      expect(
+        configMatchesContext(
+          configuration,
+          runInNewContext('({ targetingKey: "subject", records: [{ index: 1, enabled: true }] })')
+        )
+      ).toBe(false)
+      expect(getTime).not.toHaveBeenCalled()
+      expect(
+        configMatchesContext(configurationWithContext({ timestamp: new Date(0) }), { timestamp: new Date(0) })
+      ).toBe(true)
+      expect(getTime).toHaveBeenCalled()
+    } finally {
+      getTime.mockRestore()
+    }
+  })
+
   it('uses the Date intrinsic instead of tags, prototypes, or instance methods', () => {
     const configuration = configurationWithContext({ timestamp: new Date(0) })
     const tagged = new Date(0)
