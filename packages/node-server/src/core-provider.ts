@@ -1,13 +1,13 @@
 import type { Channel } from 'node:diagnostics_channel'
 import {
   type AssignmentCache,
-  createEvaluationMetadata,
   type ExposureEvent,
   evaluatePrecomputedConfiguration,
   type FlagsConfiguration,
   type FlagTypeToValue,
+  getPrecomputedContext,
   LRUInMemoryAssignmentCache,
-  timeStampNow,
+  parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import { configurationFromString, configurationToString } from '@datadog/flagging-core/rules-based'
 import type {
@@ -31,6 +31,7 @@ import {
   ExposureLoggingHook,
   prepareExposure,
   stageDependencyTelemetry,
+  stripAssignmentToken,
 } from './tracking'
 
 export interface DatadogCoreProviderOptions {
@@ -38,7 +39,11 @@ export interface DatadogCoreProviderOptions {
   onDiagnostic?: (diagnostic: SDKDiagnostic) => void | Promise<void>
   /** Experiment exclusion policy. Defaults to Disabled. */
   experimentationOptOutMode?: ExperimentationOptOutMode
-  /** Caller-owned cache; generation changes reset it, but onClose() does not. Installs no hook or uploader. @internal */
+  /**
+   * Caller-owned cache; generation changes call clear() without awaiting it, but onClose() does not.
+   * clear() must synchronously invalidate has(); deferred persistence must preserve later admissions.
+   * Installs no hook or uploader. @internal
+   */
   exposureCache?: AssignmentCache
   /** Optional exposure sink owned by the tracer integration. Does not initialize an uploader. @internal */
   exposureChannel?: Channel<ExposureEvent>
@@ -169,6 +174,7 @@ export class DatadogCoreProvider implements Provider {
     logger: Logger
   ): ResolutionDetails<FlagTypeToValue<T>> {
     const configuration = this.configuration
+    const targetingContext = stripAssignmentToken(context)
     let details: ResolutionDetails<FlagTypeToValue<T>>
     if (configuration.rules) {
       const trace = evaluateWithTrace(
@@ -176,7 +182,7 @@ export class DatadogCoreProvider implements Provider {
         type,
         flagKey,
         defaultValue,
-        context,
+        targetingContext,
         logger,
         this.experimentationOptOutMode,
         {
@@ -194,20 +200,15 @@ export class DatadogCoreProvider implements Provider {
       )
       details = trace.details
     } else {
-      const metadata = createEvaluationMetadata(
-        timeStampNow(),
-        configuration.precomputed!.response.data.attributes.observeFullEvaluationData
-      )
-      const result = evaluatePrecomputedConfiguration(
+      details = evaluatePrecomputedConfiguration(
         configuration,
         type,
         flagKey,
         defaultValue,
-        context,
+        targetingContext,
         this.experimentationOptOutMode,
         logger
       )
-      details = { ...result, flagMetadata: { ...result.flagMetadata, ...metadata } }
     }
     if (this.exposureCache) {
       prepareExposure(
@@ -228,13 +229,103 @@ function snapshotConfiguration(configuration: FlagsConfiguration): FlagsConfigur
       const snapshot = configurationFromString(configurationToString({ rules }))
       if (snapshot.rules) return snapshot
     } else if (rules === undefined) {
-      const snapshot = configurationFromString(configurationToString({ precomputed: configuration.precomputed }))
-      if (snapshot.precomputed) return snapshot
+      const precomputed = configuration.precomputed
+      if (precomputed) {
+        const validated = parsePrecomputedConfigurationResponse(precomputed.response)
+        if ('error' in validated) throw new TypeError('Invalid precomputed response')
+        const response = validated.response
+        const attributes = response.data.attributes
+        const consent = attributes.observeFullEvaluationData
+        const featuresByKey = new Map<string, ReturnType<typeof snapshotFeatures>>()
+        const flags = Object.fromEntries(
+          Object.entries(attributes.flags).map(([key, flag]) => {
+            if (flag === null || typeof flag !== 'object' || Array.isArray(flag)) return [key, flag]
+            const { features, ...assignment } = flag
+            featuresByKey.set(key, snapshotFeatures(features))
+            return [key, assignment]
+          })
+        )
+        const context = precomputed.context
+        const input = {
+          ...precomputed,
+          response: { ...response, data: { ...response.data, attributes: { ...attributes, flags } } },
+          context: context === undefined ? undefined : stripAssignmentToken(context),
+        }
+        const snapshot = configurationFromString(configurationToString({ precomputed: input }))
+        if (snapshot.precomputed) {
+          // Serialization hooks must not turn normalized consent back on.
+          const copiedAttributes = snapshot.precomputed.response.data.attributes
+          if (consent === undefined) delete copiedAttributes.observeFullEvaluationData
+          else copiedAttributes.observeFullEvaluationData = consent === true
+          for (const [key, features] of featuresByKey) {
+            if (!Object.prototype.hasOwnProperty.call(copiedAttributes.flags, key)) continue
+            const flag = copiedAttributes.flags[key]
+            if (flag !== null && typeof flag === 'object' && !Array.isArray(flag) && features !== undefined) {
+              flag.features = features
+            }
+          }
+          const quarantinedKeys = Object.keys({ ...precomputed.flagErrors, ...validated.flagErrors })
+          const flagErrors = {
+            ...Object.fromEntries(quarantinedKeys.map((key) => [key, 'Invalid precomputed flag configuration'])),
+            ...snapshot.precomputed.flagErrors,
+          }
+          if (Object.keys(flagErrors).length > 0) snapshot.precomputed.flagErrors = flagErrors
+          // The portable wire validates the response but cannot preserve in-memory Date values.
+          const detachedContext = getPrecomputedContext({ precomputed: input })
+          if (
+            detachedContext !== undefined &&
+            ((detachedContext.targetingKey !== undefined && typeof detachedContext.targetingKey !== 'string') ||
+              !isContextValue(detachedContext))
+          ) {
+            throw new TypeError('Invalid precomputed context')
+          }
+          snapshot.precomputed.context = detachedContext
+          return snapshot
+        }
+      }
     }
   } catch {
     // Caller-controlled configuration and accessor errors must not leak into diagnostics.
   }
   throw new TypeError('DatadogCoreProvider requires a valid rules-based or precomputed configuration')
+}
+
+function isContextValue(value: unknown): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (value instanceof Date) return Number.isFinite(value.getTime())
+  if (Array.isArray(value)) return Array.from(value).every(isContextValue)
+  return typeof value === 'object' && value !== null && Object.values(value).every(isContextValue)
+}
+
+function snapshotFeatures(features: unknown):
+  | Array<{
+      key: string
+      value: string | number | boolean
+      destinations: string[]
+    }>
+  | undefined {
+  if (!Array.isArray(features)) return undefined
+  const result = []
+  for (const item of features) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) continue
+    const { key, value, destinations } = item
+    if (
+      typeof key !== 'string' ||
+      key === '' ||
+      (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') ||
+      !Array.isArray(destinations)
+    )
+      continue
+    result.push({
+      key,
+      value,
+      destinations: destinations.filter(
+        (destination): destination is string => typeof destination === 'string' && destination !== ''
+      ),
+    })
+  }
+  return result
 }
 
 function configurationGeneration(configuration: FlagsConfiguration): string {

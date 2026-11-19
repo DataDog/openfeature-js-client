@@ -111,6 +111,16 @@ export class DependencyTelemetrySidecar {
 /** Structural contract: separately bundled entrypoints must not depend on class-private identity. @internal */
 export type DependencyTelemetrySidecarApi = Pick<DependencyTelemetrySidecar, keyof DependencyTelemetrySidecar>
 
+export function stripAssignmentToken(context: EvaluationContext): EvaluationContext {
+  if (!('dd_assignment_token' in context)) return context
+  // Discard the credential before reading values, including accessors and cyclic tokens.
+  return Object.fromEntries(
+    Object.keys(context)
+      .filter((key) => key !== 'dd_assignment_token')
+      .map((key) => [key, context[key]])
+  )
+}
+
 export function stageDependencyTelemetry(
   context: EvaluationContext,
   rootDetails: ResolutionDetails<FlagValue>,
@@ -145,7 +155,7 @@ export function prepareExposure(
   exposureCache: AssignmentCache | undefined
 ): PreparedDependencyExposure | undefined {
   try {
-    const event = createExposureEvent(context, details)
+    const event = createExposureEvent(stripAssignmentToken(context), details)
     if (event === undefined) return
     if (exposureCache) prepareExposureDecision(details.flagMetadata, exposureCache, event)
     return { details, event }
@@ -206,7 +216,7 @@ export class ExposureLoggingHook implements Hook {
       ...evaluationDetails,
       flagKey: evaluationDetails.flagKey ?? hookContext?.flagKey ?? '',
     }
-    const exposureEvent = createExposureEvent(hookContext?.context ?? {}, details)
+    const exposureEvent = createExposureEvent(stripAssignmentToken(hookContext?.context ?? {}), details)
     if (exposureEvent !== undefined) {
       this.completeExposure(details, exposureEvent)
     }
@@ -218,12 +228,12 @@ export class ExposureLoggingHook implements Hook {
   ): void {
     // One check-and-record after successful finalization; concurrent or nested
     // evaluations of the same assignment cannot both be admitted.
-    const sharedDecision = completeExposureDecision(details)
-    const metadata = details.flagMetadata as FlagMetadata | undefined
-    if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
-      return
-    }
     try {
+      const sharedDecision = completeExposureDecision(details)
+      const metadata = details.flagMetadata as FlagMetadata | undefined
+      if (metadata?.__dd_do_log !== true || metadata.__dd_exposure_cache_hit !== false) {
+        return
+      }
       if (this.exposureChannel.hasSubscribers) {
         // Features stay off the cache entry: a features change must not turn a
         // repeat exposure into a new one.

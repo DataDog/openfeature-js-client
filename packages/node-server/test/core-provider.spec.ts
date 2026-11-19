@@ -285,9 +285,11 @@ describe('DatadogCoreProvider offline initialization', () => {
     const provider = new DatadogCoreProvider(rules())
     const client = clientFor(provider)
 
-    expect(() => new DatadogCoreProvider(invalid)).toThrow('requires a valid rules-based or precomputed configuration')
+    expect(() => new DatadogCoreProvider(invalid)).toThrow(
+      new TypeError('DatadogCoreProvider requires a valid rules-based or precomputed configuration')
+    )
     expect(() => provider.setConfiguration(invalid)).toThrow(
-      'requires a valid rules-based or precomputed configuration'
+      new TypeError('DatadogCoreProvider requires a valid rules-based or precomputed configuration')
     )
     await expect(client.getBooleanValue('test-flag', false, context)).resolves.toBe(true)
   })

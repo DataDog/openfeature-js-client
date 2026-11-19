@@ -75,6 +75,64 @@ describe('DatadogCoreProvider optional tracking', () => {
     expect(result.flagMetadata?.__dd_exposure_cache_hit).toBeUndefined()
   })
 
+  it('does not use the reserved assignment token for rules targeting', async () => {
+    const configuration = rules()
+    const strings = configuration.rules!.response.strings
+    const countryIndex = strings.indexOf('country')
+    expect(countryIndex).toBeGreaterThanOrEqual(0)
+    strings[countryIndex] = 'dd_assignment_token'
+    const client = clientFor(new DatadogCoreProvider(configuration))
+
+    await expect(
+      client.getBooleanDetails('test-flag', false, { ...context, dd_assignment_token: 'US' })
+    ).resolves.toMatchObject({ reason: 'SPLIT' })
+  })
+
+  it.each(['implicit', 'explicit'])(
+    'excludes assignment tokens from root and dependency exposures with %s tracking',
+    async (registration) => {
+      const tracking = createExposureTracking({ collectDependencyEvaluations: true })
+      const sink = channel()
+      const provider = new DatadogCoreProvider(dependentRules(), {
+        ...tracking.providerOptions,
+        ...(registration === 'implicit' ? { exposureChannel: sink } : {}),
+      })
+      if (registration === 'explicit') provider.hooks.push(tracking.createHook(sink))
+      const client = clientFor(provider)
+      const dependencies: string[] = []
+      client.addHooks({
+        after: (hookContext) => {
+          // The tracer can recover dependency telemetry using the original context alone.
+          const evaluations = tracking.providerOptions.dependencyTelemetrySidecar.takeDependencyEvaluations(
+            undefined,
+            undefined,
+            hookContext.context
+          )
+          dependencies.push(...evaluations.map((evaluation) => evaluation.flagKey))
+        },
+      })
+
+      for (const token of ['first-token', 'rotated-token']) {
+        await expect(
+          client.getBooleanDetails('test-flag', false, { ...context, dd_assignment_token: token })
+        ).resolves.toMatchObject({ value: true, variant: 'on' })
+      }
+
+      expect(dependencies).toEqual(['prerequisite', 'prerequisite'])
+      expect(sink.publish).toHaveBeenCalledTimes(2)
+      expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual([
+        'prerequisite',
+        'test-flag',
+      ])
+      for (const [event] of sink.publish.mock.calls) {
+        expect((event as ExposureEvent).subject).toEqual({
+          id: context.targetingKey,
+          attributes: { country: context.country },
+        })
+      }
+    }
+  )
+
   it.each(['rules', 'precomputed'])(
     'shares exposure state without implicitly installing hooks (%s)',
     async (format) => {
@@ -358,6 +416,35 @@ describe('DatadogCoreProvider optional tracking', () => {
     })
     expect(sink.publish).toHaveBeenCalledTimes(1)
   })
+
+  it.each([undefined, 'has', 'set'])(
+    'attempts the root exposure after a prerequisite cache admission failure: %s',
+    async (failure) => {
+      const backing = new LRUInMemoryAssignmentCache(50)
+      let prerequisiteChecks = 0
+      const cache: AssignmentCache = {
+        init: () => backing.init(),
+        clear: () => backing.clear(),
+        has: (event) => {
+          if (event.flag.key === 'prerequisite' && ++prerequisiteChecks === 2 && failure === 'has') {
+            throw new Error('prerequisite cache check failed')
+          }
+          return backing.has(event)
+        },
+        set: (event) => {
+          if (event.flag.key === 'prerequisite' && failure === 'set') throw new Error('prerequisite cache write failed')
+          backing.set(event)
+        },
+      }
+      const sink = channel()
+      const provider = new DatadogCoreProvider(dependentRules(), { exposureCache: cache, exposureChannel: sink })
+
+      await expect(clientFor(provider).getBooleanValue('test-flag', false, context)).resolves.toBe(true)
+      expect(sink.publish.mock.calls.map(([event]) => (event as ExposureEvent).flag.key)).toEqual(
+        failure === undefined ? ['prerequisite', 'test-flag'] : ['test-flag']
+      )
+    }
+  )
 
   it('preserves deduplication on identical refreshes and invalid replacements, and resets it for a new generation', async () => {
     const sink = channel()

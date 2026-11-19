@@ -150,7 +150,7 @@ describe('assignment credential diagnostic isolation', () => {
     expectNoCredential([caught, errors.mock.calls, loggedData()])
   })
 
-  it('redacts an echoed server diagnostic header from both console and debug telemetry', async () => {
+  it('reports an echoed server diagnostic header as unknown in both console and debug telemetry', async () => {
     const provider = new DatadogProvider({
       ...options,
       flagSelection: { tags: ['beta'] },
@@ -163,7 +163,7 @@ describe('assignment credential diagnostic isolation', () => {
     await OpenFeature.setProviderAndWait(provider, context)
     expect(OpenFeature.getClient().getBooleanValue('boolean-flag', false)).toBe(true)
     expect(display.error).toHaveBeenCalledTimes(1)
-    expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'redacted' })
+    expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
     await OpenFeature.clearProviders()
     expectNoCredential(loggedData())
   })

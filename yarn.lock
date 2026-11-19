@@ -781,6 +781,7 @@ __metadata:
     "@bufbuild/buf": "npm:^1.72.0"
     "@bufbuild/protobuf": "npm:^2.13.0"
     "@bufbuild/protoc-gen-es": "npm:^2.13.0"
+    "@noble/ciphers": "npm:^1.3.0"
     "@openfeature/core": "npm:^1.9.2"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^25.6.0"
@@ -1635,6 +1636,13 @@ __metadata:
     "@emnapi/runtime": "npm:^1.4.3"
     "@tybys/wasm-util": "npm:^0.9.0"
   checksum: 10c0/049bd14c58b99fbe0967b95e9921c5503df196b59be22948d2155f17652eb305cff6728efd8685338b855da7e476dd2551fbe3a313fc2d810938f0717478441e
+  languageName: node
+  linkType: hard
+
+"@noble/ciphers@npm:^1.3.0":
+  version: 1.3.0
+  resolution: "@noble/ciphers@npm:1.3.0"
+  checksum: 10c0/3ba6da645ce45e2f35e3b2e5c87ceba86b21dfa62b9466ede9edfb397f8116dae284f06652c0cd81d99445a2262b606632e868103d54ecc99fd946ae1af8cd37
   languageName: node
   linkType: hard
 

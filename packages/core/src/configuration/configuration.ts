@@ -53,6 +53,7 @@ export type PrecomputedConfigurationResponse = {
       createdAt: string
       format?: 'PRECOMPUTED'
       environment?: { name: string }
+      /** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
       observeFullEvaluationData?: boolean
       /** Effective server evaluation options, retained in portable and persisted configurations. */
       evaluation_options?: {
@@ -64,7 +65,10 @@ export type PrecomputedConfigurationResponse = {
       obfuscated?: boolean
       /** Required when obfuscated is true; retained with the map in caches. */
       obfuscation?: FlagKeyObfuscation
+      /** Complete successful assignments only. */
       flags: Record<string, PrecomputedFlag>
+      /** Terminal per-flag evaluation failures for dependent-flags-capable clients. */
+      flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>
     }
   }
 }
@@ -78,9 +82,33 @@ export type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
   reason: ResolutionReason
   doLog: boolean
   serialId?: number | null
+  dependencyEvaluations?: PrecomputedDependencyEvaluation[]
   /** Split features of the selected assignment; parsed leniently at evaluation time. */
   features?: unknown
 }
+
+/** @internal */
+export type PrecomputedErrorFlag = {
+  reason: 'ERROR'
+  errorCode: string
+  errorMessage?: string
+  dependencyEvaluations?: PrecomputedDependencyEvaluation[]
+}
+
+/** @internal */
+export type PrecomputedDependencyEvaluation =
+  | {
+      flagKey: string
+      /** Whether this dependency belongs to the root flag's selected assignment path. */
+      isPresentInAssignment: boolean
+    }
+  | {
+      flagKey: string
+      /** Root-relative prerequisite failure; error entries never belong to an assignment. */
+      reason: 'ERROR'
+      errorCode: string
+      errorMessage?: string
+    }
 
 /** @internal */
 export type PrecomputedFlagMetadata = {
@@ -91,7 +119,7 @@ export type PrecomputedFlagMetadata = {
   variationType?: FlagValueType
   doLog?: boolean
 
-  // Server-side evaluation metadata (consumed by dd-trace-js)
+  // Evaluation-time metadata (also consumed by server-side dd-trace-js)
   __dd_allocation_key?: string
   __dd_do_log?: boolean
   __dd_split_serial_id?: number
@@ -163,9 +191,9 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   if (a == null || b == null) return false
   if (typeof a !== typeof b) return false
 
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime()
-  }
+  const aDate = contextDateValue(a)
+  const bDate = contextDateValue(b)
+  if (aDate !== undefined || bDate !== undefined) return aDate === bDate
 
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false
@@ -177,4 +205,18 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   }
 
   return false
+}
+
+function contextDateValue(value: unknown): number | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  try {
+    // Avoid intrinsic-call exceptions for ordinary context containers.
+    if (Array.isArray(value)) return undefined
+    if (!(Symbol.toStringTag in value) && Object.prototype.toString.call(value) !== '[object Date]') {
+      return undefined
+    }
+    return Date.prototype.getTime.call(value)
+  } catch {
+    return undefined
+  }
 }

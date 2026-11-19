@@ -425,9 +425,13 @@ type TimeStamp = number & {
 	t: "Epoch time";
 };
 declare const SCHEME = "flag-key-sha256-v1";
+declare const DEPENDENCY_KEY_ENCRYPTION_SCHEME = "dependency-key-hkdf-sha256-aes-256-gcm-v1";
 type FlagKeyObfuscation = {
 	scheme: typeof SCHEME;
 	salt: string;
+	dependencyKeyEncryption?: {
+		scheme: typeof DEPENDENCY_KEY_ENCRYPTION_SCHEME;
+	};
 };
 declare enum WireType {
 	/**
@@ -1452,6 +1456,7 @@ type PrecomputedConfigurationResponse = {
 			environment?: {
 				name: string;
 			};
+			/** Allows full evaluation details in telemetry only when explicitly true; absent defaults to false. */
 			observeFullEvaluationData?: boolean;
 			/** Effective server evaluation options, retained in portable and persisted configurations. */
 			evaluation_options?: {
@@ -1463,7 +1468,10 @@ type PrecomputedConfigurationResponse = {
 			obfuscated?: boolean;
 			/** Required when obfuscated is true; retained with the map in caches. */
 			obfuscation?: FlagKeyObfuscation;
+			/** Complete successful assignments only. */
 			flags: Record<string, PrecomputedFlag>;
+			/** Terminal per-flag evaluation failures for dependent-flags-capable clients. */
+			flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>;
 		};
 	};
 };
@@ -1475,8 +1483,26 @@ type PrecomputedFlag<T extends FlagValueType = FlagValueType> = {
 	reason: ResolutionReason;
 	doLog: boolean;
 	serialId?: number | null;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
 	/** Split features of the selected assignment; parsed leniently at evaluation time. */
 	features?: unknown;
+};
+type PrecomputedErrorFlag = {
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
+	dependencyEvaluations?: PrecomputedDependencyEvaluation[];
+};
+type PrecomputedDependencyEvaluation = {
+	flagKey: string;
+	/** Whether this dependency belongs to the root flag's selected assignment path. */
+	isPresentInAssignment: boolean;
+} | {
+	flagKey: string;
+	/** Root-relative prerequisite failure; error entries never belong to an assignment. */
+	reason: "ERROR";
+	errorCode: string;
+	errorMessage?: string;
 };
 interface ExposureEvent {
 	allocation: {
