@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 describe('target-client compatibility for precomputation', () => {
-  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'dependent-flag-variant-key-v1'])])(
+  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'future-dependent-flag-v2'])])(
     'keeps the plaintext baseline for %j',
     (clientFingerprint) => {
       const random = jest.spyOn(crypto, 'randomBytes')

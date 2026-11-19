@@ -9,9 +9,11 @@ const lookupCaches = new WeakMap<FlagKeyObfuscation, { salt: string; keys: Map<s
 
 /** Capability required to consume flag-key-sha256-v1 assignment maps. */
 export const FLAG_KEY_SHA256_CAPABILITY = 'assignment-encoding-flag-key-256-v1'
+/** Capability required to consume prerequisite traces in precomputed assignments. */
+export const DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY = 'dependent-flag-variant-key-v1'
 
 /** Capabilities supported by the precomputed parser and evaluator. @internal */
-export const SUPPORTED_FLAGS_CAPABILITIES = [FLAG_KEY_SHA256_CAPABILITY] as const
+export const SUPPORTED_FLAGS_CAPABILITIES = [FLAG_KEY_SHA256_CAPABILITY, DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY] as const
 
 /** Public metadata stored with the encoded assignment map. @internal */
 export type FlagKeyObfuscation = {

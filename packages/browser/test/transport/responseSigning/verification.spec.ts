@@ -166,7 +166,7 @@ test.each(isolated.cases)('$id', async (vector) => {
   }
 })
 
-const supplementDirectory = join(__dirname, 'shared-fixtures')
+const supplementDirectory = fixtureDirectory
 const manifest = JSON.parse(readFileSync(join(supplementDirectory, 'manifest.json'), 'utf8')) as {
   files: Record<string, { sha256: string; response_cases: number }>
 }

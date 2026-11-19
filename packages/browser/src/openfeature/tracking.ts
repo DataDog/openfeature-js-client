@@ -43,6 +43,7 @@ export function createTrackingHookController(
             debug.event('tracking.skipped', () => ({ reason: 'hook_not_initialized_or_stopped', context: args[0] }))
           return activeHook?.before?.(...args)
         },
+        after: (...args) => activeHook?.after?.(...args),
         finally: (...args) => activeHook?.finally?.(...args),
       },
     ],

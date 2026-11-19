@@ -1,5 +1,6 @@
 import { getGlobalObject, INTAKE_SITE_STAGING } from '@datadog/browser-core'
-import { OpenFeature } from '@openfeature/web-sdk'
+import { FlagEvaluationAggregator } from '@datadog/flagging-core'
+import { ErrorCode, type EvaluationContext, type HookContext, OpenFeature } from '@openfeature/web-sdk'
 import { IDBFactory } from 'fake-indexeddb'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
 import { type ExposureEvaluation, ExposureHook } from '../../src/openfeature/exposure-hook'
@@ -58,13 +59,64 @@ describe('ExposureHook', () => {
               reason: 'TARGETING_MATCH',
               doLog: false,
             },
+            'dependency-parent': {
+              allocationKey: 'parent-allocation',
+              variationKey: 'parent-on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+              features: [
+                { key: 'dependency.hook', value: 'parent', destinations: ['HOOK'] },
+                { key: 'dependency.exposure', value: 2, destinations: ['EXPOSURE'] },
+                { key: 'dependency.evaluation', value: true, destinations: ['EVALUATION'] },
+              ],
+            },
+            'dependency-silent-parent': {
+              allocationKey: 'silent-parent-allocation',
+              variationKey: 'silent-parent-on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: false,
+            },
+            'dependency-rejected-parent': {
+              allocationKey: 'rejected-parent-allocation',
+              variationKey: 'rejected-parent-on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+            },
+            'dependent-root': {
+              allocationKey: 'dependent-root-allocation',
+              variationKey: 'root-on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: true,
+              dependencyEvaluations: [
+                { flagKey: 'dependency-parent', isPresentInAssignment: true },
+                { flagKey: 'dependency-silent-parent', isPresentInAssignment: true },
+                { flagKey: 'dependency-rejected-parent', isPresentInAssignment: false },
+              ],
+            },
+            'dependent-silent-root': {
+              allocationKey: 'dependent-silent-root-allocation',
+              variationKey: 'root-on',
+              variationType: 'BOOLEAN',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: false,
+              dependencyEvaluations: [{ flagKey: 'dependency-parent', isPresentInAssignment: true }],
+            },
           },
         },
       },
     }),
   })
 
-  async function startProvider() {
+  async function startProvider(evaluationContext: EvaluationContext = context) {
     fetchMock.mockImplementation((url: string) => {
       if (url.toString().includes('exposures')) {
         return Promise.resolve({ ok: true, status: 200 })
@@ -72,8 +124,9 @@ describe('ExposureHook', () => {
       return Promise.resolve(precomputedResponse())
     })
     const provider = new DatadogProvider(baseProviderConfig)
-    await OpenFeature.setContext(context)
+    await OpenFeature.setContext(evaluationContext)
     await OpenFeature.setProviderAndWait(provider)
+    return provider
   }
 
   beforeAll(() => {
@@ -177,6 +230,109 @@ describe('ExposureHook', () => {
     expect(evaluations[0].isExposure()).toBe(false)
     expect(evaluations[0].shouldSend()).toBe(false)
     expect(evaluations[1].shouldSend()).toBe(true)
+  })
+
+  it('reports selected dependencies before the root with the shared exposure decisions', async () => {
+    await startProvider()
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((evaluation) => evaluations.push(evaluation)))
+    const client = OpenFeature.getClient()
+
+    client.getBooleanDetails('dependent-root', false)
+
+    expect(evaluations.map((evaluation) => evaluation.flagKey)).toEqual([
+      'dependency-parent',
+      'dependency-silent-parent',
+      'dependent-root',
+    ])
+    expect(evaluations.map((evaluation) => evaluation.isExposure())).toEqual([true, false, true])
+    expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([true, false, true])
+    expect(evaluations[0].details.value).toBe(true)
+    expect(evaluations[0].getFeatures()).toEqual({ 'dependency.hook': 'parent' })
+  })
+
+  it('uses the root provider-bound RUM subject for dependency callbacks', async () => {
+    getGlobalObject<{ DD_RUM?: DDRum }>().DD_RUM = {
+      addFeatureFlagEvaluation: jest.fn(),
+      getUser: () => ({ id: 'rum-user', plan: 'pro' }),
+    }
+    await startProvider({})
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((evaluation) => evaluations.push(evaluation)))
+
+    OpenFeature.getClient().getBooleanDetails('dependent-root', false)
+
+    expect(evaluations.map((evaluation) => evaluation.targetingKey)).toEqual(['rum-user', 'rum-user', 'rum-user'])
+    expect(evaluations[0].context).toMatchObject({ targetingKey: 'rum-user', plan: 'pro' })
+  })
+
+  it('delivers an unbound evaluation when the hook context is unreadable', async () => {
+    const provider = await startProvider()
+    const callback = jest.fn()
+    const hookContext = { flagKey: 'unbound', providerMetadata: provider.metadata } as HookContext
+    Object.defineProperty(hookContext, 'context', {
+      get: () => {
+        throw new Error('context unavailable')
+      },
+    })
+
+    new ExposureHook(callback).finally(hookContext, {
+      flagKey: 'unbound',
+      value: true,
+      variant: 'on',
+      reason: 'STATIC',
+      flagMetadata: {},
+    })
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][0].context).toBeUndefined()
+  })
+
+  it('continues dependency and root callbacks after one callback throws', async () => {
+    await startProvider()
+    const flagKeys: string[] = []
+    OpenFeature.addHooks(
+      new ExposureHook((evaluation) => {
+        flagKeys.push(evaluation.flagKey)
+        if (evaluation.flagKey === 'dependency-parent') throw new Error('callback failed')
+      })
+    )
+
+    OpenFeature.getClient().getBooleanDetails('dependent-root', false)
+
+    expect(flagKeys).toEqual(['dependency-parent', 'dependency-silent-parent', 'dependent-root'])
+  })
+
+  it('keeps reached dependency telemetry when an application after hook rejects the root', async () => {
+    await startProvider()
+    const addEvaluation = jest.spyOn(FlagEvaluationAggregator.prototype, 'addEvaluation')
+    OpenFeature.addHooks({
+      after: () => {
+        throw new Error('application hook failed')
+      },
+    })
+
+    const details = OpenFeature.getClient().getBooleanDetails('dependent-root', false)
+
+    expect(details.errorCode).toBe(ErrorCode.GENERAL)
+    expect(addEvaluation.mock.calls.map(([, evaluation, error]) => [evaluation.flagKey, error])).toEqual([
+      ['dependency-parent', undefined],
+      ['dependency-silent-parent', undefined],
+      ['dependency-rejected-parent', undefined],
+      ['dependent-root', ErrorCode.GENERAL],
+    ])
+  })
+
+  it('reports an exposed dependency when the selected root does not log', async () => {
+    await startProvider()
+    const evaluations: ExposureEvaluation[] = []
+    OpenFeature.addHooks(new ExposureHook((evaluation) => evaluations.push(evaluation)))
+
+    OpenFeature.getClient().getBooleanDetails('dependent-silent-root', false)
+
+    expect(evaluations.map((evaluation) => evaluation.flagKey)).toEqual(['dependency-parent', 'dependent-silent-root'])
+    expect(evaluations.map((evaluation) => evaluation.isExposure())).toEqual([true, false])
+    expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([true, false])
   })
 
   it('keeps customer edits to the context out of later evaluations', async () => {

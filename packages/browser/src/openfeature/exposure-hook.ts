@@ -14,6 +14,7 @@ import type {
 } from '@openfeature/web-sdk'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
 import { supportsExposureAdmission } from './exposure-scope'
+import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
 const METADATA_DO_LOG = '__dd_do_log'
@@ -61,14 +62,13 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   readonly details: EvaluationDetails<FlagValue>
   private readonly evaluationContext: EvaluationContext | undefined
 
-  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>) {
+  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>, trackingContext?: EvaluationContext) {
     this.flagKey = hookContext?.flagKey ?? details.flagKey
     this.details = details
-    // Prefer the context the provider actually evaluated (for example the
-    // RUM-enriched subject); fall back to the hook context for unbound results.
+    // The caller resolves the provider-bound context once for the whole graph.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
-      this.evaluationContext = cloneExposureContext(getEvaluationTrackingContext(details, () => hookContext?.context))
+      this.evaluationContext = cloneExposureContext(trackingContext)
     } catch {
       this.evaluationContext = undefined
     }
@@ -180,18 +180,56 @@ export class ExposureHook implements Hook {
   /** Runs in the final hook stage, so a later hook's error is seen. */
   finally(hookContext: HookContext, evaluationDetails: EvaluationDetails<FlagValue>): void {
     if (evaluationDetails == null || !supportsExposureAdmission(hookContext)) return
+    let evaluations: Array<
+      EvaluationDetails<FlagValue> | (Omit<EvaluationDetails<FlagValue>, 'value'> & { value?: FlagValue })
+    >
     try {
-      // The callback must read the final verdict, whether or not a provider or
-      // tracking hook finalized the decision first.
-      completeExposureDecision(evaluationDetails)
-      this.callback(new ExposureEvaluationImpl(hookContext, evaluationDetails))
+      const succeeded =
+        evaluationDetails.errorCode === undefined &&
+        evaluationDetails.reason !== 'ERROR' &&
+        evaluationDetails.variant != null
+      evaluations = succeeded
+        ? [
+            ...getPrecomputedDependencyEvaluations(evaluationDetails).filter(
+              (dependency) => dependency.isPresentInAssignment
+            ),
+            evaluationDetails,
+          ]
+        : [evaluationDetails]
     } catch (error) {
-      if (this.warned) {
-        console.debug('Exposure callback failed', error)
-      } else {
-        this.warned = true
-        console.warn('Exposure callback failed; later failures are logged at debug level', error)
+      this.logCallbackFailure(error)
+      return
+    }
+    let trackingContext: EvaluationContext | undefined
+    try {
+      trackingContext = getEvaluationTrackingContext(evaluationDetails, () => hookContext.context)
+    } catch {
+      // An unreadable caller context must not suppress an otherwise valid callback.
+    }
+    for (const evaluation of evaluations) {
+      try {
+        // The callback must read the final verdict, whether or not a provider or
+        // tracking hook finalized the decision first.
+        completeExposureDecision(evaluation)
+        this.callback(
+          new ExposureEvaluationImpl(
+            evaluation === evaluationDetails ? hookContext : ({ flagKey: evaluation.flagKey } as HookContext),
+            evaluation as EvaluationDetails<FlagValue>,
+            trackingContext
+          )
+        )
+      } catch (error) {
+        this.logCallbackFailure(error)
       }
+    }
+  }
+
+  private logCallbackFailure(error: unknown): void {
+    if (this.warned) {
+      console.debug('Exposure callback failed', error)
+    } else {
+      this.warned = true
+      console.warn('Exposure callback failed; later failures are logged at debug level', error)
     }
   }
 }

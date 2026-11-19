@@ -76,7 +76,16 @@ describe('precomputed dependency wire validation', () => {
     {},
     { reason: 'ERROR' },
     { ...failure, reason: 'STATIC' },
+    { ...failure, errorCode: '' },
+    { ...failure, errorCode: 'FLAG_NOT_FOUND' },
+    { ...failure, errorMessage: '' },
     { ...failure, dependencyEvaluations: {} },
+    { ...failure, dependencyEvaluations: [{ flagKey: '', isPresentInAssignment: true }] },
+    { ...failure, dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: '' }] },
+    {
+      ...failure,
+      dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'CUSTOM', errorMessage: '' }],
+    },
     {
       ...failure,
       dependencyEvaluations: [
@@ -94,6 +103,17 @@ describe('precomputed dependency wire validation', () => {
     expect(parsePrecomputedConfigurationResponse(response({}, { failed: malformed }))).toEqual({
       response: response({}, { failed: malformed }),
       flagErrors: { failed: 'Invalid precomputed flag evaluation error' },
+    })
+  })
+
+  it('accepts an arbitrary nonempty dependency error code', () => {
+    const customDependencyError = {
+      ...failure,
+      dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'CUSTOM' }],
+    }
+
+    expect(parsePrecomputedConfigurationResponse(response({}, { failed: customDependencyError }))).toEqual({
+      response: response({}, { failed: customDependencyError }),
     })
   })
 
