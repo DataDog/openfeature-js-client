@@ -24,6 +24,7 @@ import type {
 import { evaluateWithTrace } from './configuration/evaluation'
 import { type ExperimentationOptOutMode, resolveExperimentationOptOutMode } from './experimentation-opt-out'
 import { NodeProviderEventEmitter } from './provider-event-emitter'
+import { type SDKDiagnostic, SDKDiagnostics } from './sdk-diagnostics'
 import {
   DependencyTelemetrySidecar,
   type DependencyTelemetrySidecarApi,
@@ -34,6 +35,8 @@ import {
 } from './tracking'
 
 export interface DatadogCoreProviderOptions {
+  /** Receives diagnostic observations during construction without awaiting delivery. Omit to disable measurement. */
+  onDiagnostic?: (diagnostic: SDKDiagnostic) => void | Promise<void>
   /** Experiment exclusion policy. Defaults to Disabled. */
   experimentationOptOutMode?: ExperimentationOptOutMode
   /**
@@ -54,6 +57,7 @@ export class DatadogCoreProvider implements Provider {
   readonly runsOn = 'server' as const
   readonly hooks: Hook[] = []
   readonly events: ProviderEventEmitter<ServerProviderEvents> = new NodeProviderEventEmitter()
+  private readonly diagnostics?: SDKDiagnostics
   private configuration: FlagsConfiguration
   private readonly experimentationOptOutMode: ExperimentationOptOutMode
   private readonly exposureCache: AssignmentCache | undefined
@@ -62,16 +66,25 @@ export class DatadogCoreProvider implements Provider {
 
   // No initialize(): a valid configuration is required before OpenFeature registration.
   constructor(configuration: FlagsConfiguration, options: DatadogCoreProviderOptions = {}) {
-    this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
-    this.configuration = snapshotConfiguration(configuration)
-    this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
-    this.exposureCache = options.exposureCache
-    this.ownsExposureCache = options.exposureCache === undefined && options.exposureChannel !== undefined
-    if (options.exposureChannel) {
-      this.exposureCache ??= new LRUInMemoryAssignmentCache(50_000)
-      this.hooks.push(
-        new ExposureLoggingHook(this.exposureCache, options.exposureChannel, this.dependencyTelemetrySidecar)
-      )
+    this.diagnostics = options.onDiagnostic ? new SDKDiagnostics(options.onDiagnostic) : undefined
+    this.diagnostics?.start(false)
+    try {
+      this.experimentationOptOutMode = resolveExperimentationOptOutMode(options.experimentationOptOutMode)
+      this.configuration = snapshotConfiguration(configuration)
+      this.diagnostics?.configurationReceived()
+      this.dependencyTelemetrySidecar = options.dependencyTelemetrySidecar ?? new DependencyTelemetrySidecar(false)
+      this.exposureCache = options.exposureCache
+      this.ownsExposureCache = options.exposureCache === undefined && options.exposureChannel !== undefined
+      if (options.exposureChannel) {
+        this.exposureCache ??= new LRUInMemoryAssignmentCache(50_000)
+        this.hooks.push(
+          new ExposureLoggingHook(this.exposureCache, options.exposureChannel, this.dependencyTelemetrySidecar)
+        )
+      }
+      this.diagnostics?.finish('ready')
+    } catch (error) {
+      this.diagnostics?.finish('failed')
+      throw error
     }
   }
 
@@ -96,7 +109,19 @@ export class DatadogCoreProvider implements Provider {
     this.events.emit('PROVIDER_CONFIGURATION_CHANGED' as ServerProviderEvents.ConfigurationChanged)
   }
 
+  /** Called by the integration once before a sequential configuration poll, including its retries. */
+  reportConfigurationFetchStart(): void {
+    this.diagnostics?.fetchStarted()
+  }
+
+  /** Called after the poll succeeds or exhausts retries; cancellations are not fetch failures. */
+  reportConfigurationFetchResult(success: boolean): void {
+    this.diagnostics?.fetchResult(success)
+  }
+
+  /** Stops diagnostics permanently and clears the provider-owned exposure cache. Await before closing delivery. */
   async onClose(): Promise<void> {
+    this.diagnostics?.close()
     if (this.ownsExposureCache) await this.exposureCache?.clear()
   }
 

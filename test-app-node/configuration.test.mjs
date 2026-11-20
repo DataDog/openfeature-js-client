@@ -120,6 +120,53 @@ test('packed core provider evaluates and replaces local rules without OpenFeatur
   await provider.onClose()
 })
 
+for (const [mode, CoreProvider] of [
+  ['import', DatadogCoreProvider],
+  ['require', cjs.DatadogCoreProvider],
+]) {
+  test(`${mode}: packed core provider uses the existing diagnostic callback and refresh interface`, async () => {
+    const observations = []
+    const onDiagnostic = (observation) => {
+      observations.push(observation)
+    }
+    const configuration = configurationFromRulesBinary(new Uint8Array())
+    const provider = new CoreProvider(configuration, { onDiagnostic })
+    assert.equal('initialize' in provider, false)
+    assert.equal(observations.length, 1)
+    assert.equal(observations[0].event_type, 'sdk_initialization')
+    assert.equal(observations[0].initialization.outcome, 'ready')
+    assert.ok(observations[0].initialization.milestones.configuration_received)
+    assert.ok(observations[0].initialization.milestones.provider_ready)
+    if (OpenFeature) {
+      OpenFeature.setProvider(`diagnostics-${mode}`, provider)
+      const client = OpenFeature.getClient(`diagnostics-${mode}`)
+      assert.equal(client.providerStatus, 'READY')
+      const details = await client.getBooleanDetails('missing', false, {})
+      assert.equal(details.errorCode, 'FLAG_NOT_FOUND')
+    }
+    provider.reportConfigurationFetchStart()
+    provider.reportConfigurationFetchResult(false)
+    provider.reportConfigurationFetchStart()
+    provider.reportConfigurationFetchResult(false)
+    assert.deepEqual(observations.slice(1), [
+      {
+        timestamp: observations[1].timestamp,
+        event_type: 'provider_error',
+        error_code: 'CONFIG_FETCH_FAILED',
+      },
+    ])
+    await provider.onClose()
+    provider.reportConfigurationFetchResult(true)
+    provider.reportConfigurationFetchStart()
+    provider.reportConfigurationFetchResult(false)
+    assert.equal(observations.length, 2)
+    assert.throws(() => new CoreProvider({}, { onDiagnostic }), TypeError)
+    assert.equal(observations[2].error_code, 'INIT_FAILED')
+    assert.equal(observations[2].initialization.outcome, 'failed')
+    if (OpenFeature) await OpenFeature.clearProviders()
+  })
+}
+
 for (const [format, registration] of [
   ['rules', 'implicit'],
   ['precomputed', 'implicit'],

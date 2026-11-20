@@ -26,6 +26,7 @@ import {
   fetchPrecomputedConfiguration,
   type PrecomputedConfigurationFetchOptions,
   type FlagSelection as RootFlagSelection,
+  type SDKDiagnostic as RootSDKDiagnostic,
   type UniversalFlagConfigurationV1,
 } from '@datadog/openfeature-node-server'
 import {
@@ -36,6 +37,7 @@ import {
   configurationFromString,
   configurationToString,
   DatadogCoreProvider,
+  type DatadogCoreProviderOptions,
   type FlagSelection,
   type FlagsConfiguration,
   fetchRulesConfiguration,
@@ -43,6 +45,7 @@ import {
   type PrecomputeEvaluationError,
   precomputeConfiguration,
   type RulesConfigurationFetchOptions,
+  type SDKDiagnostic,
 } from '@datadog/openfeature-node-server/rules-based'
 
 // --- Test 1: DatadogNodeServerProvider can be instantiated with correct options ---
@@ -204,3 +207,20 @@ void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, experimentation
 void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, flagSelection: { tags: [42] } })
 // @ts-expect-error: Selection diagnostics require an error method.
 void fetchPrecomputedConfiguration({ ...precomputedFetchOptions, logger: {} })
+
+// The tracer can use the same callback and refresh notifications with either provider.
+const onDiagnostic = async (observation: SDKDiagnostic): Promise<void> => {
+  const rootObservation: RootSDKDiagnostic = observation
+  void rootObservation
+}
+const coreDiagnosticOptions: DatadogCoreProviderOptions = { onDiagnostic }
+const nodeDiagnosticOptions: DatadogNodeServerProviderOptions = { exposureChannel, onDiagnostic }
+const diagnosticProvider = new DatadogCoreProvider(decoded, coreDiagnosticOptions)
+const refreshReporter: Pick<
+  DatadogNodeServerProvider,
+  'reportConfigurationFetchStart' | 'reportConfigurationFetchResult'
+> = diagnosticProvider
+refreshReporter.reportConfigurationFetchStart()
+refreshReporter.reportConfigurationFetchResult(false)
+const diagnosticsClosed: Promise<void> = diagnosticProvider.onClose()
+void [nodeDiagnosticOptions, diagnosticsClosed]
