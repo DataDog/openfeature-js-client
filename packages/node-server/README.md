@@ -2,9 +2,54 @@
 
 This package provides OpenFeature integration for Node.js server environments and is designed exclusively for internal Datadog use. Support is not provided for external organizations or third-party usage.
 
+## Offline Initialization and Local Evaluation
+
+`DatadogCoreProvider` evaluates locally supplied rules or precomputed assignments without fetching, polling, or initializing a tracer or uploader. It is exported from `/rules-based`; the root entry point remains protobuf-free.
+
+Use the [configuration helpers](#standalone-configuration-helpers) to fetch and serialize server-distributed rules as `flags.json`. With a valid local snapshot, registration is synchronous and immediately ready; OpenFeature evaluation methods return promises.
+
+```javascript
+import { readFileSync } from 'node:fs'
+import { OpenFeature } from '@openfeature/server-sdk'
+import {
+  configurationFromString,
+  DatadogCoreProvider,
+  fetchRulesConfiguration,
+} from '@datadog/openfeature-node-server/rules-based'
+
+const configuration = configurationFromString(readFileSync('flags.json', 'utf8'))
+const provider = new DatadogCoreProvider(configuration)
+OpenFeature.setProvider(provider)
+const client = OpenFeature.getClient()
+
+const enabled = await client.getBooleanValue('checkout-enabled', false, { targetingKey: 'user-123' })
+```
+
+Refresh server-distributed rules without blocking evaluations against the active snapshot:
+
+```javascript
+const next = await fetchRulesConfiguration({ apiKey: process.env.DD_API_KEY, env: 'production' })
+provider.setConfiguration(next)
+```
+
+Unlike the browser provider, Node requires a valid configuration at construction, throws `TypeError` for invalid replacements, and returns a full detached copy from `getConfiguration()`. Construction, `setConfiguration()`, and `getConfiguration()` synchronously copy the configuration and can block the event loop for large snapshots; keep them outside the per-request evaluation path. Failed fetches or invalid replacements leave the active configuration and provider status unchanged; handle refresh errors in the calling application. Mixed configurations retain only their rules. Applications own refresh timing and ordering; snapshots do not expire automatically. Evaluation errors use the caller's default.
+
+To use a [locally precomputed snapshot](#local-precomputation) instead:
+
+```javascript
+import { precomputeConfiguration } from '@datadog/openfeature-node-server/rules-based'
+
+const context = { targetingKey: 'user-123' }
+provider.setConfiguration(precomputeConfiguration(configuration, context))
+```
+
+Helper-generated snapshots require the same evaluation context; a mismatch returns the caller's default with `INVALID_CONTEXT`. External snapshots without a stored context apply to every request, so retain the context for subject-specific assignments. Use rules for a shared provider serving multiple users, not per-user snapshot swaps. Keep server-distributed rules and their precomputed results on the server.
+
+Tracking is off by default. Internal tracer integrations can use `createExposureTracking({ collectDependencyEvaluations: true })` and spread its `providerOptions` into the provider options without replacing the cache or sidecar. Attach `createHook(sink)` with `provider.hooks.push()` or, for a single client, `client.addHooks()`. Do not use global `OpenFeature.addHooks()`: the hook would also receive unrelated providers' evaluations. Dependency evaluation collection defaults to false and requires rules; precomputed snapshots track only the requested root flag. Alternatively, `exposureChannel` installs a hook; do not register the same sink twice. Shared tracking state shares deduplication and configuration-generation resets. Supplied caches must invalidate their lookup state synchronously when cleared; deferred persistence must preserve later admissions. The integration owns telemetry opt-out, delivery, writer cleanup, and clearing supplied caches; provider shutdown clears only its own cache.
+
 ## Standalone Configuration Helpers
 
-Requires Node.js 18 or newer. Fetch and parse rules without initializing a tracer or provider. The customer-facing `dd-trace/openfeature` entrypoint is a separate follow-up; these examples use the internal package.
+Requires Node.js 18 or newer. Fetch and parse rules without initializing a tracer or provider.
 
 ```javascript
 import { fetchRulesConfiguration, configurationToString } from '@datadog/openfeature-node-server/rules-based'
@@ -157,7 +202,7 @@ You can also pass rules parsed with `configurationFromString()` or `configuratio
 - `flagSelection` supports only `keyPatterns` for local precomputation: source rules do not contain tag metadata. Patterns match the whole flag key, case-sensitively, with only `*` special; any matching pattern selects the flag. Patterns use the same Unicode whitespace trimming, deduplication, and limits as fetch selection (31 distinct nonempty patterns, 200 UTF-8 bytes each). Omitted selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated as absent at runtime. No matches produce an empty snapshot. Any defined `tags` value, including `[]` or `null`, malformed selections, and selections over a limit throw `invalid_options`, rather than falling back to all flags. Tags are also rejected by the TypeScript type.
 - Selection chooses the initial root flags without modifying the source rules. Precomputation also includes the transitive configured prerequisite assignments needed by those roots, even when their keys do not match. `onEvaluationError` reports failures across the selected-root and prerequisite closure. A shared rules snapshot can be reused with different selections; local selection cannot restore flags absent from that snapshot.
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
-- The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
+- The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. When precomputing for Node's `DatadogCoreProvider`, use `disabled` or `immediate` and configure the provider with the same mode; snapshots acknowledging `future_experiments_only` return `INVALID_CONTEXT`.
 - Pass the target SDK's opaque `clientFingerprint` to let the Node helper select a supported encoding and generate its salt. Keys in both top-level maps are hashed. Each nested prerequisite key is encrypted and authenticated using the plaintext root key; a capable receiver uses the caller's root key to decrypt it and hashes the recovered parent key for the top-level lookup. Omitting the fingerprint preserves plaintext prerequisite keys. The fingerprint is consumed locally and is not forwarded to the Datadog origin request.
 
 To prepare output for a particular browser SDK, send the opaque string returned
