@@ -1,0 +1,29 @@
+// Flag values and other remote data must never be run as code or written as markup.
+// Biome has no built-in rules for these sinks, so this plugin reports them.
+or {
+  `new Function($args)` as $call where {
+    register_diagnostic(span=$call, message="Do not use `new Function`. It compiles a string as code.", severity="error")
+  },
+  `Function($args)` as $call where {
+    register_diagnostic(span=$call, message="Do not use `Function()`. It compiles a string as code.", severity="error")
+  },
+  `$el.innerHTML = $value` as $sink where {
+    register_diagnostic(span=$sink, message="Do not assign to `innerHTML`. It parses a string as HTML.", severity="error")
+  },
+  `$el.outerHTML = $value` as $sink where {
+    register_diagnostic(span=$sink, message="Do not assign to `outerHTML`. It parses a string as HTML.", severity="error")
+  },
+  `$el.insertAdjacentHTML($args)` as $sink where {
+    register_diagnostic(span=$sink, message="Do not use `insertAdjacentHTML`. It parses a string as HTML.", severity="error")
+  },
+  `document.write($args)` as $sink where {
+    register_diagnostic(span=$sink, message="Do not use `document.write`. It writes a string into the page as HTML.", severity="error")
+  },
+  `document.writeln($args)` as $sink where {
+    register_diagnostic(span=$sink, message="Do not use `document.writeln`. It writes a string into the page as HTML.", severity="error")
+  },
+  `document.createElement($tag)` as $sink where {
+    $tag <: or { `'script'`, `"script"` },
+    register_diagnostic(span=$sink, message="Do not create `script` elements. The SDK must not load or run code.", severity="error")
+  }
+}
