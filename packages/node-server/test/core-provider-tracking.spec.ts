@@ -504,6 +504,85 @@ describe('DatadogCoreProvider optional tracking', () => {
     expect(result.flagMetadata.__dd_observe_full_evaluation_data).toBe(!consent)
   })
 
+  it('isolates values, dependency batches, and exposures while different request hooks overlap', async () => {
+    const configuration = dependentRules()
+    const response = configuration.rules!.response
+    response.flags['root-b'] = structuredClone(response.flags['test-flag'])
+    response.flags['leaf-b'] = structuredClone(response.flags.prerequisite)
+    response.flags['root-b'].variations[0].value = { case: 'booleanValue', value: false }
+    response.flags['leaf-b'].variations[0].value = { case: 'booleanValue', value: false }
+    response.flags['root-b'].allocations[0].targetingConditionIndex = response.conditions.length
+    response.conditions.push({
+      $typeName: 'datadog.ffe.flagging.ufc.v1.Condition',
+      kind: {
+        case: 'flagEvaluationStringMembership',
+        value: {
+          $typeName: 'datadog.ffe.flagging.ufc.v1.FlagEvaluationStringMembershipCondition',
+          flagKeyStringIndex: response.strings.push('leaf-b') - 1,
+          variantKeyStringIndexes: [0],
+          negate: false,
+        },
+      },
+    })
+    const tracking = createExposureTracking({ collectDependencyEvaluations: true })
+    const sink = channel()
+    const provider = new DatadogCoreProvider(configuration, tracking.providerOptions)
+    provider.hooks.push(tracking.createHook(sink))
+    const client = clientFor(provider)
+    const batches = new Map<string, Array<[string, unknown]>>()
+    let releaseHooks: () => void = () => {}
+    const bothHooksReady = new Promise<void>((resolve) => {
+      releaseHooks = resolve
+    })
+    let arrivals = 0
+    client.addHooks({
+      after: async (hookContext, details) => {
+        arrivals += 1
+        if (arrivals === 2) releaseHooks()
+        await bothHooksReady
+        const sidecar = tracking.providerOptions.dependencyTelemetrySidecar
+        const evaluations = sidecar.takeDependencyEvaluations(undefined, undefined, hookContext.context)
+        batches.set(
+          hookContext.context.targetingKey!,
+          evaluations.map((evaluation) => [evaluation.flagKey, evaluation.details.value])
+        )
+        expect(sidecar.takeDependencyEvaluations(details.flagMetadata, undefined, hookContext.context)).toEqual([])
+      },
+    })
+    const results = await Promise.all([
+      client.getBooleanDetails('test-flag', false, {
+        targetingKey: 'subject-a',
+        country: 'US',
+        dd_assignment_token: 'token-a',
+      }),
+      client.getBooleanDetails('root-b', true, {
+        targetingKey: 'subject-b',
+        country: 'CA',
+        dd_assignment_token: 'token-b',
+      }),
+    ])
+    expect(results).toMatchObject([
+      { value: true, variant: 'on', reason: 'TARGETING_MATCH' },
+      { value: false, variant: 'on', reason: 'TARGETING_MATCH' },
+    ])
+    expect(batches.get('subject-a')).toEqual([['prerequisite', true]])
+    expect(batches.get('subject-b')).toEqual([['leaf-b', false]])
+    expect(
+      sink.publish.mock.calls.map(([event]) => [(event as ExposureEvent).subject.id, (event as ExposureEvent).flag.key])
+    ).toEqual(
+      expect.arrayContaining([
+        ['subject-a', 'prerequisite'],
+        ['subject-a', 'test-flag'],
+        ['subject-b', 'leaf-b'],
+        ['subject-b', 'root-b'],
+      ])
+    )
+    expect(sink.publish).toHaveBeenCalledTimes(4)
+    for (const [event] of sink.publish.mock.calls) {
+      expect((event as ExposureEvent).subject.attributes).not.toHaveProperty('dd_assignment_token')
+    }
+  })
+
   it.each([true, false])('retains dependency evaluation traces with exposure tracking=%s', async (trackExposures) => {
     const sidecar = new DependencyTelemetrySidecar()
     const sink = channel()

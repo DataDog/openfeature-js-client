@@ -657,6 +657,13 @@ cross-origin requests, allow it in its CORS response before enabling it.
 The provider accepts both plaintext and obfuscated responses without an
 application configuration change.
 
+Dependent precomputed assignments are negotiated through the URL query parameter
+`cap_dependent-flags-variant-key=v1`. The provider derives this negotiation from
+its supported capabilities and adds it to every precompute request, including
+requests sent through `flaggingProxy`. For application-server precomputation,
+forward the opaque fingerprint described below; the Node helper reads the target
+browser's capabilities and adds the query parameter to its Datadog origin request.
+
 Continue evaluating the original flag key. The shared core hashes it with the
 response's public salt before lookup. Flag values do not change. Evaluation
 details, exposure events, and RUM annotations retain the original flag key. Portable
@@ -702,10 +709,11 @@ const { appData, flags: wire } = await response.json()
 The getter returns an opaque, versioned string containing the SDK name, version,
 and supported capabilities. Forward it unchanged; do not parse or construct it in
 application code. The SDK-owned format can grow without changes to your request code.
-Currently it advertises `assignment-encoding-flag-key-256-v1`. Plaintext remains
-supported; a capability does not require the server to use that format or provide
-an authorization boundary. The fingerprint identifies the SDK, not a user or device,
-and is not authentication. Your application chooses its own client-server transport.
+Currently it advertises `assignment-encoding-flag-key-256-v1` and
+`dependent-flag-variant-key-v1`. Plaintext remains supported; a capability does not
+require the server to use that format or provide an authorization boundary. The
+fingerprint identifies the SDK, not a user or device, and is not authentication. Your
+application chooses its own client-server transport.
 The getter and `ClientFingerprint` type are available from both the root and
 `/rules-based` entry points. The root import does not load protobuf.
 

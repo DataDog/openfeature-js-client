@@ -6,8 +6,12 @@ describe('getClientFingerprint', () => {
     expect(JSON.parse(getClientFingerprint())).toEqual({
       version: 1,
       sdk: { name: 'browser', version: '1.0.0-test' },
-      capabilities: [...SUPPORTED_FLAGS_CAPABILITIES].sort(),
+      capabilities: ['assignment-encoding-flag-key-256-v1', 'dependent-flag-variant-key-v1'],
     })
+    expect(SUPPORTED_FLAGS_CAPABILITIES).toEqual([
+      'assignment-encoding-flag-key-256-v1',
+      'dependent-flag-variant-key-v1',
+    ])
   })
 
   it('can be forwarded as JSON', () => {

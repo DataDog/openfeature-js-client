@@ -118,8 +118,9 @@ receive plaintext. A response using an encoding the target did not advertise is
 rejected with `ConfigurationFetchError` (`decode`).
 
 The helper decodes the SDK-owned wire internally. The target SDK fingerprint is used
-locally to reject a response encoding the target did not advertise; target capabilities
-are not forwarded to the Datadog origin. The request source still identifies the
+locally to validate response compatibility. When it advertises dependent-flag support,
+the helper adds `cap_dependent-flags-variant-key=v1` to the origin query; target
+capabilities are not forwarded in a header. The request source still identifies the
 requesting Node SDK.
 
 `flagSelection` optionally requests flags matching any of the `tags` or whole-key

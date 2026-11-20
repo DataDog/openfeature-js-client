@@ -111,7 +111,7 @@ function isEvaluationContext(value: unknown): value is EvaluationContext {
   )
 }
 
-function precomputedFlagIssue(
+export function precomputedFlagIssue(
   value: unknown,
   encoding?: FlagKeyObfuscation
 ): { field: string; expected: string; actual: unknown } | undefined {
@@ -147,17 +147,17 @@ function precomputedFlagIssue(
   if (!valid) return { field: 'variationValue', expected, actual: value.variationValue }
 }
 
-function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedErrorFlag {
+export function isPrecomputedErrorFlag(value: unknown, encoding?: FlagKeyObfuscation): value is PrecomputedErrorFlag {
   return (
     isRecord(value) &&
     value.reason === 'ERROR' &&
-    typeof value.errorCode === 'string' &&
-    (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+    value.errorCode === 'GENERAL' &&
+    (value.errorMessage === undefined || isNonEmptyString(value.errorMessage)) &&
     isDependencyEvaluations(value.dependencyEvaluations, encoding)
   )
 }
 
-function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
+export function isDependencyEvaluations(value: unknown, encoding?: FlagKeyObfuscation): boolean {
   if (value === undefined) return true
   if (!Array.isArray(value)) return false
   if (encoding !== undefined && value.length > 0 && !supportsDependencyKeyEncryption(encoding)) return false
@@ -180,11 +180,11 @@ function isEncryptedDependencyKey(value: string): boolean {
 }
 
 function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyEvaluation {
-  if (!isRecord(value) || typeof value.flagKey !== 'string') return false
+  if (!isRecord(value) || !isNonEmptyString(value.flagKey)) return false
   if (value.reason === 'ERROR') {
     return (
-      typeof value.errorCode === 'string' &&
-      (value.errorMessage === undefined || typeof value.errorMessage === 'string') &&
+      isNonEmptyString(value.errorCode) &&
+      (value.errorMessage === undefined || isNonEmptyString(value.errorMessage)) &&
       value.isPresentInAssignment === undefined
     )
   }
@@ -194,6 +194,10 @@ function isDependencyEvaluation(value: unknown): value is PrecomputedDependencyE
     value.errorCode == null &&
     value.errorMessage == null
   )
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
 }
 
 function isJsonValue(value: unknown): boolean {

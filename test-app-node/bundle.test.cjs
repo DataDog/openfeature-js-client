@@ -21,6 +21,7 @@ for (const name of ['precomputed-fetch', 'precomputed-fetch-rules-based']) {
       fetch: async (url, request) => {
         calls++
         assert.equal(new URL(url).pathname, '/precompute-assignments')
+        assert.equal(new URL(url).searchParams.get('cap_dependent-flags-variant-key'), 'v1')
         assert.equal(request.headers['X-DD-FEATURE-FLAGS-CAPABILITIES'], undefined)
         assert.equal(request.redirect, 'manual')
         const { precomputeConfiguration } = require('@datadog/openfeature-node-server/rules-based')

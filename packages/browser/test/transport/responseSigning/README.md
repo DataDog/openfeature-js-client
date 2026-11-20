@@ -5,13 +5,15 @@ v3 format were never public compatibility targets. The native verifier rejects
 prototype request versions, response versions and transcript domains; X.509 v3
 certificate encoding is unchanged.
 
-The core corpus and nested-DER certificate regressions come from the exact
+The core corpus, nested-DER certificate regressions, and subject-DER,
+extension-profile, and near-expiry supplements come from the exact
 `ffe-system-test-data` revision pinned by `../../ffe-response-signing-data`.
 Initialize it with `git submodule update --init packages/browser/test/ffe-response-signing-data`
 from the repository root. CI checks out submodules and Dependabot proposes pin updates.
 
 Run `yarn workspace @datadog/openfeature-browser test --runInBand test/transport/responseSigning/verification.spec.ts`.
-The verifier consumes all 46 core response cases and both nested-DER cases; the
+The verifier consumes all 46 core response cases, both nested-DER cases, and all
+14 supplemental response cases. It also checks four isolated certificate cases. The
 two private-key matching cases apply only to server signers. Tests check the
 original fixture hashes so byte changes require deliberate review. The separate
 public-only KeyUsage regression remains a native supplementary test.
