@@ -45,10 +45,8 @@ export class IndexedDBFlagsCache {
     debug.event('cache.read_started', () => ({ cache: 'assignments', backend: 'indexeddb', context, optedOut }))
     try {
       const legacyKey = buildConfigKey(this.clientToken, context)
-      const configKey = this.signingNamespace
-        ? await this.scopedKey(context, optedOut)
-        : `${policyPrefix(optedOut)}-${legacyKey}${this.selectionSuffix}`
-      if (!configKey) {
+      const signingNamespace = await this.signingNamespace?.()
+      if (this.signingNamespace && !signingNamespace) {
         debug.event('cache.read_completed', () => ({
           cache: 'assignments',
           outcome: 'skipped',
@@ -56,6 +54,12 @@ export class IndexedDBFlagsCache {
         }))
         return undefined
       }
+      const configKey = signingNamespace
+        ? await this.scopedKey(signingNamespace, context, optedOut, 'v3')
+        : `${policyPrefix(optedOut, 'v3')}-${legacyKey}${this.selectionSuffix}`
+      const previousConfigKey = signingNamespace
+        ? await this.scopedKey(signingNamespace, context, optedOut, 'v2')
+        : `${policyPrefix(optedOut, 'v2')}-${legacyKey}${this.selectionSuffix}`
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
@@ -67,24 +71,32 @@ export class IndexedDBFlagsCache {
               resolve(request.result as FlagsConfiguration)
               return
             }
-            if (this.signingNamespace || optedOut || this.selectionSuffix) {
-              resolve(undefined)
-              return
-            }
-            // Read older plaintext entries on upgrade. Never expose encoded
-            // snapshots written by a prerelease SDK through the legacy key.
-            const legacy = store.get(legacyKey)
-            legacy.onerror = () => reject(legacy.error)
-            legacy.onsuccess = () => {
-              const config = legacy.result as FlagsConfiguration | undefined
-              const attributes = config?.precomputed?.response?.data?.attributes
-              resolve(
-                attributes &&
-                  (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
-                  attributes.obfuscation === undefined
-                  ? config
-                  : undefined
-              )
+            const previous = store.get(previousConfigKey)
+            previous.onerror = () => reject(previous.error)
+            previous.onsuccess = () => {
+              if (previous.result !== undefined) {
+                resolve(previous.result as FlagsConfiguration)
+                return
+              }
+              if (this.signingNamespace || optedOut || this.selectionSuffix) {
+                resolve(undefined)
+                return
+              }
+              // Read older plaintext entries on upgrade. Never expose encoded
+              // snapshots written by a prerelease SDK through the legacy key.
+              const legacy = store.get(legacyKey)
+              legacy.onerror = () => reject(legacy.error)
+              legacy.onsuccess = () => {
+                const config = legacy.result as FlagsConfiguration | undefined
+                const attributes = config?.precomputed?.response?.data?.attributes
+                resolve(
+                  attributes &&
+                    (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
+                    attributes.obfuscation === undefined
+                    ? config
+                    : undefined
+                )
+              }
             }
           }
           request.onerror = () => reject(request.error)
@@ -134,15 +146,17 @@ export class IndexedDBFlagsCache {
       debug.event('cache.write_failed', () => ({ cache: 'assignments', error, action: 'retain_memory' }))
     try {
       if (this.signingNamespace) {
-        void this.scopedKey(context, optedOut)
-          .then((key) => {
-            if (!key) debug.event('cache.write_skipped', () => ({ reason: 'signing_namespace_unavailable' }))
-            else this.persist(config, key, signal, debug)
+        void this.signingNamespace()
+          .then(async (namespace) => {
+            if (!namespace) debug.event('cache.write_skipped', () => ({ reason: 'signing_namespace_unavailable' }))
+            else this.persist(config, await this.scopedKey(namespace, context, optedOut, 'v3'), signal, debug)
           })
           .catch(fail)
         return
       }
-      const key = `${policyPrefix(optedOut)}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+      // New wire shapes use a new namespace so an older SDK cannot consume a
+      // snapshot it does not understand after an application rollback.
+      const key = `${policyPrefix(optedOut, 'v3')}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
       this.persist(config, key, signal, debug)
     } catch (error) {
       fail(error)
@@ -150,12 +164,12 @@ export class IndexedDBFlagsCache {
   }
 
   private async scopedKey(
+    namespace: string,
     context: EvaluationContext,
-    optedOut: ExperimentationOptOutPolicy
-  ): Promise<string | undefined> {
-    const namespace = await this.signingNamespace?.()
-    if (!namespace) return undefined
-    return `${namespace}-${policyPrefix(optedOut)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
+    optedOut: ExperimentationOptOutPolicy,
+    version: 'v2' | 'v3'
+  ): Promise<string> {
+    return `${namespace}-${policyPrefix(optedOut, version)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
   }
 
   private persist(
@@ -201,6 +215,7 @@ export class IndexedDBFlagsCache {
   }
 }
 
-function policyPrefix(policy: ExperimentationOptOutPolicy): string {
-  return policy ? experimentationOptOutCacheKey(policy) : 'v2'
+function policyPrefix(policy: ExperimentationOptOutPolicy, version: 'v2' | 'v3'): string {
+  if (version === 'v2') return policy ? experimentationOptOutCacheKey(policy) : version
+  return policy ? `${version}-${experimentationOptOutCacheKey(policy)}` : version
 }

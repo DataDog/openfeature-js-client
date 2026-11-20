@@ -30,6 +30,7 @@ import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
 import { supportsExposureAdmission } from './exposure-scope'
+import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import type { DatadogTrackingHook, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
 
@@ -79,9 +80,9 @@ export function createExposureLoggingHook(
   return {
     shutdown: () => exposuresBatch?.stop(),
     finally: (hookContext: HookContext, details: EvaluationDetails<FlagValue>) => {
-      const evaluation = evaluationDebug(hookContext.context, debug)
+      const evaluationLog = evaluationDebug(hookContext.context, debug)
       if (details.errorCode || details.reason === 'ERROR' || details.variant == null) {
-        evaluation.event('exposure.decision', () => ({
+        evaluationLog.event('exposure.decision', () => ({
           details,
           outcome: 'skipped',
           reason: 'evaluation_error_or_no_variant',
@@ -89,74 +90,84 @@ export function createExposureLoggingHook(
         return
       }
       if (!supportsExposureAdmission(hookContext)) {
-        evaluation.event('exposure.decision', () => ({ details, outcome: 'skipped', reason: 'unrecognized_provider' }))
-        return
-      }
-      // Complete the provider decision before either destination consumes it.
-      const sharedDecision = completeExposureDecision(details)
-      const exposureEvent = createExposureEvent(
-        getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context)),
-        details
-      )
-      if (!exposureEvent) {
-        evaluation.event('exposure.decision', () => ({
+        evaluationLog.event('exposure.decision', () => ({
           details,
           outcome: 'skipped',
-          reason: !details.flagMetadata?.doLog
-            ? 'do_log_false'
-            : !details.flagMetadata?.allocationKey
-              ? 'missing_allocation'
-              : 'missing_variant',
+          reason: 'unrecognized_provider',
         }))
         return
       }
-      const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
-
-      // The verdict is final once completed. Fall back to the cache when the
-      // result carried no shared decision.
-      const stampedVerdict = details.flagMetadata?.__dd_exposure_cache_hit
-      const hasLoggedAssignment = stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
-      evaluation.event('exposure.decision', () => ({
+      const context = getEvaluationTrackingContext(details, () => getEvaluationContext(hookContext.context))
+      const evaluations = [
+        ...getPrecomputedDependencyEvaluations(details).filter((dependency) => dependency.isPresentInAssignment),
         details,
-        exposureCacheEntry,
-        stampedVerdict,
-        outcome: hasLoggedAssignment ? 'duplicate' : sendToDatadog ? 'eligible' : 'record_only',
-        sendToDatadog,
-      }))
-      if (hasLoggedAssignment) {
-        return
-      }
+      ]
+      const timestamp = timeStampNow()
+      const url = window?.location?.href
+      for (const evaluationDetails of evaluations) {
+        try {
+          const exposureDetails = evaluationDetails as EvaluationDetails<FlagValue>
+          // Complete the provider decision before either destination consumes it.
+          const sharedDecision = completeExposureDecision(exposureDetails)
+          const exposureEvent = createExposureEvent(context, exposureDetails)
+          if (!exposureEvent) {
+            evaluationLog.event('exposure.decision', () => ({
+              details: exposureDetails,
+              outcome: 'skipped',
+              reason: !exposureDetails.flagMetadata?.doLog
+                ? 'do_log_false'
+                : !exposureDetails.flagMetadata?.allocationKey
+                  ? 'missing_allocation'
+                  : 'missing_variant',
+            }))
+            continue
+          }
+          // Dependency exposures belong to the same immutable configuration
+          // snapshot as the root result.
+          const exposureCacheEntry = getExposureCacheEntry(exposureEvent, details)
+          const stampedVerdict = exposureDetails.flagMetadata?.__dd_exposure_cache_hit
+          const hasLoggedAssignment =
+            stampedVerdict === undefined ? exposureCache.has(exposureCacheEntry) : stampedVerdict
+          evaluationLog.event('exposure.decision', () => ({
+            details: exposureDetails,
+            exposureCacheEntry,
+            stampedVerdict,
+            outcome: hasLoggedAssignment ? 'duplicate' : sendToDatadog ? 'eligible' : 'record_only',
+            sendToDatadog,
+          }))
+          if (hasLoggedAssignment) continue
 
-      try {
-        if (exposuresBatch) {
-          const url = window?.location?.href
-          const timestamp = timeStampNow()
-          // Features stay off the cache entry: a features change must not turn a
-          // repeat exposure into a new one.
-          const features = featuresWithPrefix(details.flagMetadata, METADATA_EXPOSURE_FEATURE_PREFIX)
-          const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
-            ...exposureEvent,
-            ...(features && { features }),
-            ...(configuration.service ? { service: configuration.service } : {}),
-            rum: {
-              ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
-              ...(url && { view: { url } }),
-            },
-            timestamp,
+          if (exposuresBatch) {
+            // Features stay off the cache entry: a features change must not turn a
+            // repeat exposure into a new one.
+            const features = featuresWithPrefix(exposureDetails.flagMetadata, METADATA_EXPOSURE_FEATURE_PREFIX)
+            const exposureEventWithTimestamp: ExposureEventWithTimestamp = {
+              ...exposureEvent,
+              ...(features && { features }),
+              ...(configuration.service ? { service: configuration.service } : {}),
+              rum: {
+                ...(configuration.applicationId && { application: { id: configuration.applicationId } }),
+                ...(url && { view: { url } }),
+              },
+              timestamp,
+            }
+            if (debug.enabled) {
+              const eventId = `exposure-${++eventSequence}`
+              evaluationLog.event('exposure.created', () => ({ eventId, payload: exposureEventWithTimestamp }))
+              bindEventCorrelation(exposureEventWithTimestamp, { eventId })
+            }
+            exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
           }
-          if (debug.enabled) {
-            const eventId = `exposure-${++eventSequence}`
-            evaluation.event('exposure.created', () => ({ eventId, payload: exposureEventWithTimestamp }))
-            bindEventCorrelation(exposureEventWithTimestamp, { eventId })
-          }
-          exposuresBatch.add(exposureEventWithTimestamp as unknown as Context)
+          // A shared root decision already recorded the root assignment. Other
+          // entries are recorded only after batch.add() succeeds, or immediately
+          // in record-only mode where there is no batch.
+          if (!sharedDecision) exposureCache.set(exposureCacheEntry)
+        } catch (error) {
+          evaluationLog.event('exposure.record_failed', () => ({ error, details: evaluationDetails }))
+          addTelemetryDebug('Error adding exposure to batch', {
+            'error.message': error instanceof Error ? error.message : String(error),
+          })
         }
-        if (!sharedDecision) exposureCache.set(exposureCacheEntry)
-      } catch (error) {
-        evaluation.event('exposure.record_failed', () => ({ error, exposureEvent }))
-        addTelemetryDebug('Error adding exposure to batch', {
-          'error.message': error instanceof Error ? error.message : String(error),
-        })
       }
     },
   }
@@ -212,24 +223,43 @@ export function stampExposureCacheVerdict(
   exposureCache: AssignmentCache | undefined
 ): void {
   const metadata = details.flagMetadata
-  if (
-    !metadata ||
-    metadata.__dd_do_log !== true ||
-    details.errorCode ||
-    details.reason === 'ERROR' ||
-    details.variant == null
-  ) {
+  if (!metadata || details.errorCode || details.reason === 'ERROR' || details.variant == null) {
     return
   }
   const detailsWithMetadata: EvaluationDetails<FlagValue> = { ...details, flagMetadata: metadata }
-  const exposureEvent = createExposureEvent(
-    getEvaluationTrackingContext(detailsWithMetadata, () => fallbackContext),
-    detailsWithMetadata
-  )
-  if (!exposureEvent) {
+  const context = getEvaluationTrackingContext(detailsWithMetadata, () => fallbackContext)
+  if (exposureCache) {
+    for (const dependency of getPrecomputedDependencyEvaluations(detailsWithMetadata)) {
+      if (dependency.isPresentInAssignment) {
+        prepareEvaluationExposureDecision(
+          dependency as EvaluationDetails<FlagValue>,
+          context,
+          detailsWithMetadata,
+          exposureCache
+        )
+      }
+    }
+    prepareEvaluationExposureDecision(detailsWithMetadata, context, detailsWithMetadata, exposureCache)
+  }
+}
+
+function prepareEvaluationExposureDecision(
+  evaluation: EvaluationDetails<FlagValue>,
+  context: EvaluationContext,
+  rootDetails: EvaluationDetails<FlagValue>,
+  exposureCache: AssignmentCache
+): void {
+  const metadata = evaluation.flagMetadata
+  if (
+    metadata?.__dd_do_log !== true ||
+    evaluation.errorCode ||
+    evaluation.reason === 'ERROR' ||
+    evaluation.variant == null
+  ) {
     return
   }
-  if (exposureCache) {
-    prepareExposureDecision(metadata, exposureCache, getExposureCacheEntry(exposureEvent, detailsWithMetadata))
+  const exposureEvent = createExposureEvent(context, evaluation)
+  if (exposureEvent) {
+    prepareExposureDecision(metadata, exposureCache, getExposureCacheEntry(exposureEvent, rootDetails))
   }
 }

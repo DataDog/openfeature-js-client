@@ -4,6 +4,7 @@ import {
   type CanonicalFlagSelection,
   type ClientFingerprint,
   canonicalizeFlagSelection,
+  DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY,
   type ExperimentationOptOutModeValue,
   experimentationOptOutPolicy,
   FLAG_KEY_SHA256_CAPABILITY,
@@ -105,7 +106,6 @@ export async function fetchPrecomputedConfiguration(
         'Content-Type': 'application/vnd.api+json',
         'dd-client-token': clientToken,
         ...(applicationId !== undefined && { 'dd-application-id': applicationId }),
-        ...(capabilities.length > 0 && { 'X-DD-FEATURE-FLAGS-CAPABILITIES': capabilities.join(',') }),
       },
       body,
     },
@@ -217,6 +217,9 @@ function validateOptions(options: PrecomputedConfigurationFetchOptions) {
   }
   const url = new URL(`https://${host}/precompute-assignments`)
   url.searchParams.set('dd_env', env)
+  if (capabilities.includes(DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY)) {
+    url.searchParams.set('cap_dependent-flags-variant-key', 'v1')
+  }
   return {
     url,
     clientToken,

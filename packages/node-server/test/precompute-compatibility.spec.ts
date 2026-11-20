@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 describe('target-client compatibility for precomputation', () => {
-  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'dependent-flag-variant-key-v1'])])(
+  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'future-dependent-flag-v2'])])(
     'keeps the plaintext baseline for %j',
     (clientFingerprint) => {
       const random = jest.spyOn(crypto, 'randomBytes')
@@ -50,6 +50,7 @@ describe('target-client compatibility for precomputation', () => {
     expect(attributes.obfuscation).toEqual({
       scheme: 'flag-key-sha256-v1',
       salt: expect.stringMatching(/^[a-f0-9]{32}$/),
+      dependencyKeyEncryption: { scheme: 'dependency-key-hkdf-sha256-aes-256-gcm-v1' },
     })
     expect(Object.keys(attributes.flags)).not.toContain('test-flag')
     const hash = crypto

@@ -16,6 +16,7 @@ import {
 import { fingerprint } from './client-fingerprint-fixture'
 
 const capability = 'assignment-encoding-flag-key-256-v1'
+const dependentCapability = 'dependent-flag-variant-key-v1'
 const optOutAt = '2026-11-06T12:00:00.123456789Z'
 const context = {
   targetingKey: 'subject',
@@ -112,12 +113,14 @@ describe('fetchPrecomputedConfiguration', () => {
       env: 'test & preview',
       site: 'datad0g.com',
       applicationId: 'app',
-      clientFingerprint: fingerprint([capability, 'unknown-v1', capability]),
+      clientFingerprint: fingerprint([capability, dependentCapability, 'unknown-v1', capability]),
       fetch: requestFetch,
     })
     expect(requestFetch).toHaveBeenCalledTimes(1)
     const [url, init] = requestFetch.mock.calls[0]
-    expect(url).toBe('https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test+%26+preview')
+    expect(url).toBe(
+      'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=test+%26+preview&cap_dependent-flags-variant-key=v1'
+    )
     expect(init).toMatchObject({
       method: 'POST',
       redirect: 'manual',
@@ -127,7 +130,6 @@ describe('fetchPrecomputedConfiguration', () => {
         'Content-Type': 'application/vnd.api+json',
         'dd-client-token': 'test-token',
         'dd-application-id': 'app',
-        'X-DD-FEATURE-FLAGS-CAPABILITIES': capability,
       },
     })
     expect(JSON.parse(init!.body as string)).toEqual({
@@ -307,13 +309,18 @@ describe('fetchPrecomputedConfiguration', () => {
     })
   })
 
-  it.each([undefined, fingerprint(), fingerprint(['unknown-v1', 'dependent-flag-variant-key-v1'])])(
-    'does not substitute Node capabilities for %j',
-    async (clientFingerprint) => {
-      await fetchPrecomputedConfiguration({ ...options, clientFingerprint, fetch: requestFetch })
-      expect(requestFetch.mock.calls[0][1]!.headers).not.toHaveProperty('X-DD-FEATURE-FLAGS-CAPABILITIES')
-    }
-  )
+  it.each([
+    undefined,
+    fingerprint(),
+    fingerprint([capability]),
+    fingerprint(['unknown-v1', 'future-dependent-flag-v2']),
+  ])('does not substitute Node capabilities or negotiate dependencies for %j', async (clientFingerprint) => {
+    await fetchPrecomputedConfiguration({ ...options, clientFingerprint, fetch: requestFetch })
+    expect(requestFetch.mock.calls[0][1]!.headers).not.toHaveProperty('X-DD-FEATURE-FLAGS-CAPABILITIES')
+    expect(requestFetch.mock.calls[0][0]).toBe(
+      'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=prod'
+    )
+  })
 
   it.each([false, true])('accepts plaintext or encoded output for an encoding-capable client: %s', async (encoded) => {
     requestFetch.mockImplementation(async () =>

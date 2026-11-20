@@ -2,6 +2,7 @@ import { type Context, getGlobalObject } from '@datadog/browser-core'
 import type { EvaluationContext, EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk'
 import { createDebugLogger, type DebugConfiguration, type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import { type EvaluationTelemetryPolicy, withEvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
+import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import type { DatadogTrackingHook } from './tracking'
 
 export interface DDRum {
@@ -67,20 +68,28 @@ export function createRumTrackingHook(policy?: EvaluationTelemetryPolicy, debug:
           return
         }
         const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
-        try {
-          const rum = globalObject.DD_RUM
-          const annotate = rum?.addFeatureFlagEvaluation
-          if (annotate != null) Reflect.apply(annotate, rum, [details.flagKey, details.variant])
-          evaluation.event('rum.annotation', () => ({
-            flagKey: details.flagKey,
-            value: details.variant,
-            outcome: annotate != null ? 'handed_to_rum' : 'rum_unavailable',
-            downstreamDelivery: 'not_observable',
-          }))
-        } catch (error) {
-          evaluation.event('rum.annotation_failed', () => ({ details, error }))
-          throw error
+        const record = (flagKey: string, variant: string) => {
+          try {
+            const rum = globalObject.DD_RUM
+            const annotate = rum?.addFeatureFlagEvaluation
+            if (annotate != null) Reflect.apply(annotate, rum, [flagKey, variant])
+            evaluation.event('rum.annotation', () => ({
+              flagKey,
+              value: variant,
+              outcome: annotate != null ? 'handed_to_rum' : 'rum_unavailable',
+              downstreamDelivery: 'not_observable',
+            }))
+          } catch (error) {
+            // One RUM failure must not suppress the remaining dependency graph.
+            evaluation.event('rum.annotation_failed', () => ({ flagKey, value: variant, error }))
+          }
         }
+        for (const dependency of getPrecomputedDependencyEvaluations(details)) {
+          if (dependency.isPresentInAssignment && dependency.variant != null) {
+            record(dependency.flagKey, dependency.variant)
+          }
+        }
+        record(details.flagKey, details.variant)
       },
     },
     policy,

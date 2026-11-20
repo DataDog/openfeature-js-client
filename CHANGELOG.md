@@ -11,9 +11,34 @@
 **Features:**
 
 - Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [BROWSER]
-- Support `flagSelection.keyPatterns` in `precomputeConfiguration` to produce selected assignments from reusable source rules while retaining dependency evaluation. Tags are unsupported; invalid selections throw `invalid_options` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [CORE] [NODE-SERVER]
 - Send `dd-application-id` on rules-based configuration requests when `applicationId` is set, as precomputed requests do, so Usage Attribution can split this usage by `application.name`. `fetchRulesConfiguration` accepts `applicationId`. A `customHeaders` entry for `dd-application-id`, in any letter case, replaces the SDK value on both requests ([#475](https://github.com/DataDog/openfeature-js-client/pull/475)) [BROWSER]
 - Send `service` in `dd-service` on precomputed and rules-based configuration requests, so Usage Attribution can split this usage by `service`. It is sent as configured, the same way Datadog RUM reads `service`, trimmed and when it is printable ASCII, and not through `flaggingProxy` unless `customHeaders` sets it. A `customHeaders` entry for `dd-service`, in any letter case, replaces the SDK value. `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` accept `service` ([#476](https://github.com/DataDog/openfeature-js-client/pull/476)) [BROWSER]
+
+## @datadog/openfeature-node-server@2.8.0, @datadog/flagging-core@3.5.0
+
+**Features:**
+
+- Evaluate variant-key flag dependencies with bounded, memoized graph traversal; emit prerequisite evaluation telemetry and retain exposures only for prerequisites that contributed to the selected allocation ([#414](https://github.com/DataDog/openfeature-js-client/pull/414), [#437](https://github.com/DataDog/openfeature-js-client/pull/437)) [CORE]
+- Add `precomputeConfiguration` for producing context-specific assignments from parsed rules while preserving assignment metadata, consent, and experimentation opt-out acknowledgement. Failed or unassigned flags are omitted without fabricated defaults and can be reported through a diagnostic callback ([#448](https://github.com/DataDog/openfeature-js-client/pull/448)) [CORE]
+- Precompute dependent flags using the backward-compatible `flags` and `flagEvaluationErrors` maps, ordered dependency traces, and selected-path `isPresentInAssignment` semantics. Encoded output hashes top-level keys and encrypts prerequisite keys for capable target SDKs ([#457](https://github.com/DataDog/openfeature-js-client/pull/457)) [CORE]
+- Support `flagSelection.keyPatterns` in `precomputeConfiguration`, evaluating selected roots and including their prerequisite assignments for client telemetry even when those prerequisite keys do not match the selection ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [CORE]
+- Preserve evaluated full-data consent in configuration snapshots and evaluation results so telemetry producers can hash targeting keys and omit evaluation context unless the configuration explicitly opts in ([#424](https://github.com/DataDog/openfeature-js-client/pull/424)) [CORE]
+- Add Node.js helpers for local and target-SDK precomputation, including capability-aware encoded output and standalone precomputed configuration fetching ([#448](https://github.com/DataDog/openfeature-js-client/pull/448), [#461](https://github.com/DataDog/openfeature-js-client/pull/461), [#462](https://github.com/DataDog/openfeature-js-client/pull/462)) [NODE-SERVER]
+- Support dependent flags, evaluation errors, selected prerequisite telemetry, and obfuscated prerequisite keys in Node.js precomputed output ([#457](https://github.com/DataDog/openfeature-js-client/pull/457)) [NODE-SERVER]
+- Support `flagSelection.keyPatterns` in Node.js precomputation, including prerequisite assignments required by selected roots even when their keys do not match the selection ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [NODE-SERVER]
+- Add immediate per-subject experimentation opt-out to the Node.js provider ([#420](https://github.com/DataDog/openfeature-js-client/pull/420)) [NODE-SERVER]
+- Expose Node.js SDK diagnostic observations for readiness milestones and sustained outages ([#473](https://github.com/DataDog/openfeature-js-client/pull/473)) [NODE-SERVER]
+
+**Bug Fixes:**
+
+- Normalize dependent-root graph failures to `GENERAL`, retain prerequisite-specific diagnostics, and fail closed for missing or unassigned prerequisites, cycles, malformed nodes, and depth violations ([#456](https://github.com/DataDog/openfeature-js-client/pull/456), [#470](https://github.com/DataDog/openfeature-js-client/pull/470)) [CORE]
+- Trim flag-selection values in linear time while preserving the existing Unicode whitespace and canonicalization contract ([#478](https://github.com/DataDog/openfeature-js-client/pull/478)) [CORE]
+- Exclude the reserved `dd_assignment_token` credential from portable configuration snapshots, evaluation inputs, telemetry, and serialized assignments ([#454](https://github.com/DataDog/openfeature-js-client/pull/454)) [CORE]
+- Preserve evaluated full-data consent in Node.js evaluation telemetry and fail dependent-root evaluations consistently with the core evaluator ([#424](https://github.com/DataDog/openfeature-js-client/pull/424), [#456](https://github.com/DataDog/openfeature-js-client/pull/456)) [NODE-SERVER]
+
+**Internal Changes:**
+
+- Pin browser and Node.js workspace dependencies to `@datadog/flagging-core@3.5.0`. The browser package version is unchanged and is not part of this release. Publish core before Node.js.
 
 ## @datadog/openfeature-browser@2.3.0, @datadog/openfeature-node-server@2.7.0, @datadog/flagging-core@3.4.0
 

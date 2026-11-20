@@ -3,11 +3,11 @@ import {
   type CanonicalFlagSelection,
   canonicalizeFlagSelection,
   experimentationOptOutPolicy,
+  FLAG_KEY_SHA256_CAPABILITY,
   type FlagSelection,
   type FlagsConfiguration,
   INVALID_EXPERIMENTATION_OPT_OUT,
   parsePrecomputedConfigurationResponse,
-  SUPPORTED_FLAGS_CAPABILITIES,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
@@ -53,7 +53,7 @@ const sourcePayload = {
   sdk_name: 'browser',
   sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
-const capabilitiesHeader = [...SUPPORTED_FLAGS_CAPABILITIES].sort().join(',')
+const capabilitiesHeader = FLAG_KEY_SHA256_CAPABILITY
 
 type JSONAPIError = {
   errors: {
@@ -302,7 +302,6 @@ async function requestPrecomputedConfiguration(
     const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
   let signedResponse: Awaited<ReturnType<ResponseSigningController['read']>> | undefined
   let responseBody: unknown
   try {
@@ -375,6 +374,7 @@ async function requestPrecomputedConfiguration(
     },
   }
   signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
+  if (flagSelection) reportIgnoredFlagSelection(response)
   return configuration
 }
 
