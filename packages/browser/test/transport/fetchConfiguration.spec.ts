@@ -568,7 +568,8 @@ describe('createFlagsConfigurationFetcher', () => {
     describe('dd-service', () => {
       const endpoints = ['precomputed', 'rules'] as const
 
-      it.each(endpoints)('sends a printable ASCII service on %s requests', (endpoint) => {
+      // serviceHeader.spec.ts checks which values fetch accepts, with the platform Headers.
+      it.each(endpoints)('sends the service on %s requests', (endpoint) => {
         for (const service of ['checkout', '_svc', 'My-Service', 'web-store.v2:prod/api', 'my service']) {
           expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).toMatchObject({
             'dd-service': service,
@@ -576,14 +577,8 @@ describe('createFlagsConfigurationFetcher', () => {
         }
       })
 
-      it.each(endpoints)('trims the service on %s requests', (endpoint) => {
-        expect(
-          buildConfigurationHeaders({ clientToken: 'test-token', service: ' checkout' }, {}, endpoint)
-        ).toMatchObject({ 'dd-service': 'checkout' })
-      })
-
-      it.each(endpoints)('sends no header on %s requests for other services', (endpoint) => {
-        for (const service of [undefined, null, '', '   ', 'check\nout', 'café-api', '支付']) {
+      it.each(endpoints)('sends no header on %s requests without a service', (endpoint) => {
+        for (const service of [undefined, null, '']) {
           expect(buildConfigurationHeaders({ clientToken: 'test-token', service }, {}, endpoint)).not.toHaveProperty(
             'dd-service'
           )

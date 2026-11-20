@@ -69,11 +69,11 @@ entry with that name, in any letter case, replaces the SDK value. With `overwrit
 not sent.
 
 When `service` is set, both requests also send it in the `dd-service` header, so Usage Attribution can split usage
-by `service`. The value is sent as configured, without leading or trailing spaces, and Datadog normalizes it like
-other tags: `Checkout-API` is shown as `checkout-api`. A service that is not printable ASCII (for example one with
-`é` or a line break) sends no header, and the request still goes out. There is no default service: without
-`service`, no header is sent. Apps that use Datadog RUM should pass the same `service` to the flags provider, so
-usage splits the same way. A `customHeaders` entry for `dd-service`, in any letter case, replaces the SDK value.
+by `service`. The value is sent as `fetch` sends it: as configured, without leading or trailing spaces. Datadog
+decides which values it keeps, and normalizes them like other tags: `Checkout-API` is shown as `checkout-api`. If
+`fetch` rejects the value (for example one with a line break or with `支付`), no header is sent, and the request still
+goes out. There is no default service: without `service`, no header is sent. Apps that use Datadog RUM should pass
+the same `service` to the flags provider, so usage splits the same way. A `customHeaders` entry for `dd-service`, in any letter case, replaces the SDK value.
 Requests through `flaggingProxy` do not send `dd-service` by default. Proxy owners can opt in
 through `customHeaders`. The proxy must forward the header and, for cross-origin requests, allow it in its CORS
 response before enabling it.

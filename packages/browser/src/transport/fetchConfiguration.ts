@@ -77,7 +77,7 @@ interface ConfigurationRequestOptions {
 interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
-  /** The service name. It is sent as `dd-service`, trimmed, when it is printable ASCII, so usage can be split by service. */
+  /** The service name. It is sent as `dd-service` as fetch sends it, so usage can be split by service. */
   service?: string | null
   site?: string
   fetch?: typeof globalThis.fetch
@@ -149,10 +149,14 @@ export function buildConfigurationHeaders(
 }
 
 function serviceHeaderValue(service: string | null | undefined): string | undefined {
-  const value = typeof service === 'string' ? service.trim() : ''
-  // Printable ASCII plus space and tab, the same as OkHttp on Android. fetch throws above
-  // U+00FF and on CR/LF, and the edges keep only ASCII.
-  return /^[\t\x20-\x7e]+$/.test(value) ? value : undefined
+  if (!service) return undefined
+  try {
+    // fetch's own header rule: Headers trims the value and throws where fetch would, for example on
+    // a line break or above U+00FF. Then only this header is dropped, and the request still goes out.
+    return new Headers({ 'dd-service': service }).get('dd-service') || undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function fetchPrecomputedConfiguration(
