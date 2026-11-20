@@ -64,6 +64,7 @@ type JSONAPIError = {
 interface ConfigurationRequestOptions {
   clientToken: string
   applicationId?: string
+  service?: string | null
   env?: string | null
   site?: string
   customHeaders?: Record<string, string>
@@ -76,6 +77,8 @@ interface ConfigurationRequestOptions {
 interface ConfigurationFetchOptions extends DebugConfiguration {
   clientToken: string
   env: string
+  /** The service name. It is sent as `dd-service` as fetch sends it, so usage can be split by service. */
+  service?: string | null
   site?: string
   fetch?: typeof globalThis.fetch
   signal?: AbortSignal
@@ -124,6 +127,9 @@ export function buildConfigurationHeaders(
 ): Record<string, string> {
   // Fetch joins case-distinct keys into one value, so a custom header replaces the SDK header in any letter case.
   const customHeaderNames = new Set(Object.keys(options.customHeaders ?? {}).map((name) => name.toLowerCase()))
+  // Customer proxies can opt in through customHeaders after allowing it in CORS.
+  const service =
+    options.flaggingProxy || customHeaderNames.has('dd-service') ? undefined : serviceHeaderValue(options.service)
   return {
     ...contentHeaders,
     ...(options.overwriteRequestHeaders
@@ -132,12 +138,24 @@ export function buildConfigurationHeaders(
           'dd-client-token': options.clientToken,
           ...(options.applicationId &&
             !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
+          ...(service && { 'dd-service': service }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,
           }),
         }),
     ...options.customHeaders,
+  }
+}
+
+function serviceHeaderValue(service: string | null | undefined): string | undefined {
+  if (!service) return undefined
+  try {
+    // fetch's own header rule: Headers trims the value and throws where fetch would, for example on
+    // a line break or above U+00FF. Then only this header is dropped, and the request still goes out.
+    return new Headers({ 'dd-service': service }).get('dd-service') || undefined
+  } catch {
+    return undefined
   }
 }
 
