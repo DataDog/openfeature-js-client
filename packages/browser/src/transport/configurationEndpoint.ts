@@ -1,5 +1,12 @@
-import { buildEndpointHost } from '@datadog/flagging-core'
+import {
+  buildEndpointHost,
+  DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY,
+  SUPPORTED_FLAGS_CAPABILITIES,
+} from '@datadog/flagging-core'
 import { registerDebugEndpoint } from '../debug'
+
+const DEPENDENT_FLAGS_CAPABILITY_QUERY = 'cap_dependent-flags-variant-key'
+const supportsDependentFlags = SUPPORTED_FLAGS_CAPABILITIES.includes(DEPENDENT_FLAG_VARIANT_KEY_CAPABILITY)
 
 export interface ConfigurationEndpointOptions {
   site?: string
@@ -27,6 +34,9 @@ export function buildConfigurationUrl(options: ConfigurationEndpointOptions, end
   }
 
   url.searchParams.set('dd_env', options.env || '')
+  if (endpoint === 'precomputed' && supportsDependentFlags) {
+    url.searchParams.set(DEPENDENT_FLAGS_CAPABILITY_QUERY, 'v1')
+  }
   registerDebugEndpoint(url, source)
   return url
 }

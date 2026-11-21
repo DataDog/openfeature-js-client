@@ -72,10 +72,11 @@ are ignored. Datadog controls its encoding rollout: an encoding-capable client c
 receive plaintext. A response using an encoding the target did not advertise is
 rejected with `ConfigurationFetchError` (`decode`).
 
-The helper decodes the SDK-owned wire internally. It sends supported assignment
-encoding capabilities in `X-DD-FEATURE-FLAGS-CAPABILITIES`, not the whole fingerprint.
-The request source still identifies the requesting Node SDK. Dependent-flag query
-negotiation is a separate follow-up.
+The helper decodes the SDK-owned wire internally. The target SDK fingerprint is used
+locally to validate response compatibility. When it advertises dependent-flag support,
+the helper adds `cap_dependent-flags-variant-key=v1` to the origin query; target
+capabilities are not forwarded in a header. The request source still identifies the
+requesting Node SDK.
 
 `flagSelection` optionally requests flags matching any of the `tags` or whole-key
 glob `keyPatterns`. The helper trims, deduplicates, and sorts each list, then sends
@@ -140,7 +141,7 @@ const context = { targetingKey: user.id, country: user.country }
 const precomputed = precomputeConfiguration(rules, context, {
   flagSelection: { keyPatterns: ['checkout-*'] },
   onEvaluationError: ({ flagKey, errorCode }) => {
-    console.warn('Flag omitted from precomputed configuration', { flagKey, errorCode })
+    console.warn('Flag evaluation failed during precomputation', { flagKey, errorCode })
   },
 })
 const wire = configurationToString(precomputed)
@@ -150,13 +151,14 @@ const wire = configurationToString(precomputed)
 You can also pass rules parsed with `configurationFromString()` or `configurationFromRulesBinary()`. The existing browser initialization example above accepts the resulting wire. A configuration containing both capabilities is evaluated using its rules, not its existing precomputed assignments.
 
 - The helper captures one evaluation time and a detached JSON-compatible context. Recompute when rules or context change; a precomputed-only provider cannot reevaluate rules for a different subject. Dates, undefined values, nonfinite numbers, custom class instances, and cycles are not portable context values and are rejected.
-- Only actual assignments are included. Flags with no matching assignment or an individual evaluation error are omitted, without inventing code defaults. The receiving JS provider returns the application's default with `FLAG_NOT_FOUND` for an omitted flag; the original error/reason is not preserved. This is Datadog's assignment-only format, not an OFREP bulk response.
+- Complete successful assignments are included in `attributes.flags`. A failed dependency graph root is retained in `attributes.flagEvaluationErrors` so receivers can return the caller's default with the original error; ordinary flag failures remain absent and are reported only through `onEvaluationError`. A flag with no matching assignment is not included in the precomputed response. This is Datadog's assignment-only format, not an OFREP bulk response.
 - `onEvaluationError` receives the flag key and error code for each evaluation failure after the entire snapshot has been computed. It receives no context, values, or raw error messages; no-assignment outcomes do not invoke it. Exceptions thrown by the callback propagate.
 - Missing or malformed rules, invalid contexts, and invalid options throw `ConfigurationPrecomputeError` with `invalid_configuration`, `invalid_context`, or `invalid_options`, respectively. A valid configuration with no flags produces an empty, context-bound snapshot.
 - `flagSelection` supports only `keyPatterns` for local precomputation: source rules do not contain tag metadata. Patterns match the whole flag key, case-sensitively, with only `*` special; any matching pattern selects the flag. Patterns use the same Unicode whitespace trimming, deduplication, and limits as fetch selection (31 distinct nonempty patterns, 200 UTF-8 bytes each). Omitted selections and selections with no nonempty `keyPatterns` include all assignments; a `null` selection is also treated as absent at runtime. No matches produce an empty snapshot. Any defined `tags` value, including `[]` or `null`, malformed selections, and selections over a limit throw `invalid_options`, rather than falling back to all flags. Tags are also rejected by the TypeScript type.
-- Selection limits the output assignments without modifying the source rules. Selected flags can evaluate unselected dependencies, but those dependency assignments are not included unless they also match. `onEvaluationError` reports failures of selected flags only, including failures caused by their dependencies. A shared rules snapshot can be reused with different selections; local selection cannot restore flags absent from that snapshot.
+- Selection chooses the initial root flags without modifying the source rules. Precomputation also includes the transitive configured prerequisite assignments needed by those roots, even when their keys do not match. `onEvaluationError` reports failures across the selected-root and prerequisite closure. A shared rules snapshot can be reused with different selections; local selection cannot restore flags absent from that snapshot.
 - Values (including scalar/null JSON), variants, reasons, allocation keys, serial IDs, exposure-logging intent, raw split features, environment, and configuration consent are retained. Source rules and their ETag are not forwarded; the rules ETag is not a validator for this context-specific output. Precomputation itself does not record an exposure.
 - The helper's `experimentationOptOutMode` accepts `disabled` (default), `immediate`, or `future_experiments_only`. Enabled modes use the context's `dd_experimentation_opt_out_at` timestamp and preserve the effective policy in `evaluation_options`. Configure a compatible receiving provider with the same policy. These helper options do not change the existing Node provider's supported modes.
+- Pass the target SDK's opaque `clientFingerprint` to let the Node helper select a supported encoding and generate its salt. Keys in both top-level maps are hashed. Each nested prerequisite key is encrypted and authenticated using the plaintext root key; a capable receiver uses the caller's root key to decrypt it and hashes the recovered parent key for the top-level lookup. Omitting the fingerprint preserves plaintext prerequisite keys. The fingerprint is consumed locally and is not forwarded to the Datadog origin request.
 
 To prepare output for a particular browser SDK, send the opaque string returned
 by its `getClientFingerprint()` getter to your application server. For example,

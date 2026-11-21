@@ -2,9 +2,16 @@ import { addTelemetryDebug, display } from '@datadog/browser-core'
 import { type TimeStamp, timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import type { FlaggingInitConfiguration } from '../../src/domain/configuration'
+import { ExperimentationOptOutMode } from '../../src/openfeature/experimentation-opt-out'
 import { withRetry } from '../../src/transport/fetch'
-import { createFlagsConfigurationFetcher, fetchPrecomputedConfiguration } from '../../src/transport/fetchConfiguration'
+import {
+  buildConfigurationHeaders,
+  createFlagsConfigurationFetcher,
+  fetchPrecomputedConfiguration,
+} from '../../src/transport/fetchConfiguration'
 import { fetchRulesConfiguration } from '../../src/transport/fetchRulesConfiguration'
+import { createResponseSigningController } from '../../src/transport/responseSigning/controller'
+import { ResponseVerificationError } from '../../src/transport/responseSigning/verification'
 import rulesWire from '../data/rules-v1-wire.json'
 
 jest.mock('@datadog/js-core/time', () => ({
@@ -85,27 +92,27 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'HTTP protocol',
           flaggingProxy: 'http://localhost:8080',
-          expectedUrl: 'http://localhost:8080/?dd_env=test',
+          expectedUrl: 'http://localhost:8080/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTPS protocol',
           flaggingProxy: 'https://proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTPS protocol with path',
           flaggingProxy: 'https://proxy.example.com/api/flags',
-          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/api/flags?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTP protocol with port and path',
           flaggingProxy: 'http://localhost:3000/proxy',
-          expectedUrl: 'http://localhost:3000/proxy?dd_env=test',
+          expectedUrl: 'http://localhost:3000/proxy?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'HTTP protocol with port, path and params',
           flaggingProxy: 'http://localhost:3000/proxy?foo=bar',
-          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test',
+          expectedUrl: 'http://localhost:3000/proxy?foo=bar&dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -129,22 +136,22 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'domain only',
           flaggingProxy: 'proxy.example.com',
-          expectedUrl: 'https://proxy.example.com/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'domain with port',
           flaggingProxy: 'proxy.example.com:8080',
-          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test',
+          expectedUrl: 'https://proxy.example.com:8080/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'localhost with port',
           flaggingProxy: 'localhost:3000',
-          expectedUrl: 'https://localhost:3000/?dd_env=test',
+          expectedUrl: 'https://localhost:3000/?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'domain with path',
           flaggingProxy: 'proxy.example.com/api',
-          expectedUrl: 'https://proxy.example.com/api?dd_env=test',
+          expectedUrl: 'https://proxy.example.com/api?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -168,17 +175,20 @@ describe('createFlagsConfigurationFetcher', () => {
         {
           description: 'default site',
           config: baseConfig,
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'specific site',
           config: { ...baseConfig, site: 'datadoghq.eu' as const },
-          expectedUrl: 'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.datadoghq.eu/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
         {
           description: 'US3 site',
           config: { ...baseConfig, site: 'us3.datadoghq.com' as const },
-          expectedUrl: 'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test',
+          expectedUrl:
+            'https://preview.ff-cdn.us3.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1',
         },
       ]
 
@@ -498,9 +508,61 @@ describe('createFlagsConfigurationFetcher', () => {
             'DD-Client-Library-Language': 'browser',
             'DD-Client-Library-Version': '1.0.0-test',
             'dd-client-token': 'test-token',
+            'dd-application-id': 'test-app-id',
           },
         })
       )
+    })
+
+    it('does not send dd-application-id on a rules request without applicationId', async () => {
+      const bytes = Uint8Array.from(Buffer.from(rulesWire.rules.response, 'base64'))
+      const customFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        arrayBuffer: async () => bytes.buffer,
+      })
+      const { applicationId: _, ...options } = baseFetchOptions
+
+      await fetchRulesConfiguration({ ...options, fetch: customFetch })
+
+      expect(customFetch.mock.calls[0][1].headers).not.toHaveProperty('dd-application-id')
+    })
+  })
+
+  describe('buildConfigurationHeaders', () => {
+    it.each(['precomputed', 'rules'] as const)('sends dd-application-id on %s requests', (endpoint) => {
+      expect(
+        buildConfigurationHeaders({ clientToken: 'test-token', applicationId: 'app-id' }, {}, endpoint)
+      ).toMatchObject({ 'dd-application-id': 'app-id' })
+    })
+
+    it.each(['precomputed', 'rules'] as const)(
+      'does not send dd-application-id on %s requests with overwriteRequestHeaders',
+      (endpoint) => {
+        expect(
+          buildConfigurationHeaders(
+            { clientToken: 'test-token', applicationId: 'app-id', overwriteRequestHeaders: true },
+            {},
+            endpoint
+          )
+        ).toEqual({})
+      }
+    )
+
+    it.each([
+      ['precomputed', 'dd-application-id'],
+      ['precomputed', 'DD-Application-ID'],
+      ['rules', 'DD-APPLICATION-ID'],
+      ['rules', 'Dd-Application-Id'],
+    ] as const)('lets a custom %s header named %s replace applicationId', (endpoint, name) => {
+      const headers = buildConfigurationHeaders(
+        { clientToken: 'test-token', applicationId: 'automatic-app', customHeaders: { [name]: 'manual-app' } },
+        {},
+        endpoint
+      )
+
+      expect(new Headers(headers).get('dd-application-id')).toBe('manual-app')
+      expect(headers).toMatchObject({ [name]: 'manual-app' })
     })
   })
 
@@ -543,7 +605,7 @@ describe('createFlagsConfigurationFetcher', () => {
           key_patterns: ['ffe-*'],
         })
         expect(mockFetch.mock.calls[0][0]).toBe(
-          'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test'
+          'https://preview.ff-cdn.datadoghq.com/precompute-assignments?dd_env=test&cap_dependent-flags-variant-key=v1'
         )
         expect(displayError).not.toHaveBeenCalled()
         expect(addTelemetryDebug).not.toHaveBeenCalled()
@@ -558,7 +620,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
         await fetcher(mockContext)
 
-        expect(mockFetch.mock.calls[0][0]).toBe('https://proxy.example.com/?dd_env=test')
+        expect(mockFetch.mock.calls[0][0]).toBe(
+          'https://proxy.example.com/?dd_env=test&cap_dependent-flags-variant-key=v1'
+        )
         expect(requestBody().data.attributes.flag_selection).toEqual({ tags: ['beta'], key_patterns: [] })
       })
 
@@ -673,7 +737,7 @@ describe('createFlagsConfigurationFetcher', () => {
     })
 
     describe('standalone precompute POST', () => {
-      it('redacts a reflected ignored reason when the context carries an assignment token', async () => {
+      it('reports a reflected ignored header as unknown when the context carries an assignment token', async () => {
         const token = 'private.jwt.signature'
         const headers = new Headers({ 'DD-Flag-Selection-Ignored': `DD-Assignment-Token=${token}` })
         mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
@@ -687,7 +751,7 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(new Headers(mockFetch.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(token)
         expect(displayError).toHaveBeenCalledTimes(1)
         expect(displayError.mock.calls[0][0]).not.toContain(token)
-        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'redacted' })
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
         expectNoTelemetryValues(token)
       })
 
@@ -916,6 +980,277 @@ describe('createFlagsConfigurationFetcher', () => {
         expect(displayError).toHaveBeenCalledTimes(2)
         expect(addTelemetryDebug).toHaveBeenCalledTimes(2)
         expect(addTelemetryDebug).toHaveBeenNthCalledWith(2, 'Flag selection dropped', { reason: 'invalid_tag' })
+      })
+    })
+
+    describe('ignored header', () => {
+      const ignoredMessage = (reason: string) =>
+        `flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`
+
+      // Returns the value exactly as given; a Headers object would normalize surrounding whitespace.
+      const rawIgnoredHeader = (value: string) => ({
+        get: (name: string) => (name.toLowerCase() === 'dd-flag-selection-ignored' ? value : null),
+      })
+
+      const fetchWithSelection = (headers: unknown) => {
+        mockFetch.mockResolvedValue({ ok: true, status: 200, headers, json: async () => validPrecomputedResponse })
+        return createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })(mockContext)
+      }
+
+      it.each(['malformed_selection', 'too_many_values', 'invalid_key_pattern', 'invalid_tag', 'tag_load_failed'])(
+        'reports the known reason %s as received',
+        async (reason) => {
+          await expect(fetchWithSelection(rawIgnoredHeader(reason))).resolves.toHaveProperty('precomputed')
+
+          expect(displayError).toHaveBeenCalledTimes(1)
+          expect(displayError).toHaveBeenCalledWith(ignoredMessage(reason))
+          expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+          expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason })
+        }
+      )
+
+      it.each([
+        ['a differently cased reason', 'Too_Many_Values'],
+        ['an upper-case reason', 'INVALID_TAG'],
+        ['a reason with a trailing space', 'too_many_values '],
+        ['a reason with a leading space', ' invalid_tag'],
+        ['a reason with a trailing tab', 'invalid_tag\t'],
+        ['a whitespace-only value', ' '],
+        ['a reason this SDK does not know', 'reason_from_a_newer_server'],
+        ['two reasons joined with a comma', 'invalid_tag,too_many_values'],
+        ['two reasons joined as repeated fields', 'invalid_tag, too_many_values'],
+        // Fetch joins repeated fields with ", ", including empty ones. The whatwg-fetch polyfill used here skips empty
+        // values when joining, so these two are given as the joined strings a browser returns.
+        ['an empty field followed by a reason', ', invalid_tag'],
+        ['two empty fields', ', '],
+        ['the former redaction placeholder', 'redacted'],
+        ['a 33-character value', 'a'.repeat(33)],
+        ['a 33-character value that starts with a known reason', `tag_load_failed${'_'.repeat(18)}`],
+        ['a very long value', 'x'.repeat(100_000)],
+        ['a reflected request header', 'DD-Assignment-Token=private.jwt.signature'],
+      ])('reports %s as unknown, never the raw value', async (_description, value) => {
+        await expect(fetchWithSelection(rawIgnoredHeader(value))).resolves.toHaveProperty('precomputed')
+
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+      })
+
+      it.each([
+        ['distinct repeated fields', ['invalid_tag', 'tag_load_failed']],
+        ['identical repeated fields', ['invalid_tag', 'invalid_tag']],
+      ])('reports %s as unknown', async (_description, fields) => {
+        const headers = new Headers()
+        for (const field of fields) headers.append('DD-Flag-Selection-Ignored', field)
+
+        await fetchWithSelection(headers)
+
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+      })
+
+      it.each([
+        ['an empty raw value', rawIgnoredHeader('')],
+        ['an empty header field', new Headers({ 'DD-Flag-Selection-Ignored': '' })],
+      ])('treats %s as absent', async (_description, headers) => {
+        await expect(fetchWithSelection(headers)).resolves.toHaveProperty('precomputed')
+
+        expect(displayError).not.toHaveBeenCalled()
+        expect(addTelemetryDebug).not.toHaveBeenCalled()
+      })
+
+      it('reports an unknown value from the rules endpoint as unknown', async () => {
+        const customFetch = jest
+          .fn()
+          .mockResolvedValue(rulesResponse({ 'DD-Flag-Selection-Ignored': 'reason_from_a_newer_server' }))
+
+        await fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { tags: ['beta'] } })
+
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('unknown'))
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'unknown' })
+        expectNoTelemetryValues('reason_from_a_newer_server')
+      })
+
+      const ignoredHeaders = () => new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
+      const immediateOptOut = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
+      const optedOutContext = { ...mockContext, dd_experimentation_opt_out_at: '2026-10-19T12:00:00Z' }
+      const withEvaluationOptions = (evaluationOptions?: Record<string, unknown>) => ({
+        data: {
+          attributes: {
+            ...validPrecomputedResponse.data.attributes,
+            ...(evaluationOptions && { evaluation_options: evaluationOptions }),
+          },
+        },
+      })
+      const acknowledgedResponse = withEvaluationOptions({
+        experimentation_opt_out: true,
+        experimentation_opt_out_mode: 'immediate',
+      })
+
+      const nowSeconds = () => Math.floor(Date.now() / 1000)
+      const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300 })
+      const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300 })
+
+      // jsdom lacks WebCrypto, so prepare and most reads are stubbed; admit, the gate under test, runs for real.
+      const requiredSigning = () => {
+        const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: ['test-root'] })!
+        jest
+          .spyOn(signing, 'prepare')
+          .mockReturnValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
+        return signing
+      }
+
+      it('reports once when an opted-out subject receives an acknowledged, signed configuration', async () => {
+        const signing = requiredSigning()
+        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof: validProof() })
+        mockFetch.mockResolvedValue({ ok: true, status: 200, redirected: false, headers: ignoredHeaders() })
+        const fetcher = createFlagsConfigurationFetcher(
+          { ...baseConfig, ...immediateOptOut, flagSelection: { tags: ['beta'] } },
+          signing
+        )
+
+        const configuration = await fetcher(optedOutContext)
+
+        expect(signing.isVerified(configuration, optedOutContext)).toBe(true)
+        expect(displayError).toHaveBeenCalledTimes(1)
+        expect(displayError).toHaveBeenCalledWith(ignoredMessage('invalid_tag'))
+        expect(addTelemetryDebug).toHaveBeenCalledTimes(1)
+        expect(addTelemetryDebug).toHaveBeenCalledWith('Flag selection ignored', { reason: 'invalid_tag' })
+      })
+
+      describe('when the configuration is not accepted', () => {
+        it.each([
+          [
+            'the body is not JSON',
+            async () => {
+              throw new SyntaxError('Unexpected token')
+            },
+          ],
+          ['the body is not a precomputed configuration', async () => ({ data: null })],
+        ])('does not report when %s', async (_description, json) => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json })
+          const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })
+
+          await expect(fetcher(mockContext)).rejects.toThrow()
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it('does not report when the standalone fetch returns a parse error', async () => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => ({}) })
+
+          const result = await fetchPrecomputedConfiguration({
+            ...baseFetchOptions,
+            context: mockContext,
+            flagSelection: { tags: ['beta'] },
+          })
+
+          expect(result.precomputedError).toBeDefined()
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it('does not report when the rules response cannot be decoded', async () => {
+          const customFetch = jest.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            headers: ignoredHeaders(),
+            arrayBuffer: async () => Uint8Array.from([0xff, 0xff, 0xff, 0xff]).buffer,
+          })
+
+          await expect(
+            fetchRulesConfiguration({ ...baseFetchOptions, fetch: customFetch, flagSelection: { tags: ['beta'] } })
+          ).rejects.toThrow()
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        it.each([
+          ['an opted-out subject receives no acknowledgement', optedOutContext, withEvaluationOptions()],
+          [
+            'an opted-out subject receives an acknowledgement for another mode',
+            optedOutContext,
+            withEvaluationOptions({
+              experimentation_opt_out: true,
+              experimentation_opt_out_mode: 'future_experiments_only',
+            }),
+          ],
+          ['a subject that did not opt out receives an acknowledgement', mockContext, acknowledgedResponse],
+        ])('does not report when %s', async (_description, context, body) => {
+          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => body })
+          const fetcher = createFlagsConfigurationFetcher({
+            ...baseConfig,
+            ...immediateOptOut,
+            flagSelection: { tags: ['beta'] },
+          })
+
+          await expect(fetcher(context)).rejects.toThrow('did not acknowledge experimentation opt-out')
+
+          expect(displayError).not.toHaveBeenCalled()
+          expect(addTelemetryDebug).not.toHaveBeenCalled()
+        })
+
+        describe('by response signing', () => {
+          const fetchSigned = (
+            signing: ReturnType<typeof requiredSigning>,
+            { redirected = false, signal }: { redirected?: boolean; signal?: AbortSignal } = {}
+          ) => {
+            mockFetch.mockResolvedValue({ ok: true, status: 200, redirected, headers: ignoredHeaders() })
+            return createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } }, signing)(
+              mockContext,
+              { signal }
+            )
+          }
+
+          it('does not report when verification rejects the response', async () => {
+            const signing = requiredSigning()
+            jest.spyOn(signing, 'read').mockRejectedValue(new ResponseVerificationError('invalid-proof'))
+
+            await expect(fetchSigned(signing)).rejects.toThrow(ResponseVerificationError)
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when read rejects a redirected response', async () => {
+            await expect(fetchSigned(requiredSigning(), { redirected: true })).rejects.toThrow(
+              'redirects are not supported'
+            )
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when admission rejects an expired proof', async () => {
+            const signing = requiredSigning()
+            jest.spyOn(signing, 'read').mockResolvedValue({ json: validPrecomputedResponse, proof: expiredProof() })
+
+            await expect(fetchSigned(signing)).rejects.toThrow('expired-proof')
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+
+          it('does not report when the request is cancelled before admission', async () => {
+            const signing = requiredSigning()
+            const controller = new AbortController()
+            jest.spyOn(signing, 'read').mockImplementation(async () => {
+              controller.abort()
+              return { json: validPrecomputedResponse, proof: validProof() }
+            })
+
+            await expect(fetchSigned(signing, { signal: controller.signal })).rejects.toMatchObject({
+              name: 'AbortError',
+            })
+
+            expect(displayError).not.toHaveBeenCalled()
+            expect(addTelemetryDebug).not.toHaveBeenCalled()
+          })
+        })
       })
     })
   })

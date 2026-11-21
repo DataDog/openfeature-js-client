@@ -1299,7 +1299,7 @@ describe('dependent flag evaluation', () => {
     expect(onExposures.mock.calls[0]?.[0][0]?.details).not.toHaveProperty('value')
   })
 
-  it('isolates dependency resolution from telemetry snapshot failures', () => {
+  it('retains value-free dependency status when telemetry snapshot cloning fails', () => {
     const cyclicValue: Record<string, unknown> = {}
     cyclicValue.self = cyclicValue
     cyclicValue.state = 'original'
@@ -1321,7 +1321,11 @@ describe('dependent flag evaluation', () => {
       value: true,
       variant: 'on',
     })
-    expect(onDependency).not.toHaveBeenCalled()
+    expect(onDependency).toHaveBeenCalledWith({
+      flagKey: 'prerequisite',
+      details: expect.objectContaining({ reason: 'STATIC', variant: 'on' }),
+    })
+    expect(onDependency.mock.calls[0]?.[0]?.details).not.toHaveProperty('value')
     expect(onExposures).toHaveBeenCalledWith([
       expect.objectContaining({ flagKey: 'prerequisite', details: expect.objectContaining({ variant: 'on' }) }),
     ])

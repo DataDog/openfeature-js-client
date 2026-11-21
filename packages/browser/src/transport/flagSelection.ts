@@ -11,6 +11,15 @@ import {
 export const MAX_RULES_URL_BYTES = 8192
 
 const FLAG_SELECTION_IGNORED_HEADER = 'DD-Flag-Selection-Ignored'
+const FLAG_SELECTION_IGNORED_REASONS: ReadonlySet<string> = new Set([
+  'malformed_selection',
+  'too_many_values',
+  'invalid_key_pattern',
+  'invalid_tag',
+  'tag_load_failed',
+])
+// The longest known reason is 19 characters, so a longer value is unknown without a lookup.
+const MAX_FLAG_SELECTION_IGNORED_REASON_LENGTH = 32
 
 const LIMIT_DESCRIPTIONS: Record<FlagSelectionError, string> = {
   malformed_selection: 'flagSelection must be an object with optional tags and keyPatterns string arrays',
@@ -24,13 +33,21 @@ export function reportDroppedFlagSelection(reason: FlagSelectionError, limit = L
   addTelemetryDebug('Flag selection dropped', { reason })
 }
 
-export function reportIgnoredFlagSelection(response: Response, redactReason = false) {
-  const serverReason = response.headers?.get(FLAG_SELECTION_IGNORED_HEADER)
-  if (!serverReason) return
-  // A proxy can reflect request headers in this diagnostic header too.
-  const reason = redactReason ? 'redacted' : serverReason
+// Call only once the configuration in the response has been accepted.
+export function reportIgnoredFlagSelection(response: Response) {
+  const reason = ignoredFlagSelectionReason(response.headers?.get(FLAG_SELECTION_IGNORED_HEADER))
+  if (!reason) return
   display.error(`flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`)
   addTelemetryDebug('Flag selection ignored', { reason })
+}
+
+// A proxy can set this header, or reflect request headers into it, so only a known reason is reported as received.
+// Repeated header fields arrive joined with ", " and are therefore unknown.
+function ignoredFlagSelectionReason(value: string | null | undefined): string | undefined {
+  if (!value) return undefined
+  return value.length <= MAX_FLAG_SELECTION_IGNORED_REASON_LENGTH && FLAG_SELECTION_IGNORED_REASONS.has(value)
+    ? value
+    : 'unknown'
 }
 
 // Returns undefined when the URL with the selection would exceed MAX_RULES_URL_BYTES.

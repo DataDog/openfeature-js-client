@@ -3,11 +3,11 @@ import {
   type CanonicalFlagSelection,
   canonicalizeFlagSelection,
   experimentationOptOutPolicy,
+  FLAG_KEY_SHA256_CAPABILITY,
   type FlagSelection,
   type FlagsConfiguration,
   INVALID_EXPERIMENTATION_OPT_OUT,
   parsePrecomputedConfigurationResponse,
-  SUPPORTED_FLAGS_CAPABILITIES,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
 import type { EvaluationContext } from '@openfeature/web-sdk'
@@ -53,7 +53,7 @@ const sourcePayload = {
   sdk_name: 'browser',
   sdk_version: __BUILD_ENV__SDK_VERSION__,
 }
-const capabilitiesHeader = [...SUPPORTED_FLAGS_CAPABILITIES].sort().join(',')
+const capabilitiesHeader = FLAG_KEY_SHA256_CAPABILITY
 
 type JSONAPIError = {
   errors: {
@@ -94,6 +94,8 @@ export interface PrecomputedConfigurationFetchOptions
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
+  /** The RUM application ID. It is sent as `dd-application-id`, so usage can be split by application. */
+  applicationId?: string
   /**
    * Load only the flags that match these tags or key patterns. See the README for the matching rules and limits.
    * A selection over a limit is not sent, and the full configuration is loaded.
@@ -120,13 +122,16 @@ export function buildConfigurationHeaders(
   contentHeaders: Record<string, string>,
   endpoint: 'precomputed' | 'rules'
 ): Record<string, string> {
+  // Fetch joins case-distinct keys into one value, so a custom header replaces the SDK header in any letter case.
+  const customHeaderNames = new Set(Object.keys(options.customHeaders ?? {}).map((name) => name.toLowerCase()))
   return {
     ...contentHeaders,
     ...(options.overwriteRequestHeaders
       ? {}
       : {
           'dd-client-token': options.clientToken,
-          ...(endpoint === 'precomputed' && options.applicationId && { 'dd-application-id': options.applicationId }),
+          ...(options.applicationId &&
+            !customHeaderNames.has('dd-application-id') && { 'dd-application-id': options.applicationId }),
           ...(endpoint === 'rules' && {
             'DD-Client-Library-Language': sourcePayload.sdk_name,
             'DD-Client-Library-Version': sourcePayload.sdk_version,
@@ -283,7 +288,6 @@ async function requestPrecomputedConfiguration(
     const errorMessage = assignmentToken === undefined ? await getErrorMessage(response) : `HTTP ${response.status}`
     throw new Error(`Failed to fetch flag configuration: ${errorMessage}`)
   }
-  if (flagSelection) reportIgnoredFlagSelection(response, assignmentToken !== undefined)
   let signedResponse: Awaited<ReturnType<ResponseSigningController['read']>> | undefined
   let responseBody: unknown
   try {
@@ -356,6 +360,7 @@ async function requestPrecomputedConfiguration(
     },
   }
   signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
+  if (flagSelection) reportIgnoredFlagSelection(response)
   return configuration
 }
 

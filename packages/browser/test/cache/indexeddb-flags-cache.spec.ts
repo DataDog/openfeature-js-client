@@ -1,3 +1,5 @@
+import { webcrypto } from 'node:crypto'
+import { TextEncoder } from 'node:util'
 import { buildStorageKeySuffix, type FlagsConfiguration, getMD5Hash } from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import { IDBFactory } from 'fake-indexeddb'
@@ -28,8 +30,21 @@ const testConfig: FlagsConfiguration = {
 }
 
 const context = { targetingKey: 'user-123' }
+const previousCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+const previousTextEncoder = Object.getOwnPropertyDescriptor(globalThis, 'TextEncoder')
+const cryptoBridge = {
+  getRandomValues: (array: Uint8Array) => {
+    array.set(webcrypto.getRandomValues(Buffer.alloc(array.length)))
+    return array
+  },
+  subtle: {
+    digest: (algorithm: AlgorithmIdentifier, data: ArrayBuffer) =>
+      webcrypto.subtle.digest(algorithm, Buffer.from(new Uint8Array(data))),
+  },
+}
 const legacyKey = `flags-config-${buildStorageKeySuffix('test-client-token')}-${getMD5Hash(JSON.stringify(context))}`
-const currentKey = `v2-${legacyKey}`
+const previousKey = `v2-${legacyKey}`
+const currentKey = `v3-${legacyKey}`
 const encodedConfig: FlagsConfiguration = {
   precomputed: {
     ...testConfig.precomputed!,
@@ -52,7 +67,16 @@ describe('IndexedDBFlagsCache', () => {
   beforeEach(() => {
     // Reset IndexedDB between tests
     globalThis.indexedDB = new IDBFactory()
+    Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: TextEncoder })
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: cryptoBridge })
     cache = new IndexedDBFlagsCache('test-client-token')
+  })
+
+  afterEach(() => {
+    if (previousCrypto) Object.defineProperty(globalThis, 'crypto', previousCrypto)
+    else Reflect.deleteProperty(globalThis, 'crypto')
+    if (previousTextEncoder) Object.defineProperty(globalThis, 'TextEncoder', previousTextEncoder)
+    else Reflect.deleteProperty(globalThis, 'TextEncoder')
   })
 
   describe('get', () => {
@@ -160,6 +184,32 @@ describe('IndexedDBFlagsCache', () => {
   })
 
   describe('older SDK compatibility', () => {
+    it('reads the previous cache namespace without writing new snapshots into it', async () => {
+      await writeEntry(previousKey, testConfig)
+      expect(await cache.get(context)).toEqual(testConfig)
+
+      cache.set(encodedConfig, context)
+      await flushAsync()
+      expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(previousKey)).toEqual(testConfig)
+    })
+
+    it('reads the previous scoped namespace while rejecting unscoped fallback', async () => {
+      const signingNamespace = async () => 'signed-v1'
+      const signedCache = new IndexedDBFlagsCache('test-client-token', undefined, signingNamespace)
+      const scopedKey = await (
+        signedCache as unknown as {
+          scopedKey(namespace: string, contextValue: typeof context, optedOut: false, version: 'v2'): Promise<string>
+        }
+      ).scopedKey('signed-v1', context, false, 'v2')
+
+      await writeEntry(previousKey, encodedConfig)
+      expect(await signedCache.get(context)).toBeUndefined()
+
+      await writeEntry(scopedKey, testConfig)
+      expect(await signedCache.get(context)).toEqual(testConfig)
+    })
+
     it('reads legacy plaintext on upgrade without overwriting it with encoded keys', async () => {
       await writeEntry(legacyKey, testConfig)
       expect(await cache.get(context)).toEqual(testConfig)
@@ -175,6 +225,7 @@ describe('IndexedDBFlagsCache', () => {
       cache.set(encodedConfig, context)
       await flushAsync()
       expect(await readEntry(currentKey)).toEqual(encodedConfig)
+      expect(await readEntry(previousKey)).toBeUndefined()
       expect(await readEntry(legacyKey)).toBeUndefined()
     })
 
