@@ -10,7 +10,11 @@ import {
   createFlagsConfigurationFetcher,
   fetchPrecomputedConfiguration,
 } from '../../../src/transport/fetchConfiguration'
-import { createResponseSigningController, signingContextKey } from '../../../src/transport/responseSigning/controller'
+import {
+  createResponseSigningController,
+  signingContextKey,
+  UNSUPPORTED_SITE_MESSAGE,
+} from '../../../src/transport/responseSigning/controller'
 import {
   buildSigningTranscript,
   decodeBase64,
@@ -245,9 +249,7 @@ describe('staging site gate', () => {
   ]
   const entries = ['provider', 'fetch', 'factory'] as const
   const cases = entries.flatMap((entry) =>
-    sites.flatMap(([label, site]) =>
-      (['observe', 'required'] as const).map((mode) => [entry, label, site, mode] as const)
-    )
+    sites.flatMap(([label, site]) => (['observe'] as const).map((mode) => [entry, label, site, mode] as const))
   )
   async function send(
     entry: (typeof entries)[number],
@@ -265,7 +267,7 @@ describe('staging site gate', () => {
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0]
     return { url, init }
   }
-  test.each(cases)('%s on %s: %s opt-in is a no-op', async (entry, _label, site, mode) => {
+  test.each(cases)('%s on %s: %s opt-in is a no-op with a warning', async (entry, _label, site, mode) => {
     const warn = jest.spyOn(display, 'warn').mockImplementation(() => undefined)
     const random = jest.spyOn(cryptoBridge, 'getRandomValues')
     const ordinary = await send(entry, { ...defaultOptions, ...site })
@@ -299,27 +301,84 @@ describe('staging site gate', () => {
     expect(random).toHaveBeenCalledTimes(ordinaryRandomCalls)
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      'Response signing is available only on datad0g.com. Requests are sent without signing.'
+      'This SDK version supports response signing only on the Datadog staging site (datad0g.com). ' +
+        'Production support comes in a later release. Flags are not verified, and requests are sent without signing.'
     )
   })
-  test('a non-staging site does not read or validate signing trust options', () => {
-    const read = jest.fn(() => ['x'.repeat(6000)])
-    jest.spyOn(display, 'warn').mockImplementation(() => undefined)
-    expect(
-      createResponseSigningController(
+  const requiredCases = entries.flatMap((entry) => sites.map(([label, site]) => [entry, label, site] as const))
+  test.each(requiredCases)('%s on %s: required fails closed and sends no request', async (entry, _label, site) => {
+    const warn = jest.spyOn(display, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(display, 'error').mockImplementation(() => undefined)
+    global.fetch = jest.fn().mockResolvedValue(unsigned())
+    const options = {
+      ...defaultOptions,
+      ...site,
+      initialFlagsConfiguration: undefined,
+      responseSigning: { mode: 'required' as const, trustedRootCertificates: roots },
+    }
+    const attempts: Array<() => Promise<unknown>> = []
+    let subject: DatadogProvider | undefined
+    if (entry === 'provider') {
+      subject = new DatadogProvider(options)
+      providers.push(subject)
+      const provider = subject
+      attempts.push(
+        () => provider.initialize(context),
+        () => provider.onContextChange(context, { ...context, targetingKey: 'user-456' })
+      )
+    } else if (entry === 'factory') {
+      const fetcher = createFlagsConfigurationFetcher(options)
+      attempts.push(
+        () => fetcher(context),
+        () => fetcher(context)
+      )
+    } else attempts.push(...[0, 1].map(() => () => fetchPrecomputedConfiguration({ ...options, env: '', context })))
+    for (const attempt of attempts) await expect(attempt()).rejects.toThrow(UNSUPPORTED_SITE_MESSAGE)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+    // One error per controller: the provider and factory build one at init, the standalone fetch one per call.
+    expect(error).toHaveBeenCalledTimes(entry === 'fetch' ? 2 : 1)
+    expect(error).toHaveBeenCalledWith(UNSUPPORTED_SITE_MESSAGE)
+    if (subject) {
+      expect(subject.status).toBe(ProviderStatus.ERROR)
+      expect(subject.resolveBooleanEvaluation('critical', true, {}, logger)).toMatchObject({
+        value: true,
+        reason: StandardResolutionReasons.ERROR,
+        errorCode: ErrorCode.GENERAL,
+        errorMessage: UNSUPPORTED_SITE_MESSAGE,
+      })
+    }
+  })
+  test('the unsupported-site error says staging only and how to fix it', () => {
+    expect(UNSUPPORTED_SITE_MESSAGE).toBe(
+      'Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging ' +
+        "site (datad0g.com). Production support comes in a later release. Remove responseSigning mode 'required', or " +
+        "use 'observe'."
+    )
+  })
+  test.each(['observe', 'required'] as const)(
+    'a non-staging site does not read or validate signing trust options in %s mode',
+    (mode) => {
+      const read = jest.fn(() => ['x'.repeat(6000)])
+      jest.spyOn(display, 'warn').mockImplementation(() => undefined)
+      jest.spyOn(display, 'error').mockImplementation(() => undefined)
+      const controller = createResponseSigningController(
         {
-          mode: 'required',
+          mode,
           get trustedRootCertificates(): readonly string[] {
             return read()
           },
         },
         { site: 'datadoghq.com' }
       )
-    ).toBeUndefined()
-    expect(read).not.toHaveBeenCalled()
-  })
+      if (mode === 'observe') expect(controller).toBeUndefined()
+      else expect(() => controller?.prepare('https://example.test', {}, '{}')).toThrow(UNSUPPORTED_SITE_MESSAGE)
+      expect(read).not.toHaveBeenCalled()
+    }
+  )
   test('invalid ordinary configuration with required mode on a non-staging site is not a signing error', () => {
     jest.spyOn(display, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(display, 'error').mockImplementation(() => undefined)
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     expect(
       () =>

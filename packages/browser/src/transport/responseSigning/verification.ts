@@ -49,6 +49,7 @@ export type VerificationFailure =
   | 'invalid-certificate'
   | 'invalid-signature'
   | 'expired-proof'
+  | 'unsupported-site'
 
 export interface SigningRequest {
   url: string
@@ -68,8 +69,11 @@ export interface VerifiedResponse {
 
 // Errors contain only fixed diagnostic codes, never request or certificate contents.
 export class ResponseVerificationError extends GeneralError {
-  constructor(readonly reason: VerificationFailure) {
-    super(`Response signing: ${reason}`)
+  constructor(
+    readonly reason: VerificationFailure,
+    message = `Response signing: ${reason}`
+  ) {
+    super(message)
     Object.setPrototypeOf(this, new.target.prototype)
     this.name = 'ResponseVerificationError'
   }

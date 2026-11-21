@@ -24,13 +24,25 @@ import {
 export { signingContextKey } from './context'
 
 export type ResponseSigningMode = 'off' | 'observe' | 'required'
+
+/** Required signing on a site without a bundled root and EKU fails closed with this message. */
+export const UNSUPPORTED_SITE_MESSAGE =
+  `Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging site ` +
+  `(${SIGNING_SITE}). Production support comes in a later release. Remove responseSigning mode 'required', or use 'observe'.`
+const OBSERVE_UNSUPPORTED_SITE_MESSAGE =
+  `This SDK version supports response signing only on the Datadog staging site (${SIGNING_SITE}). ` +
+  `Production support comes in a later release. Flags are not verified, and requests are sent without signing.`
 export interface ResponseSigningConfiguration {
-  /** Default: off. Observe accepts ordinary valid responses even when verification fails. */
+  /**
+   * Default: off. Observe accepts ordinary valid responses even when verification fails.
+   * Staging only (`site: 'datad0g.com'`); production is not supported yet. On other sites, `observe` is a no-op
+   * with a warning, and `required` fails closed: the provider sends no assignment request and enters its error state.
+   */
   mode: ResponseSigningMode
   /**
    * Explicit trusted root certificates, standard padded base64 DER. Draft dogfood/test API.
    * Overrides endpoint-selected bundled roots, including when empty. No production root is bundled yet.
-   * Signing is available only when `site` is `datad0g.com`; on other sites this option has no effect.
+   * Signing is available only when `site` is `datad0g.com`; on other sites this option is not read.
    * These public anchors are fixed for the lifetime of the provider; never populate them from a response.
    */
   trustedRootCertificates?: readonly string[]
@@ -49,19 +61,24 @@ export function createResponseSigningController(
     throw new Error('Invalid response signing mode')
   }
   if (mode === 'off') return undefined
-  // Staging gate: on every other site, opt-in is a no-op and the request stays unchanged.
-  if (!isSigningSite(scope.site)) {
+  // Staging gate: there is no production root or EKU yet. Observe is a no-op; required fails closed.
+  const unsupportedSite = !isSigningSite(scope.site)
+  if (unsupportedSite) {
     debug.event('signing.unavailable', () => ({
       mode,
       reason: 'unsupported_site',
-      action: 'send_unsigned_request',
+      action: mode === 'required' ? 'reject_all_requests' : 'send_unsigned_request',
     }))
-    display.warn(`Response signing is available only on ${SIGNING_SITE}. Requests are sent without signing.`)
-    return undefined
+    if (mode === 'observe') {
+      display.warn(OBSERVE_UNSUPPORTED_SITE_MESSAGE)
+      return undefined
+    }
+    display.error(UNSUPPORTED_SITE_MESSAGE)
   }
   const endpoint = buildConfigurationUrl(scope, 'precomputed')
-  const automaticRoots = options?.trustedRootCertificates === undefined
-  const roots = [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]
+  // Trust options are not read off staging: every request fails before trust is needed.
+  const automaticRoots = unsupportedSite || options?.trustedRootCertificates === undefined
+  const roots = unsupportedSite ? [] : [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]
   if (roots.length > 4 || roots.some((root) => typeof root !== 'string' || root.length > 5464)) {
     debug.event('init.failed', () => ({
       field: 'responseSigning.trustedRootCertificates',
@@ -74,7 +91,7 @@ export function createResponseSigningController(
     trustAnchorCount: roots.length,
     source: automaticRoots ? 'bundled_endpoint_roots' : 'explicit_roots',
   }))
-  if (mode === 'required' && !roots.length) {
+  if (mode === 'required' && !roots.length && !unsupportedSite) {
     debug.event('init.failed', () => ({
       field: 'responseSigning.trustedRootCertificates',
       reason: 'missing_trusted_root',
@@ -114,6 +131,8 @@ export function createResponseSigningController(
     },
     prepare(url: string, headers: Record<string, string>, body: string, logger = debug): SigningRequest | undefined {
       try {
+        // Thrown before the request is sent, so no assignment request leaves the client.
+        if (unsupportedSite) throw new ResponseVerificationError('unsupported-site', UNSUPPORTED_SITE_MESSAGE)
         if (automaticRoots && new URL(url).origin !== endpoint.origin)
           throw new ResponseVerificationError('unsupported-request')
         const normalized = new Headers(headers)

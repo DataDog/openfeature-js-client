@@ -120,10 +120,16 @@ Response signing is opt-in and defaults to `off`. Use `observe` to attempt verif
 assignments, or `required` to admit only verified responses. Existing authentication,
 HTTP errors, JSON validation, and experimentation opt-out checks still apply.
 
-Response signing is available only on the Datadog staging site, `site: 'datad0g.com'`.
-On every other site, including the default site, the `responseSigning` option has no effect:
-the SDK logs one warning, sends the ordinary request without signing headers, and handles
-the response as an unsigned client does. This also applies to `required` mode.
+Response signing is staging only: it is available only on the Datadog staging site, `site: 'datad0g.com'`.
+Production is not supported yet. This SDK version bundles no production root and no production EKU.
+Production support comes in a later release. On every other site, including the default site:
+
+- `observe` has no effect. The SDK logs one warning, sends the ordinary request without signing headers,
+  and does not verify flags.
+- `required` fails closed. The SDK logs one error at initialization and sends no assignment request.
+  The provider enters its error state. Every fetch fails with the same error,
+  `Response signing: unsupported-site. ...`, and evaluations return the default value.
+  To load flags on that site, remove `required` or use `observe`.
 
 ```typescript
 const provider = new DatadogProvider({
@@ -155,7 +161,7 @@ On the staging site, the resolved assignment endpoint selects the bundled
 **public staging root** automatically. Signing still defaults to off.
 The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
 A `flaggingProxy` override takes precedence over `site` for requests and trust, but
-not for the staging gate: a production `site` behind a proxy is not signed.
+not for the staging gate: a production `site` behind a proxy follows the off-staging rules above.
 Unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
 no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
 (including when empty), for custom proxies and tests. Additional Datadog aliases
