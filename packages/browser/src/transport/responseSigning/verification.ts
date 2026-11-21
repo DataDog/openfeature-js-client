@@ -16,6 +16,11 @@ export const SIGNING_CAPABILITY = 'response-signing-v1'
 export const SIGNING_VERSION = '1'
 /** Intermediate certificates: 1 to 3 standard base64 DER entries joined by ',', index 0 issued the leaf. */
 export const SIGNING_CHAIN_HEADER = 'x-datadog-feature-flags-signing-chain'
+/**
+ * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: certificates that start before this time are
+ * revoked for the response's trust anchor. When present, it is bound at the end of the v1 transcript.
+ */
+export const MINIMUM_NOT_BEFORE_HEADER = 'x-datadog-feature-flags-minimum-not-before'
 const TRANSCRIPT_DOMAIN = 'datadog.feature-flags.precomputed-assignments.v1\0'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
@@ -50,6 +55,7 @@ export type VerificationFailure =
   | 'invalid-signature'
   | 'expired-proof'
   | 'unsupported-site'
+  | 'revoked-certificate'
 
 export interface SigningRequest {
   url: string
@@ -65,6 +71,12 @@ export interface SigningResponse {
 export interface VerifiedResponse {
   verifiedAt: number
   expiresAt: number
+  /** SHA-256 hex of the DER of the trust anchor that the chain ended at. */
+  anchorKey: string
+  /** The earliest notBefore in the response chain (the leaf and every intermediate), unix seconds. */
+  chainNotBefore: number
+  /** DRAFT: the signed minimum not-before value, when the response has one. */
+  minimumNotBefore?: number
 }
 
 // Errors contain only fixed diagnostic codes, never request or certificate contents.
@@ -505,7 +517,8 @@ export async function buildSigningTranscript(
   issuedAt: number,
   expiresAt: number,
   leaf: Uint8Array,
-  intermediates: readonly Uint8Array[]
+  intermediates: readonly Uint8Array[],
+  minimumNotBefore?: number
 ): Promise<Uint8Array> {
   const url = validateSigningRequest(request)
   requireCondition(intermediates.length >= 1 && intermediates.length <= MAX_INTERMEDIATES)
@@ -541,6 +554,8 @@ export async function buildSigningTranscript(
     new Uint8Array([intermediates.length])
   )
   for (const intermediate of intermediates) parts.push(await sha256(intermediate))
+  // DRAFT: an optional signed tail. Without the header, the v1 transcript is unchanged.
+  if (minimumNotBefore !== undefined) parts.push(new Uint8Array([1]), unsignedInteger(minimumNotBefore, 8))
   return concat(parts)
 }
 
@@ -548,7 +563,9 @@ export async function verifyResponse(
   request: SigningRequest,
   response: SigningResponse,
   trustedRoots: readonly string[],
-  now = Date.now() / 1000
+  now = Date.now() / 1000,
+  /** Stored minimum not-before for a trust anchor (SHA-256 hex of its DER); 0 when none. */
+  storedMinimumNotBefore: (anchorKey: string) => number = () => 0
 ): Promise<VerifiedResponse> {
   cryptoProvider()
   validateSigningRequest(request)
@@ -561,6 +578,9 @@ export async function verifyResponse(
   requireCondition(/^[0-9a-f]{64}$/.test(certificateId) && certificateId === hex(await sha256(leafDer)))
   const issuedAt = seconds(proof(response.headers, 'issued-at')),
     expiresAt = seconds(proof(response.headers, 'expires-at'))
+  // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
+  const minimumNotBeforeValue = response.headers.get(MINIMUM_NOT_BEFORE_HEADER)
+  const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
   requireCondition(
     issuedAt <= now + 30 && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
     'expired-proof'
@@ -574,9 +594,11 @@ export async function verifyResponse(
   }
   const last = intermediates[intermediates.length - 1]
   let anchor: ParsedCertificate | undefined
+  let anchorDer: Uint8Array | undefined
   for (const root of trustedRoots) {
     try {
-      const candidate = parseCertificate(decodeBase64(root, MAX_CERTIFICATE), 'anchor')
+      const candidateDer = decodeBase64(root, MAX_CERTIFICATE)
+      const candidate = parseCertificate(candidateDer, 'anchor')
       requireCondition(
         candidate.pathLength === undefined || candidate.pathLength >= intermediates.length,
         'invalid-certificate'
@@ -589,13 +611,20 @@ export async function verifyResponse(
         expiresAt <= candidate.notAfter
       ) {
         anchor = candidate
+        anchorDer = candidateDer
         break
       }
     } catch {
       /* Try only explicitly configured anchors; never learn roots from the response. */
     }
   }
-  requireCondition(anchor, 'invalid-certificate')
+  requireCondition(anchor && anchorDer, 'invalid-certificate')
+  const anchorKey = hex(await sha256(anchorDer))
+  const floor = storedMinimumNotBefore(anchorKey)
+  requireCondition(
+    [leaf, ...intermediates].every((certificate) => certificate.notBefore >= floor),
+    'revoked-certificate'
+  )
   for (const certificate of [leaf, ...intermediates]) {
     requireCondition(
       now >= certificate.notBefore &&
@@ -606,7 +635,16 @@ export async function verifyResponse(
     )
   }
   const signature = decodeBase64(proof(response.headers, 'signature'), 72)
-  const transcript = await buildSigningTranscript(request, response, issuedAt, expiresAt, leafDer, intermediateDers)
+  const transcript = await buildSigningTranscript(
+    request,
+    response,
+    issuedAt,
+    expiresAt,
+    leafDer,
+    intermediateDers,
+    minimumNotBefore
+  )
   requireCondition(await verifySignature(await importPublicKey(leaf), signature, transcript), 'invalid-signature')
-  return { expiresAt, verifiedAt: now }
+  const chainNotBefore = Math.min(...[leaf, ...intermediates].map((certificate) => certificate.notBefore))
+  return { expiresAt, verifiedAt: now, anchorKey, chainNotBefore, minimumNotBefore }
 }

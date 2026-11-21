@@ -214,7 +214,11 @@ export class DatadogProvider extends DatadogProviderBase {
     return {
       ...configurationSummaryFields(this.flagsConfiguration),
       expirationPolicy:
-        this.configuration?.responseSigning?.mode === 'required' ? 'verified_proof_expiry' : 'no_sdk_ttl',
+        this.configuration?.responseSigning?.mode !== 'required'
+          ? 'no_sdk_ttl'
+          : this.configuration.responseSigning.expireVerifiedFlags
+            ? 'verified_proof_expiry'
+            : 'stale_after_verified_proof_expiry',
       signingMode: this.configuration?.responseSigning?.mode ?? 'off',
       contextRevision: this.contextRevision,
       configurationRevision: this.configurationRevision,
@@ -378,7 +382,7 @@ export class DatadogProvider extends DatadogProviderBase {
 
           if (
             this.configuration?.responseSigning?.mode === 'required' &&
-            !this.configuration.responseSigning.isVerified(config, evaluationContext)
+            !this.configuration.responseSigning.isUsable(config, evaluationContext)
           ) {
             debug.event('configuration.rejected', () => ({
               reason: 'expired_proof',
@@ -492,13 +496,13 @@ export class DatadogProvider extends DatadogProviderBase {
     let allowSameSubject = this.assignmentSubjectIsolationRequired
     const canUse = (config: FlagsConfiguration | undefined) =>
       this.canUseConfiguration(config, context, allowSameSubject) &&
-      (signing?.mode !== 'required' || signing.isVerified(config, context))
+      (signing?.mode !== 'required' || signing.isUsable(config, context))
     const retainedConfig = this.flagsConfiguration
 
     const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
     // Prefer verified memory, then current config, before persistent cache.
     const verifiedMemoryEligible =
-      signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+      signing?.isUsable(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
     const memoryEligible = !verifiedMemoryEligible && canUse(retainedConfig)
     const cachedConfigPromise = verifiedMemoryEligible
       ? Promise.resolve(this.verifiedConfiguration)
@@ -540,7 +544,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Try to recover with current/cached config
       try {
         const fallback =
-          signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+          signing?.isUsable(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
             ? this.verifiedConfiguration
             : canUse(retainedConfig)
               ? retainedConfig
@@ -651,8 +655,11 @@ export class DatadogProvider extends DatadogProviderBase {
     const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
     const signing = this.configuration?.responseSigning
     const unverified =
-      signing?.mode === 'required' && !signing.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
-    const expired = unverified && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+      signing?.mode === 'required' && !signing.isUsable(this.flagsConfiguration, this.requestedEvaluationContext)
+    const expired =
+      signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+    // Default: expired verified flags stay in use and the provider is STALE. expireVerifiedFlags: ERROR and defaults.
+    const strictExpiry = expired && signing.expireVerifiedFlags
     const expiryMessage = 'The verified flag configuration proof has expired'
     if (
       expired &&
@@ -660,19 +667,22 @@ export class DatadogProvider extends DatadogProviderBase {
       (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
     ) {
       this.proofExpirySignaled = true
+      const state = strictExpiry ? ProviderStatus.ERROR : ProviderStatus.STALE
       this.debug.event('signing.expired', () => ({
         configurationRevision: this.configurationRevision,
-        action: 'runtime_default_until_verified_refresh',
+        action: strictExpiry ? 'runtime_default_until_verified_refresh' : 'serve_verified_flags_stale',
       }))
       this.debug.event('provider.state_changed', () => ({
         previousState: this.status,
-        state: ProviderStatus.ERROR,
+        state,
         reason: 'expired_proof',
       }))
-      this.status = ProviderStatus.ERROR
-      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
+      const previous = this.status
+      this.status = state
+      if (strictExpiry) this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
+      else if (previous !== ProviderStatus.STALE) this.events.emit(ProviderEvents.Stale)
     }
-    const verificationMessage = expired ? expiryMessage : unverified ? this.verificationError?.message : undefined
+    const verificationMessage = strictExpiry ? expiryMessage : unverified ? this.verificationError?.message : undefined
     const result: ResolutionDetails<FlagTypeToValue<T>> = verificationMessage
       ? {
           value: defaultValue,

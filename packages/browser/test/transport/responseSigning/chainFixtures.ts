@@ -101,7 +101,8 @@ export function expectedTranscript(
   issuedAt: number,
   expiresAt: number,
   leaf: Uint8Array,
-  intermediates: Uint8Array[]
+  intermediates: Uint8Array[],
+  minimumNotBefore?: number
 ): Buffer {
   const url = new URL(request.url)
   const parts: Buffer[] = [
@@ -133,6 +134,8 @@ export function expectedTranscript(
     Buffer.from([intermediates.length]),
     ...intermediates.map(sha)
   )
+  // DRAFT minimum not-before tail: u8(1) || u64be(value), only when the header is present.
+  if (minimumNotBefore !== undefined) parts.push(Buffer.from([1]), u(minimumNotBefore, 8))
   return Buffer.concat(parts)
 }
 
@@ -156,13 +159,22 @@ export function signedResponse(
   request: { url: string; method: string; headers: Headers; body: Uint8Array },
   signer: { privateKey: KeyObject; leafBase64: string; intermediatesBase64: string[] },
   now = FIXTURE_NOW,
-  body: Uint8Array = new Uint8Array(Buffer.from('{"data":{"attributes":{"flags":{}}}}'))
+  body: Uint8Array = new Uint8Array(Buffer.from('{"data":{"attributes":{"flags":{}}}}')),
+  minimumNotBefore?: number
 ) {
   const leaf = Buffer.from(signer.leafBase64, 'base64')
   const intermediates = signer.intermediatesBase64.map((value) => Buffer.from(value, 'base64'))
   const issuedAt = now,
     expiresAt = now + 300
-  const transcript = expectedTranscript(request, { status: 200, body }, issuedAt, expiresAt, leaf, intermediates)
+  const transcript = expectedTranscript(
+    request,
+    { status: 200, body },
+    issuedAt,
+    expiresAt,
+    leaf,
+    intermediates,
+    minimumNotBefore
+  )
   const headers = new Headers({
     'content-type': 'application/json',
     'x-datadog-feature-flags-signature-version': '1',
@@ -173,5 +185,7 @@ export function signedResponse(
     'x-datadog-feature-flags-expires-at': String(expiresAt),
     'x-datadog-feature-flags-signature': sign('sha256', transcript, signer.privateKey).toString('base64'),
   })
+  if (minimumNotBefore !== undefined)
+    headers.set('x-datadog-feature-flags-minimum-not-before', String(minimumNotBefore))
   return { status: 200, headers, body, transcript, issuedAt, expiresAt }
 }

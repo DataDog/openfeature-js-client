@@ -105,6 +105,10 @@ function provider(mode: 'off' | 'observe' | 'required', extra: Partial<FlaggingI
   providers.push(result)
   return result
 }
+/** expireVerifiedFlags: true keeps the strict behavior: ERROR and defaults at proof expiry. */
+const strict = () => ({
+  experimentalResponseSigning: { mode: 'required' as const, trustedRootCertificates: roots, expireVerifiedFlags: true },
+})
 function response(body: string, headers: Headers = new Headers(), status = 200): Response {
   // Transport boundary: exact bytes, ordinary parser, status and headers; no verifier is mocked.
   const buffer = new TextEncoder().encode(body)
@@ -527,9 +531,9 @@ test('required rejects unsigned and tampered responses without unsigned retry', 
   await expect(provider('required').initialize(context)).rejects.toThrow('invalid-signature')
   expect(global.fetch).toHaveBeenCalledTimes(1)
 })
-test('required uses matching verified memory until original expiry, including every evaluation', async () => {
+test('strict expiry: required uses matching verified memory until original expiry, including every evaluation', async () => {
   global.fetch = jest.fn(signed)
-  const subject = provider('required')
+  const subject = provider('required', strict())
   await subject.initialize(context)
   global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
   await subject.onContextChange(context, context)
@@ -540,11 +544,11 @@ test('required uses matching verified memory until original expiry, including ev
   await expect(subject.onContextChange(context, context)).rejects.toThrow('network unavailable')
 })
 test.each(['required', 'observe'] as const)(
-  '%s proof expiry: evaluation and OpenFeature lifecycle signals',
+  '%s proof expiry with expireVerifiedFlags: evaluation and OpenFeature lifecycle signals',
   async (mode) => {
     global.fetch = jest.fn(signed)
     const subject = provider(mode, {
-      experimentalResponseSigning: { mode, trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode, trustedRootCertificates: roots, expireVerifiedFlags: true },
     })
     await subject.initialize(context)
     const resolve = () => subject.resolveBooleanEvaluation('critical', false, {}, logger)
@@ -612,9 +616,9 @@ test.each(['required', 'observe'] as const)(
     expect(error).toHaveBeenCalledTimes(mode === 'required' ? 2 : 0)
   }
 )
-test('OpenFeature clients receive expiry errors and recovery events', async () => {
+test('strict expiry: OpenFeature clients receive expiry errors and recovery events', async () => {
   const domain = 'response-signing-expiry'
-  const subject = provider('required')
+  const subject = provider('required', strict())
   global.fetch = jest.fn(signed)
   await OpenFeature.setProviderAndWait(domain, subject, context)
   const client = OpenFeature.getClient(domain)
@@ -650,8 +654,94 @@ test('OpenFeature clients receive expiry errors and recovery events', async () =
   }
 })
 
-test('expiry does not overwrite an in-flight context reconciliation', async () => {
+test('default expiry: required keeps the verified flags, goes STALE once, and recovers to READY', async () => {
+  global.fetch = jest.fn(signed)
   const subject = provider('required')
+  await subject.initialize(context)
+  const resolve = () => subject.resolveBooleanEvaluation('critical', false, {}, logger)
+  const stale = jest.fn()
+  const error = jest.fn()
+  const ready = jest.fn()
+  subject.events.addHandler(ProviderEvents.Stale, stale)
+  subject.events.addHandler(ProviderEvents.Error, error)
+  subject.events.addHandler(ProviderEvents.Ready, ready)
+  const requestsAfterAdmission = (global.fetch as jest.Mock).mock.calls.length
+  for (const seconds of [300, 301, 3600]) {
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + seconds) * 1000)
+    expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+    expect(resolve().errorCode).toBeUndefined()
+  }
+  await flush()
+  expect(subject.status).toBe(ProviderStatus.STALE)
+  expect(stale).toHaveBeenCalledTimes(1)
+  expect(error).not.toHaveBeenCalled()
+  // The SDK does not refetch by itself: the application decides.
+  expect(global.fetch).toHaveBeenCalledTimes(requestsAfterAdmission)
+
+  // A blocked refresh keeps the last verified values; it cannot replace them.
+  global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
+  await subject.onContextChange(context, context)
+  await flush()
+  expect(subject.status).toBe(ProviderStatus.STALE)
+  expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+
+  // A new verified response returns the provider to READY.
+  global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 3600))
+  await subject.onContextChange(context, context)
+  await flush()
+  expect(subject.status).toBe(ProviderStatus.READY)
+  expect(ready).toHaveBeenCalledTimes(1)
+  expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
+
+  // After a restart, required mode has no flag data until the first verified response.
+  global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
+  const restarted = provider('required')
+  await expect(restarted.initialize(context)).rejects.toThrow('network unavailable')
+  expect(restarted.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({ value: false })
+})
+test('default expiry: OpenFeature clients see STALE and keep the verified values', async () => {
+  const domain = 'response-signing-stale'
+  const subject = provider('required')
+  global.fetch = jest.fn(signed)
+  await OpenFeature.setProviderAndWait(domain, subject, context)
+  const client = OpenFeature.getClient(domain)
+  const stale = jest.fn()
+  const errors = jest.fn()
+  client.addHandler(ProviderEvents.Stale, stale)
+  client.addHandler(ProviderEvents.Error, errors)
+  try {
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    for (let i = 0; i < 2; i++) {
+      expect(client.getBooleanDetails('critical', false)).toMatchObject({ value: true, reason: 'TARGETING_MATCH' })
+    }
+    await flush()
+    expect(client.providerStatus).toBe(ProviderStatus.STALE)
+    expect(stale).toHaveBeenCalledTimes(1)
+    expect(errors).not.toHaveBeenCalled()
+  } finally {
+    client.removeHandler(ProviderEvents.Stale, stale)
+    client.removeHandler(ProviderEvents.Error, errors)
+    await OpenFeature.clearProviders()
+  }
+})
+test('default expiry is logged as a stale policy', async () => {
+  const log = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+  global.fetch = jest.fn(signed)
+  const subject = provider('required', { debugMode: true })
+  await subject.initialize(context)
+  jest.spyOn(Date, 'now').mockReturnValue((vector.now + 301) * 1000)
+  expect(evaluation(subject)).toBe(true)
+  const records = log.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('[Datadog Feature Flags] '))
+    .map((line) => JSON.parse(line.slice('[Datadog Feature Flags] '.length)))
+  expect(records.find((record) => record.event === 'signing.expired').details.action).toBe('serve_verified_flags_stale')
+  expect(
+    records.filter((record) => record.event === 'evaluation.completed').slice(-1)[0].details.expirationPolicy
+  ).toBe('stale_after_verified_proof_expiry')
+})
+test('strict expiry does not overwrite an in-flight context reconciliation', async () => {
+  const subject = provider('required', strict())
   global.fetch = jest.fn(signed)
   await subject.initialize(context)
   let release: () => void = () => {}
@@ -1355,7 +1445,7 @@ describe('response signing debug diagnostics', () => {
       throw new Error('must not clone')
     })
     global.fetch = jest.fn(async (url, init) => Object.assign(await signed(url, init), { clone }))
-    const subject = provider('required', { debugMode: true })
+    const subject = provider('required', { ...strict(), debugMode: true })
     await subject.initialize(context)
     expect(events('signing.verified')[0].details.outcome).toBe('verified')
     expect(clone).not.toHaveBeenCalled()

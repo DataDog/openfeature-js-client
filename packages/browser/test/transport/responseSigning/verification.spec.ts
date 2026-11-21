@@ -14,6 +14,10 @@ import { TextDecoder, TextEncoder } from 'node:util'
 import { AsnConvert, OctetString } from '@peculiar/asn1-schema'
 import { BasicConstraints, Certificate, ExtendedKeyUsage, Extension, Extensions, Validity } from '@peculiar/asn1-x509'
 import { createResponseSigningController } from '../../../src/transport/responseSigning/controller'
+import {
+  forgetMinimumNotBeforeInMemory,
+  storedMinimumNotBefore,
+} from '../../../src/transport/responseSigning/minimumNotBefore'
 import stagingRoot from '../../../src/transport/responseSigning/staging-root.json'
 import { bundledRootsForEndpoint } from '../../../src/transport/responseSigning/trustRoots'
 import {
@@ -80,7 +84,7 @@ describe('chain fixture table (test-CA-issued credentials)', () => {
       roots.map((root) => pinned[root]),
       FIXTURE_NOW
     )
-    if (accept) await expect(result).resolves.toEqual({ expiresAt: response.expiresAt, verifiedAt: FIXTURE_NOW })
+    if (accept) await expect(result).resolves.toMatchObject({ expiresAt: response.expiresAt, verifiedAt: FIXTURE_NOW })
     else await expect(result).rejects.toThrow(reason)
   })
 })
@@ -425,7 +429,7 @@ describe('rotation under one pinned root', () => {
     for (const name of [...rotation, ...[...rotation].reverse()]) {
       const request = signingRequest()
       const response = signedResponse(request, loadCredential(name))
-      await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).resolves.toEqual({
+      await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).resolves.toMatchObject({
         expiresAt: response.expiresAt,
         verifiedAt: FIXTURE_NOW,
       })
@@ -449,7 +453,7 @@ describe('rotation under one pinned root', () => {
           new Response(Buffer.from(signed.body), { status: 200, headers: signed.headers }),
           request
         )
-        expect(result.proof).toEqual({ expiresAt: signed.expiresAt, verifiedAt: FIXTURE_NOW })
+        expect(result.proof).toMatchObject({ expiresAt: signed.expiresAt, verifiedAt: FIXTURE_NOW })
       }
     } finally {
       jest.restoreAllMocks()
@@ -600,7 +604,7 @@ describe('shared v1 fixtures', () => {
       }
       const issued = Number(response.headers.get('x-datadog-feature-flags-issued-at'))
       const expires = Number(response.headers.get('x-datadog-feature-flags-expires-at'))
-      await expect(result).resolves.toEqual({ expiresAt: expires, verifiedAt: vector.now })
+      await expect(result).resolves.toMatchObject({ expiresAt: expires, verifiedAt: vector.now })
       const transcript = await buildSigningTranscript(
         request,
         response,
@@ -614,4 +618,191 @@ describe('shared v1 fixtures', () => {
       await expect(verifyResponse(request, response, [anchor], expires)).rejects.toThrow()
     })
   }
+})
+
+describe('minimum not-before revocation (draft wire)', () => {
+  const notBefore = (base64: string) => Date.parse(new X509Certificate(Buffer.from(base64, 'base64')).validFrom) / 1000
+  const newChain = loadCredential('one-intermediate')
+  const oldChain = loadCredential('two-intermediates')
+  // The new chain's earliest notBefore (its intermediate). The old chain's intermediates are older than it.
+  const FLOOR = Math.min(notBefore(newChain.leafBase64), ...newChain.intermediatesBase64.map(notBefore))
+  const anchorKey = createHash('sha256').update(Buffer.from(ROOT_A, 'base64')).digest('hex')
+  const url = 'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=staging'
+  type Mode = 'observe' | 'required'
+  function capture() {
+    const events: Array<{ name: string; fields: any }> = []
+    const logger = {
+      enabled: true,
+      event: (name: string, fields?: () => unknown) => events.push({ name, fields: fields?.() }),
+      child: () => logger,
+    }
+    return { events, logger }
+  }
+  function controller(mode: Mode) {
+    return createResponseSigningController({ mode, trustedRootCertificates: [ROOT_A] }, { site: 'datad0g.com' })!
+  }
+  async function read(
+    signing: ReturnType<typeof controller>,
+    credential: ReturnType<typeof loadCredential>,
+    minimumNotBefore?: number,
+    change?: (headers: Headers) => void,
+    logger = capture().logger
+  ) {
+    const request = signing.prepare(url, { 'dd-client-token': 'fixture-token' }, '{"data":{}}')!
+    const signed = signedResponse(request, credential, FIXTURE_NOW, undefined, minimumNotBefore)
+    change?.(signed.headers)
+    return signing.read(
+      new Response(Buffer.from(signed.body), { status: 200, headers: signed.headers }),
+      request,
+      logger
+    )
+  }
+  // This suite runs in the node environment: install a minimal Storage, as a browser page has.
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  let storage: Map<string, string>
+  let blocked = false
+  const localStorage = {
+    getItem: (key: string) => {
+      if (blocked) throw new Error('blocked')
+      return storage.get(key) ?? null
+    },
+    setItem: (key: string, value: string) => {
+      if (blocked) throw new Error('blocked')
+      storage.set(key, value)
+    },
+  }
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW * 1000)
+    storage = new Map()
+    blocked = false
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: localStorage })
+    forgetMinimumNotBeforeInMemory()
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage)
+    else delete (globalThis as { localStorage?: unknown }).localStorage
+  })
+
+  test('the old chain has intermediates older than every certificate of the new chain', () => {
+    expect(Math.min(...oldChain.intermediatesBase64.map(notBefore))).toBeLessThan(FLOOR)
+    expect(notBefore(newChain.leafBase64)).toBeGreaterThanOrEqual(FLOOR)
+  })
+  test('required: a signed value is stored, then the old chain is rejected and the new chain still verifies', async () => {
+    const signing = controller('required')
+    expect((await read(signing, oldChain)).proof).toBeDefined()
+    const { events, logger } = capture()
+    expect((await read(signing, newChain, FLOOR, undefined, logger)).proof).toMatchObject({ minimumNotBefore: FLOOR })
+    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields).toMatchObject({
+      outcome: 'stored',
+      value: FLOOR,
+    })
+    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
+    expect(localStorage.getItem(`dd-ffe-response-signing-minimum-not-before-v1:${anchorKey}`)).toBe(String(FLOOR))
+    await expect(read(signing, oldChain)).rejects.toThrow('Response signing: revoked-certificate')
+    expect((await read(signing, newChain)).proof).toBeDefined()
+  })
+  test('observe: applies the check, reports revoked-certificate, accepts the response, and stores values', async () => {
+    const signing = controller('observe')
+    expect((await read(signing, newChain, FLOOR)).proof).toBeDefined()
+    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
+    const { events, logger } = capture()
+    const result = await read(signing, oldChain, undefined, undefined, logger)
+    expect(result.proof).toBeUndefined()
+    expect(result.json).toBeDefined()
+    expect(events.find((event) => event.name === 'signing.failed')?.fields).toMatchObject({
+      reason: 'revoked-certificate',
+      action: 'continue_unverified',
+    })
+  })
+  test('a value lower than the stored value is ignored', async () => {
+    const signing = controller('required')
+    await read(signing, newChain, FLOOR)
+    const { events, logger } = capture()
+    await read(signing, newChain, FLOOR - 1, undefined, logger)
+    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields.outcome).toBe(
+      'not-higher-than-stored'
+    )
+    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
+  })
+  test.each([
+    ['greater than the leaf notBefore', notBefore(newChain.leafBase64) + 1],
+    // Between the intermediate and the leaf: a leaf-only rule would revoke every later chain.
+    ['greater than an intermediate notBefore', FLOOR + 1],
+  ])('a value %s is ignored, because a response never revokes its own chain', async (_label, value) => {
+    const signing = controller('required')
+    const { events, logger } = capture()
+    expect((await read(signing, newChain, value, undefined, logger)).proof).toBeDefined()
+    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields.outcome).toBe(
+      'minimum-not-before-ignored'
+    )
+    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+    expect((await read(signing, oldChain)).proof).toBeDefined()
+    expect((await read(signing, newChain)).proof).toBeDefined()
+  })
+  test.each([
+    [
+      'changed',
+      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', String(FLOOR - 1)),
+      FLOOR,
+      'invalid-signature',
+    ],
+    [
+      'removed',
+      (headers: Headers) => headers.delete('x-datadog-feature-flags-minimum-not-before'),
+      FLOOR,
+      'invalid-signature',
+    ],
+    [
+      'added',
+      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', String(FLOOR)),
+      undefined,
+      'invalid-signature',
+    ],
+    [
+      'duplicated',
+      (headers: Headers) => headers.append('x-datadog-feature-flags-minimum-not-before', String(FLOOR - 1)),
+      FLOOR,
+      'invalid-proof',
+    ],
+    [
+      'leading zero',
+      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', `0${FLOOR}`),
+      FLOOR,
+      'invalid-proof',
+    ],
+    [
+      'above 2^53-1',
+      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', '9007199254740992'),
+      FLOOR,
+      'invalid-proof',
+    ],
+  ] as const)('a %s header fails verification and stores nothing', async (_label, change, signedValue, reason) => {
+    const signing = controller('required')
+    await expect(read(signing, newChain, signedValue, change)).rejects.toThrow(`Response signing: ${reason}`)
+    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+  })
+  test('the stored value survives a restart', async () => {
+    await read(controller('required'), newChain, FLOOR)
+    forgetMinimumNotBeforeInMemory()
+    await expect(read(controller('required'), oldChain)).rejects.toThrow('Response signing: revoked-certificate')
+  })
+  test('without localStorage the value is kept in memory for the page only', async () => {
+    blocked = true
+    const signing = controller('required')
+    await read(signing, newChain, FLOOR)
+    await expect(read(signing, oldChain)).rejects.toThrow('Response signing: revoked-certificate')
+    forgetMinimumNotBeforeInMemory()
+    expect((await read(controller('required'), oldChain)).proof).toBeDefined()
+  })
+  test('values are kept per trust anchor', async () => {
+    await read(controller('required'), newChain, FLOOR)
+    const other = createHash('sha256').update(Buffer.from(ROOT_B, 'base64')).digest('hex')
+    expect(storedMinimumNotBefore(other)).toBe(0)
+    const backup = createResponseSigningController(
+      { mode: 'required', trustedRootCertificates: [ROOT_B] },
+      { site: 'datad0g.com' }
+    )!
+    expect((await read(backup, loadCredential('backup-root'))).proof).toBeDefined()
+  })
 })

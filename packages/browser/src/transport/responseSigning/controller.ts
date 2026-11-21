@@ -4,6 +4,7 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
 import { signingContextKey } from './context'
+import { raiseMinimumNotBefore, storedMinimumNotBefore } from './minimumNotBefore'
 import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoots'
 import {
   cryptoProvider,
@@ -56,6 +57,17 @@ export interface ResponseSigningConfiguration {
    * These public anchors are fixed for the lifetime of the provider; never populate them from a response.
    */
   trustedRootCertificates?: readonly string[]
+  /**
+   * Required mode only. Default: false.
+   *
+   * When false, at the expiry of the last verified proof the provider keeps serving the verified flags and changes
+   * its state to STALE. A network attacker can block refreshes and keep the flags at their last verified values.
+   * The attacker cannot forge values: the guarantee is "verified once", not "fresh".
+   *
+   * When true, at expiry the provider changes its state to ERROR and returns default values until a new verified
+   * response arrives. This is the strict guarantee.
+   */
+  expireVerifiedFlags?: boolean
 }
 
 export function createResponseSigningController(
@@ -108,6 +120,7 @@ export function createResponseSigningController(
     }))
     throw new Error('Required response signing needs a locally trusted root certificate')
   }
+  const expireVerifiedFlags = mode === 'required' && options?.expireVerifiedFlags === true
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()
   const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
@@ -123,8 +136,24 @@ export function createResponseSigningController(
       throw error instanceof ResponseVerificationError ? error : new ResponseVerificationError(reason)
     return undefined
   }
+  /**
+   * DRAFT: keep a signed minimum not-before only when it cannot revoke any certificate of the chain that signed it.
+   * Intermediates are older than the leaf, so a leaf-only check could revoke every later chain.
+   */
+  function recordMinimumNotBefore(proof: VerifiedResponse, logger: DebugLogger): void {
+    const value = proof.minimumNotBefore
+    if (value === undefined) return
+    const outcome =
+      value > proof.chainNotBefore
+        ? 'minimum-not-before-ignored'
+        : raiseMinimumNotBefore(proof.anchorKey, value)
+          ? 'stored'
+          : 'not-higher-than-stored'
+    logger.event('signing.minimum_not_before', () => ({ mode, value, outcome }))
+  }
   return {
     mode,
+    expireVerifiedFlags,
     /** Hash the full immutable provider scope only when cache is used; never expose tokens in storage keys. */
     cacheNamespace(): Promise<string | undefined> {
       namespace ??= sha256(utf8(serializedScope)).then(
@@ -229,11 +258,15 @@ export function createResponseSigningController(
         proof = await verifyResponse(
           request,
           { status: response.status, headers: response.headers, body: bytes },
-          roots
+          roots,
+          undefined,
+          storedMinimumNotBefore
         )
       } catch (error) {
         failure(error, logger)
       }
+      // Observe mode also records values, but only from a response that verified fully.
+      if (proof) recordMinimumNotBefore(proof, logger)
       logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
       // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
       return { json: JSON.parse(new TextDecoder().decode(bytes)), proof }
@@ -258,6 +291,17 @@ export function createResponseSigningController(
     isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       const proof = config && verified.get(config)
       return !!proof && proof.expiresAt <= Date.now() / 1000 && proof.context === signingContextKey(context)
+    },
+    /** Verified now, or (unless expireVerifiedFlags) verified once with an expired proof: the flags stay usable. */
+    isUsable(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
+      if (!config) return false
+      const proof = verified.get(config)
+      return (
+        !!proof &&
+        proof.acceptedAt <= Date.now() / 1000 &&
+        (!expireVerifiedFlags || proof.expiresAt > Date.now() / 1000) &&
+        proof.context === signingContextKey(context)
+      )
     },
     isVerified(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false

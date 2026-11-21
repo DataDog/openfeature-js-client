@@ -193,17 +193,37 @@ Proofs issued more than 30 seconds ahead of that clock fail verification with `e
 Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
 
 Required mode uses only verified memory for the same provider and full evaluation
-context. It does not read bootstrap or persistent configurations, never retries
-unsigned, and returns defaults after proof expiry or restart until a fresh verified
-response arrives. This includes expiry while offline, without another refresh.
-The first evaluation that detects expiry returns the default with reason `ERROR`,
-error code `GENERAL`, and an explicit proof-expiry message. The provider changes
-from `READY` or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event
-per expiry episode. Repeated evaluations do not repeat that event. A fresh verified
-response restores `READY` and emits `PROVIDER_READY` after expiry recovery.
-Expiry does not start a refresh. There is no expiry timer;
+context. It does not read bootstrap or persistent configurations and never retries
+unsigned. It persists no flag data: after a restart, flags are defaults until the first verified response.
+
+At the expiry of the last verified proof, the behavior depends on `expireVerifiedFlags` (required mode only):
+
+- `expireVerifiedFlags: false` (default): the provider keeps serving the verified flags. It changes from `READY`
+  to `STALE` and emits one `PROVIDER_STALE` event per expiry episode. A refresh that fails keeps the verified values.
+  The application decides whether to refetch. In this setting, a network attacker can block refreshes and keep the
+  flags at their last verified values. The attacker cannot forge values. The guarantee is "verified once", not "fresh".
+- `expireVerifiedFlags: true`: the strict guarantee. The first evaluation that detects expiry returns the default
+  with reason `ERROR`, error code `GENERAL`, and an explicit proof-expiry message. The provider changes from `READY`
+  or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event per expiry episode. Defaults stay until a
+  fresh verified response arrives, also while offline.
+
+```typescript
+experimentalResponseSigning: { mode: 'required', expireVerifiedFlags: true }
+```
+
+In both settings, repeated evaluations do not repeat the event, and a fresh verified response restores `READY`
+and emits `PROVIDER_READY`. Expiry does not start a refresh. There is no expiry timer;
 an idle provider signals expiry when its next evaluation detects it. An update
 already in progress keeps its reconciliation status until that update completes.
+
+Minimum not-before revocation (**draft wire**, pending the edge): a response can carry
+`x-datadog-feature-flags-minimum-not-before`, unix seconds, which is bound at the end of the v1 transcript.
+After a fully verified response, the SDK stores the highest value for each trust anchor in `localStorage`
+(in memory only when storage is not available). It ignores a value that is greater than the `notBefore` of any
+certificate in that response's chain, or lower than the stored value. Then it rejects a chain whose leaf or
+intermediate starts before the stored value, with `Response signing: revoked-certificate`. Required mode fails
+closed; observe mode reports the reason and accepts the response as unverified. This value holds no flag data,
+and it is the only data that required mode persists. One value revokes every older certificate at every level.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
 headers, mode, selection and nested context. Upgrading into observe causes a
