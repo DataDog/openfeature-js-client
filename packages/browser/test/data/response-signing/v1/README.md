@@ -3,7 +3,7 @@
 These files are byte-for-byte copies of `response-signing/v1` from
 [DataDog/ffe-system-test-data](https://github.com/DataDog/ffe-system-test-data).
 
-- Source commit: `19afb2b14a3189fbffa380710523448fb73545bc`
+- Source commit: `8dfd544b1a2e8e3a06ca78a31568003a15c7ecae`. The files are unchanged since `19afb2b14a3189fbffa380710523448fb73545bc`.
 - Do not edit or reformat these files. Change them upstream, then copy the new commit here.
 - Update the commit and the hashes below in the same change.
 - `verification.spec.ts` pins the `manifest.json` SHA-256 and checks every suite against the manifest.

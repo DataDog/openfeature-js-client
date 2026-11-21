@@ -8,13 +8,13 @@ certificate encoding is unchanged.
 Signature version `1` carries the intermediate certificates in
 `x-datadog-feature-flags-signing-chain`, and the transcript ends with
 `SHA256(leaf) || u8(n) || SHA256(intermediate[0]) || ... || SHA256(intermediate[n-1])`.
-`chain-fixtures/` holds test credentials issued by a local test CA (credential JSON `version` 1)
+`../../data/response-signing/chain/` holds test credentials issued by a local test CA (credential JSON `version` 1)
 and the public test roots `root-a.pem` and `root-b.pem`. The private keys are test-only.
 Leaves are valid for 72 hours, so the tests inject `now` (`FIXTURE_NOW` in `chainFixtures.ts`).
 `verification.spec.ts` covers the chain fixture table, the transcript, and synthetic chains
 that change one certificate-profile rule at a time.
 
-`chain-fixtures/staging-us1-dc-intermediate.pem` is the public us1.staging DC intermediate.
+`../../data/response-signing/chain/staging-us1-dc-intermediate.pem` is the public us1.staging DC intermediate.
 A test checks that it links to the bundled staging root under the client profile.
 
 All six shared v1 suites are byte-for-byte copies in `../../data/response-signing/v1`.

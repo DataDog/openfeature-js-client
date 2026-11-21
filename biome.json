@@ -43,6 +43,7 @@
       "!packages/core/test/ffe-system-test-data",
       "!packages/core/test/ffe-flag-selection-data",
       "!packages/browser/test/data/response-signing/v1/*.json",
+      "!packages/browser/test/data/response-signing/chain",
       "!packages/core/src/configuration/generated"
     ]
   }

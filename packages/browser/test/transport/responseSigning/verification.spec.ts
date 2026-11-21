@@ -2,7 +2,7 @@
 /**
  * Response signing v1 with a certificate chain: leaf -> 1 to 3 intermediates -> pinned root.
  *
- * The chain tests use the test-CA-issued credentials in `chain-fixtures/` and synthetic chains
+ * The chain tests use the test-CA-issued credentials in `test/data/response-signing/chain` and synthetic chains
  * that change one certificate-profile rule at a time.
  *
  * The shared ffe-system-test-data v1 fixtures run from the copies in `test/data/response-signing/v1`.
@@ -486,7 +486,10 @@ describe('bundled trust anchor', () => {
       expect(bundledRootsForEndpoint(new URL(url))).toEqual([])
   })
   test('the real us1.staging DC intermediate links to the bundled root under the client profile', async () => {
-    const pem = readFileSync(join(__dirname, 'chain-fixtures/staging-us1-dc-intermediate.pem'), 'utf8')
+    const pem = readFileSync(
+      join(__dirname, '../../data/response-signing/chain/staging-us1-dc-intermediate.pem'),
+      'utf8'
+    )
     const dcDer = new Uint8Array(Buffer.from(pem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s+/g, ''), 'base64'))
     const root = parseCertificate(decodeBase64(stagingRoot.certificateDerBase64, 4096), 'anchor')
     // The DC intermediate is the upper intermediate (index 1): cluster intermediate (0) <- DC (1) <- root.

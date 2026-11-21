@@ -18,3 +18,4 @@ packages/core/src/configuration/generated
 
 # Shared response-signing fixtures are byte-for-byte copies of ffe-system-test-data.
 packages/browser/test/data/response-signing/v1/*.json
+packages/browser/test/data/response-signing/chain

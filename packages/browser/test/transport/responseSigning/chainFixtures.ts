@@ -1,7 +1,7 @@
 /**
  * Certificate-chain test helpers for response signing v1.
  *
- * `chain-fixtures/` holds test credentials issued by a local test CA (credential JSON `version` 1) and the two
+ * `../../data/response-signing/chain/` holds test credentials issued by a local test CA (credential JSON `version` 1) and the two
  * public test roots. The private keys are test-only. The transcript builder below is written separately
  * from the SDK and does not call it.
  */
@@ -9,7 +9,7 @@ import { createHash, createPrivateKey, type KeyObject, sign, X509Certificate } f
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const directory = join(__dirname, 'chain-fixtures')
+const directory = join(__dirname, '../../data/response-signing/chain')
 
 export const CREDENTIAL_NAMES = [
   'two-intermediates',
