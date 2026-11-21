@@ -98,9 +98,6 @@ export interface FlaggingInitConfiguration
    */
   initialFlagsConfiguration?: FlagsConfiguration
 
-  /** Opt-in assignment response signing. Default: off. */
-  responseSigning?: ResponseSigningConfiguration
-
   /**
    * Custom headers to add to the request to the Datadog API.
    */
@@ -239,8 +236,19 @@ export function validateAndBuildFlaggingTrackingConfiguration(
   return configuration
 }
 
+/**
+ * Init configuration with response signing.
+ *
+ * @internal Response signing is not part of the public API. A later release adds it as an
+ * experimental option. Only tests and internal callers use this type.
+ */
+export interface InternalFlaggingInitConfiguration extends FlaggingInitConfiguration {
+  /** Opt-in assignment response signing. Default: off. */
+  responseSigning?: ResponseSigningConfiguration
+}
+
 export function validateAndBuildFlaggingConfiguration(
-  initConfiguration: FlaggingInitConfiguration,
+  initConfiguration: InternalFlaggingInitConfiguration,
   debug = createDebugLogger(initConfiguration.debugMode)
 ): FlaggingConfiguration | undefined {
   const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)

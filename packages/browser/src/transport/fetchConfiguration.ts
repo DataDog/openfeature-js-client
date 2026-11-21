@@ -28,7 +28,7 @@ import {
   extractAssignmentToken,
   normalizeAssignmentToken,
 } from '../domain/assignment-token'
-import type { FlaggingInitConfiguration } from '../domain/configuration'
+import type { InternalFlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
@@ -398,7 +398,7 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
 }
 
 export function createFlagsConfigurationFetcher(
-  initConfiguration: FlaggingInitConfiguration,
+  initConfiguration: InternalFlaggingInitConfiguration,
   signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
     site: initConfiguration.site,
     flaggingProxy: initConfiguration.flaggingProxy,

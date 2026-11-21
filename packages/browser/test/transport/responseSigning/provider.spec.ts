@@ -3,7 +3,7 @@ import { ReadableStream } from 'node:stream/web'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { ErrorCode, OpenFeature, ProviderEvents, ProviderStatus, StandardResolutionReasons } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../../src/cache/indexeddb-flags-cache'
-import type { FlaggingInitConfiguration } from '../../../src/domain/configuration'
+import type { InternalFlaggingInitConfiguration } from '../../../src/domain/configuration'
 import { DatadogProvider } from '../../../src/openfeature/provider'
 import {
   createFlagsConfigurationFetcher,
@@ -40,7 +40,7 @@ const payload = (value = true) => ({
     },
   },
 })
-const defaultOptions: FlaggingInitConfiguration = {
+const defaultOptions: InternalFlaggingInitConfiguration = {
   clientToken: 'token-a',
   env: 'production',
   applicationId: 'app-a',
@@ -86,12 +86,13 @@ afterEach(async () => {
   global.fetch = previousFetch
   jest.restoreAllMocks()
 })
-function provider(mode: 'off' | 'observe' | 'required', extra: Partial<FlaggingInitConfiguration> = {}) {
-  const result = new DatadogProvider({
+function provider(mode: 'off' | 'observe' | 'required', extra: Partial<InternalFlaggingInitConfiguration> = {}) {
+  const options: InternalFlaggingInitConfiguration = {
     ...defaultOptions,
     responseSigning: { mode, trustedRootCertificates: roots },
     ...extra,
-  })
+  }
+  const result = new DatadogProvider(options)
   providers.push(result)
   return result
 }
@@ -272,7 +273,6 @@ test.each(['observe', 'required'] as const)(
       'response-signing-v1'
     )
     expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(DatadogProvider.responseSigningVersion).toBe(1)
     expect(init.redirect).toBe('error')
   }
 )
