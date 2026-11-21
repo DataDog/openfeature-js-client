@@ -274,7 +274,7 @@ export function validateAndBuildFlaggingConfiguration(
   )
   return {
     responseSigning,
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning, debug),
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning ?? null, debug),
     ...trackingConfiguration,
   }
 }

@@ -399,13 +399,19 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
 
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
-  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
-    site: initConfiguration.site,
-    flaggingProxy: initConfiguration.flaggingProxy,
-    env: initConfiguration.env,
-  }),
+  // `null` means the caller already resolved signing to off. A default parameter also runs for an explicit
+  // `undefined`, which would build a second controller and repeat its warnings.
+  resolvedSigning?: ResponseSigningController | null,
   debug: DebugLogger = NO_DEBUG
 ) {
+  const signing =
+    resolvedSigning === undefined
+      ? createResponseSigningController(initConfiguration.responseSigning, {
+          site: initConfiguration.site,
+          flaggingProxy: initConfiguration.flaggingProxy,
+          env: initConfiguration.env,
+        })
+      : (resolvedSigning ?? undefined)
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   try {

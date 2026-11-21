@@ -297,6 +297,7 @@ describe('staging site gate', () => {
     expect(optedIn.init.redirect).toBeUndefined()
     // No nonce is generated: only the ordinary provider instance ID uses randomness.
     expect(random).toHaveBeenCalledTimes(ordinaryRandomCalls)
+    expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
       'Response signing is available only on datad0g.com. Requests are sent without signing.'
     )
