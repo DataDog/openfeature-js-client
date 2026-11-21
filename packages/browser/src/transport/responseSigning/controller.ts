@@ -1,9 +1,10 @@
+import { display } from '@datadog/browser-core'
 import type { FlagsConfiguration } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
 import { signingContextKey } from './context'
-import { bundledRootsForEndpoint } from './trustRoots'
+import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoots'
 import {
   cryptoProvider,
   hex,
@@ -29,6 +30,7 @@ export interface ResponseSigningConfiguration {
   /**
    * Explicit trusted root certificates, standard padded base64 DER. Draft dogfood/test API.
    * Overrides endpoint-selected bundled roots, including when empty. No production root is bundled yet.
+   * Signing is available only when `site` is `datad0g.com`; on other sites this option has no effect.
    * These public anchors are fixed for the lifetime of the provider; never populate them from a response.
    */
   trustedRootCertificates?: readonly string[]
@@ -47,6 +49,16 @@ export function createResponseSigningController(
     throw new Error('Invalid response signing mode')
   }
   if (mode === 'off') return undefined
+  // Staging gate: on every other site, opt-in is a no-op and the request stays unchanged.
+  if (!isSigningSite(scope.site)) {
+    debug.event('signing.unavailable', () => ({
+      mode,
+      reason: 'unsupported_site',
+      action: 'send_unsigned_request',
+    }))
+    display.warn(`Response signing is available only on ${SIGNING_SITE}. Requests are sent without signing.`)
+    return undefined
+  }
   const endpoint = buildConfigurationUrl(scope, 'precomputed')
   const automaticRoots = options?.trustedRootCertificates === undefined
   const roots = [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]

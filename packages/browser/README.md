@@ -120,22 +120,26 @@ Response signing is opt-in and defaults to `off`. Use `observe` to attempt verif
 assignments, or `required` to admit only verified responses. Existing authentication,
 HTTP errors, JSON validation, and experimentation opt-out checks still apply.
 
+Response signing is available only on the Datadog staging site, `site: 'datad0g.com'`.
+On every other site, including the default site, the `responseSigning` option has no effect:
+the SDK logs one warning, sends the ordinary request without signing headers, and handles
+the response as an unsigned client does. This also applies to `required` mode.
+
 ```typescript
 const provider = new DatadogProvider({
   clientToken: '<client-token>',
-  env: 'production',
-  responseSigning: {
-    mode: 'observe',
-    trustedRootCertificates: [locallyProvisionedPublicRootDerBase64],
-  },
+  site: 'datad0g.com',
+  env: 'staging',
+  responseSigning: { mode: 'observe' },
 })
 ```
 
 `DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
 `trustedRootCertificates` accepts at most four standard padded base64 DER public
-root certificates fixed at initialization. The SDK bundles **no production root**. Production verification requires an
-approved root, supplied explicitly or through the endpoint trust catalog. Never obtain trust
-anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
+root certificates fixed at initialization. It is a draft option for dogfood and tests.
+The only bundled root is the public staging root, `CN=Datadog Customer Signing Root CA - staging`
+(SHA-256 of the DER `0e469f3cecc9cd51fd64373879636540512d56e99eecd70361c78b98c47ea934`).
+The SDK bundles **no production root**. Never obtain trust anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
 if no trusted root is available, before any network request.
 Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
 them verified. Verification error messages contain no token, context, response, or certificate data.
@@ -147,12 +151,12 @@ reason `ERROR`, error code `GENERAL`, and the verification failure message.
 Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
 There is no separate verification callback.
 
-For Datadog staging, select `site: 'datad0g.com'` and
-`responseSigning: { mode: 'observe' }`. The resolved assignment endpoint selects
-the bundled **public staging root** automatically. Signing still defaults to off.
+On the staging site, the resolved assignment endpoint selects the bundled
+**public staging root** automatically. Signing still defaults to off.
 The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
-A `flaggingProxy` override takes precedence over `site` for both requests and trust;
-unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+A `flaggingProxy` override takes precedence over `site` for requests and trust, but
+not for the staging gate: a production `site` behind a proxy is not signed.
+Unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
 no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
 (including when empty), for custom proxies and tests. Additional Datadog aliases
 and production site roots must be provisioned before they enter the catalog.
@@ -160,7 +164,11 @@ and production site roots must be provisioned before they enter the catalog.
 A response carries its leaf certificate and one to three intermediate certificates
 in `x-datadog-feature-flags-signing-chain`. Rotating the leaf or any intermediate
 under the unchanged trusted root requires no SDK update or prior rotation history.
-The leaf must carry the Feature Flags assignment-signing extended key usage. The
+The SDK pins only the root. It does not pin or cache a leaf or an intermediate.
+The leaf must carry the Feature Flags assignment-signing extended key usage
+(staging placeholder `1.3.6.1.4.1.99999.1.1`) and must not carry anyExtendedKeyUsage.
+Every certificate, including the root, must satisfy `notBefore <= now < notAfter`,
+and each certificate validity must lie inside the validity of its issuer. The
 SDK verifies the chain, exact request and response bytes, nonce, effective client
 token and semantic headers, and the original proof lifetime (at most five minutes).
 Signed requests require HTTPS and reject redirects. A custom fetch implementation

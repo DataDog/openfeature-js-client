@@ -7,17 +7,22 @@
  *
  * The shared ffe-system-test-data v1 fixtures run from the copies in `test/data/response-signing/v1`.
  */
-import { createHash, generateKeyPairSync, type KeyObject, sign, webcrypto } from 'node:crypto'
+import { createHash, generateKeyPairSync, type KeyObject, sign, webcrypto, X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { AsnConvert, OctetString } from '@peculiar/asn1-schema'
 import { BasicConstraints, Certificate, ExtendedKeyUsage, Extension, Extensions, Validity } from '@peculiar/asn1-x509'
+import { createResponseSigningController } from '../../../src/transport/responseSigning/controller'
+import stagingRoot from '../../../src/transport/responseSigning/staging-root.json'
+import { bundledRootsForEndpoint } from '../../../src/transport/responseSigning/trustRoots'
 import {
   buildSigningTranscript,
   decodeBase64,
+  parseCertificate,
   sha256,
   validateSigningRequest,
+  verifyChild,
   verifyResponse,
 } from '../../../src/transport/responseSigning/verification'
 import {
@@ -334,6 +339,23 @@ describe('certificate profile (synthetic re-signed chains)', () => {
     accepts({ leaf: [eku(FFE_EKU), keyUsage('03020780')] }))
   test('nonminimal leaf KeyUsage digitalSignature (03 03 00 80 00) is rejected', () =>
     rejects({ leaf: [eku(FFE_EKU), keyUsage('0303008000')] }))
+  const basicDer = (hex: string) =>
+    new Extension({ extnID: '2.5.29.19', critical: true, extnValue: new OctetString(Buffer.from(hex, 'hex')) })
+  test('leaf basicConstraints with an explicit default cA FALSE (30 03 01 01 00) is rejected', () =>
+    rejects({ leaf: [eku(FFE_EKU), basicDer('3003010100')] }))
+  test('non-critical leaf basicConstraints is rejected', () =>
+    rejects({ leaf: [eku(FFE_EKU), ext('2.5.29.19', false, new BasicConstraints({ cA: false }))] }))
+  test('nonminimal pinned root KeyUsage (03 03 01 06 00) is rejected', () =>
+    rejects({
+      root: [
+        caBasic(2),
+        new Extension({
+          extnID: '2.5.29.15',
+          critical: true,
+          extnValue: new OctetString(Buffer.from('0303010600', 'hex')),
+        }),
+      ],
+    }))
 
   test('intermediate pathLen above its index is accepted', () =>
     accepts({ intermediates: [[caBasic(5)], [caBasic(1)]] }))
@@ -385,6 +407,104 @@ describe('certificate profile (synthetic re-signed chains)', () => {
         nodes.leaf = forge(templates.leaf, other.intermediates[0], [eku(FFE_EKU)], [], 3 * 24 * 3600)
       })
     ).rejects.toThrow('invalid-certificate')
+  })
+})
+
+/**
+ * The server rotates leaves (previous, current, next) and renews intermediates. Each response carries its own
+ * leaf and chain, and the client pins only the root. No leaf or intermediate identity is pinned or cached.
+ */
+describe('rotation under one pinned root', () => {
+  const rotation: CredentialName[] = ['two-intermediates', 'rotated-lower-intermediate', 'one-intermediate']
+  test('the rotation fixtures use different leaves and different lower intermediates', () => {
+    const credentials = rotation.map(loadCredential)
+    expect(new Set(credentials.map((c) => c.leafBase64)).size).toBe(rotation.length)
+    expect(new Set(credentials.map((c) => c.intermediatesBase64[0])).size).toBe(rotation.length)
+  })
+  test('verifyResponse accepts each rotated leaf, in any order', async () => {
+    for (const name of [...rotation, ...[...rotation].reverse()]) {
+      const request = signingRequest()
+      const response = signedResponse(request, loadCredential(name))
+      await expect(verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)).resolves.toEqual({
+        expiresAt: response.expiresAt,
+        verifiedAt: FIXTURE_NOW,
+      })
+    }
+  })
+  test('one controller accepts a new leaf after an earlier leaf, then the earlier leaf again', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW * 1000)
+    try {
+      const signing = createResponseSigningController(
+        { mode: 'required', trustedRootCertificates: [ROOT_A] },
+        { site: 'datad0g.com' }
+      )!
+      for (const name of ['two-intermediates', 'rotated-lower-intermediate', 'two-intermediates'] as const) {
+        const request = signing.prepare(
+          'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=staging',
+          { 'content-type': 'application/vnd.api+json', 'dd-client-token': 'fixture-token' },
+          '{"data":{}}'
+        )!
+        const signed = signedResponse(request, loadCredential(name))
+        const result = await signing.read(
+          new Response(Buffer.from(signed.body), { status: 200, headers: signed.headers }),
+          request
+        )
+        expect(result.proof).toEqual({ expiresAt: signed.expiresAt, verifiedAt: FIXTURE_NOW })
+      }
+    } finally {
+      jest.restoreAllMocks()
+    }
+  })
+})
+
+describe('bundled trust anchor', () => {
+  const STAGING_ROOT_SHA256 = '0e469f3cecc9cd51fd64373879636540512d56e99eecd70361c78b98c47ea934'
+  test('the staging root is the verified Datadog Customer Signing Root CA - staging', () => {
+    const der = Buffer.from(stagingRoot.certificateDerBase64, 'base64')
+    expect(createHash('sha256').update(der).digest('hex')).toBe(STAGING_ROOT_SHA256)
+    expect(stagingRoot.sha256).toBe(STAGING_ROOT_SHA256)
+    const certificate = new X509Certificate(der)
+    expect(certificate.subject).toBe('CN=Datadog Customer Signing Root CA - staging')
+    expect(certificate.issuer).toBe(certificate.subject)
+    expect(certificate.ca).toBe(true)
+    expect(certificate.checkIssued(certificate)).toBe(true)
+    expect(certificate.verify(certificate.publicKey)).toBe(true)
+  })
+  test('the staging endpoint bundles exactly the staging root; other endpoints bundle no root', () => {
+    expect(bundledRootsForEndpoint(new URL('https://preview.ff-cdn.datad0g.com/precompute-assignments'))).toEqual([
+      stagingRoot.certificateDerBase64,
+    ])
+    for (const url of [
+      'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
+      'https://preview.ff-cdn.datadoghq.eu/precompute-assignments',
+      'https://proxy.test/assign',
+    ])
+      expect(bundledRootsForEndpoint(new URL(url))).toEqual([])
+  })
+  test('the real us1.staging DC intermediate links to the bundled root under the client profile', async () => {
+    const pem = readFileSync(join(__dirname, 'chain-fixtures/staging-us1-dc-intermediate.pem'), 'utf8')
+    const dcDer = new Uint8Array(Buffer.from(pem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s+/g, ''), 'base64'))
+    const root = parseCertificate(decodeBase64(stagingRoot.certificateDerBase64, 4096), 'anchor')
+    // The DC intermediate is the upper intermediate (index 1): cluster intermediate (0) <- DC (1) <- root.
+    const dc = parseCertificate(dcDer, 'intermediate', 1)
+    expect(root.pathLength).toBe(2)
+    expect(dc.pathLength).toBe(1)
+    await expect(verifyChild(dc, root)).resolves.toBeUndefined()
+    // Another anchor does not issue it.
+    await expect(verifyChild(dc, parseCertificate(decodeBase64(ROOT_A, 4096), 'anchor'))).rejects.toThrow(
+      'invalid-certificate'
+    )
+  })
+  test('test roots are not bundled', () => {
+    expect(stagingRoot.certificateDerBase64).not.toBe(ROOT_A)
+    expect(stagingRoot.certificateDerBase64).not.toBe(ROOT_B)
+  })
+  test('a test-CA chain does not verify against the staging root', async () => {
+    const request = signingRequest()
+    const response = signedResponse(request, loadCredential('two-intermediates'))
+    await expect(verifyResponse(request, response, [stagingRoot.certificateDerBase64], FIXTURE_NOW)).rejects.toThrow(
+      'invalid-certificate'
+    )
   })
 })
 

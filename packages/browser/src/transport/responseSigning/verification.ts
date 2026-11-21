@@ -234,7 +234,19 @@ export function ecdsaSignature(der: Uint8Array): Uint8Array {
   return result
 }
 
-interface ParsedCertificate {
+/**
+ * X.690 11.2.2: a DER named-bit list omits every trailing zero bit. The schema serializer keeps the input
+ * bytes, so check minimality directly: the lowest bit kept is set, or the list is empty.
+ */
+function minimalNamedBits(der: Uint8Array): boolean {
+  if (der.length < 3 || der[0] !== 3 || der[1] !== der.length - 2) return false
+  const unused = der[2]
+  if (der.length === 3) return unused === 0
+  const last = der[der.length - 1]
+  return unused <= 7 && ((last >> unused) & 1) === 1
+}
+
+export interface ParsedCertificate {
   certificate: Certificate
   notBefore: number
   notAfter: number
@@ -243,8 +255,15 @@ interface ParsedCertificate {
   /** Decoded basicConstraints pathLenConstraint, when present. */
   pathLength?: number
 }
-/** `index` is the intermediate position: 0 issued the leaf. It is ignored for other roles. */
-function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anchor', index = 0): ParsedCertificate {
+/**
+ * `index` is the intermediate position: 0 issued the leaf. It is ignored for other roles.
+ * Exported for tests only; it is not part of the package entry points.
+ */
+export function parseCertificate(
+  der: Uint8Array,
+  role: 'leaf' | 'intermediate' | 'anchor',
+  index = 0
+): ParsedCertificate {
   try {
     checkDer(der)
     const certificate = AsnConvert.parse(buffer(der), Certificate, {
@@ -309,14 +328,21 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
       usage = extensions.get('2.5.29.15'),
       eku = extensions.get('2.5.29.37')
     let pathLength: number | undefined
-    if (role === 'anchor' && basic) {
-      // Only the optional anchor pathLenConstraint is read here, for the chain-length check.
-      const constraints = parseDer(new Uint8Array(basic.extnValue.buffer), BasicConstraints)
-      pathLength = constraints.pathLenConstraint
+    if (role === 'anchor') {
+      // The anchor pathLenConstraint is read for the chain-length check. Present values must be canonical DER.
+      if (basic) pathLength = parseDer(new Uint8Array(basic.extnValue.buffer), BasicConstraints).pathLenConstraint
+      if (usage) {
+        const keyUsageDer = new Uint8Array(usage.extnValue.buffer)
+        parseDer(keyUsageDer, KeyUsage)
+        requireCondition(minimalNamedBits(keyUsageDer), 'invalid-certificate')
+      }
     }
     if (role !== 'anchor') {
       requireCondition(basic?.critical && usage?.critical, 'invalid-certificate')
-      const constraints = parseDer(new Uint8Array(basic.extnValue.buffer), BasicConstraints)
+      const basicDer = new Uint8Array(basic.extnValue.buffer)
+      // A leaf basicConstraints is exactly the empty SEQUENCE (30 00): cA FALSE is the omitted default.
+      requireCondition(role !== 'leaf' || equal(basicDer, new Uint8Array([48, 0])), 'invalid-certificate')
+      const constraints = parseDer(basicDer, BasicConstraints)
       pathLength = constraints.pathLenConstraint
       // Decode pathLenConstraint; never compare fixed bytes. Intermediate i has i CAs below it, so pathLen >= i.
       requireCondition(
@@ -390,7 +416,8 @@ async function verifySignature(key: CryptoKey, signature: Uint8Array, bytes: Uin
     buffer(bytes)
   )
 }
-async function verifyChild(child: ParsedCertificate, parent: ParsedCertificate): Promise<void> {
+/** Exported for tests only; it is not part of the package entry points. */
+export async function verifyChild(child: ParsedCertificate, parent: ParsedCertificate): Promise<void> {
   requireCondition(
     equal(
       AsnConvert.serialize(child.certificate.tbsCertificate.issuer),

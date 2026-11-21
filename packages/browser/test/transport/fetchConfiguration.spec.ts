@@ -1095,7 +1095,10 @@ describe('createFlagsConfigurationFetcher', () => {
 
       // jsdom lacks WebCrypto, so prepare and most reads are stubbed; admit, the gate under test, runs for real.
       const requiredSigning = () => {
-        const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: ['test-root'] })!
+        const signing = createResponseSigningController(
+          { mode: 'required', trustedRootCertificates: ['test-root'] },
+          { site: 'datad0g.com' }
+        )!
         jest
           .spyOn(signing, 'prepare')
           .mockReturnValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })

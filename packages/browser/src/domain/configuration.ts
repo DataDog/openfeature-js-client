@@ -18,6 +18,7 @@ import {
   type ResponseSigningConfiguration,
   type ResponseSigningController,
 } from '../transport/responseSigning/controller'
+import { isSigningSite } from '../transport/responseSigning/trustRoots'
 
 export interface EvaluationTelemetryOptOutConfiguration {
   /**
@@ -246,13 +247,15 @@ export function validateAndBuildFlaggingConfiguration(
   const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)
   if (!trackingConfiguration) {
     // Invalid ordinary configuration must never erase a requested required-signing policy.
-    if (initConfiguration.responseSigning?.mode === 'required')
+    if (initConfiguration.responseSigning?.mode === 'required' && isSigningSite(initConfiguration.site))
       throw new Error('Required response signing needs valid provider configuration')
     return
   }
 
   const snapshot =
-    initConfiguration.responseSigning && initConfiguration.responseSigning.mode !== 'off'
+    initConfiguration.responseSigning &&
+    initConfiguration.responseSigning.mode !== 'off' &&
+    isSigningSite(initConfiguration.site)
       ? { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
       : initConfiguration
   const responseSigning = createResponseSigningController(

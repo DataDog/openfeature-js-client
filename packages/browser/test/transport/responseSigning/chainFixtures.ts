@@ -153,7 +153,7 @@ export function signingRequest(url = 'https://assignments.example.test/precomput
 
 /** Sign a synthetic 200 response with the edge's v1 proof headers. */
 export function signedResponse(
-  request: ReturnType<typeof signingRequest>,
+  request: { url: string; method: string; headers: Headers; body: Uint8Array },
   signer: { privateKey: KeyObject; leafBase64: string; intermediatesBase64: string[] },
   now = FIXTURE_NOW,
   body: Uint8Array = new Uint8Array(Buffer.from('{"data":{"attributes":{"flags":{}}}}'))
