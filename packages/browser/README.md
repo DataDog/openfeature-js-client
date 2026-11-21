@@ -110,7 +110,10 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
-### Response signing
+### Response signing (experimental)
+
+Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be
+removed in a minor release, based on customer feedback. The option is `experimentalResponseSigning`.
 
 The SDK does not send `X-stream` in any mode. The edge selects the transport. When the edge signs a response,
 it buffers that response itself. A staging edge without this buffering returns no proof:
@@ -136,7 +139,7 @@ const provider = new DatadogProvider({
   clientToken: '<client-token>',
   site: 'datad0g.com',
   env: 'staging',
-  responseSigning: { mode: 'observe' },
+  experimentalResponseSigning: { mode: 'observe' },
 })
 ```
 

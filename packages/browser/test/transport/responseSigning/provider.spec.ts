@@ -99,7 +99,7 @@ afterEach(async () => {
 function provider(mode: 'off' | 'observe' | 'required', extra: Partial<FlaggingInitConfiguration> = {}) {
   const result = new DatadogProvider({
     ...defaultOptions,
-    responseSigning: { mode, trustedRootCertificates: roots },
+    experimentalResponseSigning: { mode, trustedRootCertificates: roots },
     ...extra,
   })
   providers.push(result)
@@ -185,7 +185,10 @@ test('off preserves ordinary headers/redirect behavior and performs no crypto', 
 test('required needs a local anchor for a destination without a bundled root, before any network operation', () => {
   global.fetch = jest.fn()
   expect(() =>
-    provider('required', { flaggingProxy: 'https://proxy.test/assign', responseSigning: { mode: 'required' } })
+    provider('required', {
+      flaggingProxy: 'https://proxy.test/assign',
+      experimentalResponseSigning: { mode: 'required' },
+    })
   ).toThrow('locally trusted root')
   expect(global.fetch).not.toHaveBeenCalled()
 })
@@ -210,7 +213,7 @@ test.each([
     provider('required', {
       site: 'datad0g.com',
       flaggingProxy,
-      responseSigning: { mode: 'required' },
+      experimentalResponseSigning: { mode: 'required' },
     })
   ).toThrow('locally trusted root')
 })
@@ -226,7 +229,7 @@ test.each(['provider', 'fetch', 'factory'] as const)(
       ...defaultOptions,
       site: 'datad0g.com' as const,
       env: 'staging',
-      responseSigning: { mode: 'observe' as const },
+      experimentalResponseSigning: { mode: 'observe' as const },
     }
     if (entry === 'provider') await provider('observe', options).initialize(context)
     else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
@@ -278,7 +281,7 @@ describe('staging site gate', () => {
     const optedIn = await send(entry, {
       ...defaultOptions,
       ...site,
-      responseSigning: { mode, trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode, trustedRootCertificates: roots },
     })
     expect(optedIn.url).toBe(ordinary.url)
     // AbortSignal instances and the per-provider diagnostics instance ID differ; every other field is equal.
@@ -314,7 +317,7 @@ describe('staging site gate', () => {
       ...defaultOptions,
       ...site,
       initialFlagsConfiguration: undefined,
-      responseSigning: { mode: 'required' as const, trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode: 'required' as const, trustedRootCertificates: roots },
     }
     const attempts: Array<() => Promise<unknown>> = []
     let subject: DatadogProvider | undefined
@@ -352,7 +355,7 @@ describe('staging site gate', () => {
   test('the unsupported-site error says staging only and how to fix it', () => {
     expect(UNSUPPORTED_SITE_MESSAGE).toBe(
       'Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging ' +
-        "site (datad0g.com). Production support comes in a later release. Remove responseSigning mode 'required', or " +
+        "site (datad0g.com). Production support comes in a later release. Remove experimentalResponseSigning mode 'required', or " +
         "use 'observe'."
     )
   })
@@ -386,7 +389,7 @@ describe('staging site gate', () => {
           ...defaultOptions,
           site: 'datadoghq.com',
           clientToken: '',
-          responseSigning: { mode: 'required' },
+          experimentalResponseSigning: { mode: 'required' },
         })
     ).not.toThrow('Required response signing')
   })
@@ -395,7 +398,7 @@ describe('staging site gate', () => {
     async (entry, mode) => {
       const { init } = await send(entry, {
         ...defaultOptions,
-        responseSigning: { mode, trustedRootCertificates: roots },
+        experimentalResponseSigning: { mode, trustedRootCertificates: roots },
       }).catch(() => ({ init: (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit }))
       const headers = new Headers(init.headers)
       expect(headers.get(SIGNING_VERSION_HEADER)).toBe('1')
@@ -403,10 +406,25 @@ describe('staging site gate', () => {
       expect(Object.keys(init.headers ?? {}).some((key) => key.toLowerCase() === 'x-stream')).toBe(false)
     }
   )
+  test.each(entries.flatMap((entry) => (['observe', 'required'] as const).map((mode) => [entry, mode] as const)))(
+    '%s: the old responseSigning key in %s mode has no effect',
+    async (entry, mode) => {
+      const { init } = await send(entry, {
+        ...defaultOptions,
+        // No alias: the experimental option is the only signing opt-in.
+        ...({ responseSigning: { mode, trustedRootCertificates: roots } } as unknown as FlaggingInitConfiguration),
+      })
+      const headers = new Headers(init.headers)
+      expect(headers.get(SIGNING_VERSION_HEADER)).toBeNull()
+      expect(headers.get(SIGNING_NONCE_HEADER)).toBeNull()
+      expect(headers.get('x-dd-feature-flags-capabilities') ?? '').not.toContain('response-signing-v1')
+      expect(init.redirect).toBeUndefined()
+    }
+  )
   test('the staging site sends the opt-in request headers', async () => {
     const { url, init } = await send('fetch', {
       ...defaultOptions,
-      responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
     })
     expect(String(url)).toContain('https://preview.ff-cdn.datad0g.com/precompute-assignments')
     const headers = new Headers(init.headers)
@@ -420,7 +438,7 @@ describe('staging site gate', () => {
     const nonces = new Set<string | null>()
     const fetcher = createFlagsConfigurationFetcher({
       ...defaultOptions,
-      responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
     })
     global.fetch = jest.fn().mockResolvedValue(unsigned())
     for (let i = 0; i < 3; i++) await fetcher(context)
@@ -435,7 +453,7 @@ test('the standalone fetcher honors a proxy override when selecting trust', () =
       ...defaultOptions,
       site: 'datad0g.com',
       flaggingProxy: 'https://proxy.test/assign',
-      responseSigning: { mode: 'required' },
+      experimentalResponseSigning: { mode: 'required' },
     })
   ).toThrow('locally trusted root')
 })
@@ -446,7 +464,7 @@ test.each(['observe', 'required'] as const)(
     const subject = provider(mode, {
       customHeaders: { 'dd-client-token': 'effective-token' },
       flaggingProxy: 'https://proxy.test/assign?marker=a%2Fb',
-      responseSigning: { mode, trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode, trustedRootCertificates: roots },
     })
     await subject.initialize(context)
     expect(evaluation(subject)).toBe(true)
@@ -467,7 +485,7 @@ test.each(['observe', 'required'] as const)(
 test('observe accepts unsigned and tampered ordinary responses without evaluation errors', async () => {
   global.fetch = jest.fn().mockResolvedValue(unsigned())
   const subject = provider('observe', {
-    responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+    experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
   })
   const errors = jest.fn()
   subject.events.addHandler(ProviderEvents.Error, errors)
@@ -490,7 +508,7 @@ test('observe accepts unsigned and tampered ordinary responses without evaluatio
 test.each([401, 403, 500])('observe does not turn HTTP %i into a signing success', async (status) => {
   global.fetch = jest.fn().mockResolvedValue(response('{}', new Headers(), status))
   const subject = provider('observe', {
-    responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+    experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
   })
   await expect(subject.initialize(context)).rejects.toThrow('Failed to fetch flag configuration')
 })
@@ -526,7 +544,7 @@ test.each(['required', 'observe'] as const)(
   async (mode) => {
     global.fetch = jest.fn(signed)
     const subject = provider(mode, {
-      responseSigning: { mode, trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode, trustedRootCertificates: roots },
     })
     await subject.initialize(context)
     const resolve = () => subject.resolveBooleanEvaluation('critical', false, {}, logger)
@@ -754,7 +772,7 @@ test('direct fetch opt-in verifies and rejects unsupported HTTP requests locally
       ...defaultOptions,
       env: 'production',
       context,
-      responseSigning: { mode: 'required', trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
     })
   ).resolves.toHaveProperty('precomputed')
   const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: roots }, STAGING)!
@@ -780,7 +798,7 @@ test('direct fetch combines flag selection with required response signing', asyn
       env: 'production',
       context,
       flagSelection: { tags: [' beta ', 'beta'], keyPatterns: ['critical*'] },
-      responseSigning: { mode: 'required', trustedRootCertificates: roots },
+      experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
     })
   ).resolves.toHaveProperty('precomputed')
   expect(global.fetch).toHaveBeenCalledTimes(1)
@@ -789,7 +807,7 @@ test('direct fetch combines flag selection with required response signing', asyn
 test('observe retains network availability without WebCrypto; required fails before fetch', async () => {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined })
   global.fetch = jest.fn().mockResolvedValue(unsigned())
-  const observer = provider('observe', { responseSigning: { mode: 'observe' } })
+  const observer = provider('observe', { experimentalResponseSigning: { mode: 'observe' } })
   await observer.initialize(context)
   expect(evaluation(observer)).toBe(true)
   expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBeNull()
@@ -800,7 +818,7 @@ test('observe retains network availability without WebCrypto; required fails bef
 
 test('observe without a provisioned anchor accepts responses and required never promotes its cached entry', async () => {
   global.fetch = jest.fn(signed)
-  const observer = provider('observe', { responseSigning: { mode: 'observe' } })
+  const observer = provider('observe', { experimentalResponseSigning: { mode: 'observe' } })
   await observer.initialize(context)
   expect(evaluation(observer)).toBe(true)
   await flush()
@@ -858,7 +876,7 @@ test('direct required fetch binds admission to the original nested context acros
     ...defaultOptions,
     env: 'production',
     context: mutable,
-    responseSigning: { mode: 'required', trustedRootCertificates: roots },
+    experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
   })
   mutable.targetingKey = 'after'
   mutable.nested.plan = 'enterprise'
@@ -878,7 +896,7 @@ test.each(['observe', 'required'] as const)(
         ...defaultOptions,
         env: 'production',
         context,
-        responseSigning: { mode, trustedRootCertificates: roots },
+        experimentalResponseSigning: { mode, trustedRootCertificates: roots },
       })
     ).rejects.toThrow('redirects')
     expect(global.fetch).toHaveBeenCalledTimes(1)
@@ -893,7 +911,7 @@ test('observe rejects redirects even when unavailable crypto prevented forming a
       ...defaultOptions,
       env: 'production',
       context,
-      responseSigning: { mode: 'observe' },
+      experimentalResponseSigning: { mode: 'observe' },
     })
   ).rejects.toThrow('redirects')
   expect(global.fetch).toHaveBeenCalledTimes(1)
@@ -906,7 +924,7 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
       provider('required', {
         clientToken: '',
         initialFlagsConfiguration: initialFlagsConfiguration as any,
-        responseSigning: { mode: 'required', trustedRootCertificates },
+        experimentalResponseSigning: { mode: 'required', trustedRootCertificates },
       })
     ).toThrow('valid provider configuration')
   }
@@ -1000,7 +1018,7 @@ describe('Date-valued signing contexts', () => {
           ...defaultOptions,
           env: 'production',
           context: input,
-          responseSigning: { mode, trustedRootCertificates: roots },
+          experimentalResponseSigning: { mode, trustedRootCertificates: roots },
         })
       }
       const init = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
@@ -1031,7 +1049,7 @@ describe('Date-valued signing contexts', () => {
         ...defaultOptions,
         env: 'production',
         context: input,
-        responseSigning: { mode, trustedRootCertificates: roots },
+        experimentalResponseSigning: { mode, trustedRootCertificates: roots },
       })
       await started
       input.joined.setTime(10000)
@@ -1186,7 +1204,7 @@ describe('response signing with assignment authorization', () => {
         ...defaultOptions,
         env: 'production',
         context: tokenContext,
-        responseSigning: { mode: 'required', trustedRootCertificates: roots },
+        experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
       })
       expect(config.precomputed?.context).not.toHaveProperty('dd_assignment_token')
     }
@@ -1231,7 +1249,7 @@ describe('response signing with assignment authorization', () => {
         ...defaultOptions,
         env: 'production',
         context: { ...context, dd_assignment_token: token },
-        responseSigning: { mode: 'observe', trustedRootCertificates: roots },
+        experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
       })
     ).rejects.toThrow('Assignment response is not valid JSON')
   })
@@ -1264,7 +1282,8 @@ describe('missing proof on an opted-in staging response (credential cutover)', (
       ),
   }
   // The bundled staging root is selected from the staging endpoint; no explicit roots are configured.
-  const staging = (mode: 'observe' | 'required') => provider(mode, { debugMode: true, responseSigning: { mode } })
+  const staging = (mode: 'observe' | 'required') =>
+    provider(mode, { debugMode: true, experimentalResponseSigning: { mode } })
   test.each(Object.keys(responses) as Array<keyof typeof responses>)('required fails closed with %s', async (kind) => {
     global.fetch = jest.fn().mockResolvedValue(responses[kind]())
     const subject = staging('required')

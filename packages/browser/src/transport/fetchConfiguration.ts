@@ -90,7 +90,11 @@ export interface PrecomputedConfigurationFetchOptions
    * A selection over a limit is not sent, and the full configuration is loaded.
    */
   flagSelection?: FlagSelection
-  responseSigning?: ResponseSigningConfiguration
+  /**
+   * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+   * @experimental
+   */
+  experimentalResponseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -153,7 +157,7 @@ export async function fetchPrecomputedConfiguration(
     options,
     selection,
     createResponseSigningController(
-      options.responseSigning,
+      options.experimentalResponseSigning,
       {
         site: requestOptions.site,
         flaggingProxy: requestOptions.flaggingProxy,
@@ -406,7 +410,7 @@ export function createFlagsConfigurationFetcher(
 ) {
   const signing =
     resolvedSigning === undefined
-      ? createResponseSigningController(initConfiguration.responseSigning, {
+      ? createResponseSigningController(initConfiguration.experimentalResponseSigning, {
           site: initConfiguration.site,
           flaggingProxy: initConfiguration.flaggingProxy,
           env: initConfiguration.env,

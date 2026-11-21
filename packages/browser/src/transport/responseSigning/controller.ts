@@ -23,15 +23,25 @@ import {
 
 export { signingContextKey } from './context'
 
+/**
+ * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+ * @experimental
+ */
 export type ResponseSigningMode = 'off' | 'observe' | 'required'
 
 /** Required signing on a site without a bundled root and EKU fails closed with this message. */
 export const UNSUPPORTED_SITE_MESSAGE =
   `Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging site ` +
-  `(${SIGNING_SITE}). Production support comes in a later release. Remove responseSigning mode 'required', or use 'observe'.`
+  `(${SIGNING_SITE}). Production support comes in a later release. Remove experimentalResponseSigning mode 'required', or use 'observe'.`
 const OBSERVE_UNSUPPORTED_SITE_MESSAGE =
   `This SDK version supports response signing only on the Datadog staging site (${SIGNING_SITE}). ` +
   `Production support comes in a later release. Flags are not verified, and requests are sent without signing.`
+/**
+ * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+ *
+ * Staging only (`site: 'datad0g.com'`); production is not supported yet.
+ * @experimental
+ */
 export interface ResponseSigningConfiguration {
   /**
    * Default: off. Observe accepts ordinary valid responses even when verification fails.
@@ -57,7 +67,7 @@ export function createResponseSigningController(
   // Trust metadata is emitted below from the roots resolved by the operational path.
   debug.event('signing.configured', () => ({ mode }))
   if (!['off', 'observe', 'required'].includes(mode)) {
-    debug.event('init.failed', () => ({ field: 'responseSigning.mode', reason: 'invalid_signing_mode' }))
+    debug.event('init.failed', () => ({ field: 'experimentalResponseSigning.mode', reason: 'invalid_signing_mode' }))
     throw new Error('Invalid response signing mode')
   }
   if (mode === 'off') return undefined
@@ -81,7 +91,7 @@ export function createResponseSigningController(
   const roots = unsupportedSite ? [] : [...(options?.trustedRootCertificates ?? bundledRootsForEndpoint(endpoint))]
   if (roots.length > 4 || roots.some((root) => typeof root !== 'string' || root.length > 5464)) {
     debug.event('init.failed', () => ({
-      field: 'responseSigning.trustedRootCertificates',
+      field: 'experimentalResponseSigning.trustedRootCertificates',
       reason: 'invalid_trust_anchors',
     }))
     throw new Error('Invalid response signing trust anchors')
@@ -93,7 +103,7 @@ export function createResponseSigningController(
   }))
   if (mode === 'required' && !roots.length && !unsupportedSite) {
     debug.event('init.failed', () => ({
-      field: 'responseSigning.trustedRootCertificates',
+      field: 'experimentalResponseSigning.trustedRootCertificates',
       reason: 'missing_trusted_root',
     }))
     throw new Error('Required response signing needs a locally trusted root certificate')
