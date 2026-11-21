@@ -28,7 +28,7 @@ import {
   extractAssignmentToken,
   normalizeAssignmentToken,
 } from '../domain/assignment-token'
-import type { InternalFlaggingInitConfiguration } from '../domain/configuration'
+import type { FlaggingInitConfiguration } from '../domain/configuration'
 import {
   type ExperimentationOptOutConfiguration,
   getExperimentationOptOutMode,
@@ -39,11 +39,7 @@ import { debugFetch } from './debugFetch'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import { cloneSigningContext } from './responseSigning/context'
-import {
-  createResponseSigningController,
-  type ResponseSigningConfiguration,
-  type ResponseSigningController,
-} from './responseSigning/controller'
+import { type ResponseSigningController } from './responseSigning/controller'
 
 import { ResponseVerificationError } from './responseSigning/verification'
 
@@ -90,7 +86,6 @@ export interface PrecomputedConfigurationFetchOptions
    * A selection over a limit is not sent, and the full configuration is loaded.
    */
   flagSelection?: FlagSelection
-  responseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -148,21 +143,7 @@ export async function fetchPrecomputedConfiguration(
   const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
   if (error) reportDroppedFlagSelection(error)
   debug.event('configuration.selection', () => ({ requested: options.flagSelection, effective: selection, error }))
-  const requestOptions: ConfigurationRequestOptions = options
-  return requestPrecomputedConfiguration(
-    options,
-    selection,
-    createResponseSigningController(
-      options.responseSigning,
-      {
-        site: requestOptions.site,
-        flaggingProxy: requestOptions.flaggingProxy,
-        env: requestOptions.env,
-      },
-      debug
-    ),
-    debug
-  )
+  return requestPrecomputedConfiguration(options, selection, undefined, debug)
 }
 
 async function requestPrecomputedConfiguration(
@@ -398,12 +379,9 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
 }
 
 export function createFlagsConfigurationFetcher(
-  initConfiguration: InternalFlaggingInitConfiguration,
-  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
-    site: initConfiguration.site,
-    flaggingProxy: initConfiguration.flaggingProxy,
-    env: initConfiguration.env,
-  }),
+  initConfiguration: FlaggingInitConfiguration,
+  // Internal: response signing has no public option yet. Only tests pass a controller.
+  signing?: ResponseSigningController,
   debug: DebugLogger = NO_DEBUG
 ) {
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
