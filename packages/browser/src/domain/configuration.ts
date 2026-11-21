@@ -18,6 +18,7 @@ import {
   type ResponseSigningConfiguration,
   type ResponseSigningController,
 } from '../transport/responseSigning/controller'
+import { isSigningSite } from '../transport/responseSigning/trustRoots'
 
 export interface EvaluationTelemetryOptOutConfiguration {
   /**
@@ -98,8 +99,14 @@ export interface FlaggingInitConfiguration
    */
   initialFlagsConfiguration?: FlagsConfiguration
 
-  /** Opt-in assignment response signing. Default: off. */
-  responseSigning?: ResponseSigningConfiguration
+  /**
+   * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+   *
+   * Opt-in assignment response signing. Default: off. Staging only (`site: 'datad0g.com'`); production is not
+   * supported yet.
+   * @experimental
+   */
+  experimentalResponseSigning?: ResponseSigningConfiguration
 
   /**
    * Custom headers to add to the request to the Datadog API.
@@ -246,17 +253,19 @@ export function validateAndBuildFlaggingConfiguration(
   const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)
   if (!trackingConfiguration) {
     // Invalid ordinary configuration must never erase a requested required-signing policy.
-    if (initConfiguration.responseSigning?.mode === 'required')
+    if (initConfiguration.experimentalResponseSigning?.mode === 'required' && isSigningSite(initConfiguration.site))
       throw new Error('Required response signing needs valid provider configuration')
     return
   }
 
   const snapshot =
-    initConfiguration.responseSigning && initConfiguration.responseSigning.mode !== 'off'
+    initConfiguration.experimentalResponseSigning &&
+    initConfiguration.experimentalResponseSigning.mode !== 'off' &&
+    isSigningSite(initConfiguration.site)
       ? { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
       : initConfiguration
   const responseSigning = createResponseSigningController(
-    initConfiguration.responseSigning,
+    initConfiguration.experimentalResponseSigning,
     {
       clientToken: snapshot.clientToken,
       applicationId: snapshot.applicationId,
@@ -271,7 +280,7 @@ export function validateAndBuildFlaggingConfiguration(
   )
   return {
     responseSigning,
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning, debug),
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning ?? null, debug),
     ...trackingConfiguration,
   }
 }

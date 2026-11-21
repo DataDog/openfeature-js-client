@@ -90,7 +90,11 @@ export interface PrecomputedConfigurationFetchOptions
    * A selection over a limit is not sent, and the full configuration is loaded.
    */
   flagSelection?: FlagSelection
-  responseSigning?: ResponseSigningConfiguration
+  /**
+   * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+   * @experimental
+   */
+  experimentalResponseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -153,7 +157,7 @@ export async function fetchPrecomputedConfiguration(
     options,
     selection,
     createResponseSigningController(
-      options.responseSigning,
+      options.experimentalResponseSigning,
       {
         site: requestOptions.site,
         flaggingProxy: requestOptions.flaggingProxy,
@@ -399,13 +403,19 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
 
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
-  signing: ResponseSigningController | undefined = createResponseSigningController(initConfiguration.responseSigning, {
-    site: initConfiguration.site,
-    flaggingProxy: initConfiguration.flaggingProxy,
-    env: initConfiguration.env,
-  }),
+  // `null` means the caller already resolved signing to off. A default parameter also runs for an explicit
+  // `undefined`, which would build a second controller and repeat its warnings.
+  resolvedSigning?: ResponseSigningController | null,
   debug: DebugLogger = NO_DEBUG
 ) {
+  const signing =
+    resolvedSigning === undefined
+      ? createResponseSigningController(initConfiguration.experimentalResponseSigning, {
+          site: initConfiguration.site,
+          flaggingProxy: initConfiguration.flaggingProxy,
+          env: initConfiguration.env,
+        })
+      : (resolvedSigning ?? undefined)
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   try {

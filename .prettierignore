@@ -16,6 +16,6 @@ packages/node-server/index.d.ts
 packages/node-server/rules-based.d.ts
 packages/core/src/configuration/generated
 
-# Shared response-signing fixtures retain their independently pinned bytes.
-packages/browser/test/ffe-response-signing-data
-packages/browser/test/transport/responseSigning/key-usage-supplement.json
+# Shared response-signing fixtures are byte-for-byte copies of ffe-system-test-data.
+packages/browser/test/data/response-signing/v1/*.json
+packages/browser/test/data/response-signing/chain
