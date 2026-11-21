@@ -5,7 +5,7 @@
  * The chain tests use the test-CA-issued credentials in `chain-fixtures/` and synthetic chains
  * that change one certificate-profile rule at a time.
  *
- * The shared ffe-system-test-data v1 fixtures run from the pinned `ffe-response-signing-data` submodule.
+ * The shared ffe-system-test-data v1 fixtures run from the copies in `test/data/response-signing/v1`.
  */
 import { createHash, generateKeyPairSync, type KeyObject, sign, webcrypto } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -411,8 +411,8 @@ test('the independent transcript helper is self-consistent with the response hel
 })
 
 /**
- * Shared ffe-system-test-data response-signing v1 fixtures, from the pinned
- * `ffe-response-signing-data` submodule. Verifiers run `cases` only; `signing_cases` are for signers.
+ * Shared ffe-system-test-data response-signing v1 fixtures, copied byte for byte into
+ * `test/data/response-signing/v1` (source commit in its README.md). Verifiers run `cases` only; `signing_cases` are for signers.
  * A case `anchor_der_base64` overrides the file anchor. `rejection_reason` is a rule code, not a native
  * error message, so rejected cases assert only the rejection.
  */
@@ -427,7 +427,7 @@ describe('shared v1 fixtures', () => {
     request: { url: string; method: string; headers: [string, string][]; body_base64: string }
     response: { status: number; headers: [string, string][]; body_base64: string }
   }
-  const fixtureDirectory = join(__dirname, '../../ffe-response-signing-data/response-signing/v1')
+  const fixtureDirectory = join(__dirname, '../../data/response-signing/v1')
   const manifestRaw = readFileSync(join(fixtureDirectory, 'manifest.json'))
   const manifest = JSON.parse(manifestRaw.toString()) as {
     files: Record<string, { sha256: string; response_cases: number; accepted: number }>

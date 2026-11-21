@@ -14,10 +14,12 @@ Leaves are valid for 72 hours, so the tests inject `now` (`FIXTURE_NOW` in `chai
 `verification.spec.ts` covers the chain fixture table, the transcript, and synthetic chains
 that change one certificate-profile rule at a time.
 
-All six shared v1 suites come from the exact `ffe-system-test-data` revision pinned by
-`../../ffe-response-signing-data`. Initialize it with
-`git submodule update --init packages/browser/test/ffe-response-signing-data`
-from the repository root. CI checks out submodules and Dependabot proposes pin updates.
+`chain-fixtures/staging-us1-dc-intermediate.pem` is the public us1.staging DC intermediate.
+A test checks that it links to the bundled staging root under the client profile.
+
+All six shared v1 suites are byte-for-byte copies in `../../data/response-signing/v1`.
+They do not use a git submodule. That folder's `README.md` records the source
+`ffe-system-test-data` commit and the SHA-256 of each file, and shows how to refresh them.
 
 Run `yarn workspace @datadog/openfeature-browser test --runInBand test/transport/responseSigning/verification.spec.ts`.
 The verifier runs all 97 shared response cases: 77 core, four isolated-certificate,
@@ -26,7 +28,7 @@ It skips `signing_cases`, because they apply only to signers. A case
 `anchor_der_base64` replaces the file anchor for that case. Rejected cases assert
 only the rejection, because `rejection_reason` is a rule code and not a native error
 message. The test pins the upstream manifest hash and checks each file against the
-manifest, so byte changes require a deliberate pin update. The KeyUsage
+manifest, so byte changes require a deliberate copy from a new commit. The KeyUsage
 named-bit-list regression is a synthetic native test in `verification.spec.ts`.
 
 These files are test inputs and are not included in the published SDK. Loading
