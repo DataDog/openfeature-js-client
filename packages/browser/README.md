@@ -112,9 +112,9 @@ network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate t
 
 ### Response signing
 
-Signing-enabled requests set `X-stream: false` because whole-body proofs require buffered delivery.
-Both observe and required modes apply this override. Signing-off requests keep their ordinary transport selection.
-Custom proxies must forward this header and permit it in CORS preflights.
+The SDK does not send `X-stream` in any mode. The edge selects the transport. When the edge signs a response,
+it buffers that response itself. A staging edge without this buffering returns no proof:
+`required` then fails closed with `Response signing: missing-proof`, and `observe` accepts the response as unverified.
 
 Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
 assignments, or `required` to admit only verified responses. Existing authentication,
@@ -212,7 +212,7 @@ ordinary network and in-memory availability but cannot use its scoped persistent
 cache. Required mode fails locally.
 
 Off mode preserves ordinary transport and caching and performs no signing work.
-Signing covers complete buffered JSON responses in the same assignment request;
+Signing covers complete JSON responses in the same assignment request;
 it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
 or change the existing unsigned streaming protocol.
 

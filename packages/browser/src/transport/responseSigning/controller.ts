@@ -152,8 +152,7 @@ export function createResponseSigningController(
           if (semantic.has(lower) && seen.has(lower)) throw new ResponseVerificationError('unsupported-request')
           seen.add(lower)
         }
-        // Whole-body proofs require buffered delivery, regardless of the server rollout.
-        normalized.set('x-stream', 'false')
+        // No transport override: the edge buffers a response that it signs, so the SDK never sends X-stream.
         normalized.set(SIGNING_VERSION_HEADER, '1')
         normalized.set(SIGNING_NONCE_HEADER, hex(cryptoProvider().getRandomValues(new Uint8Array(16))))
         const capabilities =
@@ -166,7 +165,7 @@ export function createResponseSigningController(
         normalized.set('x-dd-feature-flags-capabilities', capabilities.sort().join(','))
         const request = { url, method: 'POST', headers: normalized, body: utf8(body) }
         validateSigningRequest(request)
-        logger.event('signing.prepared', () => ({ mode, noncePresent: true, version: 1, bufferedResponse: true }))
+        logger.event('signing.prepared', () => ({ mode, noncePresent: true, version: 1 }))
         return request
       } catch (error) {
         return failure(error, logger, 'request_preparation')

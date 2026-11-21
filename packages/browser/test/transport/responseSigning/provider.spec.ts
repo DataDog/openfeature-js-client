@@ -390,6 +390,19 @@ describe('staging site gate', () => {
         })
     ).not.toThrow('Required response signing')
   })
+  test.each(entries.flatMap((entry) => (['observe', 'required'] as const).map((mode) => [entry, mode] as const)))(
+    '%s on the staging site in %s mode never sends X-stream',
+    async (entry, mode) => {
+      const { init } = await send(entry, {
+        ...defaultOptions,
+        responseSigning: { mode, trustedRootCertificates: roots },
+      }).catch(() => ({ init: (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit }))
+      const headers = new Headers(init.headers)
+      expect(headers.get(SIGNING_VERSION_HEADER)).toBe('1')
+      expect(headers.has('x-stream')).toBe(false)
+      expect(Object.keys(init.headers ?? {}).some((key) => key.toLowerCase() === 'x-stream')).toBe(false)
+    }
+  )
   test('the staging site sends the opt-in request headers', async () => {
     const { url, init } = await send('fetch', {
       ...defaultOptions,
@@ -399,7 +412,7 @@ describe('staging site gate', () => {
     const headers = new Headers(init.headers)
     expect(headers.get(SIGNING_VERSION_HEADER)).toBe('1')
     expect(headers.get(SIGNING_NONCE_HEADER)).toMatch(/^[0-9a-f]{32}$/)
-    expect(headers.get('x-stream')).toBe('false')
+    expect(headers.get('x-stream')).toBeNull()
     expect(headers.get('x-dd-feature-flags-capabilities')?.split(',')).toContain('response-signing-v1')
     expect(init.redirect).toBe('error')
   })
@@ -442,7 +455,7 @@ test.each(['observe', 'required'] as const)(
     expect(new Headers(init.headers).get('dd-client-token')).toBe('effective-token')
     expect(new Headers(init.headers).get(SIGNING_NONCE_HEADER)).toMatch(/^[0-9a-f]{32}$/)
     expect(new Headers(init.headers).get(SIGNING_VERSION_HEADER)).toBe('1')
-    expect(new Headers(init.headers).get('x-stream')).toBe('false')
+    expect(new Headers(init.headers).get('x-stream')).toBeNull()
     expect(new Headers(init.headers).get('x-dd-feature-flags-capabilities')?.split(',')).toContain(
       'response-signing-v1'
     )
