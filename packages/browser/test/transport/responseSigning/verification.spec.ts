@@ -655,6 +655,27 @@ describe('shared v1 fixtures', () => {
       await expect(verifyResponse(request, response, [anchor], expires)).rejects.toThrow()
     })
   }
+  test('dd-service is not part of the signed request', async () => {
+    // The edge does not sign dd-service, so an accepted response must stay valid when the request carries it.
+    const suite = JSON.parse(readFileSync(join(fixtureDirectory, 'corpus.json')).toString()) as {
+      anchor_der_base64: string
+      cases: SharedCase[]
+    }
+    const vector = suite.cases.find((c) => c.expected_accept)!
+    const request = {
+      ...vector.request,
+      headers: new Headers([...vector.request.headers, ['dd-service', 'checkout']]),
+      body: decodeBase64(vector.request.body_base64, 1024 * 1024),
+    }
+    const response = {
+      ...vector.response,
+      headers: new Headers(vector.response.headers),
+      body: decodeBase64(vector.response.body_base64, 2 * 1024 * 1024),
+    }
+    await expect(
+      verifyResponse(request, response, [vector.anchor_der_base64 ?? suite.anchor_der_base64], vector.now)
+    ).resolves.toBeDefined()
+  })
 })
 
 describe('minimum leaf not-before revocation (draft wire)', () => {
