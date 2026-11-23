@@ -342,6 +342,31 @@ describe('DatadogProvider', () => {
       })
     })
 
+    it('deduplicates plain toJSON data and Date subclasses with the default serializer', async () => {
+      class NativeDate extends Date {}
+      const context = () => ({ targetingKey: 'user', profile: { toJSON: 'data' }, date: new NativeDate(0) })
+
+      await provider.onContextChange({}, context())
+      await provider.onContextChange({}, context())
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves custom Date serialization and refreshes when it changes', async () => {
+      const timestamp = (label: string) => Object.defineProperty(new Date(0), 'toISOString', { value: () => label })
+      const first = { targetingKey: 'user', date: timestamp('first') }
+      const next = { targetingKey: 'user', date: timestamp('next') }
+
+      await provider.onContextChange({}, first)
+      await provider.onContextChange(first, next)
+
+      expect(
+        fetchMock.mock.calls.map(
+          ([, request]) => JSON.parse(request.body).data.attributes.subject.targeting_attributes.date
+        )
+      ).toEqual(['"first"', '"next"'])
+    })
+
     it('should include RUM user properties in the configuration request', async () => {
       const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
       globalObject.DD_RUM = {
@@ -470,6 +495,72 @@ describe('DatadogProvider', () => {
       } finally {
         await provider.onClose()
       }
+    })
+
+    it('coalesces the same update submitted by a Reconciling listener', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const first = { targetingKey: 'ready' }
+      const next = { targetingKey: 'next' }
+      const initial = provider.initialize(first)
+      calls[0].resolve(makeFetchResponse(makeResponse('ready')))
+      await initial
+      let duplicate: Promise<void> | undefined
+      let called = false
+      provider.events.addHandler(ProviderEvents.Reconciling, () => {
+        if (!called) {
+          called = true
+          duplicate = provider.onContextChange(first, next)
+        }
+      })
+
+      const updating = provider.onContextChange(first, next)
+      for (const call of calls.slice(1)) call.resolve(makeFetchResponse(makeResponse('next')))
+      await Promise.all([updating, duplicate])
+      expect(mock).toHaveBeenCalledTimes(2)
+      expect(duplicate).toBe(updating)
+      await provider.onClose()
+    })
+
+    it('keeps the normalized assignment token out of enumerable provider state', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const token = 'synthetic.review.token'
+      const context = { targetingKey: 'user', dd_assignment_token: token }
+      const updating = provider.onContextChange({}, context)
+      expect(new Headers(mock.mock.calls[0][1].headers).get('DD-Assignment-Token')).toBe(token)
+      const getEnumerableValues = () =>
+        Object.values(provider).flatMap((value) =>
+          typeof value === 'object' && value !== null ? Object.values(value) : [value]
+        )
+      expect(getEnumerableValues()).not.toContain(token)
+      calls[0].resolve(makeFetchResponse(makeResponse('ready')))
+      await updating
+      expect(getEnumerableValues()).not.toContain(token)
+    })
+
+    it('shares the pending rejection with an equal context submitted synchronously by custom fetch', async () => {
+      const context = { targetingKey: 'user' }
+      let duplicate!: Promise<void>
+      let failFetch!: (error: Error) => void
+      const flagConfigurationFetch = jest.fn(() => {
+        duplicate = provider.onContextChange(context, { ...context })
+        return new Promise<Response>((_resolve, reject) => {
+          failFetch = reject
+        })
+      })
+      const provider = new DatadogProvider({ ...options, flagConfigurationFetch })
+
+      const original = provider.onContextChange({}, context)
+      const outcome = Promise.allSettled([original, duplicate])
+      const error = new Error('custom fetch failed')
+      failFetch(error)
+
+      expect(flagConfigurationFetch).toHaveBeenCalledTimes(1)
+      expect(await outcome).toEqual([
+        { status: 'rejected', reason: error },
+        { status: 'rejected', reason: error },
+      ])
     })
 
     it('coalesces equal pending credentials and supersedes the fetch when the credential changes', async () => {

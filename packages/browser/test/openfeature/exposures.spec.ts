@@ -1089,8 +1089,10 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch new configuration with same createdAt (cache should NOT be cleared)
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      // Fetch new configuration with the same createdAt and targeting attributes.
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
+      expect(configFetchCount).toBe(2)
 
       // Evaluate same flag - should not log again because cache was not cleared
       client.getStringValue('string-flag', 'default')

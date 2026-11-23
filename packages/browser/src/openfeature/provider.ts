@@ -152,7 +152,7 @@ export class DatadogProvider extends DatadogProviderBase {
    *    with a settled promise so aborted updates can finish.
    */
   private latestContextUpdate: Promise<void> = Promise.resolve()
-  private contextUpdate?: { key: string; assignmentToken: string | undefined; pending: boolean }
+  #contextUpdate: { key: string; assignmentToken: string | undefined; pending: boolean } | undefined
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
@@ -229,7 +229,7 @@ export class DatadogProvider extends DatadogProviderBase {
     if (!this.initializationStarted) {
       this.initializationStarted = true
       // A new lifecycle needs fresh initialization even if a context change ran before initialize.
-      if (!this.contextUpdate?.pending) this.contextUpdate = undefined
+      if (!this.#contextUpdate?.pending) this.#contextUpdate = undefined
       try {
         if (this.configuration) {
           this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
@@ -262,7 +262,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Diagnostic shutdown must not interrupt application shutdown.
     }
     // Aborted updates must not delegate to their own pending promise during shutdown.
-    this.contextUpdate = undefined
+    this.#contextUpdate = undefined
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
     try {
@@ -301,7 +301,7 @@ export class DatadogProvider extends DatadogProviderBase {
     let evaluationContext = signing ? cloneSigningContext(sanitizedContext) : sanitizedContext
     let key: string | undefined
     try {
-      const snapshot = signing ? evaluationContext : cloneSigningContext(sanitizedContext)
+      const snapshot = signing ? evaluationContext : cloneSigningContext(sanitizedContext, true)
       key = signingContextKey(snapshot)
       evaluationContext = snapshot
     } catch {
@@ -318,7 +318,7 @@ export class DatadogProvider extends DatadogProviderBase {
     }))
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
-    const previous = this.contextUpdate
+    const previous = this.#contextUpdate
     if (
       !this.closed &&
       key !== undefined &&
@@ -337,23 +337,12 @@ export class DatadogProvider extends DatadogProviderBase {
     // remove a boundary already established by a request or server rejection.
     this.assignmentSubjectIsolationRequired ||= assignmentToken !== undefined
 
-    if (this.status === ProviderStatus.NOT_READY) {
-      // we're initializing, no status changes necessary
-    } else {
-      debug.event('provider.state_changed', () => ({ previousState: this.status, state: ProviderStatus.RECONCILING }))
-      this.status = ProviderStatus.RECONCILING
-      this.events.emit(ProviderEvents.Reconciling)
-    }
-
-    // abort any previous setContext operation
-    this.contextUpdateAbortController.abort(
-      new DOMException('Flag configuration fetch superseded by a newer context update', 'AbortError')
-    )
+    const previousController = this.contextUpdateAbortController
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
     const update = key === undefined ? undefined : { key, assignmentToken, pending: true }
-    this.contextUpdate = update
+    this.#contextUpdate = update
     this.requestDiagnostics.accept(signal, trigger)
     bindDebugSignal(signal, debug)
     if (debug.enabled)
@@ -371,7 +360,17 @@ export class DatadogProvider extends DatadogProviderBase {
     // Important: OF SDK awaits for all onContextChange calls to exit
     // before marking the provider as ready. Make sure to respect
     // `signal`, so we don't block OF SDK unnecessarily.
-    this.latestContextUpdate = this.retrieveFlagsConfiguration(evaluationContext, { signal, assignmentToken })
+    // Publish the operation before synchronous event handlers or the custom fetch can reenter.
+    let startFetch!: () => void
+    const result = new Promise<Awaited<ReturnType<DatadogProvider['retrieveFlagsConfiguration']>>>(
+      (resolve, reject) => {
+        startFetch = () => {
+          if (signal.aborted) reject(signal.reason)
+          else resolve(this.retrieveFlagsConfiguration(evaluationContext, { signal, assignmentToken }))
+        }
+      }
+    )
+    const operation = result
       .then((result) =>
         // Preserve the existing timestamp-based reset for experiment reporting.
         // createdAt is a configuration timestamp, not an experiment revision.
@@ -475,7 +474,7 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
-            this.contextUpdate = undefined
+            this.#contextUpdate = undefined
             this.verificationError = error instanceof ResponseVerificationError ? error : undefined
             this.assignmentSubjectIsolationRequired ||=
               error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED
@@ -496,7 +495,20 @@ export class DatadogProvider extends DatadogProviderBase {
         }
       )
 
-    return this.latestContextUpdate
+    this.latestContextUpdate = operation
+    if (this.status === ProviderStatus.NOT_READY) {
+      // we're initializing, no status changes necessary
+    } else {
+      debug.event('provider.state_changed', () => ({ previousState: this.status, state: ProviderStatus.RECONCILING }))
+      this.status = ProviderStatus.RECONCILING
+      this.events.emit(ProviderEvents.Reconciling)
+    }
+
+    previousController.abort(
+      new DOMException('Flag configuration fetch superseded by a newer context update', 'AbortError')
+    )
+    startFetch()
+    return operation
   }
 
   /**
