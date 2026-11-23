@@ -192,10 +192,10 @@ Useful events:
 | `evaluation.completed`, `evaluation.trace`, `evaluation.returned` | Value/default origin, variant metadata, local-rule trace and OpenFeature hook result |
 | `exposure.*`, `tracking.policy`, `rum.*`                          | Eligibility, duplicates, opt-outs and handoff to RUM                                 |
 | `evaluation.aggregated`, `batch.*`, `upload.*`                    | Aggregation, admission, flush, intake acceptance, retry and drop                     |
-| `signing.*`, `authorization.*`                                    | Verification/admission, proof expiry, credential rejection and subject isolation     |
+| `authorization.*`                                                 | Credential rejection and subject isolation                                           |
 | `shutdown.*`                                                      | Close/cancellation and retained state                                                |
 
-Signing logs distinguish observe-mode continuation from required rejection and verified-memory fallback. Required signing retains bounded body reading; raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
+Raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
 
 `intake_accepted` means an HTTP success response; it does not prove downstream processing. `browser_queued` means
 `sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures
