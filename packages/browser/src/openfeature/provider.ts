@@ -47,7 +47,7 @@ import {
   validateAndBuildFlaggingConfiguration,
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
-import { cloneSigningContext } from '../transport/responseSigning/context'
+import { cloneSigningContext, signingContextKey } from '../transport/responseSigning/context'
 import { ResponseVerificationError } from '../transport/responseSigning/verification'
 import { toProviderErrorEvent } from './error-event'
 import {
@@ -152,6 +152,7 @@ export class DatadogProvider extends DatadogProviderBase {
    *    with a settled promise so aborted updates can finish.
    */
   private latestContextUpdate: Promise<void> = Promise.resolve()
+  private contextUpdate?: { key: string; assignmentToken: string | undefined; pending: boolean }
   private contextUpdateAbortController: AbortController = new AbortController()
 
   constructor(options: FlaggingInitConfiguration) {
@@ -227,6 +228,8 @@ export class DatadogProvider extends DatadogProviderBase {
   async initialize(context: EvaluationContext = {}): Promise<void> {
     if (!this.initializationStarted) {
       this.initializationStarted = true
+      // A new lifecycle needs fresh initialization even if a context change ran before initialize.
+      if (!this.contextUpdate?.pending) this.contextUpdate = undefined
       try {
         if (this.configuration) {
           this.flagEvaluationTransport = createFlagEvaluationTransport(this.configuration)
@@ -259,6 +262,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Diagnostic shutdown must not interrupt application shutdown.
     }
     // Aborted updates must not delegate to their own pending promise during shutdown.
+    this.contextUpdate = undefined
     this.latestContextUpdate = Promise.resolve()
     this.contextUpdateAbortController.abort()
     try {
@@ -293,9 +297,16 @@ export class DatadogProvider extends DatadogProviderBase {
       : targetingContext
     // RUM user attributes must never supply or restore an assignment credential.
     const { context: sanitizedContext } = extractAssignmentToken(effectiveContext)
-    const evaluationContext: EvaluationContext = this.configuration?.responseSigning
-      ? cloneSigningContext(sanitizedContext)
-      : sanitizedContext
+    const signing = this.configuration?.responseSigning
+    let evaluationContext = signing ? cloneSigningContext(sanitizedContext) : sanitizedContext
+    let key: string | undefined
+    try {
+      const snapshot = signing ? evaluationContext : cloneSigningContext(sanitizedContext)
+      key = signingContextKey(snapshot)
+      evaluationContext = snapshot
+    } catch {
+      // Let the regular fetch path handle values outside the supported context types.
+    }
     debug.event('context.accepted', () => ({
       rawContext: targetingContext,
       effectiveContext,
@@ -307,6 +318,19 @@ export class DatadogProvider extends DatadogProviderBase {
     }))
     // Apply telemetry admission before the ordinary assignment refresh completes.
     this.telemetryPolicy.setContext(evaluationContext)
+    const previous = this.contextUpdate
+    if (
+      !this.closed &&
+      key !== undefined &&
+      previous?.key === key &&
+      previous.assignmentToken === assignmentToken &&
+      (previous.pending ||
+        (this.status === ProviderStatus.READY &&
+          (signing?.mode !== 'required' || signing.isVerified(this.flagsConfiguration, evaluationContext))))
+    ) {
+      return this.latestContextUpdate
+    }
+
     this.requestedEvaluationContext = evaluationContext
     this.verificationError = undefined
     // Missing/unusable tokens preserve ordinary no-token behavior, but must not
@@ -328,6 +352,8 @@ export class DatadogProvider extends DatadogProviderBase {
     this.contextUpdateAbortController = new AbortController()
 
     const signal = this.contextUpdateAbortController.signal
+    const update = key === undefined ? undefined : { key, assignmentToken, pending: true }
+    this.contextUpdate = update
     this.requestDiagnostics.accept(signal, trigger)
     bindDebugSignal(signal, debug)
     if (debug.enabled)
@@ -373,6 +399,7 @@ export class DatadogProvider extends DatadogProviderBase {
           // call. We should update our state atomically here in a
           // single microtask (i.e., without any await/promise
           // scheduling).
+          if (update) update.pending = false
 
           if (
             this.configuration?.responseSigning?.mode === 'required' &&
@@ -448,6 +475,7 @@ export class DatadogProvider extends DatadogProviderBase {
             return this.latestContextUpdate
           } else {
             // Otherwise, this is a legitimate error
+            this.contextUpdate = undefined
             this.verificationError = error instanceof ResponseVerificationError ? error : undefined
             this.assignmentSubjectIsolationRequired ||=
               error instanceof GeneralError && error.message === ASSIGNMENT_AUTHORIZATION_FAILED

@@ -32,3 +32,8 @@ test('preserves invalid dates in detached snapshots without confusing them with 
   expect(Number.isNaN((copy.date as Date).getTime())).toBe(true)
   expect(signingContextKey(copy)).not.toBe(signingContextKey({ date: null }))
 })
+
+test('distinguishes null and non-finite numbers in context keys', () => {
+  const keys = [null, NaN, Infinity, -Infinity].map((value) => signingContextKey({ nested: { value } }))
+  expect(new Set(keys).size).toBe(keys.length)
+})

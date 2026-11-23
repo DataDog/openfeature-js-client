@@ -34,6 +34,7 @@ async function run() {
   let online: DatadogProvider | undefined
   let core: DatadogCoreProvider | undefined
   let tracking: DatadogTrackingHooks | undefined
+  let refreshCount = 0
   const configure = async (consent: boolean) => {
     if (mode === 'rules') {
       const configuration = configurationFromString(JSON.stringify(rulesWire))
@@ -88,7 +89,7 @@ async function run() {
         }
       },
       refresh: async (consent: boolean) => {
-        if (online) await online.onContextChange(context, context)
+        if (online) await online.onContextChange(context, { ...context, dd_assignment_token: `test.${++refreshCount}` })
         else await configure(consent)
       },
       close: async () => {

@@ -368,7 +368,7 @@ describe('evaluation telemetry opt-out', () => {
     const context = { targetingKey: 'user', [attribute]: false }
     await OpenFeature.setProviderAndWait(domain, provider, context)
     const client = OpenFeature.getClient(domain)
-    const refresh = OpenFeature.setContext(domain, context)
+    const refresh = OpenFeature.setContext(domain, { ...context, country: 'CA' })
     const optOut = OpenFeature.setContext(domain, { ...context, [attribute]: true })
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
     expect(fetchAssignments).toHaveBeenCalledTimes(3)

@@ -37,6 +37,8 @@ export function cloneSigningContext(context: EvaluationContext): EvaluationConte
 /** A full context identity with distinct encodings for dates, arrays and objects. */
 export function signingContextKey(context: EvaluationContext): string {
   function canonical(value: EvaluationContextValue): unknown {
+    if (value === undefined) return ['undefined']
+    if (typeof value === 'number' && !Number.isFinite(value)) return ['number', String(value)]
     if (value === null || typeof value !== 'object') return value
     const time = dateTime(value)
     if (time !== undefined) return ['date', Number.isNaN(time) ? null : time]

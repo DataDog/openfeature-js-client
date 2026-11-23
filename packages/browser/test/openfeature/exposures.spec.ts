@@ -872,9 +872,9 @@ describe('Exposures End-to-End', () => {
       expect(firstValue).toBe('red')
       triggerBatch()
 
-      // Fetch new configuration (simulating a config update)
-      // This would typically happen automatically via polling, but we trigger it manually
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      // Rotate the credential while keeping the exposure context the same.
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
 
       // Evaluate same flag with second variation
       const secondValue = client.getStringValue('string-flag', 'default')
@@ -956,7 +956,8 @@ describe('Exposures End-to-End', () => {
       expect(getExposuresCalls()).toHaveLength(1)
 
       // Fetch the same assignment with a changed configuration timestamp.
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
 
       // Receiving configuration does not itself emit an exposure.
       expect(getExposuresCalls()).toHaveLength(1)

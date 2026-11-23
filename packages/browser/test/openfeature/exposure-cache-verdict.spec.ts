@@ -154,7 +154,8 @@ describe('exposure cache verdict', () => {
       }
       return Promise.resolve(precomputedResponse({ serialId: 1002 }))
     })
-    await provider.onContextChange(context, context)
+    const changedSerial = { ...context, dd_assignment_token: 'serial.token' }
+    await provider.onContextChange(context, changedSerial)
     expect(client.getBooleanDetails('holdout-flag', true).flagMetadata?.__dd_exposure_cache_hit).toBe(false)
     expect(client.getBooleanDetails('holdout-flag', true).flagMetadata?.__dd_exposure_cache_hit).toBe(true)
 
@@ -164,7 +165,7 @@ describe('exposure cache verdict', () => {
       }
       return Promise.resolve(precomputedResponse({ variationKey: 'treatment', variationValue: true }))
     })
-    await provider.onContextChange(context, context)
+    await provider.onContextChange(changedSerial, { ...context, dd_assignment_token: 'variant.token' })
     const changedVariant = client.getBooleanDetails('holdout-flag', true)
     expect(changedVariant.value).toBe(true)
     expect(changedVariant.flagMetadata?.__dd_exposure_cache_hit).toBe(false)
@@ -216,7 +217,7 @@ describe('exposure cache verdict', () => {
         })
       )
     })
-    await provider.onContextChange(context, context)
+    await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(client.getBooleanDetails('holdout-flag', true).flagMetadata?.__dd_exposure_cache_hit).toBe(true)
     triggerBatch()
     expect(exposureEvents()).toHaveLength(1)

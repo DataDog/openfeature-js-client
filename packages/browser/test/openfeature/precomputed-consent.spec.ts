@@ -100,7 +100,7 @@ describe.each([false, true])('browser consent (obfuscated: %s)', (obfuscated) =>
             finish = resolve
           })
       )
-      const refresh = provider.onContextChange(context, context)
+      const refresh = provider.onContextChange(context, { ...context, country: 'CA' })
       expect(provider.resolveBooleanEvaluation(flagKey, false, context, logger).flagMetadata?.[metadataKey]).toBe(
         consent
       )

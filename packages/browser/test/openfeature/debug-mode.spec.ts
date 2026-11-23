@@ -452,7 +452,7 @@ describe('browser debug-mode scenarios', () => {
     const value = provider()
     await value.initialize(context)
     fetch.mockRejectedValue(new TypeError('offline'))
-    await value.onContextChange(context, context)
+    await value.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(value.status).toBe(ProviderStatus.STALE)
     expect(events('cache.fallback').slice(-1)[0].details).toMatchObject({ source: 'memory', requestedContext: context })
     await expect(value.onContextChange(context, { targetingKey: 'another-user' })).rejects.toThrow('offline')

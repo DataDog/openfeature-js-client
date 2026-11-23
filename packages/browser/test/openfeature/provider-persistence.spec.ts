@@ -259,7 +259,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
   })
 
   describe('current configuration fallback', () => {
-    it('should reuse current configuration on context change when context still matches', async () => {
+    it('should reuse current configuration when a credential refresh fails for the same context', async () => {
       const context = { targetingKey: 'user-1' }
 
       // Initialize successfully for user-1
@@ -270,15 +270,17 @@ describe('DatadogProvider IndexedDB persistence', () => {
       await provider.initialize(context)
       expect(provider.status).toBe(ProviderStatus.READY)
 
-      // Context change to same context, but fetch fails
-      // Should reuse current config and go STALE
       global.fetch = failingFetchMock()
-      await provider.onContextChange(context, context)
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
 
       expect(provider.status).toBe(ProviderStatus.STALE)
       const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
       const result = provider.resolveStringEvaluation('string-flag', 'default', {}, mockLogger)
       expect(result.value).toBe('red')
+
+      global.fetch = successfulFetchMock()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
+      expect(provider.status).toBe(ProviderStatus.READY)
     })
   })
 

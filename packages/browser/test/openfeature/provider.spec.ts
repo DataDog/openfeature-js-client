@@ -367,6 +367,22 @@ describe('DatadogProvider', () => {
             company_name: 'Example, Inc.',
           },
         })
+
+        // Explicitly supplying the existing RUM defaults leaves the effective request unchanged.
+        await provider.onContextChange(
+          {},
+          {
+            targetingKey: 'rum-user',
+            user_email: 'explicit@example.com',
+            company_name: 'Example, Inc.',
+          }
+        )
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+
+        globalObject.DD_RUM.getUser = () => ({ id: 'next-rum-user' })
+        await provider.onContextChange({}, { user_email: 'explicit@example.com' })
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body).data.attributes.subject.targeting_key).toBe('next-rum-user')
       } finally {
         delete globalObject.DD_RUM
       }
@@ -425,6 +441,86 @@ describe('DatadogProvider', () => {
       global.fetch = mock
       return { mock, calls }
     }
+
+    it('shares pending assignments and skips another fetch once the effective context is ready', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const first = { targetingKey: 'user', profile: { plan: 'team', dates: [new Date(0)] } }
+      const equal = { profile: { dates: [new Date(0)], plan: 'team' }, targetingKey: 'user' }
+
+      try {
+        const initializing = provider.initialize(first)
+        const duplicate = provider.onContextChange(first, equal)
+        const signal: AbortSignal = mock.mock.calls[0][1].signal
+        expect(mock).toHaveBeenCalledTimes(1)
+        expect(signal.aborted).toBe(false)
+
+        calls[0].resolve(makeFetchResponse(makeResponse('ready')))
+        await Promise.all([initializing, duplicate])
+        await provider.onContextChange(first, equal)
+        expect(mock).toHaveBeenCalledTimes(1)
+        expect(signal.aborted).toBe(false)
+        expect(provider.status).toBe(ProviderStatus.READY)
+
+        first.profile.dates[0].setTime(1000)
+        const changed = provider.onContextChange(equal, first)
+        expect(mock).toHaveBeenCalledTimes(2)
+        calls[1].resolve(makeFetchResponse(makeResponse('changed')))
+        await changed
+      } finally {
+        await provider.onClose()
+      }
+    })
+
+    it('coalesces equal pending credentials and supersedes the fetch when the credential changes', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const first = { targetingKey: 'user', dd_assignment_token: 'first.token' }
+      const replacement = { ...first, dd_assignment_token: 'replacement.token' }
+
+      const updating = provider.onContextChange({}, first)
+      const duplicate = provider.onContextChange(first, { ...first })
+      const signal: AbortSignal = mock.mock.calls[0][1].signal
+      expect(duplicate).toBe(updating)
+      expect(mock).toHaveBeenCalledTimes(1)
+      expect(signal.aborted).toBe(false)
+
+      const changed = provider.onContextChange(first, replacement)
+      expect(mock).toHaveBeenCalledTimes(2)
+      expect(signal.aborted).toBe(true)
+      expect(new Headers(mock.mock.calls[1][1].headers).get('DD-Assignment-Token')).toBe('replacement.token')
+      calls[0].resolve(makeFetchResponse(makeResponse('superseded')))
+      calls[1].resolve(makeFetchResponse(makeResponse('ready')))
+      await Promise.all([updating, duplicate, changed])
+      await provider.onContextChange(replacement, { ...replacement })
+      expect(mock).toHaveBeenCalledTimes(2)
+
+      const removed = provider.onContextChange(replacement, { targetingKey: 'user' })
+      expect(mock).toHaveBeenCalledTimes(3)
+      expect(new Headers(mock.mock.calls[2][1].headers).has('DD-Assignment-Token')).toBe(false)
+      calls[2].resolve(makeFetchResponse(makeResponse('removed')))
+      await removed
+    })
+
+    it('retries the same context when the shared request fails', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const context = { targetingKey: 'user' }
+      const first = provider.onContextChange({}, context)
+      const duplicate = provider.onContextChange(context, { ...context })
+      expect(duplicate).toBe(first)
+      expect(mock).toHaveBeenCalledTimes(1)
+
+      calls[0].reject(new Error('network failure'))
+      await expect(duplicate).rejects.toThrow('network failure')
+      expect(provider.status).toBe(ProviderStatus.ERROR)
+
+      const retry = provider.onContextChange(context, { ...context })
+      expect(mock).toHaveBeenCalledTimes(2)
+      calls[1].resolve(makeFetchResponse(makeResponse('recovered')))
+      await retry
+      expect(provider.status).toBe(ProviderStatus.READY)
+    })
 
     it('last onContextChange call wins even if earlier call resolves later', async () => {
       const provider = new DatadogProvider(options)
