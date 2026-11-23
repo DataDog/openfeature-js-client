@@ -48,7 +48,7 @@ import {
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { cloneSigningContext } from '../transport/responseSigning/context'
-import { ResponseVerificationError } from '../transport/responseSigning/verification'
+import { ResponseVerificationError, signingFailureMessage } from '../transport/responseSigning/verification'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -385,14 +385,14 @@ export class DatadogProvider extends DatadogProviderBase {
             !this.configuration.responseSigning.isUsable(config, evaluationContext)
           ) {
             debug.event('configuration.rejected', () => ({
-              reason: 'expired_proof',
+              reason: 'expired-proof',
               stage: 'installation',
               action: 'retain_previous_configuration',
             }))
             debug.event('provider.state_changed', () => ({
               previousState: this.status,
               state: ProviderStatus.ERROR,
-              reason: 'expired_proof',
+              reason: 'expired-proof',
             }))
             this.status = ProviderStatus.ERROR
             const error = new ResponseVerificationError('expired-proof')
@@ -660,7 +660,7 @@ export class DatadogProvider extends DatadogProviderBase {
       signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
     // Default: expired verified flags stay in use and the provider is STALE. expireVerifiedFlags: ERROR and defaults.
     const strictExpiry = expired && signing.expireVerifiedFlags
-    const expiryMessage = 'The verified flag configuration proof has expired'
+    const expiryMessage = signingFailureMessage('expired-proof')
     if (
       expired &&
       !this.proofExpirySignaled &&
@@ -675,7 +675,7 @@ export class DatadogProvider extends DatadogProviderBase {
       this.debug.event('provider.state_changed', () => ({
         previousState: this.status,
         state,
-        reason: 'expired_proof',
+        reason: 'expired-proof',
       }))
       const previous = this.status
       this.status = state

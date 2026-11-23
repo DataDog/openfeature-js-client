@@ -117,7 +117,7 @@ removed in a minor release, based on customer feedback. The option is `experimen
 
 The SDK does not send `X-stream` in any mode. The edge selects the transport. When the edge signs a response,
 it buffers that response itself. A staging edge without this buffering returns no proof:
-`required` then fails closed with `Response signing: missing-proof`, and `observe` accepts the response as unverified.
+`required` then fails closed with reason `missing-proof`, and `observe` accepts the response as unverified.
 
 Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
 assignments, or `required` to admit only verified responses. Existing authentication,
@@ -131,7 +131,7 @@ Production support comes in a later release. On every other site, including the 
   and does not verify flags.
 - `required` fails closed. The SDK logs one error at initialization and sends no assignment request.
   The provider enters its error state. Every fetch fails with the same error,
-  `Response signing: unsupported-site. ...`, and evaluations return the default value.
+  `Flag response signing failed (unsupported-site): ...`, and evaluations return the default value.
   To load flags on that site, remove `required` or use `observe`.
 
 ```typescript
@@ -154,7 +154,25 @@ Observe mode accepts an otherwise valid response when no anchor is available. It
 them verified. Verification error messages contain no token, context, response, or certificate data.
 
 Required-mode verification failures use OpenFeature error code `GENERAL`.
-`PROVIDER_ERROR` events include the failure message, such as `Response signing: missing-proof`.
+`PROVIDER_ERROR` events include the failure message, in the format
+`Flag response signing failed (<code>): <what failed>. <fix hint>.` For example:
+`Flag response signing failed (missing-proof): The response has no signature headers. A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled.`
+iOS, Android and the browser use the same reason codes:
+
+| Code                  | What failed                                                                    | Fix hint                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `unsupported-request` | The SDK cannot sign this request shape                                         | Use the default flags endpoint and request options                                                 |
+| `unavailable-crypto`  | The platform crypto API is not available                                       | Use a secure (HTTPS) context                                                                       |
+| `missing-anchor`      | No trusted root is configured for this site                                    | Response signing supports only the staging site in this release                                    |
+| `missing-proof`       | The response has no signature headers                                          | A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled |
+| `invalid-proof`       | The signature headers are present but not valid                                | A proxy or CDN changed the response headers                                                        |
+| `response-too-large`  | The body is larger than the signed size limit                                  | Contact Datadog support                                                                            |
+| `invalid-certificate` | The certificate chain does not chain to the pinned root, or a chain rule fails | The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support     |
+| `invalid-signature`   | The signature does not match the request and response                          | The response changed in transit                                                                    |
+| `expired-proof`       | The proof is expired or not yet valid                                          | Check the device clock                                                                             |
+| `unsupported-site`    | Signing is not available on this Datadog site                                  | Response signing supports only the staging site in this release. Production is not supported yet   |
+
+`revoked-certificate` (draft) keeps the message `Response signing: revoked-certificate`.
 When no usable verified configuration remains, evaluation details return the default value,
 reason `ERROR`, error code `GENERAL`, and the verification failure message.
 Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
@@ -203,7 +221,7 @@ At the expiry of the last verified proof, the behavior depends on `expireVerifie
   The application decides whether to refetch. In this setting, a network attacker can block refreshes and keep the
   flags at their last verified values. The attacker cannot forge values. The guarantee is "verified once", not "fresh".
 - `expireVerifiedFlags: true`: the strict guarantee. The first evaluation that detects expiry returns the default
-  with reason `ERROR`, error code `GENERAL`, and an explicit proof-expiry message. The provider changes from `READY`
+  with reason `ERROR`, error code `GENERAL`, and the `expired-proof` message. The provider changes from `READY`
   or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event per expiry episode. Defaults stay until a
   fresh verified response arrives, also while offline.
 

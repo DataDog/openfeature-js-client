@@ -16,6 +16,7 @@ import {
   SIGNING_VERSION_HEADER,
   type SigningRequest,
   sha256,
+  signingFailureMessage,
   utf8,
   type VerifiedResponse,
   validateSigningRequest,
@@ -31,12 +32,8 @@ export { signingContextKey } from './context'
 export type ResponseSigningMode = 'off' | 'observe' | 'required'
 
 /** Required signing on a site without a bundled root and EKU fails closed with this message. */
-export const UNSUPPORTED_SITE_MESSAGE =
-  `Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging site ` +
-  `(${SIGNING_SITE}). Production support comes in a later release. Remove experimentalResponseSigning mode 'required', or use 'observe'.`
-const OBSERVE_UNSUPPORTED_SITE_MESSAGE =
-  `This SDK version supports response signing only on the Datadog staging site (${SIGNING_SITE}). ` +
-  `Production support comes in a later release. Flags are not verified, and requests are sent without signing.`
+export const UNSUPPORTED_SITE_MESSAGE = `${signingFailureMessage('unsupported-site')} The staging site is ${SIGNING_SITE}. Remove experimentalResponseSigning mode 'required', or use 'observe'.`
+const OBSERVE_UNSUPPORTED_SITE_MESSAGE = `${signingFailureMessage('unsupported-site')} The staging site is ${SIGNING_SITE}. Flags are not verified, and requests are sent without signing.`
 /**
  * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
  *
@@ -88,7 +85,7 @@ export function createResponseSigningController(
   if (unsupportedSite) {
     debug.event('signing.unavailable', () => ({
       mode,
-      reason: 'unsupported_site',
+      reason: 'unsupported-site',
       action: mode === 'required' ? 'reject_all_requests' : 'send_unsigned_request',
     }))
     if (mode === 'observe') {
@@ -116,9 +113,9 @@ export function createResponseSigningController(
   if (mode === 'required' && !roots.length && !unsupportedSite) {
     debug.event('init.failed', () => ({
       field: 'experimentalResponseSigning.trustedRootCertificates',
-      reason: 'missing_trusted_root',
+      reason: 'missing-anchor',
     }))
-    throw new Error('Required response signing needs a locally trusted root certificate')
+    throw new ResponseVerificationError('missing-anchor')
   }
   const expireVerifiedFlags = mode === 'required' && options?.expireVerifiedFlags === true
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()

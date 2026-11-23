@@ -79,11 +79,49 @@ export interface VerifiedResponse {
   minimumNotBefore?: number
 }
 
+/**
+ * The shared reason-code table of iOS, Android and the browser: what failed, then a fix hint.
+ * `revoked-certificate` is a draft rule and keeps its earlier text.
+ */
+const FAILURES: Record<Exclude<VerificationFailure, 'revoked-certificate'>, [string, string]> = {
+  'unsupported-request': [
+    'The SDK cannot sign this request shape',
+    'Use the default flags endpoint and request options',
+  ],
+  'unavailable-crypto': ['The platform crypto API is not available', 'Use a secure (HTTPS) context'],
+  'missing-anchor': [
+    'No trusted root is configured for this site',
+    'Response signing supports only the staging site in this release',
+  ],
+  'missing-proof': [
+    'The response has no signature headers',
+    'A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled',
+  ],
+  'invalid-proof': ['The signature headers are present but not valid', 'A proxy or CDN changed the response headers'],
+  'response-too-large': ['The body is larger than the signed size limit', 'Contact Datadog support'],
+  'invalid-certificate': [
+    'The certificate chain does not chain to the pinned root, or a chain rule fails',
+    'The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support',
+  ],
+  'invalid-signature': ['The signature does not match the request and response', 'The response changed in transit'],
+  'expired-proof': ['The proof is expired or not yet valid', 'Check the device clock'],
+  'unsupported-site': [
+    'Signing is not available on this Datadog site',
+    'Response signing supports only the staging site in this release. Production is not supported yet',
+  ],
+}
+/** `Flag response signing failed (<code>): <what failed>. <fix hint>.` */
+export function signingFailureMessage(reason: VerificationFailure): string {
+  if (reason === 'revoked-certificate') return `Response signing: ${reason}`
+  const [what, hint] = FAILURES[reason]
+  return `Flag response signing failed (${reason}): ${what}. ${hint}.`
+}
+
 // Errors contain only fixed diagnostic codes, never request or certificate contents.
 export class ResponseVerificationError extends GeneralError {
   constructor(
     readonly reason: VerificationFailure,
-    message = `Response signing: ${reason}`
+    message = signingFailureMessage(reason)
   ) {
     super(message)
     Object.setPrototypeOf(this, new.target.prototype)

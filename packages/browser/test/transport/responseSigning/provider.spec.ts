@@ -21,6 +21,7 @@ import {
   MAX_SIGNED_RESPONSE,
   SIGNING_NONCE_HEADER,
   SIGNING_VERSION_HEADER,
+  signingFailureMessage,
 } from '../../../src/transport/responseSigning/verification'
 import { FIXTURE_NOW, loadCredential, ROOT_A } from './chainFixtures'
 
@@ -193,7 +194,7 @@ test('required needs a local anchor for a destination without a bundled root, be
       flaggingProxy: 'https://proxy.test/assign',
       experimentalResponseSigning: { mode: 'required' },
     })
-  ).toThrow('locally trusted root')
+  ).toThrow('Flag response signing failed (missing-anchor)')
   expect(global.fetch).not.toHaveBeenCalled()
 })
 test('staging selects its root only when signing is enabled', () => {
@@ -202,7 +203,7 @@ test('staging selects its root only when signing is enabled', () => {
   expect(createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })).toBeDefined()
   expect(() =>
     createResponseSigningController({ mode: 'required', trustedRootCertificates: [] }, { site: 'datad0g.com' })
-  ).toThrow('locally trusted root')
+  ).toThrow('Flag response signing failed (missing-anchor)')
 })
 test.each([
   'https://preview.ff-cdn.datadoghq.com/precompute-assignments',
@@ -219,7 +220,7 @@ test.each([
       flaggingProxy,
       experimentalResponseSigning: { mode: 'required' },
     })
-  ).toThrow('locally trusted root')
+  ).toThrow('Flag response signing failed (missing-anchor)')
 })
 test('automatic trust cannot be reused for a different request origin', () => {
   const signing = createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })!
@@ -308,8 +309,9 @@ describe('staging site gate', () => {
     expect(random).toHaveBeenCalledTimes(ordinaryRandomCalls)
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(
-      'This SDK version supports response signing only on the Datadog staging site (datad0g.com). ' +
-        'Production support comes in a later release. Flags are not verified, and requests are sent without signing.'
+      'Flag response signing failed (unsupported-site): Signing is not available on this Datadog site. ' +
+        'Response signing supports only the staging site in this release. Production is not supported yet. ' +
+        'The staging site is datad0g.com. Flags are not verified, and requests are sent without signing.'
     )
   })
   const requiredCases = entries.flatMap((entry) => sites.map(([label, site]) => [entry, label, site] as const))
@@ -358,9 +360,9 @@ describe('staging site gate', () => {
   })
   test('the unsupported-site error says staging only and how to fix it', () => {
     expect(UNSUPPORTED_SITE_MESSAGE).toBe(
-      'Response signing: unsupported-site. This SDK version supports response signing only on the Datadog staging ' +
-        "site (datad0g.com). Production support comes in a later release. Remove experimentalResponseSigning mode 'required', or " +
-        "use 'observe'."
+      'Flag response signing failed (unsupported-site): Signing is not available on this Datadog site. ' +
+        'Response signing supports only the staging site in this release. Production is not supported yet. ' +
+        "The staging site is datad0g.com. Remove experimentalResponseSigning mode 'required', or use 'observe'."
     )
   })
   test.each(['observe', 'required'] as const)(
@@ -459,7 +461,7 @@ test('the standalone fetcher honors a proxy override when selecting trust', () =
       flaggingProxy: 'https://proxy.test/assign',
       experimentalResponseSigning: { mode: 'required' },
     })
-  ).toThrow('locally trusted root')
+  ).toThrow('Flag response signing failed (missing-anchor)')
 })
 test.each(['observe', 'required'] as const)(
   '%s verifies the actual normalized request, token override, query and response before provider admission',
@@ -576,7 +578,7 @@ test.each(['required', 'observe'] as const)(
             value: false,
             reason: StandardResolutionReasons.ERROR,
             errorCode: ErrorCode.GENERAL,
-            errorMessage: 'The verified flag configuration proof has expired',
+            errorMessage: signingFailureMessage('expired-proof'),
           })
         } else {
           expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
@@ -592,7 +594,7 @@ test.each(['required', 'observe'] as const)(
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({
           errorCode: ErrorCode.GENERAL,
-          message: 'The verified flag configuration proof has expired',
+          message: signingFailureMessage('expired-proof'),
         })
       )
     }
@@ -634,7 +636,7 @@ test('strict expiry: OpenFeature clients receive expiry errors and recovery even
         value: false,
         reason: StandardResolutionReasons.ERROR,
         errorCode: ErrorCode.GENERAL,
-        errorMessage: 'The verified flag configuration proof has expired',
+        errorMessage: signingFailureMessage('expired-proof'),
       })
     }
     await flush()
@@ -831,7 +833,7 @@ test('strict expiry does not overwrite an in-flight context reconciliation', asy
   expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
     value: false,
     errorCode: ErrorCode.GENERAL,
-    errorMessage: 'The verified flag configuration proof has expired',
+    errorMessage: signingFailureMessage('expired-proof'),
   })
   expect(subject.status).toBe(ProviderStatus.RECONCILING)
   release()
@@ -1277,7 +1279,7 @@ describe('Date-valued signing contexts', () => {
   })
 })
 
-test.each(['missing-proof', 'invalid-signature', 'response-too-large'])(
+test.each(['missing-proof', 'invalid-signature', 'response-too-large'] as const)(
   'required exposes %s through OpenFeature errors and evaluation details',
   async (reason) => {
     global.fetch = jest.fn(async (url, init) => {
@@ -1291,20 +1293,20 @@ test.each(['missing-proof', 'invalid-signature', 'response-too-large'])(
     subject.events.addHandler(ProviderEvents.Error, errors)
     await expect(subject.initialize(context)).rejects.toMatchObject({
       code: ErrorCode.GENERAL,
-      message: `Response signing: ${reason}`,
+      message: signingFailureMessage(reason),
     })
     await flush()
     expect(errors).toHaveBeenCalledWith(
       expect.objectContaining({
         errorCode: ErrorCode.GENERAL,
-        message: `Response signing: ${reason}`,
+        message: signingFailureMessage(reason),
       })
     )
     expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
       value: false,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
-      errorMessage: `Response signing: ${reason}`,
+      errorMessage: signingFailureMessage(reason),
     })
     global.fetch = jest.fn(signed)
     await subject.onContextChange(context, context)
@@ -1330,14 +1332,14 @@ test('OpenFeature clients receive verification failure details after a context c
     expect(errors).toHaveBeenCalledWith(
       expect.objectContaining({
         errorCode: ErrorCode.GENERAL,
-        message: 'Response signing: missing-proof',
+        message: signingFailureMessage('missing-proof'),
       })
     )
     expect(client.getBooleanDetails('critical', false)).toMatchObject({
       value: false,
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
-      errorMessage: 'Response signing: missing-proof',
+      errorMessage: signingFailureMessage('missing-proof'),
     })
   } finally {
     client.removeHandler(ProviderEvents.Error, errors)
@@ -1393,12 +1395,12 @@ describe('response signing with assignment authorization', () => {
     const events = jest.fn()
     subject.events.addHandler(ProviderEvents.Error, events)
     await expect(subject.initialize({ ...context, dd_assignment_token: 'assignment.jwt.signature' })).rejects.toThrow(
-      'Response signing: missing-proof'
+      signingFailureMessage('missing-proof')
     )
     expect(events).toHaveBeenCalledWith(
       expect.objectContaining({
         errorCode: ErrorCode.GENERAL,
-        message: 'Response signing: missing-proof',
+        message: signingFailureMessage('missing-proof'),
       })
     )
   })
@@ -1449,7 +1451,7 @@ describe('missing proof on an opted-in staging response (credential cutover)', (
   test.each(Object.keys(responses) as Array<keyof typeof responses>)('required fails closed with %s', async (kind) => {
     global.fetch = jest.fn().mockResolvedValue(responses[kind]())
     const subject = staging('required')
-    await expect(subject.initialize(context)).rejects.toThrow('Response signing: missing-proof')
+    await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('missing-proof'))
     expect(global.fetch).toHaveBeenCalledTimes(1)
     const details = subject.resolveBooleanEvaluation('critical', false, {}, logger)
     expect(details.value).toBe(false)

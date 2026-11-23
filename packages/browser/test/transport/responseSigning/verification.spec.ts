@@ -782,7 +782,9 @@ describe('minimum not-before revocation (draft wire)', () => {
     ],
   ] as const)('a %s header fails verification and stores nothing', async (_label, change, signedValue, reason) => {
     const signing = controller('required')
-    await expect(read(signing, newChain, signedValue, change)).rejects.toThrow(`Response signing: ${reason}`)
+    await expect(read(signing, newChain, signedValue, change)).rejects.toThrow(
+      `Flag response signing failed (${reason})`
+    )
     expect(storedMinimumNotBefore(anchorKey)).toBe(0)
   })
   test('the stored value survives a restart', async () => {
