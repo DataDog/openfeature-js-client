@@ -3,7 +3,9 @@
   "version": "independent",
   "command": {
     "version": {
-      "exact": true
+      "exact": true,
+      "excludeDependents": true,
+      "granularPathspec": false
     }
   }
 }
