@@ -4,13 +4,13 @@ Thank you for your interest in contributing to the OpenFeature JS Client! This d
 
 ## Project Structure
 
-This is a monorepo managed with Lerna that contains multiple packages:
+This is a Yarn workspaces monorepo that contains multiple packages:
 
 - **`@datadog/flagging-core`** - Runtime-agnostic flag-evaluation logic
 - **`@datadog/openfeature-browser`** - Browser-specific bindings for OpenFeature
 - **`@datadog/openfeature-node-server`** - Node.js server bindings for OpenFeature
 
-The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions on release (via `command.version.exact` in `lerna.json`) to prevent version skew.
+The project uses **independent versioning**, meaning each package can have its own version number. Internal dependencies (e.g., `@datadog/flagging-core`) are pinned to exact versions on release to prevent version skew.
 
 ## Development Setup
 
@@ -101,15 +101,13 @@ CORS response headers on authorization errors.
 
 ## Release Process
 
-### Prerequisites
+A release has three parts:
 
-- Ensure you're not on the `main` branch (releases should be done from feature branches)
-- All tests must pass
-- Code must be linted and type-checked
-- Changes should be committed and pushed
-- Proper GitHub secrets must be configured:
-  - `NPM_PUBLISH_TOKEN_FLAGGING_CORE` - Token for publishing core package
-  - `NPM_PUBLISH_TOKEN` - Token for publishing browser package
+1. A release PR changes the package versions and the CHANGELOG.
+2. After the PR merges, a GitHub Release creates the version tag on `main`.
+3. The published GitHub Release starts the `release.yaml` workflow, which builds and publishes the package to npm.
+
+You do not create or push tags by hand. The GitHub Release creates the tag.
 
 ### Build Modes
 
@@ -148,116 +146,146 @@ The project also supports different SDK setups:
 
 ### Creating a Release
 
-All packages are published with the `latest` npm tag.
+All packages are published with the `latest` npm tag, unless the GitHub Release is marked as a pre-release (see [Pre-releases](#pre-releases)).
 
-#### Step 1: Prepare for Release
+#### Step 1: Create a Release Branch
 
-1. **Switch to a feature branch:**
+Create a branch from an up-to-date `main`. Name it for the packages that you release:
+
+```bash
+git fetch origin
+git checkout -b release/browser-2.4.0-core-3.6.0 origin/main
+```
+
+#### Step 2: Set the Package Versions
+
+1. Decide which packages to release. Compare each package with its last release tag:
 
    ```bash
-   # For independent releases (describe what's being released)
-   git checkout -b release/node-server-1.3.0
-   git checkout -b release/browser-and-node-server-1.3.0
-
-   # For unified releases (all packages with same version)
-   git checkout -b release/v1.2.3
+   git log --oneline @datadog/openfeature-browser@2.3.0..origin/main -- packages/browser
    ```
 
-#### Step 2: Pin Internal Dependencies
+   If a dependent package (`browser` or `node-server`) uses core code that is not in the published `@datadog/flagging-core`, release core too.
 
-2. **Ensure internal dependencies use exact versions:**
+2. Edit the `version` field in the `package.json` of each package that you release. Use semver: patch for fixes, minor for backward-compatible features, major for breaking changes.
+
+3. Pin the internal dependencies to the new versions:
 
    ```bash
    yarn node ./scripts/release/update-peer-dependency-versions.js
    ```
 
-   This script reads each package's current version and updates internal dependencies (like `@datadog/flagging-core`) to use exact versions without the `^` prefix. This prevents version skew between packages.
+   This script reads each package's current version. It sets internal dependencies (such as `@datadog/flagging-core`) to exact versions with no `^` prefix. This prevents version skew between packages. It also changes the pin in packages that you do not release. That is correct: the next release of those packages uses the same core.
 
-   After running, verify the changes:
-
-   ```bash
-   git diff packages/*/package.json
-   ```
-
-   You should see changes like:
-
-   ```diff
-   -    "@datadog/flagging-core": "^1.2.1"
-   +    "@datadog/flagging-core": "1.2.1"
-   ```
-
-#### Step 3: Version the Package(s)
-
-3. **Update the version using the CLI:**
-
-   **For independent releases (recommended):**
+4. Update the lockfile:
 
    ```bash
-   yarn release
+   yarn install
    ```
 
-   This command:
-   - Validates you're not on the `main` branch
-   - Runs `lerna version --exact`
-   - Prompts for version updates only for **changed** packages
-   - Creates version commits and tags per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
-   - Pushes version tags to Github
-
-   **For unified releases (all packages with same version):**
+5. Check the result:
 
    ```bash
-   yarn release:all
+   git diff packages/*/package.json yarn.lock
+   bash scripts/internal-deps-validate.sh
    ```
 
-   This command:
-   - Same as above, but uses `--force-publish` to prompt for **all** packages
-   - Use this when you want to release all packages together with the same version
+#### Step 3: Update the CHANGELOG
 
-#### Step 4: Open and Merge the Release PR
+Replace the `## Unreleased` heading in `CHANGELOG.md` with a heading that names each released package and version, for example `## @datadog/openfeature-browser@2.4.0, @datadog/flagging-core@3.6.0`.
 
-4. **Open a PR from your release branch and merge it with a merge commit — not a squash.**
+Make sure that the section lists every user-facing change since the last release of each package. Tag each entry with `[CORE]`, `[BROWSER]` or `[NODE-SERVER]`. Put behavior changes under **Usage Notes**.
 
-   `yarn release` pushes the version tag onto your branch commit. Squashing creates a new commit on `main` and orphans that tag, which breaks change detection on the _next_ release (Lerna falls back to an old tag and prompts to version packages that never changed). A merge commit keeps the tag reachable.
+#### Step 4: Validate the Release Branch
 
-#### Step 5: Publish via GitHub Release
+Run the checks in release mode:
 
-**Publishing is fully automated via GitHub workflows!**
+```bash
+export BUILD_MODE=release
+yarn build
+yarn typecheck
+yarn lint
+yarn format:check
+yarn test
+yarn test:browser-install
+```
 
-1. **Create a GitHub Release:**
-   - Go to the GitHub repository
-   - Click "Releases" → "Create a new release"
-   - Set the tag to match your version:
-     - Independent: `@datadog/openfeature-node-server@1.3.0` (publishes only that package)
-     - Unified: `v1.2.1` (publishes all packages)
-   - Add release notes describing your changes or use the `Generate Release Notes` button
-   - Click "Publish release"
+`yarn test:browser-install` packs the packages and runs the packed browser SDK in Chromium. The release workflow runs the same test.
 
-   **For multiple independent releases:** Create a separate GitHub release for each package tag (e.g., one for `@datadog/openfeature-browser@1.3.0` and one for `@datadog/openfeature-node-server@1.3.0`).
+#### Step 5: Open and Merge the Release PR
 
-2. **Automated Publishing Workflow:**
+1. Open a PR from the release branch to `main`. List each release tag in the PR description.
+2. Get approval and make sure that CI passes.
+3. Merge the PR.
 
-   The `release.yaml` workflow will automatically trigger and:
+Do not create a GitHub Release before the PR merges. The tag must point to a commit on `main`.
 
-   **Validation Phase:**
-   - Checks that the GitHub release tag matches the corresponding package version
-   - Fails fast if validation doesn't pass
+#### Step 6: Publish with a GitHub Release
 
-   **Build and Publish Phase:**
-   - Installs dependencies with `yarn install --immutable`
-   - Builds all packages in release mode (`BUILD_MODE=release`)
-   - Creates package tarballs with `yarn lerna run pack --stream`
+Create one GitHub Release for each package. If core is in the release, publish core first.
 
-   **Publishing Sequence:**
+1. Go to **Releases** → **Draft a new release**.
+2. In **Choose a tag**, type the new tag name. Select **Create new tag on publish**.
+   - Independent release: `@datadog/<package-name>@<version>`, for example `@datadog/openfeature-browser@2.4.0`. This publishes only that package.
+   - Unified release: `v<version>`, for example `v1.2.1`. This publishes all packages. Every package must have this version.
+3. Set **Target** to `main`. If `main` has new commits after the release PR, set the target to the merge commit of the release PR.
+4. Set the release title to the tag name.
+5. Paste the CHANGELOG entries for the package into the release notes.
+6. Click **Publish release**.
 
-   _For independent releases_ (`@datadog/pkg@x.y.z`):
-   - Publishes only the specified package
-   - If publishing `browser` or `node-server`, waits for `flagging-core` to be available on npm first
+You can also use the GitHub CLI. With `--target`, `gh` creates the tag on publish:
 
-   _For unified releases_ (`vX.Y.Z`):
-   1. Publishes `@datadog/flagging-core` first
-   2. Waits for npm registry propagation (up to 5 minutes)
-   3. Publishes `@datadog/openfeature-browser`
-   4. Publishes `@datadog/openfeature-node-server`
+```bash
+gh release create '@datadog/flagging-core@3.6.0' \
+  --repo DataDog/openfeature-js-client \
+  --target <release-pr-merge-commit-sha> \
+  --title '@datadog/flagging-core@3.6.0' \
+  --notes-file core-release-notes.md
+```
+
+When the release is published, GitHub creates the tag and the `release.yaml` workflow starts.
+
+#### Step 7: Approve and Verify the Publication
+
+1. Open the `Publish packages on NPM` run in the **Actions** tab.
+2. Both jobs use the `production` environment. Approve the deployment when GitHub asks for it.
+3. When the run completes, make sure that npm has the new version:
+
+   ```bash
+   npm view @datadog/flagging-core@3.6.0 version
+   ```
+
+4. For a browser or Node.js release in the same batch, create its GitHub Release only after npm has the new core version. The workflow waits up to 5 minutes for core and then fails.
+
+#### Pre-releases
+
+Select **Set as a pre-release** on the GitHub Release to publish a pre-release:
+
+- A tag that contains `preview` publishes with the `preview` npm tag.
+- Any other pre-release tag publishes with the `alpha` npm tag.
+
+### What the Release Workflow Does
+
+The `release.yaml` workflow runs when a GitHub Release is published.
+
+**Validation job (`validate-release`):**
+
+- Reads the package name and version from the release tag.
+- Fails if the version in the package's `package.json` is different from the tag version.
+- Fails if an internal dependency does not use an exact version (`scripts/internal-deps-validate.sh`).
+
+**Build and publish job (`build-and-publish`):**
+
+- Installs dependencies with `yarn install --immutable`.
+- Builds all packages with `BUILD_MODE=release`.
+- Packs each package and runs `yarn test:browser-install`.
+- Publishes with npm provenance through npm trusted publishing (OIDC). The workflow needs no npm token secret. See [the OIDC migration notes](docs/npm-oidc-migration.md).
+- Skips a package version that npm already has.
+
+**Publication order:**
+
+- Independent release (`@datadog/<package-name>@x.y.z`): publishes only that package. For `browser` and `node-server`, it first waits until npm has the pinned `flagging-core` version.
+- Unified release (`vX.Y.Z`): publishes `@datadog/flagging-core`, waits until npm has it, and then publishes `@datadog/openfeature-browser` and `@datadog/openfeature-node-server`.
 
 ### Package-Specific Build Commands
 
@@ -313,99 +341,42 @@ yarn pack
 
 Since this project uses **independent versioning**:
 
-- Each package has its own version number (stored in its `package.json`)
-- `yarn release` prompts for version updates only for **changed** packages (independent releases)
-- `yarn release:all` prompts for **all** packages (unified releases)
-- Internal dependencies are pinned to exact versions (configured via `command.version.exact` in `lerna.json`)
-- Version commits and tags are created per package (e.g., `@datadog/openfeature-node-server@1.3.0`)
+- Each package has its own version number in its `package.json`.
+- You set the versions by hand in the release PR.
+- Internal dependencies are pinned to exact versions. `scripts/internal-deps-validate.sh` enforces this in the release workflow.
+- Each package has its own release tag, for example `@datadog/openfeature-node-server@1.3.0`. The GitHub Release creates the tag.
 
 > ⚠️ **Version policy for `@datadog/flagging-core`:** Internal dependencies are pinned to **exact** versions (enforced by `scripts/internal-deps-validate.sh`), so our packages never pull a core update implicitly. From `2.0.0` onward, `flagging-core` follows normal semver — minor/patch for backward-compatible changes, major for breaking ones. Two rules still apply:
 >
 > 1. **Do not publish new `1.x` versions of `flagging-core`.** Legacy consumers still on `^1.2.1` would pull them and risk version skew; the `2.0.0` major bump exists to cap those consumers below `2.x`.
-> 2. **Bumping core does not reach dependents automatically.** Because `openfeature-browser` and `openfeature-node-server` pin core exactly, you must update each dependent's pin and re-release it (see [Step 2](#step-2-pin-internal-dependencies)) for consumers to pick up the new core.
-
-### Automated Release Workflow Details
-
-The GitHub Actions workflow (`release.yaml`) includes several safety measures:
-
-1. **Version Consistency Check:**
-   - Compares GitHub release tag with the corresponding package version
-   - Ensures tags and package versions are synchronized
-
-2. **Dependency Coordination:**
-   - Core package is published first
-   - Waits for npm registry propagation (up to 5 minutes)
-   - Browser package gets updated core dependency automatically
-
-3. **Build Integrity:**
-   - Uses `BUILD_MODE=release` for production builds
-   - Replaces build environment variables correctly
-   - Creates both npm packages and CDN bundles
-
-### Testing Before Release
-
-1. **Run all tests:**
-
-   ```bash
-   yarn test
-   ```
-
-2. **Type checking:**
-
-   ```bash
-   yarn typecheck
-   ```
-
-3. **Linting:**
-
-   ```bash
-   yarn lint
-   ```
-
-4. **Build verification:**
-
-   ```bash
-   yarn clean
-   yarn build
-   yarn build:bundle
-   ```
-
-5. **Package creation test:**
-   ```bash
-   yarn version  # Pins internal dependencies and creates package tarballs
-   ```
+> 2. **Bumping core does not reach dependents automatically.** Because `openfeature-browser` and `openfeature-node-server` pin core exactly, you must update each dependent's pin and re-release it (see [Step 2](#step-2-set-the-package-versions)) for consumers to pick up the new core.
 
 ### Troubleshooting
 
 #### Common Issues
 
-1. **Release from main branch:**
-   - Error: "please do not release from `main` branch"
-   - Solution: Create a feature branch for releases
+1. **The workflow did not start:**
+   - The workflow starts only when a GitHub Release is **published**. A draft release or a pushed tag does not start it.
 
-2. **Version mismatch in GitHub workflow:**
-   - Error: "Release tag doesn't match lerna.json version"
-   - Solution: Ensure the GitHub release tag exactly matches `v{version}` format where `{version}` is from `lerna.json`
+2. **Version mismatch in the validation job:**
+   - Error: `Release tag version X doesn't match packages/<dir> version Y`
+   - Cause: the tag points to a commit where the package has a different version. This occurs when the release is created before the release PR merges, or when the target is wrong.
+   - Solution: delete the GitHub Release and its tag. Then create the release again with the release PR merge commit as the target.
 
-3. **Build environment issues:**
+3. **Internal dependency validation fails:**
+   - Run `yarn node ./scripts/release/update-peer-dependency-versions.js`.
+   - Make sure that internal dependencies use exact versions with no `^` prefix.
+
+4. **The workflow waits for the production approval:**
+   - Both jobs use the `production` environment. An approver must approve each job in the Actions run.
+
+5. **Timeout while the workflow waits for core:**
+   - The workflow waits up to 5 minutes for the pinned `@datadog/flagging-core` version on npm.
+   - Make sure that the core release completed first. Then re-run the failed job.
+
+6. **Build environment issues:**
    - Ensure `BUILD_MODE` and `SDK_SETUP` are set correctly
    - Check that all dependencies are installed
-
-4. **Version synchronization issues:**
-   - Run `yarn node ./scripts/release/update-peer-dependency-versions.js` to pin internal dependencies
-   - Verify internal dependencies use exact versions (no `^` prefix)
-
-5. **GitHub workflow failures:**
-   - Check the Actions tab for detailed error logs
-   - Ensure GitHub secrets are properly configured:
-     - `NPM_PUBLISH_TOKEN_FLAGGING_CORE` for core package
-     - `NPM_PUBLISH_TOKEN` for browser package
-   - Verify the release tag matches the version in `lerna.json`
-
-6. **npm registry propagation delays:**
-   - The workflow waits up to 5 minutes for the core package to be available
-   - If this fails, it may indicate npm registry issues
-   - Check npm status page or try republishing manually
 
 7. **Webpack build issues:**
    - Ensure all TypeScript configurations are valid
@@ -417,34 +388,7 @@ The GitHub Actions workflow (`release.yaml`) includes several safety measures:
 - Check the [README.md](README.md) for basic project information
 - Review the scripts in the `scripts/` directory for implementation details
 - Check the GitHub Actions tab for workflow status and logs
-- Examine the `scripts/cli` script for available commands (`release`, `release_all`, `version`, `typecheck`, `lint`)
 - Open an issue on GitHub for bugs or feature requests
-
-#### Manual Publishing (Emergency Only)
-
-If the automated workflow fails and you need to publish manually:
-
-1. **Build packages:**
-
-   ```bash
-   BUILD_MODE=release yarn build
-   yarn version
-   ```
-
-2. **Publish core package:**
-
-   ```bash
-   cd packages/core
-   npm publish --tag latest
-   ```
-
-3. **Wait for propagation, then publish remaining packages:**
-   ```bash
-   cd packages/browser
-   npm publish --tag latest
-   cd ../node-server
-   npm publish --tag latest
-   ```
 
 ## Third-Party Licenses
 
