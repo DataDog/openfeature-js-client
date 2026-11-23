@@ -10,7 +10,11 @@ import {
   readFlagKeyObfuscation,
   supportsDependencyKeyEncryption,
 } from './flag-key-obfuscation'
-import { isUnrepresentablePrecomputedNumber, precomputedNumberSource } from './precomputed-json'
+import {
+  isUnrepresentablePrecomputedNumber,
+  PRECOMPUTED_NUMERIC_TYPES,
+  precomputedNumberSource,
+} from './precomputed-json'
 
 type WireEntry = {
   response: string
@@ -43,7 +47,7 @@ export function parsePrecomputedConfigurationResponse(
   | {
       response: PrecomputedConfigurationResponse
       flagErrors?: Record<string, string>
-      numericErrors?: Record<string, string>
+      invalidNumericSources?: Record<string, string>
     }
   | { error: string } {
   if (!isRecord(value)) return { error: 'Precomputed configuration response must be an object' }
@@ -68,7 +72,7 @@ export function parsePrecomputedConfigurationResponse(
   }
 
   const flagErrors: Array<[string, string]> = []
-  const numericErrors: Array<[string, string]> = []
+  const invalidNumericSources: Array<[string, string]> = []
   for (const [key, flag] of Object.entries(flags)) {
     if (encoding.encoding && !isLowercaseHex(key, 32)) {
       return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
@@ -85,7 +89,7 @@ export function parsePrecomputedConfigurationResponse(
     if (isRecord(flag)) {
       const source = precomputedNumberSource(flag.variationValue)
       if (source !== undefined) {
-        numericErrors.push([key, source])
+        invalidNumericSources.push([key, source])
       }
     }
   }
@@ -102,9 +106,9 @@ export function parsePrecomputedConfigurationResponse(
   // assignments or opt into full telemetry details.
   const attributes = value.data.attributes
   // Persist plain data, not parser-specific class instances, in IndexedDB.
-  const sources = new Map(numericErrors)
+  const sources = new Map(invalidNumericSources)
   const normalizedFlags =
-    numericErrors.length > 0
+    invalidNumericSources.length > 0
       ? Object.fromEntries(
           Object.entries(flags).map(([key, flag]) => {
             const source = sources.get(key)
@@ -116,7 +120,7 @@ export function parsePrecomputedConfigurationResponse(
         )
       : flags
   const response =
-    attributes.observeFullEvaluationData === undefined && numericErrors.length === 0
+    attributes.observeFullEvaluationData === undefined && invalidNumericSources.length === 0
       ? value
       : {
           ...value,
@@ -134,7 +138,7 @@ export function parsePrecomputedConfigurationResponse(
   return {
     response: response as PrecomputedConfigurationResponse,
     ...(flagErrors.length > 0 ? { flagErrors: Object.fromEntries(flagErrors) } : {}),
-    ...(numericErrors.length > 0 ? { numericErrors: Object.fromEntries(numericErrors) } : {}),
+    ...(invalidNumericSources.length > 0 ? { invalidNumericSources: Object.fromEntries(invalidNumericSources) } : {}),
   }
 }
 
@@ -172,7 +176,7 @@ export function precomputedFlagIssue(
   } else if (type === 'BOOLEAN' || type === 'boolean') {
     expected = 'boolean'
     valid = typeof value.variationValue === 'boolean'
-  } else if (['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'].includes(type as string)) {
+  } else if (PRECOMPUTED_NUMERIC_TYPES.has(type as string)) {
     expected = 'finite number'
     valid =
       (typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)) ||

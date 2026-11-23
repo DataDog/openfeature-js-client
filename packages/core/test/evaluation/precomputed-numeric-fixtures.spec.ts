@@ -19,8 +19,8 @@ type Fixture = {
   }>
 }
 
-// These targeted regressions exercise the case-level Web skips for this bug.
-// Keep the per-evaluation filters: native-only Integer getters do not apply.
+// Read the shared decimal fixtures verbatim and apply their evaluation filters:
+// native-only Integer getters do not apply to JavaScript's Number getter.
 describe.each(['float', 'integer', 'number'])('shared numeric-decimal-%s', (label) => {
   const file = path.resolve(
     __dirname,

@@ -1,9 +1,11 @@
 import { isLosslessNumber, LosslessNumber, parse, stringify } from 'lossless-json'
 import type { PrecomputedConfigurationResponse } from './configuration'
 
-const NUMERIC_TYPES = new Set(['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'])
+export const PRECOMPUTED_NUMERIC_TYPES = new Set(['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'])
+export const INVALID_PRECOMPUTED_NUMBER =
+  'Precomputed numeric assignment cannot be represented exactly as a JavaScript number'
 
-/** @internal Preserve unrepresentable numeric assignments until typed evaluation. */
+/** @internal Preserve rejected numeric tokens for validation and portable serialization. */
 export function parsePrecomputedConfigurationJson(text: string): unknown {
   let hasUnrepresentableNumber = false
   const value = parse(text, undefined, {
@@ -23,7 +25,7 @@ export function parsePrecomputedConfigurationJson(text: string): unknown {
       for (const flag of Object.values(flags)) {
         if (
           isRecord(flag) &&
-          NUMERIC_TYPES.has(flag.variationType as string) &&
+          PRECOMPUTED_NUMERIC_TYPES.has(flag.variationType as string) &&
           isLosslessNumber(flag.variationValue)
         ) {
           retained.add(flag.variationValue)
@@ -52,13 +54,28 @@ export function parsePrecomputedConfigurationJson(text: string): unknown {
 
 export function stringifyPrecomputedConfigurationJson(
   response: PrecomputedConfigurationResponse,
-  numericErrors?: Record<string, string>
+  invalidNumericSources?: Record<string, string>
 ): string {
-  if (!numericErrors) return JSON.stringify(response)
   const attributes = response.data.attributes
+  // JSON.stringify's shortest integer text may not equal the exact double.
+  const sources = new Map<string, string>()
+  for (const [key, flag] of Object.entries(attributes.flags)) {
+    const value = isRecord(flag) ? flag.variationValue : undefined
+    const source =
+      (invalidNumericSources && Object.getOwnPropertyDescriptor(invalidNumericSources, key)?.value) ??
+      (isRecord(flag) &&
+      PRECOMPUTED_NUMERIC_TYPES.has(flag.variationType as string) &&
+      typeof value === 'number' &&
+      Number.isInteger(value) &&
+      !Number.isSafeInteger(value)
+        ? integerToDecimal(value)
+        : undefined)
+    if (source !== undefined) sources.set(key, source)
+  }
+  if (sources.size === 0) return JSON.stringify(response)
   const flags = Object.fromEntries(
     Object.entries(attributes.flags).map(([key, flag]) => {
-      const source = Object.getOwnPropertyDescriptor(numericErrors, key)?.value
+      const source = sources.get(key)
       return [key, source === undefined ? flag : { ...flag, variationValue: new LosslessNumber(source) }]
     })
   )

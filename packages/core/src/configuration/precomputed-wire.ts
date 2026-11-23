@@ -51,12 +51,12 @@ export function precomputedConfigurationToWire(configuration: FlagsConfiguration
   const wire: ConfigurationWireContents = { version: 1 }
   if (!configuration.precomputed) return wire
 
-  const { context, response, fetchedAt, etag, numericErrors } = configuration.precomputed
+  const { context, response, fetchedAt, etag, invalidNumericSources } = configuration.precomputed
   // Older readers reject version 2 instead of treating hashed keys as plaintext.
   if (response.data.attributes.obfuscated === true) wire.version = 2
   wire.precomputed = {
     context,
-    response: stringifyPrecomputedConfigurationJson(response, numericErrors),
+    response: stringifyPrecomputedConfigurationJson(response, invalidNumericSources),
     fetchedAt,
     etag,
   }

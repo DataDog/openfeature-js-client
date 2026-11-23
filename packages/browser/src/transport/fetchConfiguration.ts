@@ -40,7 +40,7 @@ import { debugFetch } from './debugFetch'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import { cloneSigningContext } from './responseSigning/context'
-import { type ResponseSigningController } from './responseSigning/controller'
+import type { ResponseSigningController } from './responseSigning/controller'
 
 import { ResponseVerificationError } from './responseSigning/verification'
 
@@ -325,7 +325,10 @@ async function requestPrecomputedConfiguration(
     const raw = responseBody as { data?: { attributes?: { flags?: unknown } } } | null
     const receivedFlags = raw?.data?.attributes?.flags
     const receivedKeys = receivedFlags && typeof receivedFlags === 'object' ? Object.keys(receivedFlags) : []
-    const rejectedKeys = 'error' in parsed ? receivedKeys : Object.keys(parsed.flagErrors ?? {})
+    const rejectedKeys =
+      'error' in parsed
+        ? receivedKeys
+        : [...new Set([...Object.keys(parsed.flagErrors ?? {}), ...Object.keys(parsed.invalidNumericSources ?? {})])]
     const rejected = new Set(rejectedKeys)
     const acceptedKeys =
       'error' in parsed ? [] : Object.keys(parsed.response.data.attributes.flags).filter((key) => !rejected.has(key))
@@ -339,6 +342,7 @@ async function requestPrecomputedConfiguration(
       acceptedKeys,
       rejectedKeys,
       flagErrors: 'error' in parsed ? undefined : parsed.flagErrors,
+      invalidNumericSources: 'error' in parsed ? undefined : parsed.invalidNumericSources,
       rejectionScope: 'error' in parsed ? 'response' : 'individual_flags',
     }
   })

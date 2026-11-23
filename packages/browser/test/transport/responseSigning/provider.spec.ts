@@ -128,6 +128,32 @@ test('automatic trust cannot be reused for a different request origin', () => {
   const signing = createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })!
   expect(() => signing.prepare('https://proxy.test/assign', {}, '{}')).toThrow('unsupported-request')
 })
+
+test.each(['9007199254740993', '1e-999', '1e999'])(
+  'retains numeric token %s when observe mode continues without a signing request',
+  async (token) => {
+    const signing = createResponseSigningController({ mode: 'observe', trustedRootCertificates: roots })!
+    const request = signing.prepare(
+      'https://example.test/assign',
+      { 'dd-client-token': 'a', 'DD-Client-Token': 'b' },
+      '{}'
+    )
+    expect(request).toBeUndefined()
+    const raw = JSON.stringify(payload()).replace(
+      '"variationType":"boolean","variationValue":true',
+      `"variationType":"number","variationValue":${token}`
+    )
+    const read = await signing.read(response(raw), request)
+    expect(read.proof).toBeUndefined()
+    const parsed = parsePrecomputedConfigurationResponse(read.json)
+    if ('error' in parsed) throw new Error(parsed.error)
+    expect(evaluatePrecomputedConfiguration({ precomputed: parsed }, 'number', 'critical', -99.5, {})).toMatchObject({
+      value: -99.5,
+      reason: 'ERROR',
+      errorCode: 'TYPE_MISMATCH',
+    })
+  }
+)
 test('public v1 persistence is isolated from prototype signing cache namespaces', async () => {
   const signing = createResponseSigningController({ mode: 'observe', trustedRootCertificates: roots })!
   const namespace = await signing.cacheNamespace()

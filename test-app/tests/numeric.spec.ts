@@ -7,6 +7,10 @@ for (const variationType of ['number', 'integer', 'float']) {
     ['1e999', false],
     ['9007199254740994', true],
     ['1.20000000000000001', true],
+    ['1152921504606846976', true],
+    ['147573952589676412928', true],
+    ['1267650600228229401496703205376', true],
+    ['-9223372036854775808', true],
   ] as const) {
     test(`${variationType} JSON token ${token}`, async ({ page }) => {
       // Fulfill with bytes, not a JS object that has already lost the token.

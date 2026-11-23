@@ -480,6 +480,29 @@ describe('browser debug-mode scenarios', () => {
     expect(value.resolveStringEvaluation('string-flag', 'default', context, logger).value).toBe('red')
   })
 
+  it('reports rejected numeric sources and excludes them from the accepted count', async () => {
+    const partial = JSON.parse(JSON.stringify(precomputed))
+    partial.data.attributes.flags['numeric-flag'].variationValue = '__NUMBER__'
+    const raw = JSON.stringify(partial).replace('"__NUMBER__"', '1e999')
+    fetch.mockResolvedValue({ ...response(), text: async () => raw })
+    const value = provider()
+    await value.initialize(context)
+    const invalidNumericSources = { 'numeric-flag': '1e999' }
+    expect(events('configuration.decoded').slice(-1)[0].details).toMatchObject({
+      acceptedCount: Object.keys(partial.data.attributes.flags).length - 1,
+      rejectedCount: 1,
+      rejectedKeys: ['numeric-flag'],
+      invalidNumericSources,
+    })
+    expect(events('configuration.installed').slice(-1)[0].details.invalidNumericSources).toEqual(invalidNumericSources)
+    expect(value.resolveNumberEvaluation('numeric-flag', -99.5, context, logger)).toMatchObject({
+      value: -99.5,
+      reason: 'ERROR',
+      errorCode: 'TYPE_MISMATCH',
+      errorMessage: 'Precomputed numeric assignment cannot be represented exactly as a JavaScript number',
+    })
+  })
+
   it('correlates superseded responses and preserves the newest context', async () => {
     const first = deferred<Response>()
     const second = deferred<Response>()
