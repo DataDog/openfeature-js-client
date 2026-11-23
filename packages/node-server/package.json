@@ -58,7 +58,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@datadog/flagging-core": "3.5.0"
+    "@datadog/flagging-core": "3.6.0"
   },
   "devDependencies": {
     "@openfeature/core": "1.11.0",
