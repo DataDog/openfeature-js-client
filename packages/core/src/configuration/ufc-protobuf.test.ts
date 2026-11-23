@@ -400,6 +400,14 @@ describe('flags configuration protobuf decoder', () => {
     })
   })
 
+  it.each([
+    [{ targetingKey: 'US' }, true],
+    [{ targetingKey: 'CA' }, false],
+    [{ country: 'US' }, false],
+  ] as const)('matches a targetingKey attribute path against the context targeting key %#', (context, expected) => {
+    expect(evaluateBoolean({ attributeName: 'targetingKey' }, context).value).toBe(expected)
+  })
+
   it.each(['constructor', '__proto__'])('treats inherited protobuf flag key %s as missing', (flagKey) => {
     expect(
       evaluateRulesBasedConfiguration(decodeRules(), 'boolean', flagKey, false, { targetingKey: 'user' }, logger)

@@ -337,12 +337,12 @@ function evaluateRules<T extends FlagValueType>(
     return dependencies.complete(details)
   }
 
-  const { targetingKey: subjectKey, ...remainingContext } = context
+  const subjectKey = context.targetingKey
 
-  // Include the subjectKey as an "id" attribute for rule matching only when present
+  // Expose the subjectKey to rule matching as "id" when present. An explicit "id" context attribute takes precedence.
   const subjectAttributes = {
     ...(subjectKey != null ? { id: subjectKey } : {}),
-    ...remainingContext,
+    ...context,
   }
   if (!Object.prototype.hasOwnProperty.call(config.flags, flagKey)) {
     logger.debug('returning default value because flag is not found', { flagKey, subjectKey })
