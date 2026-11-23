@@ -285,6 +285,10 @@ export function createResponseSigningController(
         verified.set(config, { ...proof, acceptedAt: proof.verifiedAt, context: signingContextKey(context) })
       }
     },
+    /** Unix seconds at which the verified proof of this configuration expires, when it has one. */
+    expiresAt(config: FlagsConfiguration | undefined): number | undefined {
+      return config ? verified.get(config)?.expiresAt : undefined
+    },
     isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       const proof = config && verified.get(config)
       return !!proof && proof.expiresAt <= Date.now() / 1000 && proof.context === signingContextKey(context)

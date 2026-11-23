@@ -108,6 +108,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private initializationStarted = false
   private verificationError: ResponseVerificationError | undefined
   private proofExpirySignaled = false
+  private proofExpiryTimer: ReturnType<typeof setTimeout> | undefined
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -257,6 +258,8 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async onClose(): Promise<void> {
+    clearTimeout(this.proofExpiryTimer)
+    this.proofExpiryTimer = undefined
     this.closed = true
     this.debug.event('shutdown.started', () => ({ state: this.status, contextRevision: this.contextRevision }))
     try {
@@ -405,6 +408,7 @@ export class DatadogProvider extends DatadogProviderBase {
           this.configurationRevision++
           this.configurationSource = source
           this.flagsConfiguration = config
+          this.scheduleProofExpiry()
           if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
             this.verifiedConfiguration = config
           this.assignmentSubjectIsolationRequired = false
@@ -627,6 +631,60 @@ export class DatadogProvider extends DatadogProviderBase {
     }
   }
 
+  /** Expiry is detected by a timer at expires-at and by the check on each read; both use this transition. */
+  private scheduleProofExpiry(): void {
+    clearTimeout(this.proofExpiryTimer)
+    this.proofExpiryTimer = undefined
+    const signing = this.configuration?.responseSigning
+    const expiresAt = signing?.mode === 'required' ? signing.expiresAt(this.flagsConfiguration) : undefined
+    if (expiresAt === undefined || this.closed) return
+    const config = this.flagsConfiguration
+    this.proofExpiryTimer = setTimeout(
+      () => {
+        this.proofExpiryTimer = undefined
+        if (this.flagsConfiguration !== config) return
+        // A timer can fire a little early; check again at the exact expiry.
+        if (!this.signalProofExpiry() && !this.proofExpirySignaled) this.scheduleProofExpiry()
+      },
+      Math.max(0, expiresAt * 1000 - Date.now())
+    )
+  }
+
+  /**
+   * Returns whether the current verified proof has expired, and changes the state once per expiry episode.
+   * Default: the verified flags stay in use and the provider is STALE. expireVerifiedFlags: ERROR and defaults.
+   * Both apply from READY and from STALE.
+   */
+  private signalProofExpiry(): boolean {
+    const signing = this.configuration?.responseSigning
+    const expired =
+      signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+    if (!expired) return false
+    if (this.proofExpirySignaled || (this.status !== ProviderStatus.READY && this.status !== ProviderStatus.STALE))
+      return true
+    const strictExpiry = signing.expireVerifiedFlags
+    this.proofExpirySignaled = true
+    const state = strictExpiry ? ProviderStatus.ERROR : ProviderStatus.STALE
+    this.debug.event('signing.expired', () => ({
+      configurationRevision: this.configurationRevision,
+      action: strictExpiry ? 'runtime_default_until_verified_refresh' : 'serve_verified_flags_stale',
+    }))
+    this.debug.event('provider.state_changed', () => ({
+      previousState: this.status,
+      state,
+      reason: 'expired-proof',
+    }))
+    const previous = this.status
+    this.status = state
+    if (strictExpiry)
+      this.events.emit(
+        ProviderEvents.Error,
+        toProviderErrorEvent(new GeneralError(signingFailureMessage('expired-proof')))
+      )
+    else if (previous !== ProviderStatus.STALE) this.events.emit(ProviderEvents.Stale)
+    return true
+  }
+
   protected resolve<T extends FlagValueType>(
     type: T,
     flagKey: string,
@@ -656,33 +714,12 @@ export class DatadogProvider extends DatadogProviderBase {
     const signing = this.configuration?.responseSigning
     const unverified =
       signing?.mode === 'required' && !signing.isUsable(this.flagsConfiguration, this.requestedEvaluationContext)
-    const expired =
-      signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
-    // Default: expired verified flags stay in use and the provider is STALE. expireVerifiedFlags: ERROR and defaults.
-    const strictExpiry = expired && signing.expireVerifiedFlags
-    const expiryMessage = signingFailureMessage('expired-proof')
-    if (
-      expired &&
-      !this.proofExpirySignaled &&
-      (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
-    ) {
-      this.proofExpirySignaled = true
-      const state = strictExpiry ? ProviderStatus.ERROR : ProviderStatus.STALE
-      this.debug.event('signing.expired', () => ({
-        configurationRevision: this.configurationRevision,
-        action: strictExpiry ? 'runtime_default_until_verified_refresh' : 'serve_verified_flags_stale',
-      }))
-      this.debug.event('provider.state_changed', () => ({
-        previousState: this.status,
-        state,
-        reason: 'expired-proof',
-      }))
-      const previous = this.status
-      this.status = state
-      if (strictExpiry) this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
-      else if (previous !== ProviderStatus.STALE) this.events.emit(ProviderEvents.Stale)
-    }
-    const verificationMessage = strictExpiry ? expiryMessage : unverified ? this.verificationError?.message : undefined
+    const strictExpiry = this.signalProofExpiry() && signing?.expireVerifiedFlags
+    const verificationMessage = strictExpiry
+      ? signingFailureMessage('expired-proof')
+      : unverified
+        ? this.verificationError?.message
+        : undefined
     const result: ResolutionDetails<FlagTypeToValue<T>> = verificationMessage
       ? {
           value: defaultValue,

@@ -742,6 +742,104 @@ test('default expiry is logged as a stale policy', async () => {
     records.filter((record) => record.event === 'evaluation.completed').slice(-1)[0].details.expirationPolicy
   ).toBe('stale_after_verified_proof_expiry')
 })
+describe('expiry timer at expires-at', () => {
+  // Date stays under the jest.spyOn mock; only the timers are fake.
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['Date', 'nextTick', 'queueMicrotask', 'setImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+  const settle = () => jest.advanceTimersByTimeAsync(100)
+  test.each([
+    [false, 'READY'],
+    [false, 'STALE'],
+    [true, 'READY'],
+    [true, 'STALE'],
+  ] as const)(
+    'expireVerifiedFlags %s from %s: the timer changes the state with no evaluation',
+    async (strictMode, from) => {
+      global.fetch = jest.fn(signed)
+      const subject = provider(
+        'required',
+        strictMode ? strict() : { experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots } }
+      )
+      await subject.initialize(context)
+      if (from === 'STALE') {
+        // A failed refresh falls back to the verified memory: the provider is STALE before the proof expires.
+        global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
+        const update = subject.onContextChange(context, context)
+        await jest.advanceTimersByTimeAsync(30_000)
+        await update
+      }
+      expect(subject.status).toBe(from === 'STALE' ? ProviderStatus.STALE : ProviderStatus.READY)
+      const stale = jest.fn()
+      const error = jest.fn()
+      subject.events.addHandler(ProviderEvents.Stale, stale)
+      subject.events.addHandler(ProviderEvents.Error, error)
+
+      // One second before expiry nothing changes.
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 299) * 1000)
+      await jest.advanceTimersByTimeAsync(299_000)
+      expect(subject.status).toBe(from === 'STALE' ? ProviderStatus.STALE : ProviderStatus.READY)
+      expect(error).not.toHaveBeenCalled()
+
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+      await jest.advanceTimersByTimeAsync(1_000)
+      await settle()
+      if (strictMode) {
+        expect(subject.status).toBe(ProviderStatus.ERROR)
+        expect(error).toHaveBeenCalledTimes(1)
+        expect(error).toHaveBeenCalledWith(
+          expect.objectContaining({ errorCode: ErrorCode.GENERAL, message: signingFailureMessage('expired-proof') })
+        )
+        expect(stale).not.toHaveBeenCalled()
+        expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
+          value: false,
+          errorCode: ErrorCode.GENERAL,
+        })
+      } else {
+        expect(subject.status).toBe(ProviderStatus.STALE)
+        // From STALE the state does not change, so no second STALE event is sent.
+        expect(stale).toHaveBeenCalledTimes(from === 'READY' ? 1 : 0)
+        expect(error).not.toHaveBeenCalled()
+        expect(evaluation(subject)).toBe(true)
+      }
+      // The read check does not send the event again.
+      subject.resolveBooleanEvaluation('critical', false, {}, logger)
+      await settle()
+      expect(error).toHaveBeenCalledTimes(strictMode ? 1 : 0)
+
+      // A new verified response returns READY and schedules a new timer.
+      global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 300))
+      const refresh = subject.onContextChange(context, context)
+      await settle()
+      await refresh
+      expect(subject.status).toBe(ProviderStatus.READY)
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 600) * 1000)
+      await jest.advanceTimersByTimeAsync(300_000)
+      await settle()
+      expect(subject.status).toBe(strictMode ? ProviderStatus.ERROR : ProviderStatus.STALE)
+      expect(error).toHaveBeenCalledTimes(strictMode ? 2 : 0)
+    }
+  )
+  test('closing the provider cancels the expiry timer', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', strict())
+    await subject.initialize(context)
+    const error = jest.fn()
+    subject.events.addHandler(ProviderEvents.Error, error)
+    await subject.onClose()
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    await jest.advanceTimersByTimeAsync(301_000)
+    expect(error).not.toHaveBeenCalled()
+    expect(jest.getTimerCount()).toBe(0)
+  })
+  test('observe mode schedules no expiry timer', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('observe')
+    await subject.initialize(context)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    await jest.advanceTimersByTimeAsync(301_000)
+    expect(subject.status).toBe(ProviderStatus.READY)
+  })
+})
 describe('RUM is not part of the signing scope', () => {
   // The browser application ID is a fixed init option. RUM only enriches the context when the application
   // changes it, so a RUM start, a RUM stop, or a RUM change during a fetch never invalidates verified flags.

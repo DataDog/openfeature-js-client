@@ -230,8 +230,8 @@ experimentalResponseSigning: { mode: 'required', expireVerifiedFlags: true }
 ```
 
 In both settings, repeated evaluations do not repeat the event, and a fresh verified response restores `READY`
-and emits `PROVIDER_READY`. Expiry does not start a refresh. There is no expiry timer;
-an idle provider signals expiry when its next evaluation detects it. An update
+and emits `PROVIDER_READY`. Expiry does not start a refresh. The provider detects expiry in two ways: a timer at `expires-at`, and a check on
+each evaluation. Both change the state and send the event once, from `READY` or `STALE`. An update
 already in progress keeps its reconciliation status until that update completes.
 
 Minimum not-before revocation (**draft wire**, pending the edge): a response can carry
