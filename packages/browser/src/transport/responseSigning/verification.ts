@@ -17,10 +17,11 @@ export const SIGNING_VERSION = '1'
 /** Intermediate certificates: 1 to 3 standard base64 DER entries joined by ',', index 0 issued the leaf. */
 export const SIGNING_CHAIN_HEADER = 'x-datadog-feature-flags-signing-chain'
 /**
- * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: certificates that start before this time are
- * revoked for the response's trust anchor. When present, it is bound at the end of the v1 transcript.
+ * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: a LEAF that starts before this time is revoked
+ * for the response's trust anchor. Intermediates are never compared with it. When present, it is bound at the end of
+ * the v1 transcript. The edge must list it in Access-Control-Expose-Headers, or the browser cannot read it.
  */
-export const MINIMUM_NOT_BEFORE_HEADER = 'x-datadog-feature-flags-minimum-not-before'
+export const MINIMUM_LEAF_NOT_BEFORE_HEADER = 'x-datadog-feature-flags-minimum-leaf-not-before'
 const TRANSCRIPT_DOMAIN = 'datadog.feature-flags.precomputed-assignments.v1\0'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
@@ -73,9 +74,9 @@ export interface VerifiedResponse {
   expiresAt: number
   /** SHA-256 hex of the DER of the trust anchor that the chain ended at. */
   anchorKey: string
-  /** The earliest notBefore in the response chain (the leaf and every intermediate), unix seconds. */
-  chainNotBefore: number
-  /** DRAFT: the signed minimum not-before value, when the response has one. */
+  /** notBefore of the leaf that signed the response, unix seconds. */
+  leafNotBefore: number
+  /** DRAFT: the signed minimum leaf not-before value, when the response has one. */
   minimumNotBefore?: number
 }
 
@@ -617,7 +618,7 @@ export async function verifyResponse(
   const issuedAt = seconds(proof(response.headers, 'issued-at')),
     expiresAt = seconds(proof(response.headers, 'expires-at'))
   // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
-  const minimumNotBeforeValue = response.headers.get(MINIMUM_NOT_BEFORE_HEADER)
+  const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
   const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
   requireCondition(
     issuedAt <= now + 30 && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
@@ -659,10 +660,8 @@ export async function verifyResponse(
   requireCondition(anchor && anchorDer, 'invalid-certificate')
   const anchorKey = hex(await sha256(anchorDer))
   const floor = storedMinimumNotBefore(anchorKey)
-  requireCondition(
-    [leaf, ...intermediates].every((certificate) => certificate.notBefore >= floor),
-    'revoked-certificate'
-  )
+  // Leaf only: intermediates live for years, so comparing them would block every later leaf.
+  requireCondition(leaf.notBefore >= floor, 'revoked-certificate')
   for (const certificate of [leaf, ...intermediates]) {
     requireCondition(
       now >= certificate.notBefore &&
@@ -683,6 +682,5 @@ export async function verifyResponse(
     minimumNotBefore
   )
   requireCondition(await verifySignature(await importPublicKey(leaf), signature, transcript), 'invalid-signature')
-  const chainNotBefore = Math.min(...[leaf, ...intermediates].map((certificate) => certificate.notBefore))
-  return { expiresAt, verifiedAt: now, anchorKey, chainNotBefore, minimumNotBefore }
+  return { expiresAt, verifiedAt: now, anchorKey, leafNotBefore: leaf.notBefore, minimumNotBefore }
 }

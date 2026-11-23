@@ -234,14 +234,16 @@ and emits `PROVIDER_READY`. Expiry does not start a refresh. The provider detect
 each evaluation. Both change the state and send the event once, from `READY` or `STALE`. An update
 already in progress keeps its reconciliation status until that update completes.
 
-Minimum not-before revocation (**draft wire**, pending the edge): a response can carry
-`x-datadog-feature-flags-minimum-not-before`, unix seconds, which is bound at the end of the v1 transcript.
+Minimum leaf not-before revocation (**draft wire**, pending the edge): a response can carry
+`x-datadog-feature-flags-minimum-leaf-not-before`, unix seconds, which is bound at the end of the v1 transcript.
 After a fully verified response, the SDK stores the highest value for each trust anchor in `localStorage`
-(in memory only when storage is not available). It ignores a value that is greater than the `notBefore` of any
-certificate in that response's chain, or lower than the stored value. Then it rejects a chain whose leaf or
-intermediate starts before the stored value, with `Response signing: revoked-certificate`. Required mode fails
-closed; observe mode reports the reason and accepts the response as unverified. This value holds no flag data,
-and it is the only data that required mode persists. One value revokes every older certificate at every level.
+(in memory only when storage is not available). It ignores a value that is greater than the `notBefore` of the
+leaf in that response, or lower than the stored value. Then it rejects a leaf that starts before the stored
+value, with `Response signing: revoked-certificate`. The floor applies to the leaf only and is never compared with
+intermediates, so a new leaf under older intermediates verifies. Required mode fails closed; observe mode reports
+the reason and accepts the response as unverified. This value holds no flag data, and it is the only data that
+required mode persists. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
+read it.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
 headers, mode, selection and nested context. Upgrading into observe causes a

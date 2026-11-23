@@ -186,6 +186,6 @@ export function signedResponse(
     'x-datadog-feature-flags-signature': sign('sha256', transcript, signer.privateKey).toString('base64'),
   })
   if (minimumNotBefore !== undefined)
-    headers.set('x-datadog-feature-flags-minimum-not-before', String(minimumNotBefore))
+    headers.set('x-datadog-feature-flags-minimum-leaf-not-before', String(minimumNotBefore))
   return { status: 200, headers, body, transcript, issuedAt, expiresAt }
 }

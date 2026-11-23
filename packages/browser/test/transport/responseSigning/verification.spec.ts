@@ -228,65 +228,68 @@ describe('wire format and transcript', () => {
   })
 })
 
+/** Synthetic certificate helpers: re-sign real fixture certificates with fresh keys. */
+interface Node {
+  certificate: Certificate
+  der: Uint8Array
+  privateKey: KeyObject
+}
+const template = loadCredential('two-intermediates')
+const templates = {
+  root: ROOT_A,
+  upper: template.intermediatesBase64[1],
+  lower: template.intermediatesBase64[0],
+  leaf: template.leafBase64,
+}
+function ext(id: string, critical: boolean, value: object): Extension {
+  return new Extension({ extnID: id, critical, extnValue: new OctetString(AsnConvert.serialize(value)) })
+}
+const caBasic = (pathLenConstraint?: number, critical = true, cA = true) =>
+  ext(
+    '2.5.29.19',
+    critical,
+    new BasicConstraints({ cA, ...(pathLenConstraint !== undefined && { pathLenConstraint }) })
+  )
+const eku = (...purposes: string[]) => ext('2.5.29.37', false, new ExtendedKeyUsage(purposes))
+function forge(
+  templateBase64: string,
+  issuer: Node | 'self',
+  replace: Extension[],
+  remove: string[] = [],
+  lifetime = 10 * 24 * 3600,
+  notBefore?: number
+): Node {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const certificate = AsnConvert.parse(Buffer.from(templateBase64, 'base64'), Certificate)
+  const tbs = certificate.tbsCertificate
+  const spki = publicKey.export({ format: 'der', type: 'spki' })
+  tbs.subjectPublicKeyInfo.subjectPublicKey = new Uint8Array(spki.subarray(spki.length - 65)).buffer
+  tbs.issuer = issuer === 'self' ? tbs.subject : issuer.certificate.tbsCertificate.subject
+  tbs.validity = new Validity({
+    notBefore: new Date((notBefore ?? FIXTURE_NOW - 3600 - (issuer === 'self' ? 1000 : 0)) * 1000),
+    notAfter: new Date((FIXTURE_NOW + lifetime) * 1000),
+  })
+  // Drop key identifiers: they are optional per link and would otherwise name the template keys.
+  const dropped = new Set(['2.5.29.14', '2.5.29.35', ...remove, ...replace.map((e) => e.extnID)])
+  const extensions = (tbs.extensions || []).filter((e) => !dropped.has(e.extnID))
+  tbs.extensions = new Extensions([...extensions, ...replace])
+  const tbsDer = Buffer.from(AsnConvert.serialize(tbs))
+  const signer = issuer === 'self' ? privateKey : issuer.privateKey
+  const forged = new Certificate({
+    tbsCertificate: tbs,
+    signatureAlgorithm: certificate.signatureAlgorithm,
+    signatureValue: new Uint8Array(sign('sha256', tbsDer, signer)).buffer,
+  })
+  const der = new Uint8Array(AsnConvert.serialize(forged))
+  return { certificate: AsnConvert.parse(der, Certificate), der, privateKey }
+}
+const b64 = (node: Node) => Buffer.from(node.der).toString('base64')
+
 /**
  * Synthetic chains re-sign real fixture certificates with fresh keys and changed extensions.
  * They isolate one profile rule at a time; the verifier still parses every certificate from DER.
  */
 describe('certificate profile (synthetic re-signed chains)', () => {
-  interface Node {
-    certificate: Certificate
-    der: Uint8Array
-    privateKey: KeyObject
-  }
-  const template = loadCredential('two-intermediates')
-  const templates = {
-    root: ROOT_A,
-    upper: template.intermediatesBase64[1],
-    lower: template.intermediatesBase64[0],
-    leaf: template.leafBase64,
-  }
-  function ext(id: string, critical: boolean, value: object): Extension {
-    return new Extension({ extnID: id, critical, extnValue: new OctetString(AsnConvert.serialize(value)) })
-  }
-  const caBasic = (pathLenConstraint?: number, critical = true, cA = true) =>
-    ext(
-      '2.5.29.19',
-      critical,
-      new BasicConstraints({ cA, ...(pathLenConstraint !== undefined && { pathLenConstraint }) })
-    )
-  const eku = (...purposes: string[]) => ext('2.5.29.37', false, new ExtendedKeyUsage(purposes))
-  function forge(
-    templateBase64: string,
-    issuer: Node | 'self',
-    replace: Extension[],
-    remove: string[] = [],
-    lifetime = 10 * 24 * 3600
-  ): Node {
-    const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-    const certificate = AsnConvert.parse(Buffer.from(templateBase64, 'base64'), Certificate)
-    const tbs = certificate.tbsCertificate
-    const spki = publicKey.export({ format: 'der', type: 'spki' })
-    tbs.subjectPublicKeyInfo.subjectPublicKey = new Uint8Array(spki.subarray(spki.length - 65)).buffer
-    tbs.issuer = issuer === 'self' ? tbs.subject : issuer.certificate.tbsCertificate.subject
-    tbs.validity = new Validity({
-      notBefore: new Date((FIXTURE_NOW - 3600 - (issuer === 'self' ? 1000 : 0)) * 1000),
-      notAfter: new Date((FIXTURE_NOW + lifetime) * 1000),
-    })
-    // Drop key identifiers: they are optional per link and would otherwise name the template keys.
-    const dropped = new Set(['2.5.29.14', '2.5.29.35', ...remove, ...replace.map((e) => e.extnID)])
-    const extensions = (tbs.extensions || []).filter((e) => !dropped.has(e.extnID))
-    tbs.extensions = new Extensions([...extensions, ...replace])
-    const tbsDer = Buffer.from(AsnConvert.serialize(tbs))
-    const signer = issuer === 'self' ? privateKey : issuer.privateKey
-    const forged = new Certificate({
-      tbsCertificate: tbs,
-      signatureAlgorithm: certificate.signatureAlgorithm,
-      signatureValue: new Uint8Array(sign('sha256', tbsDer, signer)).buffer,
-    })
-    const der = new Uint8Array(AsnConvert.serialize(forged))
-    return { certificate: AsnConvert.parse(der, Certificate), der, privateKey }
-  }
-  const b64 = (node: Node) => Buffer.from(node.der).toString('base64')
   interface Shape {
     root?: Extension[]
     intermediates?: Extension[][]
@@ -623,13 +626,23 @@ describe('shared v1 fixtures', () => {
   }
 })
 
-describe('minimum not-before revocation (draft wire)', () => {
-  const notBefore = (base64: string) => Date.parse(new X509Certificate(Buffer.from(base64, 'base64')).validFrom) / 1000
-  const newChain = loadCredential('one-intermediate')
-  const oldChain = loadCredential('two-intermediates')
-  // The new chain's earliest notBefore (its intermediate). The old chain's intermediates are older than it.
-  const FLOOR = Math.min(notBefore(newChain.leafBase64), ...newChain.intermediatesBase64.map(notBefore))
-  const anchorKey = createHash('sha256').update(Buffer.from(ROOT_A, 'base64')).digest('hex')
+describe('minimum leaf not-before revocation (draft wire)', () => {
+  // Synthetic chain under one root: the intermediates start long before both leaves, as in production.
+  const intermediateStart = FIXTURE_NOW - 15_000
+  const root = forge(templates.root, 'self', [caBasic(2)], [], 40 * 24 * 3600, intermediateStart - 5_000)
+  const upper = forge(templates.upper, root, [caBasic(1)], [], 30 * 24 * 3600, intermediateStart)
+  const lower = forge(templates.lower, upper, [caBasic(0)], [], 20 * 24 * 3600, intermediateStart + 5_000)
+  const oldLeaf = forge(templates.leaf, lower, [eku(FFE_EKU)], [], 3 * 24 * 3600, FIXTURE_NOW - 3_600)
+  const newLeaf = forge(templates.leaf, lower, [eku(FFE_EKU)], [], 3 * 24 * 3600, FIXTURE_NOW - 1_800)
+  const signer = (leaf: Node) => ({
+    privateKey: leaf.privateKey,
+    leafBase64: b64(leaf),
+    intermediatesBase64: [b64(lower), b64(upper)],
+  })
+  // The floor is the new leaf's notBefore. It is later than the notBefore of both intermediates.
+  const FLOOR = FIXTURE_NOW - 1_800
+  const HEADER = 'x-datadog-feature-flags-minimum-leaf-not-before'
+  const anchorKey = createHash('sha256').update(Buffer.from(root.der)).digest('hex')
   const url = 'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=staging'
   type Mode = 'observe' | 'required'
   function capture() {
@@ -641,12 +654,14 @@ describe('minimum not-before revocation (draft wire)', () => {
     }
     return { events, logger }
   }
-  function controller(mode: Mode) {
-    return createResponseSigningController({ mode, trustedRootCertificates: [ROOT_A] }, { site: 'datad0g.com' })!
+  const outcome = (events: Array<{ name: string; fields: any }>) =>
+    events.find((event) => event.name === 'signing.minimum_not_before')?.fields.outcome
+  function controller(mode: Mode, anchor = root) {
+    return createResponseSigningController({ mode, trustedRootCertificates: [b64(anchor)] }, { site: 'datad0g.com' })!
   }
   async function read(
     signing: ReturnType<typeof controller>,
-    credential: ReturnType<typeof loadCredential>,
+    credential: ReturnType<typeof signer>,
     minimumNotBefore?: number,
     change?: (headers: Headers) => void,
     logger = capture().logger
@@ -687,30 +702,81 @@ describe('minimum not-before revocation (draft wire)', () => {
     else delete (globalThis as { localStorage?: unknown }).localStorage
   })
 
-  test('the old chain has intermediates older than every certificate of the new chain', () => {
-    expect(Math.min(...oldChain.intermediatesBase64.map(notBefore))).toBeLessThan(FLOOR)
-    expect(notBefore(newChain.leafBase64)).toBeGreaterThanOrEqual(FLOOR)
+  test('the synthetic chain: both intermediates start before the floor, the old leaf before it, the new leaf at it', () => {
+    for (const node of [upper, lower]) expect(new X509Certificate(Buffer.from(node.der)).validFrom).toBeDefined()
+    expect(intermediateStart + 5_000).toBeLessThan(FLOOR)
+    expect(FIXTURE_NOW - 3_600).toBeLessThan(FLOOR)
   })
-  test('required: a signed value is stored, then the old chain is rejected and the new chain still verifies', async () => {
+  test('after the floor is stored, an old leaf under the same intermediates is rejected', async () => {
     const signing = controller('required')
-    expect((await read(signing, oldChain)).proof).toBeDefined()
-    const { events, logger } = capture()
-    expect((await read(signing, newChain, FLOOR, undefined, logger)).proof).toMatchObject({ minimumNotBefore: FLOOR })
-    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields).toMatchObject({
-      outcome: 'stored',
-      value: FLOOR,
-    })
+    expect((await read(signing, signer(oldLeaf))).proof).toBeDefined()
+    await read(signing, signer(newLeaf), FLOOR)
     expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
-    expect(localStorage.getItem(`dd-ffe-response-signing-minimum-not-before-v1:${anchorKey}`)).toBe(String(FLOOR))
-    await expect(read(signing, oldChain)).rejects.toThrow('Response signing: revoked-certificate')
-    expect((await read(signing, newChain)).proof).toBeDefined()
+    await expect(read(signing, signer(oldLeaf))).rejects.toThrow('Response signing: revoked-certificate')
   })
-  test('observe: applies the check, reports revoked-certificate, accepts the response, and stores values', async () => {
+  test('a new leaf with older intermediates is ACCEPTED, and its floor is stored', async () => {
+    const signing = controller('required')
+    const { events, logger } = capture()
+    // The floor is later than both intermediates. The earlier any-certificate rule ignored it.
+    expect((await read(signing, signer(newLeaf), FLOOR, undefined, logger)).proof).toMatchObject({
+      minimumNotBefore: FLOOR,
+      leafNotBefore: FLOOR,
+    })
+    expect(outcome(events)).toBe('stored')
+    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
+    expect(localStorage.getItem(`dd-ffe-response-signing-minimum-leaf-not-before-v1:${anchorKey}`)).toBe(String(FLOOR))
+    // Later responses from the new leaf still verify: the floor is never compared with intermediates.
+    expect((await read(signing, signer(newLeaf))).proof).toBeDefined()
+  })
+  test('a value greater than the leaf notBefore is ignored', async () => {
+    const signing = controller('required')
+    const { events, logger } = capture()
+    expect((await read(signing, signer(newLeaf), FLOOR + 1, undefined, logger)).proof).toBeDefined()
+    expect(outcome(events)).toBe('minimum-not-before-ignored')
+    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+    expect((await read(signing, signer(oldLeaf))).proof).toBeDefined()
+  })
+  test('a value lower than the stored value is ignored', async () => {
+    const signing = controller('required')
+    await read(signing, signer(newLeaf), FLOOR)
+    const { events, logger } = capture()
+    await read(signing, signer(newLeaf), FLOOR - 1, undefined, logger)
+    expect(outcome(events)).toBe('not-higher-than-stored')
+    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
+  })
+  test.each([
+    ['changed', (headers: Headers) => headers.set(HEADER, String(FLOOR - 1)), FLOOR, 'invalid-signature'],
+    ['removed', (headers: Headers) => headers.delete(HEADER), FLOOR, 'invalid-signature'],
+    ['added', (headers: Headers) => headers.set(HEADER, String(FLOOR)), undefined, 'invalid-signature'],
+    ['duplicated', (headers: Headers) => headers.append(HEADER, String(FLOOR - 1)), FLOOR, 'invalid-proof'],
+    ['leading zero', (headers: Headers) => headers.set(HEADER, `0${FLOOR}`), FLOOR, 'invalid-proof'],
+    ['above 2^53-1', (headers: Headers) => headers.set(HEADER, '9007199254740992'), FLOOR, 'invalid-proof'],
+  ] as const)('a %s header fails verification and stores nothing', async (_label, change, signedValue, reason) => {
+    await expect(read(controller('required'), signer(newLeaf), signedValue, change)).rejects.toThrow(
+      `Flag response signing failed (${reason})`
+    )
+    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+  })
+  test('the earlier header name is not read', async () => {
+    const result = await read(controller('required'), signer(newLeaf), undefined, (headers) =>
+      headers.set('x-datadog-feature-flags-minimum-not-before', String(FLOOR))
+    )
+    expect(result.proof).toBeDefined()
+    expect(result.proof?.minimumNotBefore).toBeUndefined()
+    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+  })
+  test('the stored value survives a restart', async () => {
+    await read(controller('required'), signer(newLeaf), FLOOR)
+    forgetMinimumNotBeforeInMemory()
+    await expect(read(controller('required'), signer(oldLeaf))).rejects.toThrow('Response signing: revoked-certificate')
+    expect((await read(controller('required'), signer(newLeaf))).proof).toBeDefined()
+  })
+  test('observe: applies the floor, reports revoked-certificate, accepts the response, and stores values', async () => {
     const signing = controller('observe')
-    expect((await read(signing, newChain, FLOOR)).proof).toBeDefined()
+    expect((await read(signing, signer(newLeaf), FLOOR)).proof).toBeDefined()
     expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
     const { events, logger } = capture()
-    const result = await read(signing, oldChain, undefined, undefined, logger)
+    const result = await read(signing, signer(oldLeaf), undefined, undefined, logger)
     expect(result.proof).toBeUndefined()
     expect(result.json).toBeDefined()
     expect(events.find((event) => event.name === 'signing.failed')?.fields).toMatchObject({
@@ -718,96 +784,24 @@ describe('minimum not-before revocation (draft wire)', () => {
       action: 'continue_unverified',
     })
   })
-  test('a value lower than the stored value is ignored', async () => {
-    const signing = controller('required')
-    await read(signing, newChain, FLOOR)
-    const { events, logger } = capture()
-    await read(signing, newChain, FLOOR - 1, undefined, logger)
-    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields.outcome).toBe(
-      'not-higher-than-stored'
-    )
-    expect(storedMinimumNotBefore(anchorKey)).toBe(FLOOR)
-  })
-  test.each([
-    ['greater than the leaf notBefore', notBefore(newChain.leafBase64) + 1],
-    // Between the intermediate and the leaf: a leaf-only rule would revoke every later chain.
-    ['greater than an intermediate notBefore', FLOOR + 1],
-  ])('a value %s is ignored, because a response never revokes its own chain', async (_label, value) => {
-    const signing = controller('required')
-    const { events, logger } = capture()
-    expect((await read(signing, newChain, value, undefined, logger)).proof).toBeDefined()
-    expect(events.find((event) => event.name === 'signing.minimum_not_before')?.fields.outcome).toBe(
-      'minimum-not-before-ignored'
-    )
-    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
-    expect((await read(signing, oldChain)).proof).toBeDefined()
-    expect((await read(signing, newChain)).proof).toBeDefined()
-  })
-  test.each([
-    [
-      'changed',
-      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', String(FLOOR - 1)),
-      FLOOR,
-      'invalid-signature',
-    ],
-    [
-      'removed',
-      (headers: Headers) => headers.delete('x-datadog-feature-flags-minimum-not-before'),
-      FLOOR,
-      'invalid-signature',
-    ],
-    [
-      'added',
-      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', String(FLOOR)),
-      undefined,
-      'invalid-signature',
-    ],
-    [
-      'duplicated',
-      (headers: Headers) => headers.append('x-datadog-feature-flags-minimum-not-before', String(FLOOR - 1)),
-      FLOOR,
-      'invalid-proof',
-    ],
-    [
-      'leading zero',
-      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', `0${FLOOR}`),
-      FLOOR,
-      'invalid-proof',
-    ],
-    [
-      'above 2^53-1',
-      (headers: Headers) => headers.set('x-datadog-feature-flags-minimum-not-before', '9007199254740992'),
-      FLOOR,
-      'invalid-proof',
-    ],
-  ] as const)('a %s header fails verification and stores nothing', async (_label, change, signedValue, reason) => {
-    const signing = controller('required')
-    await expect(read(signing, newChain, signedValue, change)).rejects.toThrow(
-      `Flag response signing failed (${reason})`
-    )
-    expect(storedMinimumNotBefore(anchorKey)).toBe(0)
-  })
-  test('the stored value survives a restart', async () => {
-    await read(controller('required'), newChain, FLOOR)
-    forgetMinimumNotBeforeInMemory()
-    await expect(read(controller('required'), oldChain)).rejects.toThrow('Response signing: revoked-certificate')
-  })
   test('without localStorage the value is kept in memory for the page only', async () => {
     blocked = true
     const signing = controller('required')
-    await read(signing, newChain, FLOOR)
-    await expect(read(signing, oldChain)).rejects.toThrow('Response signing: revoked-certificate')
+    await read(signing, signer(newLeaf), FLOOR)
+    await expect(read(signing, signer(oldLeaf))).rejects.toThrow('Response signing: revoked-certificate')
     forgetMinimumNotBeforeInMemory()
-    expect((await read(controller('required'), oldChain)).proof).toBeDefined()
+    expect((await read(controller('required'), signer(oldLeaf))).proof).toBeDefined()
   })
   test('values are kept per trust anchor', async () => {
-    await read(controller('required'), newChain, FLOOR)
-    const other = createHash('sha256').update(Buffer.from(ROOT_B, 'base64')).digest('hex')
+    await read(controller('required'), signer(newLeaf), FLOOR)
+    // The fixture chain under root A has its own anchor key and no stored floor.
+    const other = createHash('sha256').update(Buffer.from(ROOT_A, 'base64')).digest('hex')
+    expect(other).not.toBe(anchorKey)
     expect(storedMinimumNotBefore(other)).toBe(0)
-    const backup = createResponseSigningController(
-      { mode: 'required', trustedRootCertificates: [ROOT_B] },
+    const fixture = createResponseSigningController(
+      { mode: 'required', trustedRootCertificates: [ROOT_A] },
       { site: 'datad0g.com' }
     )!
-    expect((await read(backup, loadCredential('backup-root'))).proof).toBeDefined()
+    expect((await read(fixture, loadCredential('two-intermediates'))).proof).toBeDefined()
   })
 })

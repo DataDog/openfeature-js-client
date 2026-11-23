@@ -1,11 +1,12 @@
 /**
  * DRAFT wire, pending the edge and the shared fixtures.
  *
- * The highest signed minimum not-before value seen for each trust anchor (SHA-256 hex of the root DER).
+ * The highest signed minimum leaf not-before value seen for each trust anchor (SHA-256 hex of the root DER).
  * This is the only data that required mode persists, and it holds no flag data. Storage is best effort:
  * when localStorage is not available, the value is kept in memory for this page only.
  */
-const STORAGE_PREFIX = 'dd-ffe-response-signing-minimum-not-before-v1:'
+// A new key for the leaf-only rule: a value stored under the earlier any-certificate draft is not reused.
+const STORAGE_PREFIX = 'dd-ffe-response-signing-minimum-leaf-not-before-v1:'
 const memory = new Map<string, number>()
 
 function readStorage(anchorKey: string): number {

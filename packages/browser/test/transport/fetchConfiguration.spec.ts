@@ -1090,7 +1090,7 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const nowSeconds = () => Math.floor(Date.now() / 1000)
-      const proofScope = { anchorKey: '0'.repeat(64), chainNotBefore: 0 }
+      const proofScope = { anchorKey: '0'.repeat(64), leafNotBefore: 0 }
       const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300, ...proofScope })
       const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300, ...proofScope })
 

@@ -134,14 +134,14 @@ export function createResponseSigningController(
     return undefined
   }
   /**
-   * DRAFT: keep a signed minimum not-before only when it cannot revoke any certificate of the chain that signed it.
-   * Intermediates are older than the leaf, so a leaf-only check could revoke every later chain.
+   * DRAFT: keep a signed minimum leaf not-before only when it cannot revoke the leaf that signed it.
+   * It is never compared with intermediates.
    */
   function recordMinimumNotBefore(proof: VerifiedResponse, logger: DebugLogger): void {
     const value = proof.minimumNotBefore
     if (value === undefined) return
     const outcome =
-      value > proof.chainNotBefore
+      value > proof.leafNotBefore
         ? 'minimum-not-before-ignored'
         : raiseMinimumNotBefore(proof.anchorKey, value)
           ? 'stored'
