@@ -1,4 +1,4 @@
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { type FlagsConfiguration, parsePrecomputedConfigurationJson } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
@@ -156,7 +156,7 @@ export function createResponseSigningController(
         }))
         throw new Error('Flag configuration redirects are not supported with response signing')
       }
-      if (!request) return { json: await response.json() }
+      if (!request) return { json: parsePrecomputedConfigurationJson(await response.text()) }
       // Response bodies are application bytes: fetch has already decompressed HTTP content-encoding.
       let bytes: Uint8Array
       if (mode === 'required' && response.body) {
@@ -196,7 +196,7 @@ export function createResponseSigningController(
       }
       logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
       // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
-      return { json: JSON.parse(new TextDecoder().decode(bytes)), proof }
+      return { json: parsePrecomputedConfigurationJson(new TextDecoder().decode(bytes)), proof }
     },
     admit(
       config: FlagsConfiguration,

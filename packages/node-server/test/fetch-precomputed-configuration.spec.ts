@@ -107,6 +107,33 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(RulesFetchError).toBe(ConfigurationFetchError)
   })
 
+  it.each(['number', 'integer', 'float'])(
+    'preserves %s numeric failures through fetch and serialization',
+    async (variationType) => {
+      for (const token of ['9007199254740993', '1e-999', '1e999']) {
+        const body = JSON.stringify({
+          data: {
+            attributes: {
+              createdAt: '2026-11-23T00:00:00Z',
+              flags: {
+                numeric: { ...assignment, variationType, variationValue: '__TOKEN__' },
+                healthy: assignment,
+              },
+            },
+          },
+        }).replace('"__TOKEN__"', token)
+        requestFetch.mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'application/json' } }))
+        const configuration = await fetchPrecomputedConfiguration({ ...options, fetch: requestFetch })
+        for (const snapshot of [configuration, configurationFromString(configurationToString(configuration))]) {
+          const result = evaluate(snapshot, 'number', 'numeric', -99.5, context)
+          expect(result).toMatchObject({ value: -99.5, reason: 'ERROR', errorCode: 'TYPE_MISMATCH' })
+          expect(result.variant).toBeUndefined()
+          expect(evaluate(snapshot, 'boolean', 'healthy', false, context).value).toBe(true)
+        }
+      }
+    }
+  )
+
   it('maps client credentials, context, environment and target compatibility to the existing endpoint', async () => {
     const result = await fetchPrecomputedConfiguration({
       ...options,

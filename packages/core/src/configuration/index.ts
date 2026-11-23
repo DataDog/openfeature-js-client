@@ -13,6 +13,7 @@ export * from './flagEvaluationAggregator'
 export * from './flagEvaluationEvent'
 export * from './flagEvaluationEvent.types'
 export * from './precomputed-context'
+export { parsePrecomputedConfigurationJson } from './precomputed-json'
 export {
   configurationFromPrecomputedString as configurationFromString,
   configurationToPrecomputedString as configurationToString,

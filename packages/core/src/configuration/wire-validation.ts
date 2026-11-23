@@ -10,6 +10,7 @@ import {
   readFlagKeyObfuscation,
   supportsDependencyKeyEncryption,
 } from './flag-key-obfuscation'
+import { isUnrepresentablePrecomputedNumber, precomputedNumberSource } from './precomputed-json'
 
 type WireEntry = {
   response: string
@@ -38,7 +39,13 @@ export function isPrecomputedWireEntry(value: unknown): value is PrecomputedWire
 export function parsePrecomputedConfigurationResponse(
   value: unknown,
   onInvalidFlag?: (key: string, issue: { field: string; expected: string; actual: unknown }) => void
-): { response: PrecomputedConfigurationResponse; flagErrors?: Record<string, string> } | { error: string } {
+):
+  | {
+      response: PrecomputedConfigurationResponse
+      flagErrors?: Record<string, string>
+      numericErrors?: Record<string, string>
+    }
+  | { error: string } {
   if (!isRecord(value)) return { error: 'Precomputed configuration response must be an object' }
   if (!isRecord(value.data)) return { error: 'Precomputed configuration response is missing data' }
   if (!isRecord(value.data.attributes)) {
@@ -61,6 +68,7 @@ export function parsePrecomputedConfigurationResponse(
   }
 
   const flagErrors: Array<[string, string]> = []
+  const numericErrors: Array<[string, string]> = []
   for (const [key, flag] of Object.entries(flags)) {
     if (encoding.encoding && !isLowercaseHex(key, 32)) {
       return { error: 'Obfuscated flag keys must contain 64 lowercase hexadecimal characters' }
@@ -72,6 +80,12 @@ export function parsePrecomputedConfigurationResponse(
         onInvalidFlag?.(key, issue)
       } catch {
         /* Diagnostic observers cannot affect parsing. */
+      }
+    }
+    if (isRecord(flag)) {
+      const source = precomputedNumberSource(flag.variationValue)
+      if (source !== undefined) {
+        numericErrors.push([key, source])
       }
     }
   }
@@ -87,19 +101,40 @@ export function parsePrecomputedConfigurationResponse(
   // Consent is optional for older responses. Wrong types must not reject valid
   // assignments or opt into full telemetry details.
   const attributes = value.data.attributes
+  // Persist plain data, not parser-specific class instances, in IndexedDB.
+  const sources = new Map(numericErrors)
+  const normalizedFlags =
+    numericErrors.length > 0
+      ? Object.fromEntries(
+          Object.entries(flags).map(([key, flag]) => {
+            const source = sources.get(key)
+            return [
+              key,
+              source === undefined ? flag : { ...(flag as Record<string, unknown>), variationValue: Number(source) },
+            ]
+          })
+        )
+      : flags
   const response =
-    attributes.observeFullEvaluationData === undefined
+    attributes.observeFullEvaluationData === undefined && numericErrors.length === 0
       ? value
       : {
           ...value,
           data: {
             ...value.data,
-            attributes: { ...attributes, observeFullEvaluationData: attributes.observeFullEvaluationData === true },
+            attributes: {
+              ...attributes,
+              flags: normalizedFlags,
+              ...(attributes.observeFullEvaluationData === undefined
+                ? {}
+                : { observeFullEvaluationData: attributes.observeFullEvaluationData === true }),
+            },
           },
         }
   return {
     response: response as PrecomputedConfigurationResponse,
     ...(flagErrors.length > 0 ? { flagErrors: Object.fromEntries(flagErrors) } : {}),
+    ...(numericErrors.length > 0 ? { numericErrors: Object.fromEntries(numericErrors) } : {}),
   }
 }
 
@@ -139,7 +174,9 @@ export function precomputedFlagIssue(
     valid = typeof value.variationValue === 'boolean'
   } else if (['NUMBER', 'NUMERIC', 'INTEGER', 'number', 'integer', 'float'].includes(type as string)) {
     expected = 'finite number'
-    valid = typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)
+    valid =
+      (typeof value.variationValue === 'number' && Number.isFinite(value.variationValue)) ||
+      isUnrepresentablePrecomputedNumber(value.variationValue)
   } else if (type === 'OBJECT' || type === 'JSON' || type === 'object') {
     expected = 'JSON value'
     valid = isJsonValue(value.variationValue)

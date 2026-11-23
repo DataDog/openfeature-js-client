@@ -7,6 +7,7 @@ import {
   type FlagSelection,
   type FlagsConfiguration,
   INVALID_EXPERIMENTATION_OPT_OUT,
+  parsePrecomputedConfigurationJson,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
@@ -291,7 +292,7 @@ async function requestPrecomputedConfiguration(
   let responseBody: unknown
   try {
     signedResponse = signing ? await signing.read(response, signingRequest, debug) : undefined
-    responseBody = signedResponse ? signedResponse.json : await response.json()
+    responseBody = signedResponse ? signedResponse.json : parsePrecomputedConfigurationJson(await response.text())
   } catch (error) {
     debug.event('configuration.decode_failed', () => ({
       stage: error instanceof ResponseVerificationError ? 'signature_verification' : 'body_read_or_json_decode',

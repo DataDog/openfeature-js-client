@@ -45,7 +45,7 @@ const response = (ack?: unknown) => ({
     },
   },
 })
-const fetchResponse = (ack?: unknown) => ({ ok: true, json: async () => response(ack) })
+const fetchResponse = (ack?: unknown) => ({ ok: true, text: async () => JSON.stringify(await response(ack)) })
 const online = (fetch: typeof globalThis.fetch, token = 'test') =>
   new DatadogProvider({
     ...immediate,
@@ -145,7 +145,7 @@ describe('immediate experimentation opt-out', () => {
   it('sends the effective option to Precompute and rejects a missing acknowledgement', async () => {
     const fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: { attributes: { createdAt: '2026-10-19T12:00:00Z', flags: {} } } }),
+      text: async () => JSON.stringify({ data: { attributes: { createdAt: '2026-10-19T12:00:00Z', flags: {} } } }),
     })
     const options = { experimentationOptOutMode: ExperimentationOptOutMode.Immediate }
     await expect(
@@ -440,7 +440,7 @@ describe('experimentation opt-out tracking identity', () => {
     payload.data.attributes.flags.boolean.doLog = true
     const fetch = jest
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => payload })
+      .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(await payload) })
       .mockReturnValueOnce(pending.promise)
     const provider = trackingProvider(fetch)
     const a = { targetingKey: 'subject-A' }
@@ -529,7 +529,9 @@ describe('future experimentation opt-out', () => {
     '2026-10-19T12:00:00.1234567890Z',
     '2026-10-19T12:00:00.1234567899Z',
   ])('accepts equivalent acknowledgement %s and round-trips portable configuration', async (cutoff) => {
-    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff) })
+    const fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await futureResponse(cutoff)) })
     const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
     expect(JSON.parse(fetch.mock.calls[0][1].body).data.attributes.evaluation_options).toEqual({
       experimentation_opt_out_mode: 'future_experiments_only',
@@ -548,7 +550,9 @@ describe('future experimentation opt-out', () => {
     [preciseContext.dd_experimentation_opt_out_at, 'immediate'],
     ['', 'future_experiments_only'],
   ])('rejects wrong cutoff %s or mode %s', async (cutoff, mode) => {
-    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse(cutoff, mode) })
+    const fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await futureResponse(cutoff, mode)) })
     await expect(fetchPrecomputedConfiguration({ ...options, fetch })).rejects.toThrow('acknowledge')
   })
 
@@ -556,7 +560,7 @@ describe('future experimentation opt-out', () => {
     'accepts subject timestamp %s with a normalized server acknowledgement',
     async (timestamp) => {
       const suppliedContext = { ...preciseContext, dd_experimentation_opt_out_at: timestamp }
-      const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse() })
+      const fetch = jest.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify(await futureResponse()) })
       const configuration = await fetchPrecomputedConfiguration({ ...options, context: suppliedContext, fetch })
       const core = new DatadogCoreProvider(future)
       core.setConfiguration(configuration)
@@ -566,7 +570,7 @@ describe('future experimentation opt-out', () => {
   )
 
   it('isolates IndexedDB cache across immediate, future, cutoff, and subject', async () => {
-    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => futureResponse() })
+    const fetch = jest.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify(await futureResponse()) })
     const configuration = await fetchPrecomputedConfiguration({ ...options, fetch })
     const cache = new IndexedDBFlagsCache('future-cache')
     const policy = experimentationOptOutPolicy(preciseContext, 'future_experiments_only')!

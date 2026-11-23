@@ -26,7 +26,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
     jest.fn().mockImplementation(async () => ({
       ok: true,
       headers: new Headers({ 'content-type': 'application/vnd.api+json' }),
-      json: async () => precomputedResponse,
+      text: async () => JSON.stringify(await precomputedResponse),
     }))
 
   const failingFetchMock = () =>
@@ -63,7 +63,7 @@ describe('DatadogProvider IndexedDB persistence', () => {
           },
         },
       }
-      fetchMock.mockResolvedValue({ ok: true, json: async () => payload })
+      fetchMock.mockResolvedValue({ ok: true, text: async () => JSON.stringify(await payload) })
       const provider = new DatadogProvider(options)
       await provider.initialize(context)
       await flushAsync()

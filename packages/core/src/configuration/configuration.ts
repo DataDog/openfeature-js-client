@@ -27,6 +27,8 @@ export type PrecomputedConfiguration = {
   etag?: string
   /** Parsing errors for malformed flags, retained by flag key. */
   flagErrors?: Record<string, string>
+  /** Original tokens for numeric assignments that cannot be represented as doubles. */
+  numericErrors?: Record<string, string>
 }
 
 /** @internal */

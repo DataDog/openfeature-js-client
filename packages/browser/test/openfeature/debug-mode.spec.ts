@@ -32,6 +32,7 @@ function response(body: unknown = precomputed, status = 200): Response {
     type: 'basic',
     statusText: 'Test response',
     headers: new Headers({ 'content-type': 'application/json' }),
+    text: async () => JSON.stringify(await body),
     json: async () => body,
     clone: () => ({ text: async () => JSON.stringify(body) }),
   } as Response
@@ -162,7 +163,7 @@ describe('browser debug-mode scenarios', () => {
     const failure = new SyntaxError('Unexpected token in JSON')
     fetch.mockResolvedValue({
       ...response(),
-      json: async () => {
+      text: async () => {
         throw failure
       },
     })

@@ -787,6 +787,7 @@ __metadata:
     "@types/node": "npm:^25.6.0"
     "@types/spark-md5": "npm:^3.0.5"
     jest: "npm:^30.0.5"
+    lossless-json: "npm:^4.3.4"
     npm-run-all: "npm:^4.1.5"
     spark-md5: "npm:^3.0.2"
     ts-jest: "npm:^29.4.9"
@@ -6813,6 +6814,13 @@ __metadata:
     chalk: "npm:^4.1.0"
     is-unicode-supported: "npm:^0.1.0"
   checksum: 10c0/67f445a9ffa76db1989d0fa98586e5bc2fd5247260dafb8ad93d9f0ccd5896d53fb830b0e54dade5ad838b9de2006c826831a3c528913093af20dff8bd24aca6
+  languageName: node
+  linkType: hard
+
+"lossless-json@npm:^4.3.4":
+  version: 4.3.4
+  resolution: "lossless-json@npm:4.3.4"
+  checksum: 10c0/067149de7203d69a9009b8fe04445d516173ad69a1b731ec3f6e96ed3fd41fab68dfe7beb7dd9c1f15d733462c16ac2efff7bb99c2c8702da34a89e12666ec8c
   languageName: node
   linkType: hard
 

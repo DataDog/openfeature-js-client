@@ -248,7 +248,10 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
-  if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
+  if (
+    (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) ||
+    (precomputed.numericErrors !== undefined && hasOwnKey(precomputed.numericErrors, lookup.key))
+  ) {
     const flagMetadata = {}
     const dependencyError = bindPrecomputedDependencyEvaluations(
       flagMetadata,
