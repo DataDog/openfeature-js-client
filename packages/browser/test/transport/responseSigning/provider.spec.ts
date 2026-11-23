@@ -740,6 +740,78 @@ test('default expiry is logged as a stale policy', async () => {
     records.filter((record) => record.event === 'evaluation.completed').slice(-1)[0].details.expirationPolicy
   ).toBe('stale_after_verified_proof_expiry')
 })
+describe('RUM is not part of the signing scope', () => {
+  // The browser application ID is a fixed init option. RUM only enriches the context when the application
+  // changes it, so a RUM start, a RUM stop, or a RUM change during a fetch never invalidates verified flags.
+  const rum = { enableRumFeatureFlagTracking: true }
+  const setRumUser = (user?: Record<string, unknown>) => {
+    if (user) Object.assign(globalThis, { DD_RUM: { getUser: () => user } })
+    else delete (globalThis as { DD_RUM?: unknown }).DD_RUM
+  }
+  afterEach(() => setRumUser(undefined))
+  // Flag-evaluation telemetry batches also use global.fetch; count only assignment requests.
+  const assignmentRequests = () =>
+    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/precompute-assignments'))
+  test.each([
+    ['RUM starts after init', undefined, { id: 'rum-user', plan: 'pro' }],
+    ['RUM stops after init', { id: 'rum-user', plan: 'pro' }, undefined],
+  ] as const)('%s: the verified flags stay READY with no refetch', async (_label, before, after) => {
+    setRumUser(before)
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', rum)
+    await subject.initialize(context)
+    const requests = assignmentRequests().length
+    const stale = jest.fn()
+    const error = jest.fn()
+    subject.events.addHandler(ProviderEvents.Stale, stale)
+    subject.events.addHandler(ProviderEvents.Error, error)
+    setRumUser(after)
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
+      value: true,
+      reason: StandardResolutionReasons.TARGETING_MATCH,
+    })
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(assignmentRequests()).toHaveLength(requests)
+    expect(stale).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+  })
+  test('the RUM context changes during a fetch: the response is still admitted, and dd-application-id is bound', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', rum)
+    await subject.initialize(context)
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let sent: RequestInit | undefined
+    global.fetch = jest.fn(async (url, init) => {
+      // Telemetry batches share global.fetch; only the assignment request is under test.
+      if (!String(url).includes('/precompute-assignments')) return response('{}')
+      sent = init
+      await gate
+      return signed(url, init, true, vector.now + 10)
+    })
+    const update = subject.onContextChange(context, { ...context, plan: 'team' })
+    setRumUser({ id: 'rum-user', plan: 'pro' })
+    release()
+    await update
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(evaluation(subject)).toBe(true)
+    // The transcript binds the header that was sent; the configured application ID did not change.
+    expect(new Headers(sent?.headers).get('dd-application-id')).toBe('app-a')
+    // The per-response binding stays: a proof made for another application ID does not verify.
+    global.fetch = jest.fn(async (url, init) => {
+      const headers = new Headers(init?.headers)
+      headers.set('dd-application-id', 'app-b')
+      return signed(url, { ...init, headers }, true, vector.now + 20)
+    })
+    await expect(subject.onContextChange(context, { ...context, plan: 'enterprise' })).rejects.toThrow(
+      'invalid-signature'
+    )
+  })
+})
 test('strict expiry does not overwrite an in-flight context reconciliation', async () => {
   const subject = provider('required', strict())
   global.fetch = jest.fn(signed)
