@@ -569,7 +569,8 @@ export async function buildSigningTranscript(
     // WHATWG URL host: lowercase, IPv6 in brackets, and no port when it is the scheme default (443).
     lp(url.host.toLowerCase()),
     lp(url.pathname),
-    lp(url.search),
+    // WHATWG search is '' for both "/p" and "/p?". The edge, iOS and Android encode an empty query as "?".
+    lp(url.search || (url.href.replace(/#.*$/, '').endsWith('?') ? '?' : '')),
     lp(nonce),
     await sha256(request.body),
     await sha256(utf8(request.headers.get('dd-client-token')!)),

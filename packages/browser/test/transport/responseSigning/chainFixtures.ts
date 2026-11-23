@@ -111,7 +111,8 @@ export function expectedTranscript(
     lp('https'),
     lp(authority(url)),
     lp(url.pathname),
-    lp(url.search),
+    // An empty query ("/p?") is "?", as the edge sends it; no query is "".
+    lp(url.search === '' && request.url.split('#')[0].endsWith('?') ? '?' : url.search),
     lp(Buffer.from(request.headers.get('x-datadog-feature-flags-request-nonce')!, 'hex')),
     sha(request.body),
     sha(request.headers.get('dd-client-token')!),

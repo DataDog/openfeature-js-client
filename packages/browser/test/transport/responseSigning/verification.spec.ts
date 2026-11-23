@@ -540,6 +540,37 @@ test('the independent transcript helper is self-consistent with the response hel
   expect(again[again.length - 33]).toBe(1)
 })
 
+test('an empty query is encoded as "?", the same as the edge, iOS and Android', async () => {
+  const credential = loadCredential('one-intermediate')
+  const transcriptFor = async (url: string) => {
+    const request = signingRequest(url)
+    const response = signedResponse(request, credential)
+    const built = await buildSigningTranscript(
+      request,
+      response,
+      response.issuedAt,
+      response.expiresAt,
+      new Uint8Array(Buffer.from(credential.leafBase64, 'base64')),
+      credential.intermediatesBase64.map((value) => new Uint8Array(Buffer.from(value, 'base64')))
+    )
+    return { request, response, built: Buffer.from(built) }
+  }
+  const empty = await transcriptFor('https://h.example.test/p?')
+  const none = await transcriptFor('https://h.example.test/p')
+  // u32 length 1, then "?": the query field of the empty query.
+  expect(empty.built.includes(Buffer.from([0, 0, 0, 1, 0x3f]))).toBe(true)
+  expect(empty.built.equals(empty.response.transcript)).toBe(true)
+  expect(none.built.equals(none.response.transcript)).toBe(true)
+  expect(empty.built.equals(none.built)).toBe(false)
+  await expect(verifyResponse(empty.request, empty.response, [ROOT_A], FIXTURE_NOW)).resolves.toHaveProperty(
+    'expiresAt'
+  )
+  // A proof made for "/p" does not verify for "/p?".
+  await expect(
+    verifyResponse(empty.request, { ...none.response, headers: none.response.headers }, [ROOT_A], FIXTURE_NOW)
+  ).rejects.toThrow('invalid-signature')
+})
+
 /**
  * Shared ffe-system-test-data response-signing v1 fixtures, copied byte for byte into
  * `test/data/response-signing/v1` (source commit in its README.md). Verifiers run `cases` only; `signing_cases` are for signers.
