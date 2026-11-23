@@ -13,11 +13,7 @@ import {
 import type { ExperimentationOptOutConfiguration } from '../openfeature/experimentation-opt-out'
 import type { DDRum } from '../openfeature/rumIntegration'
 import { createFlagsConfigurationFetcher } from '../transport/fetchConfiguration'
-import {
-  createResponseSigningController,
-  type ResponseSigningConfiguration,
-  type ResponseSigningController,
-} from '../transport/responseSigning/controller'
+import { type ResponseSigningController } from '../transport/responseSigning/controller'
 
 export interface EvaluationTelemetryOptOutConfiguration {
   /**
@@ -97,9 +93,6 @@ export interface FlaggingInitConfiguration
    * Initial flags configuration (precomputed flags)
    */
   initialFlagsConfiguration?: FlagsConfiguration
-
-  /** Opt-in assignment response signing. Default: off. */
-  responseSigning?: ResponseSigningConfiguration
 
   /**
    * Custom headers to add to the request to the Datadog API.
@@ -244,34 +237,10 @@ export function validateAndBuildFlaggingConfiguration(
   debug = createDebugLogger(initConfiguration.debugMode)
 ): FlaggingConfiguration | undefined {
   const trackingConfiguration = validateAndBuildFlaggingTrackingConfiguration(initConfiguration, debug)
-  if (!trackingConfiguration) {
-    // Invalid ordinary configuration must never erase a requested required-signing policy.
-    if (initConfiguration.responseSigning?.mode === 'required')
-      throw new Error('Required response signing needs valid provider configuration')
-    return
-  }
-
-  const snapshot =
-    initConfiguration.responseSigning && initConfiguration.responseSigning.mode !== 'off'
-      ? { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
-      : initConfiguration
-  const responseSigning = createResponseSigningController(
-    initConfiguration.responseSigning,
-    {
-      clientToken: snapshot.clientToken,
-      applicationId: snapshot.applicationId,
-      env: snapshot.env,
-      site: snapshot.site,
-      flaggingProxy: snapshot.flaggingProxy,
-      customHeaders: snapshot.customHeaders,
-      overwriteRequestHeaders: snapshot.overwriteRequestHeaders,
-      flagSelection: snapshot.flagSelection,
-    },
-    debug
-  )
+  if (!trackingConfiguration) return
+  // Response signing has no public option yet, so the provider never builds a signing controller.
   return {
-    responseSigning,
-    fetchFlagsConfiguration: createFlagsConfigurationFetcher(snapshot, responseSigning, debug),
+    fetchFlagsConfiguration: createFlagsConfigurationFetcher(initConfiguration, undefined, debug),
     ...trackingConfiguration,
   }
 }

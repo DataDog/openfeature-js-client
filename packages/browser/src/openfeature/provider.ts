@@ -91,8 +91,6 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider extends DatadogProviderBase {
-  /** Runtime feature detection for applications adopting the response-signing draft. */
-  static readonly responseSigningVersion = 1
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
