@@ -3,12 +3,12 @@
 Both folders are byte-for-byte copies from
 [DataDog/ffe-system-test-data](https://github.com/DataDog/ffe-system-test-data) at one pinned commit.
 
-- Source commit: `8dfd544b1a2e8e3a06ca78a31568003a15c7ecae`
+- Source commit: `7497e366bc4614cbf0e2293f32070381fdb77f1d`. `chain/` is unchanged since `8dfd544b1a2e8e3a06ca78a31568003a15c7ecae`
 - `chain/` is a copy of `response-signing/chain/`: the test-CA credentials, the test roots, the root-EKU
   variants and the public us1.staging DC intermediate. `chain/manifest.json` records the SHA-256 of each file.
   The SHA-256 of `chain/manifest.json` is `78d91dc598fe051a15afd07485c47a73f3d4f08d227e377cc8e5bad11665f984`.
 - `v1/` is a copy of `response-signing/v1/`. `v1/README.md` lists its hashes. The SHA-256 of
-  `v1/manifest.json` is `cd97bbe1893671c57cf02d23ba06cf5c71e8961c3afc069aadb9ad4a18e17fde`.
+  `v1/manifest.json` is `26298a88577779c60c3f23ef5631c359cf3a70f44e31dad292dc837c30f0c92d`.
 - Do not edit or reformat these files. Change them upstream, then copy both folders from the new commit
   and update this commit and the hashes in the same change.
 

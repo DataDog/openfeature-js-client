@@ -610,7 +610,7 @@ describe('shared v1 fixtures', () => {
   test('the pinned manifest is unchanged and lists every suite', () => {
     // Byte changes to the shared fixtures require a deliberate pin update and review.
     expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
-      'cd97bbe1893671c57cf02d23ba06cf5c71e8961c3afc069aadb9ad4a18e17fde'
+      '26298a88577779c60c3f23ef5631c359cf3a70f44e31dad292dc837c30f0c92d'
     )
     expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })

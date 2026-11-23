@@ -22,7 +22,7 @@ They do not use a git submodule. That folder's `README.md` records the source
 `ffe-system-test-data` commit and the SHA-256 of each file, and shows how to refresh them.
 
 Run `yarn workspace @datadog/openfeature-browser test --runInBand test/transport/responseSigning/verification.spec.ts`.
-The verifier runs all 97 shared response cases: 77 core, four isolated-certificate,
+The verifier runs all 99 shared response cases: 79 core, four isolated-certificate,
 two nested-DER, two subject-DER, six near-expiry and six extension-profile cases.
 It skips `signing_cases`, because they apply only to signers. A case
 `anchor_der_base64` replaces the file anchor for that case. Rejected cases assert
