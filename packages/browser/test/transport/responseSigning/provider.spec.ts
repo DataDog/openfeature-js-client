@@ -110,6 +110,14 @@ function provider(mode: 'off' | 'observe' | 'required', extra: Partial<FlaggingI
 const strict = () => ({
   experimentalResponseSigning: { mode: 'required' as const, trustedRootCertificates: roots, expireVerifiedFlags: true },
 })
+/**
+ * Assignment requests only (not telemetry). Flag-evaluation telemetry batches also use global.fetch, on a real timer that can fire
+ * in any test (more often on a slow CI runner), so a raw global.fetch call count is not deterministic.
+ */
+function assignmentRequests() {
+  // Telemetry goes to the /api/v2/ intake routes; assignments go to the endpoint or a proxy.
+  return (global.fetch as jest.Mock).mock.calls.filter(([url]) => !new URL(String(url)).pathname.startsWith('/api/v2/'))
+}
 function response(body: string, headers: Headers = new Headers(), status = 200): Response {
   // Transport boundary: exact bytes, ordinary parser, status and headers; no verifier is mocked.
   const buffer = new TextEncoder().encode(body)
@@ -195,7 +203,7 @@ test('required needs a local anchor for a destination without a bundled root, be
       experimentalResponseSigning: { mode: 'required' },
     })
   ).toThrow('Flag response signing failed (missing-anchor)')
-  expect(global.fetch).not.toHaveBeenCalled()
+  expect(assignmentRequests()).toHaveLength(0)
 })
 test('staging selects its root only when signing is enabled', () => {
   expect(createResponseSigningController(undefined, { site: 'datad0g.com' })).toBeUndefined()
@@ -239,7 +247,7 @@ test.each(['provider', 'fetch', 'factory'] as const)(
     if (entry === 'provider') await provider('observe', options).initialize(context)
     else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
     else await fetchPrecomputedConfiguration({ ...options, context })
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(assignmentRequests()).toHaveLength(1)
     expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBe('1')
   }
 )
@@ -271,7 +279,7 @@ describe('staging site gate', () => {
       expect(evaluation(subject)).toBe(true)
     } else if (entry === 'factory') await createFlagsConfigurationFetcher(options)(context)
     else await fetchPrecomputedConfiguration({ ...options, env: options.env ?? '', context })
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(assignmentRequests()).toHaveLength(1)
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0]
     return { url, init }
   }
@@ -343,7 +351,7 @@ describe('staging site gate', () => {
       )
     } else attempts.push(...[0, 1].map(() => () => fetchPrecomputedConfiguration({ ...options, env: '', context })))
     for (const attempt of attempts) await expect(attempt()).rejects.toThrow(UNSUPPORTED_SITE_MESSAGE)
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(assignmentRequests()).toHaveLength(0)
     expect(warn).not.toHaveBeenCalled()
     // One error per controller: the provider and factory build one at init, the standalone fetch one per call.
     expect(error).toHaveBeenCalledTimes(entry === 'fetch' ? 2 : 1)
@@ -483,7 +491,7 @@ test.each(['observe', 'required'] as const)(
     expect(new Headers(init.headers).get('x-dd-feature-flags-capabilities')?.split(',')).toContain(
       'response-signing-v1'
     )
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(assignmentRequests()).toHaveLength(1)
     expect(DatadogProvider.responseSigningVersion).toBe(1)
     expect(init.redirect).toBe('error')
   }
@@ -525,13 +533,13 @@ test('observe parser failure is not an optional verification failure', async () 
 test('required rejects unsigned and tampered responses without unsigned retry', async () => {
   global.fetch = jest.fn().mockResolvedValue(unsigned())
   await expect(provider('required').initialize(context)).rejects.toThrow('missing-proof')
-  expect(global.fetch).toHaveBeenCalledTimes(1)
+  expect(assignmentRequests()).toHaveLength(1)
   global.fetch = jest.fn(async (url, init) => {
     const valid = await signed(String(url), init!)
     return response(JSON.stringify(payload(false)), valid.headers)
   })
   await expect(provider('required').initialize(context)).rejects.toThrow('invalid-signature')
-  expect(global.fetch).toHaveBeenCalledTimes(1)
+  expect(assignmentRequests()).toHaveLength(1)
 })
 test('strict expiry: required uses matching verified memory until original expiry, including every evaluation', async () => {
   global.fetch = jest.fn(signed)
@@ -564,7 +572,7 @@ test.each(['required', 'observe'] as const)(
     subject.events.addHandler(ProviderEvents.Stale, stale)
     subject.events.addHandler(ProviderEvents.Error, error)
     subject.events.addHandler(ProviderEvents.ConfigurationChanged, changed)
-    const requestsAfterAdmission = (global.fetch as jest.Mock).mock.calls.length
+    const requestsAfterAdmission = assignmentRequests().length
 
     jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000 - 1)
     expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
@@ -599,7 +607,7 @@ test.each(['required', 'observe'] as const)(
       )
     }
     expect(changed).not.toHaveBeenCalled()
-    expect(global.fetch).toHaveBeenCalledTimes(requestsAfterAdmission)
+    expect(assignmentRequests()).toHaveLength(requestsAfterAdmission)
 
     // A fresh proof restores usability and permits another expiry episode to signal once.
     const ready = jest.fn()
@@ -667,7 +675,7 @@ test('default expiry: required keeps the verified flags, goes STALE once, and re
   subject.events.addHandler(ProviderEvents.Stale, stale)
   subject.events.addHandler(ProviderEvents.Error, error)
   subject.events.addHandler(ProviderEvents.Ready, ready)
-  const requestsAfterAdmission = (global.fetch as jest.Mock).mock.calls.length
+  const requestsAfterAdmission = assignmentRequests().length
   for (const seconds of [300, 301, 3600]) {
     jest.spyOn(Date, 'now').mockReturnValue((vector.now + seconds) * 1000)
     expect(resolve()).toMatchObject({ value: true, reason: StandardResolutionReasons.TARGETING_MATCH })
@@ -678,7 +686,7 @@ test('default expiry: required keeps the verified flags, goes STALE once, and re
   expect(stale).toHaveBeenCalledTimes(1)
   expect(error).not.toHaveBeenCalled()
   // The SDK does not refetch by itself: the application decides.
-  expect(global.fetch).toHaveBeenCalledTimes(requestsAfterAdmission)
+  expect(assignmentRequests()).toHaveLength(requestsAfterAdmission)
 
   // A blocked refresh keeps the last verified values; it cannot replace them.
   global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
@@ -849,9 +857,6 @@ describe('RUM is not part of the signing scope', () => {
     else delete (globalThis as { DD_RUM?: unknown }).DD_RUM
   }
   afterEach(() => setRumUser(undefined))
-  // Flag-evaluation telemetry batches also use global.fetch; count only assignment requests.
-  const assignmentRequests = () =>
-    (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/precompute-assignments'))
   test.each([
     ['RUM starts after init', undefined, { id: 'rum-user', plan: 'pro' }],
     ['RUM stops after init', { id: 'rum-user', plan: 'pro' }, undefined],
@@ -1063,7 +1068,7 @@ test('direct fetch combines flag selection with required response signing', asyn
       experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
     })
   ).resolves.toHaveProperty('precomputed')
-  expect(global.fetch).toHaveBeenCalledTimes(1)
+  expect(assignmentRequests()).toHaveLength(1)
 })
 
 test('observe retains network availability without WebCrypto; required fails before fetch', async () => {
@@ -1075,7 +1080,7 @@ test('observe retains network availability without WebCrypto; required fails bef
   expect(new Headers((global.fetch as jest.Mock).mock.calls[0][1].headers).get(SIGNING_VERSION_HEADER)).toBeNull()
   ;(global.fetch as jest.Mock).mockClear()
   await expect(provider('required').initialize(context)).rejects.toThrow('unavailable-crypto')
-  expect(global.fetch).not.toHaveBeenCalled()
+  expect(assignmentRequests()).toHaveLength(0)
 })
 
 test('observe without a provisioned anchor accepts responses and required never promotes its cached entry', async () => {
@@ -1161,7 +1166,7 @@ test.each(['observe', 'required'] as const)(
         experimentalResponseSigning: { mode, trustedRootCertificates: roots },
       })
     ).rejects.toThrow('redirects')
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(assignmentRequests()).toHaveLength(1)
   }
 )
 
@@ -1176,7 +1181,7 @@ test('observe rejects redirects even when unavailable crypto prevented forming a
       experimentalResponseSigning: { mode: 'observe' },
     })
   ).rejects.toThrow('redirects')
-  expect(global.fetch).toHaveBeenCalledTimes(1)
+  expect(assignmentRequests()).toHaveLength(1)
 })
 
 test('invalid ordinary configuration cannot downgrade required mode or admit bootstrap data', () => {
@@ -1550,7 +1555,7 @@ describe('missing proof on an opted-in staging response (credential cutover)', (
     global.fetch = jest.fn().mockResolvedValue(responses[kind]())
     const subject = staging('required')
     await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('missing-proof'))
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(assignmentRequests()).toHaveLength(1)
     const details = subject.resolveBooleanEvaluation('critical', false, {}, logger)
     expect(details.value).toBe(false)
     expect(details.reason).toBe(StandardResolutionReasons.ERROR)
@@ -1569,7 +1574,7 @@ describe('missing proof on an opted-in staging response (credential cutover)', (
       const errors = jest.fn()
       subject.events.addHandler(ProviderEvents.Error, errors)
       await subject.initialize(context)
-      expect(global.fetch).toHaveBeenCalledTimes(1)
+      expect(assignmentRequests()).toHaveLength(1)
       expect(evaluation(subject)).toBe(true)
       expect(errors).not.toHaveBeenCalled()
       expect(events('signing.failed')[0].details).toMatchObject({
