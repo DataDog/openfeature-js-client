@@ -6,13 +6,30 @@
 
 ---
 
-## Unreleased
+## @datadog/openfeature-browser@2.4.0, @datadog/flagging-core@3.6.0
 
 **Features:**
 
+- Resolve `targetingKey` in JSON targeting rules. The context targeting key is available to rule matching as both `id` and `targetingKey`. An explicit `id` context attribute still has precedence. Protobuf configurations already behaved this way ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [CORE]
+- Reconstruct dependent precomputed assignments from the `flags` and `flagEvaluationErrors` maps, including obfuscated prerequisite references ([#458](https://github.com/DataDog/openfeature-js-client/pull/458)) [CORE]
+- Consume dependent precomputed assignments. A failed root serves the caller default. A missing, quarantined or malformed prerequisite fails the root closed. Selected prerequisites reach exposure hooks, RUM enrichment and ordered dependency telemetry. The browser cache uses a new v3 namespace and reads v2 snapshots during the upgrade ([#458](https://github.com/DataDog/openfeature-js-client/pull/458)) [BROWSER]
+- Add `getClientFingerprint()` and the `ClientFingerprint` type. Applications forward this opaque value unchanged when they request bootstrap data that includes a precomputed configuration. The fingerprint identifies the SDK, not a user or a device ([#460](https://github.com/DataDog/openfeature-js-client/pull/460), [#458](https://github.com/DataDog/openfeature-js-client/pull/458)) [BROWSER]
+- Support subject authorization for assignment downloads. Put a backend-issued token in the `dd_assignment_token` context field. The SDK sends it only in the `DD-Assignment-Token` request header and excludes it from targeting, telemetry, logs and the assignment cache ([#454](https://github.com/DataDog/openfeature-js-client/pull/454)) [BROWSER]
+- Add the opt-in `debugMode` option to providers, standalone fetch helpers and tracking hooks. It writes structured `console.log` records about context, configuration, evaluation and delivery. It excludes transport credentials and the assignment token ([#450](https://github.com/DataDog/openfeature-js-client/pull/450)) [BROWSER]
+- Send SDK lifecycle telemetry for initialization results and configuration fetch errors through the existing flag evaluation intake, with `sdk_name` set to `browser` ([#444](https://github.com/DataDog/openfeature-js-client/pull/444), [#455](https://github.com/DataDog/openfeature-js-client/pull/455)) [BROWSER]
+- Protect flag evaluation telemetry with evaluated consent. Unless the configuration explicitly opts in to full data, telemetry hashes targeting keys and omits the evaluation context ([#424](https://github.com/DataDog/openfeature-js-client/pull/424)) [BROWSER]
 - Support `flagSelection` tags and key patterns in standalone `fetchPrecomputedConfiguration`, matching `fetchRulesConfiguration` ([#467](https://github.com/DataDog/openfeature-js-client/pull/467)) [BROWSER]
 - Send `dd-application-id` on rules-based configuration requests when `applicationId` is set, as precomputed requests do, so Usage Attribution can split this usage by `application.name`. `fetchRulesConfiguration` accepts `applicationId`. A `customHeaders` entry for `dd-application-id`, in any letter case, replaces the SDK value on both requests ([#475](https://github.com/DataDog/openfeature-js-client/pull/475)) [BROWSER]
 - Send `service` in `dd-service` on precomputed and rules-based configuration requests, so Usage Attribution can split this usage by `service`. It is sent as configured, the same way Datadog RUM reads `service`, and as `fetch` sends it: trimmed, with no header when `fetch` rejects the value. It is not sent through `flaggingProxy` unless `customHeaders` sets it. A `customHeaders` entry for `dd-service`, in any letter case, replaces the SDK value. `fetchPrecomputedConfiguration` and `fetchRulesConfiguration` accept `service` ([#476](https://github.com/DataDog/openfeature-js-client/pull/476)) [BROWSER]
+
+**Bug Fixes:**
+
+- Report the `DD-Flag-Selection-Ignored` reason only when it is one of the known reasons, and `unknown` otherwise. Report it only after the configuration is accepted ([#477](https://github.com/DataDog/openfeature-js-client/pull/477)) [BROWSER]
+
+**Usage Notes:**
+
+- Behavior change: JSON configurations with `targetingKey` conditions can change outcome. `ONE_OF`, `MATCHES` and `IS_NULL: false` can start to match. `NOT_ONE_OF` and `NOT_MATCHES` can start to match keys that they do not list. `IS_NULL: true` stops matching subjects that have a targeting key ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [CORE]
+- This release adds no public response signing option ([#489](https://github.com/DataDog/openfeature-js-client/pull/489)) [BROWSER]
 
 ## @datadog/openfeature-node-server@2.8.0, @datadog/flagging-core@3.5.0
 
