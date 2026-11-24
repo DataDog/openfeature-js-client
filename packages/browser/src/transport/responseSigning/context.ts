@@ -29,6 +29,17 @@ function hasDefaultDateSerialization(value: object): boolean {
   })
 }
 
+function hasUnsupportedObjectSerialization(value: object): boolean {
+  const toJSON = findPropertyDescriptor(value, 'toJSON')
+  return (
+    toJSON?.get !== undefined ||
+    typeof toJSON?.value === 'function' ||
+    // A custom type tag can hide a boxed value or run a getter during the check.
+    findPropertyDescriptor(value, Symbol.toStringTag) !== undefined ||
+    /^\[object (Boolean|Number|String|BigInt|Symbol)\]$/.test(Object.prototype.toString.call(value))
+  )
+}
+
 /** Copy supported context values without converting dates to strings or sharing mutable values. */
 export function cloneSigningContext(
   context: EvaluationContext,
@@ -48,14 +59,14 @@ export function cloneSigningContext(
     return copy
   }
   function clone(value: EvaluationContextValue): EvaluationContextValue {
+    // JSON drops functions and symbols, but the context key can confuse them with null.
+    if (preserveRequestSerialization && (typeof value === 'function' || typeof value === 'symbol'))
+      throw new TypeError('Context has values without a request encoding')
     if (value === null || typeof value !== 'object') return value
     const time = dateTime(value)
     if (preserveRequestSerialization) {
-      const toJSON = time === undefined ? findPropertyDescriptor(value, 'toJSON') : undefined
       const unsupported =
-        time === undefined
-          ? toJSON?.get !== undefined || typeof toJSON?.value === 'function'
-          : !hasDefaultDateSerialization(value)
+        time === undefined ? hasUnsupportedObjectSerialization(value) : !hasDefaultDateSerialization(value)
       if (unsupported) throw new TypeError('Context has custom request serialization')
     }
     if (time !== undefined) return new Date(time)

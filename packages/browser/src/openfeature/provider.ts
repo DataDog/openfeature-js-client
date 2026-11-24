@@ -137,19 +137,14 @@ export class DatadogProvider extends DatadogProviderBase {
   private readonly tracking: ProviderTracking
 
   /**
-   * Concurrency control for initialize/onContextChange:
+   * OpenFeature derives provider status from the last context change to settle.
+   * Superseded operations follow `latestContextUpdate` so overlapping calls settle
+   * with the latest result. On close, a settled promise lets aborted calls finish.
    *
-   * Per OpenFeature spec, the SDK determines provider status from the
-   * last onContextChange to TERMINATE (resolve/reject), not the last
-   * to be CALLED. This creates a race condition when multiple calls
-   * overlap.
-   *
-   * Solution:
-   * 1. `contextUpdateAbortController`: allows aborting previous operation.
-   * 2. `latestContextUpdate`: the last-called context update
-   *    operation. Aborted updates delegate to it so all concurrent
-   *    updates resolve to the same result. On close, it is replaced
-   *    with a settled promise so aborted updates can finish.
+   * `#contextUpdate` stores the effective context key, normalized assignment token
+   * and pending state. Equivalent updates join pending work or reuse ready assignments.
+   * Publish the new operation before emitting Reconciling, aborting the previous
+   * operation, or calling fetch, since those callbacks can start another update.
    */
   private latestContextUpdate: Promise<void> = Promise.resolve()
   #contextUpdate: { key: string; assignmentToken: string | undefined; pending: boolean } | undefined
@@ -328,7 +323,11 @@ export class DatadogProvider extends DatadogProviderBase {
         (this.status === ProviderStatus.READY &&
           (signing?.mode !== 'required' || signing.isVerified(this.flagsConfiguration, evaluationContext))))
     ) {
-      return this.latestContextUpdate
+      const existingUpdate = this.latestContextUpdate
+      debug.event('context.coalesced', () => ({
+        action: previous.pending ? 'join_pending_update' : 'reuse_ready_configuration',
+      }))
+      return existingUpdate
     }
 
     this.requestedEvaluationContext = evaluationContext

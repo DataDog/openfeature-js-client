@@ -89,7 +89,7 @@ async function run() {
         }
       },
       refresh: async (consent: boolean) => {
-        if (online) await online.onContextChange(context, { ...context, dd_assignment_token: `test.${++refreshCount}` })
+        if (online) await online.onContextChange(context, { ...context, privacyRefresh: ++refreshCount })
         else await configure(consent)
       },
       close: async () => {

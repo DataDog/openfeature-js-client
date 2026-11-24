@@ -342,6 +342,44 @@ describe('DatadogProvider', () => {
       })
     })
 
+    it.each([
+      ['function', () => 1],
+      ['symbol', Symbol('plan')],
+    ])('does not merge a %s value with null', async (_type, plan) => {
+      const context = { targetingKey: 'user', plan: null }
+      await Promise.all([
+        provider.onContextChange({}, context),
+        provider.onContextChange(context, { ...context, plan: plan as unknown as null }),
+      ])
+
+      expect(
+        fetchMock.mock.calls.map(([, request]) => JSON.parse(request.body).data.attributes.subject.targeting_attributes)
+      ).toEqual([{ targetingKey: 'user', plan: 'null' }, { targetingKey: 'user' }])
+    })
+
+    it.each([
+      ['string', Object('pro'), '"pro"'],
+      ['number', Object(7), '7'],
+      ['boolean', Object(false), 'false'],
+    ])('sends a boxed %s as supplied', async (_type, plan, expected) => {
+      await provider.onContextChange({}, { targetingKey: 'user', plan })
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).data.attributes.subject.targeting_attributes.plan).toBe(
+        expected
+      )
+    })
+
+    it('preserves boxed values without reading a custom type tag', async () => {
+      const tag = jest.fn(() => 'Object')
+      const plan = Object.defineProperty(Object('pro'), Symbol.toStringTag, { get: tag })
+      await provider.onContextChange({}, { targetingKey: 'user', plan })
+
+      expect(tag).not.toHaveBeenCalled()
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).data.attributes.subject.targeting_attributes.plan).toBe(
+        '"pro"'
+      )
+    })
+
     it('deduplicates plain toJSON data and Date subclasses with the default serializer', async () => {
       class NativeDate extends Date {}
       const context = () => ({ targetingKey: 'user', profile: { toJSON: 'data' }, date: new NativeDate(0) })
@@ -520,6 +558,42 @@ describe('DatadogProvider', () => {
       expect(mock).toHaveBeenCalledTimes(2)
       expect(duplicate).toBe(updating)
       await provider.onClose()
+    })
+
+    it('lets a Reconciling listener supersede the update with a different context', async () => {
+      const provider = new DatadogProvider(options)
+      const { mock, calls } = mockFetchDeferred()
+      const first = { targetingKey: 'ready' }
+      const next = { targetingKey: 'next' }
+      const final = { targetingKey: 'final' }
+
+      try {
+        const initial = provider.initialize(first)
+        calls[0].resolve(makeFetchResponse(makeResponse('ready')))
+        await initial
+
+        let nested: Promise<void> | undefined
+        let requestedFinal = false
+        provider.events.addHandler(ProviderEvents.Reconciling, () => {
+          if (!requestedFinal) {
+            requestedFinal = true
+            nested = provider.onContextChange(next, final)
+          }
+        })
+
+        const updating = provider.onContextChange(first, next)
+        expect(nested).toBeDefined()
+        expect(
+          mock.mock.calls.map(([, request]) => JSON.parse(request.body).data.attributes.subject.targeting_key)
+        ).toEqual([first.targetingKey, final.targetingKey])
+
+        calls[1].resolve(makeFetchResponse(makeResponse('final')))
+        await Promise.all([updating, nested])
+        expect(provider.status).toBe(ProviderStatus.READY)
+        expect(provider.resolveStringEvaluation('string-flag', 'default', {}, console).value).toBe('final')
+      } finally {
+        await provider.onClose()
+      }
     })
 
     it('keeps the normalized assignment token out of enumerable provider state', async () => {
