@@ -42,6 +42,9 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - name: Validate dynamic-code lint rules
+        run: yarn lint:dynamic-code
+
       - name: Format
         run: yarn format:check
 
