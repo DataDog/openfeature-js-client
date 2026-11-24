@@ -8,7 +8,7 @@ import type {
 } from '@openfeature/web-sdk'
 import { type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import { extractAssignmentToken } from '../domain/assignment-token'
-import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
+import type { EvaluationTelemetryOptOutConfiguration, ProviderRecordingConfiguration } from '../domain/configuration'
 
 const attribute = 'dd_evaluation_telemetry_opt_out'
 
@@ -27,10 +27,12 @@ export interface EvaluationTelemetryPolicy {
 
 export function createEvaluationTelemetryPolicy(
   metadata: ProviderMetadata,
-  configuration: EvaluationTelemetryOptOutConfiguration,
+  configuration: EvaluationTelemetryOptOutConfiguration & Pick<ProviderRecordingConfiguration, 'trackEvaluations'>,
   getTrackingContext?: () => EvaluationContext
 ): EvaluationTelemetryPolicy {
   const enabled = configuration.enableEvaluationTelemetryOptOutParameter === true
+  // Shared tracking hooks find this policy through the provider metadata.
+  const trackEvaluations = configuration.trackEvaluations ?? true
   let currentContextOptedOut = false
   const subjects = new Map<string | undefined, boolean>()
   const policy = {
@@ -48,6 +50,7 @@ export function createEvaluationTelemetryPolicy(
       }
     },
     allowsTelemetry(context: EvaluationContext) {
+      if (!trackEvaluations) return false
       const tracking = getTrackingContext?.()
       const activeOptedOut = tracking && (subjects.get(tracking.targetingKey) ?? isOptedOut(tracking))
       return !enabled || !(isOptedOut(context) || currentContextOptedOut || activeOptedOut)

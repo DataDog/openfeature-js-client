@@ -13,7 +13,7 @@ import type {
   HookContext,
 } from '@openfeature/web-sdk'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
-import { supportsExposureAdmission } from './exposure-scope'
+import { recordsExposures, supportsExposureAdmission } from './exposure-scope'
 import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
@@ -61,10 +61,17 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   readonly flagKey: string
   readonly details: EvaluationDetails<FlagValue>
   private readonly evaluationContext: EvaluationContext | undefined
+  private readonly recordsExposures: boolean
 
-  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>, trackingContext?: EvaluationContext) {
+  constructor(
+    hookContext: HookContext,
+    details: EvaluationDetails<FlagValue>,
+    trackingContext: EvaluationContext | undefined,
+    recordsExposures: boolean
+  ) {
     this.flagKey = hookContext?.flagKey ?? details.flagKey
     this.details = details
+    this.recordsExposures = recordsExposures
     // The caller resolves the provider-bound context once for the whole graph.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
@@ -94,6 +101,7 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
 
   isExposure(): boolean {
     return (
+      this.recordsExposures &&
       this.details.errorCode === undefined &&
       this.details.reason !== 'ERROR' &&
       this.details.variant != null &&
@@ -200,6 +208,7 @@ export class ExposureHook implements Hook {
       this.logCallbackFailure(error)
       return
     }
+    const providerRecordsExposures = recordsExposures(hookContext)
     let trackingContext: EvaluationContext | undefined
     try {
       trackingContext = getEvaluationTrackingContext(evaluationDetails, () => hookContext.context)
@@ -215,7 +224,8 @@ export class ExposureHook implements Hook {
           new ExposureEvaluationImpl(
             evaluation === evaluationDetails ? hookContext : ({ flagKey: evaluation.flagKey } as HookContext),
             evaluation as EvaluationDetails<FlagValue>,
-            trackingContext
+            trackingContext,
+            providerRecordsExposures
           )
         )
       } catch (error) {

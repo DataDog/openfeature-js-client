@@ -370,6 +370,38 @@ Set `trackExposures: false` to stop sending exposure events to Datadog only. The
 evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
 and superseded by `trackExposures`; when both are set, `trackExposures` wins.
 
+#### Evaluate without recording (peeking)
+
+To evaluate a flag now, for example to choose content, and record the exposure later, create a second provider
+with `recordExposures: false` and `trackEvaluations: false`, and register it under its own domain. Both options
+default to `true` and apply only to that provider, on `DatadogProvider` and `DatadogCoreProvider`:
+
+- `recordExposures: false`: the provider's evaluations are not exposures. Nothing is sent to the exposure intake,
+  the exposure cache is neither read nor written, and `ExposureHook` reports `isExposure()`, `isCacheHit()` and
+  `shouldSend()` as false. This is stronger than `trackExposures: false`, which still records exposures without
+  sending them.
+- `trackEvaluations: false`: no flag evaluation events are sent and no RUM feature flag evaluations are added. The
+  RUM user still enriches the evaluation context.
+
+Both also apply to shared hooks from `createDatadogExposureLoggingHook`, `createDatadogEvaluationLoggingHook` and
+`createDatadogRumTrackingHook`. They can only turn recording off: they do not re-enable tracking that other options
+turn off. Flag values and assignments are unchanged, and a later evaluation of the same flag through a provider with
+the defaults records the exposure as new.
+
+```javascript
+const options = { clientToken: 'client-token', applicationId: 'application-id', site: 'datadoghq.com' }
+await OpenFeature.setProviderAndWait(new DatadogProvider(options), context)
+await OpenFeature.setProviderAndWait(
+  'peek',
+  new DatadogProvider({ ...options, recordExposures: false, trackEvaluations: false }),
+  context
+)
+
+const variant = OpenFeature.getClient('peek').getStringValue('checkout-layout', 'control') // nothing recorded
+// Later, when the subject sees the content:
+OpenFeature.getClient().getStringValue('checkout-layout', 'control') // records the exposure
+```
+
 Exposures require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`.
 Composed providers such as OpenFeature's `MultiProvider` are not supported: their child hooks finish before the
 application's hooks can reject the result. Under a composed provider, the SDK sends no exposures to Datadog, does not

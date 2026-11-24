@@ -2,6 +2,7 @@ export type {
   EvaluationTelemetryOptOutConfiguration,
   FlaggingInitConfiguration,
   FlaggingTrackingInitConfiguration,
+  ProviderRecordingConfiguration,
 } from './domain/configuration'
 export { DatadogDevtools } from './openfeature/devtools-provider'
 export {

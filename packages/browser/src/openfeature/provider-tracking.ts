@@ -5,6 +5,7 @@ import { type DebugLogger, evaluationDebug, NO_DEBUG } from '../debug'
 import {
   type FlaggingTrackingConfiguration,
   type FlaggingTrackingInitConfiguration,
+  type ProviderRecordingConfiguration,
   resolveTrackExposures,
 } from '../domain/configuration'
 import type { EvaluationTelemetryPolicy } from './evaluation-telemetry-policy'
@@ -28,7 +29,7 @@ export function createProviderTracking({
   telemetryPolicy,
   debug = configuration?.debug ?? NO_DEBUG,
 }: {
-  options: Partial<FlaggingTrackingInitConfiguration>
+  options: Partial<FlaggingTrackingInitConfiguration & ProviderRecordingConfiguration>
   configuration?: FlaggingTrackingConfiguration
   enabledByDefault: boolean
   getTrackingContext?: (context: EvaluationContext) => EvaluationContext
@@ -37,10 +38,14 @@ export function createProviderTracking({
   debug?: DebugLogger
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
+  // `trackEvaluations` is applied by the telemetry policy, which also covers shared hooks.
+  const recordExposures = options.recordExposures ?? true
   debug.event('tracking.configured', () => ({
     exposure: options.trackExposures ?? options.enableExposureLogging ?? enabledByDefault,
     evaluation: options.enableFlagEvaluationTracking ?? enabledByDefault,
     rum: options.enableRumFeatureFlagTracking ?? enabledByDefault,
+    recordExposures,
+    trackEvaluations: options.trackEvaluations ?? true,
     validConfiguration: !!configuration,
     flagConfigurationCustomFetchAppliesToTracking: false,
   }))
@@ -61,9 +66,10 @@ export function createProviderTracking({
   // The exposure cache and its recording hook exist whenever tracking is
   // configured: turning exposure logging off must not break deduplication for
   // customers recording exposures in their own data store. The toggle only
-  // stops the batch send to Datadog.
+  // stops the batch send to Datadog. `recordExposures: false` is stronger: this
+  // provider's evaluations are not exposures, so there is nothing to record.
   let exposureCache: AssignmentCache | undefined
-  if (configuration) {
+  if (configuration && recordExposures) {
     const cache = createExposureCache(options, configuration)
     exposureCache = cache
     const sendToDatadog = resolveTrackExposures(options, enabledByDefault)
