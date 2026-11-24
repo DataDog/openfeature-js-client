@@ -167,3 +167,31 @@ test('a second export builds working CJS/ESM bundles without bundler registratio
     assert.equal((await import(pathToFileURL(modulePath).href)).name, entry.name)
   }
 })
+
+test('legacy bundles transpile lossless-json to ES2015 syntax in both formats', async (t) => {
+  const root = fixture(t)
+  const [entry] = synchronizeCoreEntrypoints(root)
+  const file = path.resolve(root, entry.import)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `export { parse, stringify } from ${JSON.stringify(require.resolve('lossless-json'))}\n`)
+  await new Promise((resolve, reject) => {
+    const compiler = webpack(webpackConfigs({ packageRoot: root }))
+    compiler.run((error, stats) => {
+      compiler.close((closeError) => {
+        if (error || closeError) return reject(error || closeError)
+        if (stats.hasErrors()) return reject(new Error(stats.toString()))
+        resolve()
+      })
+    })
+  })
+  for (const format of ['cjs', 'esm']) {
+    const bundle = path.join(root, 'bundle/legacy', format, `${entry.name}.js`)
+    const source = fs.readFileSync(bundle, 'utf8')
+    webpack.javascript.JavascriptParser._parse(source, {
+      ecmaVersion: 2015,
+      sourceType: format === 'esm' ? 'module' : 'script',
+    })
+    const api = format === 'cjs' ? require(bundle) : await import(pathToFileURL(bundle).href)
+    assert.equal(api.stringify(api.parse('{"value":1e999}')), '{"value":1e999}')
+  }
+})

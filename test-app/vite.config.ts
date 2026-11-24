@@ -14,6 +14,7 @@ export default defineConfig({
         precomputed: fileURLToPath(new URL('./precomputed.html', import.meta.url)),
         privacy: fileURLToPath(new URL('./privacy.html', import.meta.url)),
         consent: fileURLToPath(new URL('./consent.html', import.meta.url)),
+        numeric: fileURLToPath(new URL('./numeric.html', import.meta.url)),
         diagnostics: fileURLToPath(new URL('./diagnostics.html', import.meta.url)),
         obfuscation: fileURLToPath(new URL('./obfuscation.html', import.meta.url)),
         evaluationTelemetry: fileURLToPath(new URL('./evaluation-telemetry.html', import.meta.url)),

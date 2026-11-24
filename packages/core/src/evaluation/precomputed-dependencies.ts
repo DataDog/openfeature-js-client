@@ -3,6 +3,7 @@ import type { PrecomputedDependencyEvaluation, PrecomputedErrorFlag, Precomputed
 import { createDependencyFlagKeyDecryptor } from '../configuration/dependency-key-encryption'
 import type { FlagKeyObfuscation } from '../configuration/flag-key-obfuscation'
 import { encodePrecomputedFlagKey } from '../configuration/flag-key-obfuscation'
+import { INVALID_PRECOMPUTED_NUMBER } from '../configuration/precomputed-json'
 import { isDependencyEvaluations, isPrecomputedErrorFlag, precomputedFlagIssue } from '../configuration/wire-validation'
 import { getOwnProperty, hasOwnKey } from './getOwnProperty'
 import { createSplitFeatureMetadata, HAS_EVALUATION_FEATURES_METADATA_KEY } from './split-features'
@@ -32,6 +33,7 @@ export function bindPrecomputedDependencyEvaluations(
     encoding?: FlagKeyObfuscation
     allowDependencyErrors?: boolean
     flagEvaluationErrors?: Record<string, PrecomputedErrorFlag>
+    invalidNumericSources?: Record<string, string>
   }
 ): string | undefined {
   if (!isDependencyEvaluations(dependencies, identity?.encoding)) {
@@ -50,6 +52,7 @@ export function bindPrecomputedDependencyEvaluations(
       decryptDependencyFlagKey,
       identity?.flagEvaluationErrors,
       flagErrors,
+      identity?.invalidNumericSources,
       logger
     )
     if ('bindingError' in details) return details.bindingError
@@ -82,6 +85,7 @@ function toEvaluationDetails(
   decryptDependencyFlagKey: ((encryptedFlagKey: string) => { key: string } | { error: string }) | undefined,
   flagEvaluationErrors: Record<string, PrecomputedErrorFlag> | undefined,
   flagErrors: Record<string, string> | undefined,
+  invalidNumericSources: Record<string, string> | undefined,
   logger: Logger
 ): PrecomputedDependencyEvaluationDetails | { bindingError: string } {
   const decrypted = decryptDependencyFlagKey
@@ -114,6 +118,9 @@ function toEvaluationDetails(
     }
   }
   const flagError = flagErrors ? getOwnProperty(flagErrors, lookup.key) : undefined
+  if (flag && invalidNumericSources !== undefined && hasOwnKey(invalidNumericSources, lookup.key)) {
+    return { bindingError: INVALID_PRECOMPUTED_NUMBER }
+  }
   const hasFlagError = flagErrors ? hasOwnKey(flagErrors, lookup.key) : false
   if (hasFlagError || hasEvaluationError || !flag || precomputedFlagIssue(flag, encoding) !== undefined) {
     return {

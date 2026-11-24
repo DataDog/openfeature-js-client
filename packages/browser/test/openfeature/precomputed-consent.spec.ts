@@ -54,7 +54,9 @@ describe.each([false, true])('browser consent (obfuscated: %s)', (obfuscated) =>
   it.each([true, false, undefined, null, 'true'])(
     'retains consent %p through persistent cache and offline restart',
     async (consent) => {
-      const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => response(consent, obfuscated) })
+      const fetch = jest
+        .fn()
+        .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await response(consent, obfuscated)) })
       global.fetch = fetch
       const online = new DatadogProvider(options)
       const offline = new DatadogProvider(options)
@@ -87,7 +89,9 @@ describe.each([false, true])('browser consent (obfuscated: %s)', (obfuscated) =>
   )
 
   it.each([true, false])('updates consent %s on normal refresh while retaining earlier results', async (consent) => {
-    const fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => response(consent, obfuscated) })
+    const fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await response(consent, obfuscated)) })
     global.fetch = fetch
     const provider = new DatadogProvider(options)
     try {
@@ -104,7 +108,7 @@ describe.each([false, true])('browser consent (obfuscated: %s)', (obfuscated) =>
       expect(provider.resolveBooleanEvaluation(flagKey, false, context, logger).flagMetadata?.[metadataKey]).toBe(
         consent
       )
-      finish({ ok: true, json: async () => response(!consent, obfuscated) })
+      finish({ ok: true, text: async () => JSON.stringify(await response(!consent, obfuscated)) })
       await refresh
       const next = provider.resolveBooleanEvaluation(flagKey, false, context, logger)
       expect(next.value).toBe(first.value)
