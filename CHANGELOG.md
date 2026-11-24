@@ -6,6 +6,16 @@
 
 ---
 
+## @datadog/openfeature-node-server@2.9.0
+
+**Features:**
+
+- Use `@datadog/flagging-core@3.6.0`, which resolves `targetingKey` in JSON targeting rules. The context targeting key is available to rule matching as both `id` and `targetingKey`. An explicit `id` context attribute still has precedence ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [NODE-SERVER]
+
+**Usage Notes:**
+
+- Behavior change: JSON configurations with `targetingKey` conditions can change outcome. `ONE_OF`, `MATCHES` and `IS_NULL: false` can start to match. `NOT_ONE_OF` and `NOT_MATCHES` can start to match keys that they do not list. `IS_NULL: true` stops matching subjects that have a targeting key ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [NODE-SERVER]
+
 ## @datadog/openfeature-browser@2.4.0, @datadog/flagging-core@3.6.0
 
 **Features:**
