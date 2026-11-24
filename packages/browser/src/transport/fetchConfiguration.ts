@@ -7,6 +7,7 @@ import {
   type FlagSelection,
   type FlagsConfiguration,
   INVALID_EXPERIMENTATION_OPT_OUT,
+  parsePrecomputedConfigurationJson,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import { timeStampNow } from '@datadog/js-core/time'
@@ -39,7 +40,7 @@ import { debugFetch } from './debugFetch'
 import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import { cloneSigningContext } from './responseSigning/context'
-import { type ResponseSigningController } from './responseSigning/controller'
+import type { ResponseSigningController } from './responseSigning/controller'
 
 import { ResponseVerificationError } from './responseSigning/verification'
 
@@ -291,7 +292,7 @@ async function requestPrecomputedConfiguration(
   let responseBody: unknown
   try {
     signedResponse = signing ? await signing.read(response, signingRequest, debug) : undefined
-    responseBody = signedResponse ? signedResponse.json : await response.json()
+    responseBody = signedResponse ? signedResponse.json : parsePrecomputedConfigurationJson(await response.text())
   } catch (error) {
     debug.event('configuration.decode_failed', () => ({
       stage: error instanceof ResponseVerificationError ? 'signature_verification' : 'body_read_or_json_decode',
@@ -324,7 +325,10 @@ async function requestPrecomputedConfiguration(
     const raw = responseBody as { data?: { attributes?: { flags?: unknown } } } | null
     const receivedFlags = raw?.data?.attributes?.flags
     const receivedKeys = receivedFlags && typeof receivedFlags === 'object' ? Object.keys(receivedFlags) : []
-    const rejectedKeys = 'error' in parsed ? receivedKeys : Object.keys(parsed.flagErrors ?? {})
+    const rejectedKeys =
+      'error' in parsed
+        ? receivedKeys
+        : [...new Set([...Object.keys(parsed.flagErrors ?? {}), ...Object.keys(parsed.invalidNumericSources ?? {})])]
     const rejected = new Set(rejectedKeys)
     const acceptedKeys =
       'error' in parsed ? [] : Object.keys(parsed.response.data.attributes.flags).filter((key) => !rejected.has(key))
@@ -338,6 +342,7 @@ async function requestPrecomputedConfiguration(
       acceptedKeys,
       rejectedKeys,
       flagErrors: 'error' in parsed ? undefined : parsed.flagErrors,
+      invalidNumericSources: 'error' in parsed ? undefined : parsed.invalidNumericSources,
       rejectionScope: 'error' in parsed ? 'response' : 'individual_flags',
     }
   })

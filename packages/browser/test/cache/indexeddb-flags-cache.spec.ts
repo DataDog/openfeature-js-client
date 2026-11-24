@@ -1,6 +1,12 @@
 import { webcrypto } from 'node:crypto'
 import { TextEncoder } from 'node:util'
-import { buildStorageKeySuffix, type FlagsConfiguration, getMD5Hash } from '@datadog/flagging-core'
+import {
+  buildStorageKeySuffix,
+  configurationFromString,
+  evaluatePrecomputedConfiguration,
+  type FlagsConfiguration,
+  getMD5Hash,
+} from '@datadog/flagging-core'
 import type { TimeStamp } from '@datadog/js-core/time'
 import { IDBFactory } from 'fake-indexeddb'
 import { IndexedDBFlagsCache } from '../../src/cache/indexeddb-flags-cache'
@@ -43,8 +49,9 @@ const cryptoBridge = {
   },
 }
 const legacyKey = `flags-config-${buildStorageKeySuffix('test-client-token')}-${getMD5Hash(JSON.stringify(context))}`
-const previousKey = `v2-${legacyKey}`
-const currentKey = `v3-${legacyKey}`
+const previousKey = `v3-${legacyKey}`
+const olderKey = `v2-${legacyKey}`
+const currentKey = `v4-${legacyKey}`
 const encodedConfig: FlagsConfiguration = {
   precomputed: {
     ...testConfig.precomputed!,
@@ -184,6 +191,53 @@ describe('IndexedDBFlagsCache', () => {
   })
 
   describe('older SDK compatibility', () => {
+    it('still reads the v2 namespace when v4 and v3 are empty', async () => {
+      await writeEntry(olderKey, testConfig)
+      expect(await cache.get(context)).toEqual(testConfig)
+    })
+
+    it('prefers v3 over v2 on upgrade', async () => {
+      await writeEntry(olderKey, testConfig)
+      await writeEntry(previousKey, encodedConfig)
+      expect(await cache.get(context)).toEqual(encodedConfig)
+    })
+
+    it.each([false, true])('isolates rejected numeric sources from older readers (scoped: %s)', async (scoped) => {
+      const numericCache = scoped
+        ? new IndexedDBFlagsCache('test-client-token', undefined, async () => 'signed-v1')
+        : cache
+      const response = JSON.stringify(testConfig.precomputed!.response).replace(
+        '"variationType":"boolean","variationValue":true',
+        '"variationType":"number","variationValue":1e999'
+      )
+      const configuration = configurationFromString(JSON.stringify({ version: 1, precomputed: { context, response } }))
+      numericCache.set(configuration, context)
+      await flushAsync()
+      const restored = await numericCache.get(context)
+      expect(restored!.precomputed!.invalidNumericSources).toEqual({ 'test-flag': '1e999' })
+      expect(evaluatePrecomputedConfiguration(restored, 'number', 'test-flag', -99.5, context)).toMatchObject({
+        value: -99.5,
+        reason: 'ERROR',
+        errorCode: 'TYPE_MISMATCH',
+      })
+      const key = async (version: 'v2' | 'v3' | 'v4') =>
+        scoped
+          ? (
+              numericCache as unknown as {
+                scopedKey(
+                  namespace: string,
+                  contextValue: typeof context,
+                  optedOut: false,
+                  version: 'v2' | 'v3' | 'v4'
+                ): Promise<string>
+              }
+            ).scopedKey('signed-v1', context, false, version)
+          : `${version}-${legacyKey}`
+      expect(await readEntry(await key('v4'))).toEqual(restored)
+      expect(await readEntry(await key('v3'))).toBeUndefined()
+      expect(await readEntry(await key('v2'))).toBeUndefined()
+      expect(await readEntry(legacyKey)).toBeUndefined()
+    })
     it('reads the previous cache namespace without writing new snapshots into it', async () => {
       await writeEntry(previousKey, testConfig)
       expect(await cache.get(context)).toEqual(testConfig)
@@ -194,21 +248,29 @@ describe('IndexedDBFlagsCache', () => {
       expect(await readEntry(previousKey)).toEqual(testConfig)
     })
 
-    it('reads the previous scoped namespace while rejecting unscoped fallback', async () => {
-      const signingNamespace = async () => 'signed-v1'
-      const signedCache = new IndexedDBFlagsCache('test-client-token', undefined, signingNamespace)
-      const scopedKey = await (
-        signedCache as unknown as {
-          scopedKey(namespace: string, contextValue: typeof context, optedOut: false, version: 'v2'): Promise<string>
-        }
-      ).scopedKey('signed-v1', context, false, 'v2')
+    it.each(['v3', 'v2'] as const)(
+      'reads the %s scoped namespace while rejecting unscoped fallback',
+      async (version) => {
+        const signingNamespace = async () => 'signed-v1'
+        const signedCache = new IndexedDBFlagsCache('test-client-token', undefined, signingNamespace)
+        const scopedKey = await (
+          signedCache as unknown as {
+            scopedKey(
+              namespace: string,
+              contextValue: typeof context,
+              optedOut: false,
+              version: 'v2' | 'v3'
+            ): Promise<string>
+          }
+        ).scopedKey('signed-v1', context, false, version)
 
-      await writeEntry(previousKey, encodedConfig)
-      expect(await signedCache.get(context)).toBeUndefined()
+        await writeEntry(previousKey, encodedConfig)
+        expect(await signedCache.get(context)).toBeUndefined()
 
-      await writeEntry(scopedKey, testConfig)
-      expect(await signedCache.get(context)).toEqual(testConfig)
-    })
+        await writeEntry(scopedKey, testConfig)
+        expect(await signedCache.get(context)).toEqual(testConfig)
+      }
+    )
 
     it('reads legacy plaintext on upgrade without overwriting it with encoded keys', async () => {
       await writeEntry(legacyKey, testConfig)

@@ -115,7 +115,7 @@ describe('assignment credential diagnostic isolation', () => {
       'response-body rejection',
       async () => {
         const result = success()
-        jest.spyOn(result, 'json').mockRejectedValue(leakingError())
+        jest.spyOn(result, 'text').mockRejectedValue(leakingError())
         return result
       },
       'ParseError',
@@ -124,7 +124,7 @@ describe('assignment credential diagnostic isolation', () => {
       'response-body cancellation',
       async () => {
         const result = success()
-        jest.spyOn(result, 'json').mockRejectedValue(new DOMException(jwt, 'AbortError'))
+        jest.spyOn(result, 'text').mockRejectedValue(new DOMException(jwt, 'AbortError'))
         return result
       },
       'AbortError',
@@ -273,7 +273,7 @@ describe('assignment credential diagnostic isolation', () => {
   it('preserves existing response-body errors when there is no assignment token', async () => {
     const original = new SyntaxError('invalid response')
     const result = success()
-    jest.spyOn(result, 'json').mockRejectedValue(original)
+    jest.spyOn(result, 'text').mockRejectedValue(original)
     await expect(
       fetchPrecomputedConfiguration({
         ...options,

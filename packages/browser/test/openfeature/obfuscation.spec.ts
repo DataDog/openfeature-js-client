@@ -57,7 +57,7 @@ function response(publicSalt: string | undefined = salt, value = true, createdAt
 }
 
 function fetchResponse(payload: unknown) {
-  return { ok: true, headers: new Headers(), json: async () => payload }
+  return { ok: true, headers: new Headers(), text: async () => JSON.stringify(await payload) }
 }
 
 describe('browser flag-key obfuscation', () => {

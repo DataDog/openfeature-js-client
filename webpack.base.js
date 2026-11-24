@@ -25,6 +25,11 @@ module.exports = ({ entry, mode, filename, types, keepBuildEnvVariables, plugins
   module: {
     rules: [
       {
+        test: /\.m?js$/,
+        include: /[/\\]node_modules[/\\]lossless-json[/\\]/,
+        use: path.resolve(__dirname, 'scripts/build/transpile-legacy-dependency.js'),
+      },
+      {
         test: /\.(ts|tsx|js)$/,
         loader: 'ts-loader',
         exclude: /node_modules/,

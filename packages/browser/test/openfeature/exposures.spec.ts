@@ -234,13 +234,13 @@ describe('Exposures End-to-End', () => {
         // Mock flag configuration endpoint
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
       // Fallback for any other requests
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({}),
+        text: async () => JSON.stringify(await Promise.resolve({})),
       })
     })
 
@@ -343,10 +343,10 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
 
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
@@ -388,10 +388,10 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
 
     let rumUser = { id: 'rum-user-a', user_email: 'a@example.com' }
@@ -437,10 +437,10 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
 
     const globalObject = getGlobalObject<{ DD_RUM?: DDRum }>()
@@ -476,10 +476,10 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
 
     await OpenFeature.setContext({ targetingKey: 'test-user-123' })
@@ -507,7 +507,7 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(precomputedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
         })
       }
       return Promise.resolve({ ok: true })
@@ -566,7 +566,7 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(modifiedServerResponse),
+          text: async () => JSON.stringify(await Promise.resolve(modifiedServerResponse)),
         })
       }
       return Promise.resolve({ ok: true })
@@ -640,10 +640,10 @@ describe('Exposures End-to-End', () => {
       if (url.includes('precompute-assignments')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(responseWithSerialId),
+          text: async () => JSON.stringify(await Promise.resolve(responseWithSerialId)),
         })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
 
     await OpenFeature.setContext({ targetingKey: 'test-user-123' })
@@ -696,13 +696,13 @@ describe('Exposures End-to-End', () => {
           // Mock flag configuration endpoint
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(precomputedServerResponse),
+            text: async () => JSON.stringify(await Promise.resolve(precomputedServerResponse)),
           })
         }
         // Fallback for any other requests
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({}),
+          text: async () => JSON.stringify(await Promise.resolve({})),
         })
       })
     })
@@ -850,7 +850,8 @@ describe('Exposures End-to-End', () => {
           configFetchCount++
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+            text: async () =>
+              JSON.stringify(await Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse)),
           })
         }
         return Promise.resolve({ ok: true })
@@ -931,7 +932,8 @@ describe('Exposures End-to-End', () => {
           configFetchCount++
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+            text: async () =>
+              JSON.stringify(await Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse)),
           })
         }
         return Promise.resolve({ ok: true })
@@ -988,7 +990,7 @@ describe('Exposures End-to-End', () => {
         if (url.includes('precompute-assignments')) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(response),
+            text: async () => JSON.stringify(await Promise.resolve(response)),
           })
         }
         return Promise.resolve({ ok: true })
@@ -1065,7 +1067,8 @@ describe('Exposures End-to-End', () => {
           configFetchCount++
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse),
+            text: async () =>
+              JSON.stringify(await Promise.resolve(configFetchCount === 1 ? firstResponse : secondResponse)),
           })
         }
         return Promise.resolve({ ok: true })

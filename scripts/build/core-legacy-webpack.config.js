@@ -26,6 +26,15 @@ module.exports = ({ packageRoot = path.resolve(__dirname, '../../packages/core')
       },
       // Resolve dependencies now rather than leaving imports for the legacy consumer.
       externals: [],
+      module: {
+        rules: [
+          {
+            test: /\.m?js$/,
+            include: /[/\\]node_modules[/\\]lossless-json[/\\]/,
+            use: path.resolve(__dirname, 'transpile-legacy-dependency.js'),
+          },
+        ],
+      },
       optimization: {
         // Application bundlers minify; distributed artifacts retain dependency notices.
         minimize: false,

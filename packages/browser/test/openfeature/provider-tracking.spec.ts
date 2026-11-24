@@ -9,7 +9,7 @@ import { createDeferred } from '../transport/fetchTestUtils'
 
 const domain = 'provider-tracking-context'
 const options = { clientToken: 'tracking-token', env: 'test', flagEvaluationTrackingInterval: 1000 }
-const response = { ok: true, json: async () => precomputedResponse }
+const response = { ok: true, text: async () => JSON.stringify(await precomputedResponse) }
 
 describe('online provider tracking context', () => {
   let originalFetch: typeof globalThis.fetch

@@ -11,6 +11,7 @@ import {
   type FlagKeyObfuscation,
   readFlagKeyObfuscation,
 } from '../configuration/flag-key-obfuscation'
+import { INVALID_PRECOMPUTED_NUMBER } from '../configuration/precomputed-json'
 import { isPrecomputedErrorFlag } from '../configuration/wire-validation'
 import { timeStampNow } from '../time'
 import { type EvaluationDiagnostics, traceEvaluation } from './diagnostics'
@@ -222,6 +223,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
         encoding,
         allowDependencyErrors: true,
         flagEvaluationErrors: attributes.flagEvaluationErrors,
+        invalidNumericSources: precomputed.invalidNumericSources,
       }
     )
     if (dependencyError) {
@@ -248,7 +250,9 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     }
   }
 
-  if (flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) {
+  const invalidNumber =
+    precomputed.invalidNumericSources !== undefined && hasOwnKey(precomputed.invalidNumericSources, lookup.key)
+  if ((flag.variationType && variationTypeToOpenFeature(flag.variationType) !== type) || invalidNumber) {
     const flagMetadata = {}
     const dependencyError = bindPrecomputedDependencyEvaluations(
       flagMetadata,
@@ -256,7 +260,12 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       attributes.flags,
       precomputed.flagErrors,
       logger,
-      { rootFlagKey: flagKey, encoding, flagEvaluationErrors: attributes.flagEvaluationErrors }
+      {
+        rootFlagKey: flagKey,
+        encoding,
+        flagEvaluationErrors: attributes.flagEvaluationErrors,
+        invalidNumericSources: precomputed.invalidNumericSources,
+      }
     )
     if (dependencyError) {
       return {
@@ -270,6 +279,7 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
       value: defaultValue,
       reason: 'ERROR',
       errorCode: 'TYPE_MISMATCH' as ErrorCode,
+      ...(invalidNumber ? { errorMessage: INVALID_PRECOMPUTED_NUMBER } : {}),
       ...(flag.dependencyEvaluations?.length ? { flagMetadata } : {}),
     }
   }
@@ -291,7 +301,12 @@ function evaluatePrecomputedFlag<T extends FlagValueType>(
     attributes.flags,
     precomputed.flagErrors,
     logger,
-    { rootFlagKey: flagKey, encoding, flagEvaluationErrors: attributes.flagEvaluationErrors }
+    {
+      rootFlagKey: flagKey,
+      encoding,
+      flagEvaluationErrors: attributes.flagEvaluationErrors,
+      invalidNumericSources: precomputed.invalidNumericSources,
+    }
   )
   if (dependencyError) {
     return {

@@ -107,6 +107,43 @@ describe('fetchPrecomputedConfiguration', () => {
     expect(RulesFetchError).toBe(ConfigurationFetchError)
   })
 
+  it.each(['number', 'integer', 'float'])(
+    'preserves %s numeric conversions through fetch and serialization',
+    async (variationType) => {
+      for (const [token, valid] of [
+        ['9007199254740993', false],
+        ['1e-999', false],
+        ['1e999', false],
+        ['1152921504606846976', true],
+        ['1267650600228229401496703205376', true],
+      ] as const) {
+        const body = JSON.stringify({
+          data: {
+            attributes: {
+              createdAt: '2026-11-23T00:00:00Z',
+              flags: {
+                numeric: { ...assignment, variationType, variationValue: '__TOKEN__' },
+                healthy: assignment,
+              },
+            },
+          },
+        }).replace('"__TOKEN__"', token)
+        requestFetch.mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'application/json' } }))
+        const configuration = await fetchPrecomputedConfiguration({ ...options, fetch: requestFetch })
+        for (const snapshot of [configuration, configurationFromString(configurationToString(configuration))]) {
+          const result = evaluate(snapshot, 'number', 'numeric', -99.5, context)
+          expect(result).toMatchObject(
+            valid
+              ? { value: Number(token), reason: 'TARGETING_MATCH', variant: assignment.variationKey }
+              : { value: -99.5, reason: 'ERROR', errorCode: 'TYPE_MISMATCH' }
+          )
+          if (!valid) expect(result.variant).toBeUndefined()
+          expect(evaluate(snapshot, 'boolean', 'healthy', false, context).value).toBe(true)
+        }
+      }
+    }
+  )
+
   it('maps client credentials, context, environment and target compatibility to the existing endpoint', async () => {
     const result = await fetchPrecomputedConfiguration({
       ...options,

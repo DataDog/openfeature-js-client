@@ -9,6 +9,7 @@ import {
   experimentationOptOutPolicy,
   FLAG_KEY_SHA256_CAPABILITY,
   type FlagsConfiguration,
+  parsePrecomputedConfigurationJson,
   parsePrecomputedConfigurationResponse,
 } from '@datadog/flagging-core'
 import type { EvaluationContext, JsonValue } from '@openfeature/core'
@@ -125,7 +126,7 @@ export async function fetchPrecomputedConfiguration(
       checkAborted()
       let json: unknown
       try {
-        json = JSON.parse(text)
+        json = parsePrecomputedConfigurationJson(text)
       } catch {
         throw new ConfigurationFetchError('decode', 'Configuration JSON could not be decoded')
       }

@@ -1,9 +1,10 @@
-import {
-  type FlagsConfiguration,
-  type PrecomputedConfigurationResponse,
-  type PrecomputedFlag,
-} from '../../src/configuration'
+import type { FlagsConfiguration, PrecomputedConfigurationResponse, PrecomputedFlag } from '../../src/configuration'
 import { encodePrecomputedFlagKey, type FlagKeyObfuscation } from '../../src/configuration/flag-key-obfuscation'
+import { INVALID_PRECOMPUTED_NUMBER } from '../../src/configuration/precomputed-json'
+import {
+  configurationFromPrecomputedString,
+  configurationToPrecomputedString,
+} from '../../src/configuration/precomputed-wire'
 import { parsePrecomputedConfigurationResponse } from '../../src/configuration/wire-validation'
 import { getPrecomputedDependencyEvaluations } from '../../src/evaluation/precomputed-dependencies'
 import { evaluatePrecomputedConfiguration } from '../../src/evaluation/precomputed-evaluation'
@@ -42,6 +43,72 @@ function configuration(
 }
 
 describe('precomputed dependent flags', () => {
+  describe.each(['success', 'type-mismatch', 'terminal-error'] as const)('%s root numeric dependencies', (kind) => {
+    it.each([
+      '9007199254740993',
+      '-9007199254740993',
+      '9007199254740993.0',
+      '90071992547409930e-1',
+      '1e23',
+      '1e-999',
+      '-1e-999',
+      '1e999',
+      '-1e999',
+    ])('fails closed for numeric prerequisite %s without publishing partial dependency details', (source) => {
+      const dependencyEvaluations = [
+        { flagKey: 'healthy', isPresentInAssignment: true },
+        { flagKey: 'parent', isPresentInAssignment: true },
+      ]
+      const root =
+        kind === 'terminal-error'
+          ? { reason: 'ERROR', errorCode: 'GENERAL', dependencyEvaluations }
+          : { ...parentFlag, dependencyEvaluations }
+      const payload = configuration(root, {
+        healthy: parentFlag,
+        parent: { ...parentFlag, variationType: 'number', variationValue: '__NUMBER__' },
+      }).precomputed!.response
+      const response = JSON.stringify(payload).replace('"__NUMBER__"', source)
+      const parsed = configurationFromPrecomputedString(
+        JSON.stringify({ version: 1, precomputed: { context, response } })
+      )
+      for (const snapshot of [parsed, configurationFromPrecomputedString(configurationToPrecomputedString(parsed))]) {
+        const result =
+          kind === 'type-mismatch'
+            ? evaluatePrecomputedConfiguration(snapshot, 'string', 'root', 'fallback', context)
+            : evaluatePrecomputedConfiguration(snapshot, 'boolean', 'root', false, context)
+        expect(result).toMatchObject({
+          value: kind === 'type-mismatch' ? 'fallback' : false,
+          reason: 'ERROR',
+          errorCode: 'PARSE_ERROR',
+          errorMessage: INVALID_PRECOMPUTED_NUMBER,
+        })
+        expect(result.variant).toBeUndefined()
+        expect(getPrecomputedDependencyEvaluations(result)).toEqual([])
+      }
+    })
+  })
+
+  it('preserves an inline dependency error even when its standalone numeric assignment is rejected', () => {
+    const payload = configuration(
+      {
+        reason: 'ERROR',
+        errorCode: 'GENERAL',
+        dependencyEvaluations: [{ flagKey: 'parent', reason: 'ERROR', errorCode: 'GENERAL' }],
+      },
+      { parent: { ...parentFlag, variationType: 'number', variationValue: '__NUMBER__' } }
+    ).precomputed!.response
+    const flags = configurationFromPrecomputedString(
+      JSON.stringify({
+        version: 1,
+        precomputed: { context, response: JSON.stringify(payload).replace('"__NUMBER__"', '1e999') },
+      })
+    )
+    const result = evaluatePrecomputedConfiguration(flags, 'boolean', 'root', false, context)
+    expect(result).toMatchObject({ value: false, reason: 'ERROR', errorCode: 'GENERAL' })
+    expect(getPrecomputedDependencyEvaluations(result)).toEqual([
+      expect.objectContaining({ flagKey: 'parent', reason: 'ERROR', errorCode: 'GENERAL' }),
+    ])
+  })
   const successfulDependency = {
     flagKey: 'parent',
     isPresentInAssignment: true,
