@@ -1,4 +1,3 @@
-import { GeneralError } from '@openfeature/web-sdk'
 import { AsnConvert } from '@peculiar/asn1-schema'
 import {
   AuthorityKeyIdentifier,
@@ -8,26 +7,35 @@ import {
   KeyUsage,
   SubjectKeyIdentifier,
 } from '@peculiar/asn1-x509'
+import {
+  buffer,
+  CLOCK_TOLERANCE_SECONDS,
+  cryptoProvider,
+  hex,
+  MAX_SIGNED_REQUEST,
+  MAX_SIGNED_RESPONSE,
+  MINIMUM_LEAF_NOT_BEFORE_HEADER,
+  ResponseVerificationError,
+  requireCondition,
+  SIGNING_CAPABILITY,
+  SIGNING_CHAIN_HEADER,
+  SIGNING_NONCE_HEADER,
+  SIGNING_VERSION,
+  SIGNING_VERSION_HEADER,
+  type SigningRequest,
+  type SigningResponse,
+  sha256,
+  utf8,
+  type VerifiedResponse,
+} from './protocol'
 
-export const SIGNING_VERSION_HEADER = 'x-datadog-feature-flags-signature-version'
-export const SIGNING_NONCE_HEADER = 'x-datadog-feature-flags-request-nonce'
-export const SIGNING_CAPABILITY = 'response-signing-v1'
-/** Request and response signature version. */
-export const SIGNING_VERSION = '1'
-/** Intermediate certificates: 1 to 3 standard base64 DER entries joined by ',', index 0 issued the leaf. */
-export const SIGNING_CHAIN_HEADER = 'x-datadog-feature-flags-signing-chain'
-/**
- * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: a LEAF that starts before this time is revoked
- * for the response's trust anchor. Intermediates are never compared with it. When present, it is bound at the end of
- * the v1 transcript. The edge must list it in Access-Control-Expose-Headers, or the browser cannot read it.
- */
-export const MINIMUM_LEAF_NOT_BEFORE_HEADER = 'x-datadog-feature-flags-minimum-leaf-not-before'
+// The certificate verifier. The provider loads this module as a dynamic chunk, so it is not in the default bundle.
+export * from './protocol'
+
 const TRANSCRIPT_DOMAIN = 'datadog.feature-flags.precomputed-assignments.v1\0'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
 const MAX_INTERMEDIATES = 3
-export const MAX_SIGNED_REQUEST = 1024 * 1024
-export const MAX_SIGNED_RESPONSE = 2 * 1024 * 1024
 /**
  * FFE assignment-signing extended key usage (DER 06 0a 2b 06 01 04 01 86 8d 1f 01 01).
  * PLACEHOLDER: 1.3.6.1.4.1.99999 is not a Datadog-owned arc. Datadog must assign the
@@ -45,109 +53,6 @@ const OPTIONAL_HEADERS = [
   'x-dd-feature-flags-capabilities',
 ]
 
-export type VerificationFailure =
-  | 'unsupported-request'
-  | 'unavailable-crypto'
-  | 'missing-anchor'
-  | 'missing-proof'
-  | 'invalid-proof'
-  | 'response-too-large'
-  | 'invalid-certificate'
-  | 'invalid-signature'
-  | 'expired-proof'
-  | 'unsupported-site'
-  | 'revoked-certificate'
-
-export interface SigningRequest {
-  url: string
-  method: string
-  headers: Headers
-  body: Uint8Array
-}
-export interface SigningResponse {
-  status: number
-  headers: Headers
-  body: Uint8Array
-}
-export interface VerifiedResponse {
-  verifiedAt: number
-  expiresAt: number
-  /** SHA-256 hex of the DER of the trust anchor that the chain ended at. */
-  anchorKey: string
-  /** notBefore of the leaf that signed the response, unix seconds. */
-  leafNotBefore: number
-  /** DRAFT: the signed minimum leaf not-before value, when the response has one. */
-  minimumNotBefore?: number
-}
-
-/**
- * The shared reason-code table of iOS, Android and the browser: what failed, then a fix hint.
- * `revoked-certificate` is a draft rule and keeps its earlier text.
- */
-const FAILURES: Record<Exclude<VerificationFailure, 'revoked-certificate'>, [string, string]> = {
-  'unsupported-request': [
-    'The SDK cannot sign this request shape',
-    'Use the default flags endpoint and request options',
-  ],
-  'unavailable-crypto': ['The platform crypto API is not available', 'Use a secure (HTTPS) context'],
-  'missing-anchor': [
-    'No trusted root is configured for this site',
-    'Response signing supports only the staging site in this release',
-  ],
-  'missing-proof': [
-    'The response has no signature headers',
-    'A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled',
-  ],
-  'invalid-proof': ['The signature headers are present but not valid', 'A proxy or CDN changed the response headers'],
-  'response-too-large': ['The body is larger than the signed size limit', 'Contact Datadog support'],
-  'invalid-certificate': [
-    'The certificate chain does not chain to the pinned root, or a chain rule fails',
-    'The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support',
-  ],
-  'invalid-signature': ['The signature does not match the request and response', 'The response changed in transit'],
-  'expired-proof': ['The proof is expired or not yet valid', 'Check the device clock'],
-  'unsupported-site': [
-    'Signing is not available on this Datadog site',
-    'Response signing supports only the staging site in this release. Production is not supported yet',
-  ],
-}
-/** `Flag response signing failed (<code>): <what failed>. <fix hint>.` */
-export function signingFailureMessage(reason: VerificationFailure): string {
-  if (reason === 'revoked-certificate') return `Response signing: ${reason}`
-  const [what, hint] = FAILURES[reason]
-  return `Flag response signing failed (${reason}): ${what}. ${hint}.`
-}
-
-// Errors contain only fixed diagnostic codes, never request or certificate contents.
-export class ResponseVerificationError extends GeneralError {
-  constructor(
-    readonly reason: VerificationFailure,
-    message = signingFailureMessage(reason)
-  ) {
-    super(message)
-    Object.setPrototypeOf(this, new.target.prototype)
-    this.name = 'ResponseVerificationError'
-  }
-}
-function requireCondition(condition: unknown, reason: VerificationFailure = 'invalid-proof'): asserts condition {
-  if (!condition) throw new ResponseVerificationError(reason)
-}
-export function cryptoProvider(): Crypto {
-  requireCondition(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues, 'unavailable-crypto')
-  return globalThis.crypto
-}
-export function utf8(value: string): Uint8Array {
-  return new TextEncoder().encode(value)
-}
-function buffer(bytes: Uint8Array): ArrayBuffer {
-  return new Uint8Array(bytes).buffer
-}
-export async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await cryptoProvider().subtle.digest('SHA-256', buffer(bytes)))
-}
-export function hex(bytes: Uint8Array): string {
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
-}
 function equal(a: ArrayBuffer | Uint8Array, b: ArrayBuffer | Uint8Array): boolean {
   const aa = new Uint8Array(a),
     bb = new Uint8Array(b)
@@ -622,7 +527,7 @@ export async function verifyResponse(
   const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
   const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
   requireCondition(
-    issuedAt <= now + 30 && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
+    issuedAt <= now + CLOCK_TOLERANCE_SECONDS && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
     'expired-proof'
   )
   const leaf = parseCertificate(leafDer, 'leaf')

@@ -446,11 +446,11 @@ describe('rotation under one pinned root', () => {
         { site: 'datad0g.com' }
       )!
       for (const name of ['two-intermediates', 'rotated-lower-intermediate', 'two-intermediates'] as const) {
-        const request = signing.prepare(
+        const request = (await signing.prepare(
           'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=staging',
           { 'content-type': 'application/vnd.api+json', 'dd-client-token': 'fixture-token' },
           '{"data":{}}'
-        )!
+        ))!
         const signed = signedResponse(request, loadCredential(name))
         const result = await signing.read(
           new Response(Buffer.from(signed.body), { status: 200, headers: signed.headers }),
@@ -718,7 +718,7 @@ describe('minimum leaf not-before revocation (draft wire)', () => {
     change?: (headers: Headers) => void,
     logger = capture().logger
   ) {
-    const request = signing.prepare(url, { 'dd-client-token': 'fixture-token' }, '{"data":{}}')!
+    const request = (await signing.prepare(url, { 'dd-client-token': 'fixture-token' }, '{"data":{}}'))!
     const signed = signedResponse(request, credential, FIXTURE_NOW, undefined, minimumNotBefore)
     change?.(signed.headers)
     return signing.read(

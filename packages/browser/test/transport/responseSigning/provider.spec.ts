@@ -15,6 +15,7 @@ import {
   signingContextKey,
   UNSUPPORTED_SITE_MESSAGE,
 } from '../../../src/transport/responseSigning/controller'
+import { isSigningSite } from '../../../src/transport/responseSigning/trustRoots'
 import {
   buildSigningTranscript,
   decodeBase64,
@@ -230,9 +231,23 @@ test.each([
     })
   ).toThrow('Flag response signing failed (missing-anchor)')
 })
-test('automatic trust cannot be reused for a different request origin', () => {
+test.each(['DATAD0G.COM', 'Datad0g.com', 'datad0g.com.', 'evil-datad0g.com', 'datad0g.com.evil.test', ' datad0g.com'])(
+  'the lookalike site %j is not the signing site',
+  (site) => {
+    expect(isSigningSite(site)).toBe(false)
+    // The endpoint builder also rejects the site, so no signed request can be made.
+    jest.spyOn(display, 'error').mockImplementation(() => undefined)
+    expect(() => createResponseSigningController({ mode: 'required' }, { site })).toThrow('Unsupported site')
+  }
+)
+test('automatic trust cannot be reused for a different request origin', async () => {
   const signing = createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })!
-  expect(() => signing.prepare('https://proxy.test/assign', {}, '{}')).toThrow('unsupported-request')
+  const headers = { 'dd-client-token': 'pub0123456789abcdef0123456789abcdef' }
+  // Control: the same headers sign a request to the bundled origin.
+  await expect(
+    signing.prepare('https://preview.ff-cdn.datad0g.com/precompute-assignments', headers, '{}')
+  ).resolves.toBeDefined()
+  await expect(signing.prepare('https://proxy.test/assign', headers, '{}')).rejects.toThrow('unsupported-request')
 })
 test.each(['provider', 'fetch', 'factory'] as const)(
   '%s selects staging trust from the resolved endpoint without another option',
@@ -375,7 +390,7 @@ describe('staging site gate', () => {
   })
   test.each(['observe', 'required'] as const)(
     'a non-staging site does not read or validate signing trust options in %s mode',
-    (mode) => {
+    async (mode) => {
       const read = jest.fn(() => ['x'.repeat(6000)])
       jest.spyOn(display, 'warn').mockImplementation(() => undefined)
       jest.spyOn(display, 'error').mockImplementation(() => undefined)
@@ -389,7 +404,7 @@ describe('staging site gate', () => {
         { site: 'datadoghq.com' }
       )
       if (mode === 'observe') expect(controller).toBeUndefined()
-      else expect(() => controller?.prepare('https://example.test', {}, '{}')).toThrow(UNSUPPORTED_SITE_MESSAGE)
+      else await expect(controller?.prepare('https://example.test', {}, '{}')).rejects.toThrow(UNSUPPORTED_SITE_MESSAGE)
       expect(read).not.toHaveBeenCalled()
     }
   )
@@ -839,6 +854,61 @@ describe('expiry timer at expires-at', () => {
     expect(error).not.toHaveBeenCalled()
     expect(jest.getTimerCount()).toBe(0)
   })
+  /** A fetch that stays pending until the test ends it, so that closing the provider does not wait for it. */
+  function pendingFetch() {
+    let end: (error: Error) => void = () => undefined
+    global.fetch = jest.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          end = reject
+        })
+    )
+    return () => end(new Error('test ended'))
+  }
+  test.each(['no context change', 'a context change in flight', 'a failed context change'] as const)(
+    'after expiry with %s, the timer does not re-arm in a loop',
+    async (change) => {
+      global.fetch = jest.fn(signed)
+      const subject = provider('required')
+      await subject.initialize(context)
+      const other = { targetingKey: 'user-456' }
+      let endFetch: () => void = () => undefined
+      if (change === 'a context change in flight') {
+        endFetch = pendingFetch()
+        subject.onContextChange(context, other).catch(() => undefined)
+      } else if (change === 'a failed context change') {
+        global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
+        const update = subject.onContextChange(context, other).catch(() => undefined)
+        await jest.advanceTimersByTimeAsync(30_000)
+        await update
+      }
+      // The requested context differs from the proof context, so the timer cannot signal the expiry.
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 301) * 1000)
+      await jest.advanceTimersByTimeAsync(300_000)
+      const schedules = jest.spyOn(subject as unknown as { scheduleProofExpiry(): void }, 'scheduleProofExpiry')
+      await jest.advanceTimersByTimeAsync(1_000)
+      expect(schedules.mock.calls.length).toBeLessThan(10)
+      endFetch()
+      await jest.advanceTimersByTimeAsync(100)
+    }
+  )
+  test('after a large backward clock step, the timer delay stays in the 32-bit timer range', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required')
+    await subject.initialize(context)
+    // With a context change in flight, the timer cannot signal the expiry and re-arms before expires-at.
+    const endFetch = pendingFetch()
+    subject.onContextChange(context, { targetingKey: 'user-456' }).catch(() => undefined)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 30 * 24 * 3600) * 1000)
+    // The timer fires at expires-at and re-arms for about 30 days. A delay over the 32-bit range overflows and fires at
+    // once, as in browsers, which makes a loop.
+    await jest.advanceTimersByTimeAsync(300_000)
+    const schedules = jest.spyOn(subject as unknown as { scheduleProofExpiry(): void }, 'scheduleProofExpiry')
+    await jest.advanceTimersByTimeAsync(1_000)
+    expect(schedules.mock.calls.length).toBeLessThan(10)
+    endFetch()
+    await jest.advanceTimersByTimeAsync(100)
+  })
   test('observe mode schedules no expiry timer', async () => {
     global.fetch = jest.fn(signed)
     const subject = provider('observe')
@@ -1043,7 +1113,7 @@ test('direct fetch opt-in verifies and rejects unsupported HTTP requests locally
     })
   ).resolves.toHaveProperty('precomputed')
   const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: roots }, STAGING)!
-  expect(() => signing.prepare('http://example.test/', { 'dd-client-token': 'test' }, '{}')).toThrow(
+  await expect(signing.prepare('http://example.test/', { 'dd-client-token': 'test' }, '{}')).rejects.toThrow(
     'unsupported-request'
   )
 })
@@ -1119,12 +1189,122 @@ test('signed provider snapshots nested context and configured header overrides',
   expect(evaluation(subject)).toBe(false)
 })
 
-test('required refuses its verified memory after the clock moves backward', async () => {
+describe('backward clock step', () => {
+  // The tolerance is 30 s, the same as for issued-at. A larger step is handled as proof expiry.
+  const modes = [
+    ['default', {}, ProviderStatus.STALE],
+    ['expireVerifiedFlags', strict(), ProviderStatus.ERROR],
+  ] as const
+  async function verifiedProvider(extra: Partial<FlaggingInitConfiguration>) {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', extra)
+    await subject.initialize(context)
+    const events = { ready: jest.fn(), stale: jest.fn(), error: jest.fn() }
+    subject.events.addHandler(ProviderEvents.Ready, events.ready)
+    subject.events.addHandler(ProviderEvents.Stale, events.stale)
+    subject.events.addHandler(ProviderEvents.Error, events.error)
+    return { subject, events }
+  }
+
+  test.each(modes)('%s: a step of 30 s keeps the verified flags current', async (_name, extra, _expired) => {
+    const { subject, events } = await verifiedProvider(extra)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 30) * 1000)
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({ value: true })
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(events.stale).not.toHaveBeenCalled()
+    expect(events.error).not.toHaveBeenCalled()
+  })
+
+  test('default: a step of more than 30 s is STALE and keeps the verified flags', async () => {
+    const { subject, events } = await verifiedProvider({})
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 31) * 1000)
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({ value: true })
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.STALE)
+    expect(events.stale).toHaveBeenCalledTimes(1)
+    expect(events.error).not.toHaveBeenCalled()
+  })
+
+  test('expireVerifiedFlags: a step of more than 30 s is ERROR with expired-proof', async () => {
+    const { subject, events } = await verifiedProvider(strict())
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 31) * 1000)
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
+      value: false,
+      errorCode: ErrorCode.GENERAL,
+      errorMessage: signingFailureMessage('expired-proof'),
+    })
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+    expect(events.error).toHaveBeenCalledTimes(1)
+    expect(events.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: signingFailureMessage('expired-proof') })
+    )
+  })
+
+  test.each(modes)('%s: the provider recovers to READY when the clock returns', async (_name, extra, expired) => {
+    const { subject, events } = await verifiedProvider(extra)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 120) * 1000)
+    evaluation(subject)
+    await flush()
+    expect(subject.status).toBe(expired)
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 10) * 1000)
+    expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({ value: true })
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(events.ready).toHaveBeenCalledTimes(1)
+    // The proof still expires at expires-at after the recovery.
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    evaluation(subject)
+    await flush()
+    expect(subject.status).toBe(expired)
+  })
+})
+
+/** Counts the records in every IndexedDB database and object store. */
+async function indexedDBRecords(): Promise<number> {
+  let count = 0
+  for (const { name } of await indexedDB.databases()) {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name!)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    for (const store of Array.from(database.objectStoreNames)) {
+      count += await new Promise<number>((resolve, reject) => {
+        const request = database.transaction(store).objectStore(store).count()
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    database.close()
+  }
+  return count
+}
+test.each([
+  ['observe', true],
+  ['required', false],
+] as const)('%s mode writes flag data to IndexedDB: %s', async (mode, writes) => {
   global.fetch = jest.fn(signed)
-  const subject = provider('required')
+  const subject = provider(mode)
   await subject.initialize(context)
-  jest.spyOn(Date, 'now').mockReturnValue((vector.now - 1) * 1000)
-  expect(evaluation(subject)).toBe(false)
+  await subject.onContextChange(context, { ...context, nested: { plan: 'enterprise' } })
+  expect(evaluation(subject)).toBe(true)
+  await flush()
+  if (writes) expect(await indexedDBRecords()).toBeGreaterThan(0)
+  else expect(await indexedDBRecords()).toBe(0)
+})
+
+test('required accepts a response issued 30 s in the future and rejects 31 s', async () => {
+  global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 30))
+  const accepted = provider('required')
+  await accepted.initialize(context)
+  expect(accepted.status).toBe(ProviderStatus.READY)
+  expect(evaluation(accepted)).toBe(true)
+  global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 31))
+  const rejected = provider('required')
+  await expect(rejected.initialize(context)).rejects.toMatchObject({ reason: 'expired-proof' })
+  expect(evaluation(rejected)).toBe(false)
 })
 
 test('direct required fetch binds admission to the original nested context across asynchronous verification', async () => {
@@ -1198,9 +1378,9 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
 })
 
 describe('required response stream reads', () => {
-  function setup() {
+  async function setup() {
     const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: roots }, STAGING)!
-    const request = signing.prepare('https://example.test/assign', { 'dd-client-token': 'test' }, '{}')!
+    const request = (await signing.prepare('https://example.test/assign', { 'dd-client-token': 'test' }, '{}'))!
     return { signing, request }
   }
 
@@ -1209,7 +1389,7 @@ describe('required response stream reads', () => {
   }
 
   test.each([false, true])('rejects overflow and handles cancellation (rejects: %s)', async (rejectCancel) => {
-    const { signing, request } = setup()
+    const { signing, request } = await setup()
     for (let attempt = 0; attempt < 2; attempt++) {
       const cancel = jest.fn(() => (rejectCancel ? Promise.reject(new Error('cancel failed')) : Promise.resolve()))
       const body = new ReadableStream<Uint8Array>({
@@ -1228,7 +1408,7 @@ describe('required response stream reads', () => {
   })
 
   test('verifies a valid signed response delivered in chunks', async () => {
-    const { signing, request } = setup()
+    const { signing, request } = await setup()
     const result = await signed(request.url, { headers: request.headers, body: '{}' })
     const data = new Uint8Array(await result.arrayBuffer())
     const body = new ReadableStream<Uint8Array>({
@@ -1246,7 +1426,7 @@ describe('required response stream reads', () => {
   })
 
   test('preserves ordinary stream failures without replacing the error', async () => {
-    const { signing, request } = setup()
+    const { signing, request } = await setup()
     const error = new Error('stream failed')
     const body = new ReadableStream<Uint8Array>({
       start(controller) {

@@ -219,6 +219,16 @@ is independent of X.509 v3 certificate encoding.
 Verification requires an accurate device clock and uses the browser's `Date.now()`.
 Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
 Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+Verified flags stay current after the clock moves back by at most 30 seconds. After a larger backward step, the
+provider handles the proof as expired (see below). When the clock returns into the proof's validity window, the
+provider returns to its state before the expiry and emits the matching event.
+
+The `observe` and `required` modes load the verifier as a separate script chunk. The default mode, `off`, and
+sites other than staging do not load it. With the CDN bundle, serve the `chunks/` directory next to
+`datadog-openfeature-browser.js`, and let the page load scripts from that location. If the chunk does not load,
+`observe` sends the request without signing, and `required` sends no assignment request and fails with
+`Flag response signing failed: the response signing verifier did not load. ...`. The SDK tries to load the chunk
+again on the next fetch.
 
 Required mode uses only verified memory for the same provider and full evaluation
 context. It does not read bootstrap or persistent configurations and never retries

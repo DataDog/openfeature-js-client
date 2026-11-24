@@ -45,7 +45,7 @@ import {
   type ResponseSigningController,
 } from './responseSigning/controller'
 
-import { ResponseVerificationError } from './responseSigning/verification'
+import { ResponseVerificationError } from './responseSigning/protocol'
 
 export { buildConfigurationUrl } from './configurationEndpoint'
 
@@ -264,7 +264,8 @@ async function requestPrecomputedConfiguration(
     },
     options.signal
   )
-  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body, debug)
+  // Await only with signing on, so that the default path starts the fetch in the same tick as before.
+  const signingRequest = signing ? await signing.prepare(url.toString(), defaultHeaders, body, debug) : undefined
   const fetchImplementation = options.fetch ?? globalThis.fetch
   debug.event('context.normalized', () => ({
     rawContext: options.context,

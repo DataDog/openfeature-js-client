@@ -1187,7 +1187,7 @@ describe('createFlagsConfigurationFetcher', () => {
         )!
         jest
           .spyOn(signing, 'prepare')
-          .mockReturnValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
+          .mockResolvedValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
         return signing
       }
 

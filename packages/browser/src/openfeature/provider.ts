@@ -48,7 +48,7 @@ import {
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { cloneSigningContext } from '../transport/responseSigning/context'
-import { ResponseVerificationError, signingFailureMessage } from '../transport/responseSigning/verification'
+import { ResponseVerificationError, signingFailureMessage } from '../transport/responseSigning/protocol'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -108,6 +108,7 @@ export class DatadogProvider extends DatadogProviderBase {
   private initializationStarted = false
   private verificationError: ResponseVerificationError | undefined
   private proofExpirySignaled = false
+  private proofExpiryPreviousState?: ProviderStatus
   private proofExpiryTimer: ReturnType<typeof setTimeout> | undefined
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
@@ -643,10 +644,12 @@ export class DatadogProvider extends DatadogProviderBase {
       () => {
         this.proofExpiryTimer = undefined
         if (this.flagsConfiguration !== config) return
-        // A timer can fire a little early; check again at the exact expiry.
-        if (!this.signalProofExpiry() && !this.proofExpirySignaled) this.scheduleProofExpiry()
+        // A timer can fire a little early: re-arm only before expires-at. After it, only a read checks again.
+        if (!this.signalProofExpiry() && !this.proofExpirySignaled && Date.now() < expiresAt * 1000)
+          this.scheduleProofExpiry()
       },
-      Math.max(0, expiresAt * 1000 - Date.now())
+      // Clamp the delay to the signed 32-bit timer range.
+      Math.min(2 ** 31 - 1, Math.max(0, expiresAt * 1000 - Date.now()))
     )
   }
 
@@ -659,7 +662,10 @@ export class DatadogProvider extends DatadogProviderBase {
     const signing = this.configuration?.responseSigning
     const expired =
       signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
-    if (!expired) return false
+    if (!expired) {
+      this.recoverFromProofExpiry()
+      return false
+    }
     if (this.proofExpirySignaled || (this.status !== ProviderStatus.READY && this.status !== ProviderStatus.STALE))
       return true
     const strictExpiry = signing.expireVerifiedFlags
@@ -675,6 +681,7 @@ export class DatadogProvider extends DatadogProviderBase {
       reason: 'expired-proof',
     }))
     const previous = this.status
+    this.proofExpiryPreviousState = previous
     this.status = state
     if (strictExpiry)
       this.events.emit(
@@ -683,6 +690,28 @@ export class DatadogProvider extends DatadogProviderBase {
       )
     else if (previous !== ProviderStatus.STALE) this.events.emit(ProviderEvents.Stale)
     return true
+  }
+
+  /**
+   * After a backward clock step larger than the tolerance, the proof is current again when the clock returns into its
+   * window. Restore the state from before the expiry, and schedule the timer at expires-at again.
+   */
+  private recoverFromProofExpiry(): void {
+    const signing = this.configuration?.responseSigning
+    const expiryState = signing?.expireVerifiedFlags ? ProviderStatus.ERROR : ProviderStatus.STALE
+    if (
+      !this.proofExpirySignaled ||
+      this.status !== expiryState ||
+      !signing?.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
+    )
+      return
+    const state = this.proofExpiryPreviousState ?? ProviderStatus.READY
+    this.proofExpirySignaled = false
+    this.debug.event('provider.state_changed', () => ({ previousState: this.status, state, reason: 'proof-current' }))
+    this.status = state
+    if (state === ProviderStatus.READY) this.events.emit(ProviderEvents.Ready)
+    else if (expiryState === ProviderStatus.ERROR) this.events.emit(ProviderEvents.Stale)
+    this.scheduleProofExpiry()
   }
 
   protected resolve<T extends FlagValueType>(

@@ -4,24 +4,23 @@ import type { EvaluationContext } from '@openfeature/web-sdk'
 import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
 import { signingContextKey } from './context'
-import { raiseMinimumNotBefore, storedMinimumNotBefore } from './minimumNotBefore'
-import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoots'
 import {
-  cryptoProvider,
+  CLOCK_TOLERANCE_SECONDS,
   hex,
-  MAX_SIGNED_RESPONSE,
   ResponseVerificationError,
-  SIGNING_CAPABILITY,
-  SIGNING_NONCE_HEADER,
-  SIGNING_VERSION_HEADER,
   type SigningRequest,
   sha256,
   signingFailureMessage,
   utf8,
   type VerifiedResponse,
-  validateSigningRequest,
-  verifyResponse,
-} from './verification'
+} from './protocol'
+import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoots'
+
+type Exchange = typeof import('./exchange')
+
+/** Required mode fails closed with this message when the verifier chunk does not load. */
+export const VERIFIER_UNAVAILABLE_MESSAGE =
+  'Flag response signing failed: the response signing verifier did not load. Check that the page can load the SDK chunk files.'
 
 export { signingContextKey } from './context'
 
@@ -117,8 +116,28 @@ export function createResponseSigningController(
     }))
     throw new ResponseVerificationError('missing-anchor')
   }
+  // The verifier loads as a dynamic chunk while signing is experimental. Revisit at GA: an opt-in entry point may be a
+  // better fit. Load it now, in parallel with the first request. A failed load is tried again on the next response.
+  let exchange: Promise<Exchange> | undefined
+  function loadExchange(): Promise<Exchange> {
+    exchange ??= import('./exchange').catch((error: unknown) => {
+      exchange = undefined
+      throw error
+    })
+    return exchange
+  }
+  if (!unsupportedSite) loadExchange().catch(() => undefined)
   const expireVerifiedFlags = mode === 'required' && options?.expireVerifiedFlags === true
-  const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; acceptedAt: number; context: string }>()
+  const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; verifiedAt: number; context: string }>()
+  /**
+   * A proof is current from its verification time until expires-at. A backward clock step of at most
+   * CLOCK_TOLERANCE_SECONDS keeps it current. A larger step is handled as expiry, and the proof is current again when
+   * the clock returns into the window.
+   */
+  function outsideValidity(proof: { expiresAt: number; verifiedAt: number }): boolean {
+    const now = Date.now() / 1000
+    return proof.expiresAt <= now || proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
+  }
   const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
   function failure(error: unknown, logger = debug, stage = 'verification'): undefined {
@@ -132,21 +151,6 @@ export function createResponseSigningController(
     if (mode === 'required')
       throw error instanceof ResponseVerificationError ? error : new ResponseVerificationError(reason)
     return undefined
-  }
-  /**
-   * DRAFT: keep a signed minimum leaf not-before only when it cannot revoke the leaf that signed it.
-   * It is never compared with intermediates.
-   */
-  function recordMinimumNotBefore(proof: VerifiedResponse, logger: DebugLogger): void {
-    const value = proof.minimumNotBefore
-    if (value === undefined) return
-    const outcome =
-      value > proof.leafNotBefore
-        ? 'minimum-not-before-ignored'
-        : raiseMinimumNotBefore(proof.anchorKey, value)
-          ? 'stored'
-          : 'not-higher-than-stored'
-    logger.event('signing.minimum_not_before', () => ({ mode, value, outcome }))
   }
   return {
     mode,
@@ -165,42 +169,36 @@ export function createResponseSigningController(
       )
       return namespace
     },
-    prepare(url: string, headers: Record<string, string>, body: string, logger = debug): SigningRequest | undefined {
+    async prepare(
+      url: string,
+      headers: Record<string, string>,
+      body: string,
+      logger = debug
+    ): Promise<SigningRequest | undefined> {
       try {
         // Thrown before the request is sent, so no assignment request leaves the client.
         if (unsupportedSite) throw new ResponseVerificationError('unsupported-site', UNSUPPORTED_SITE_MESSAGE)
         if (automaticRoots && new URL(url).origin !== endpoint.origin)
           throw new ResponseVerificationError('unsupported-request')
-        const normalized = new Headers(headers)
-        // Case-distinct object keys become duplicate HTTP fields, even if Headers later coalesces them.
-        const semantic = new Set([
-          'dd-client-token',
-          'authorization',
-          'content-type',
-          'dd-application-id',
-          'x-rkyv',
-          'x-use-cache',
-          'x-dd-feature-flags-capabilities',
-        ])
-        const seen = new Set<string>()
-        for (const key of Object.keys(headers)) {
-          const lower = key.toLowerCase()
-          if (semantic.has(lower) && seen.has(lower)) throw new ResponseVerificationError('unsupported-request')
-          seen.add(lower)
-        }
-        // No transport override: the edge buffers a response that it signs, so the SDK never sends X-stream.
-        normalized.set(SIGNING_VERSION_HEADER, '1')
-        normalized.set(SIGNING_NONCE_HEADER, hex(cryptoProvider().getRandomValues(new Uint8Array(16))))
-        const capabilities =
-          normalized
-            .get('x-dd-feature-flags-capabilities')
-            ?.split(',')
-            .map((value) => value.trim())
-            .filter(Boolean) || []
-        if (!capabilities.includes(SIGNING_CAPABILITY)) capabilities.push(SIGNING_CAPABILITY)
-        normalized.set('x-dd-feature-flags-capabilities', capabilities.sort().join(','))
-        const request = { url, method: 'POST', headers: normalized, body: utf8(body) }
-        validateSigningRequest(request)
+      } catch (error) {
+        return failure(error, logger, 'request_preparation')
+      }
+      let loaded: Exchange
+      try {
+        loaded = await loadExchange()
+      } catch {
+        logger.event('signing.failed', () => ({
+          mode,
+          stage: 'verifier_load',
+          reason: 'verifier_unavailable',
+          action: mode === 'required' ? 'reject_request' : 'send_unsigned_request',
+        }))
+        // Observe sends the request without signing; required sends no assignment request.
+        if (mode === 'required') throw new Error(VERIFIER_UNAVAILABLE_MESSAGE)
+        return undefined
+      }
+      try {
+        const request = loaded.signedRequest(url, headers, body)
         logger.event('signing.prepared', () => ({ mode, noncePresent: true, version: 1 }))
         return request
       } catch (error) {
@@ -223,50 +221,8 @@ export function createResponseSigningController(
         throw new Error('Flag configuration redirects are not supported with response signing')
       }
       if (!request) return { json: await response.json() }
-      // Response bodies are application bytes: fetch has already decompressed HTTP content-encoding.
-      let bytes: Uint8Array
-      if (mode === 'required' && response.body) {
-        const reader = response.body.getReader()
-        const chunks: Uint8Array[] = []
-        let length = 0
-        try {
-          for (;;) {
-            const result = await reader.read()
-            if (result.done) break
-            length += result.value.length
-            if (length > MAX_SIGNED_RESPONSE) {
-              void reader.cancel().catch(() => undefined)
-              failure(new ResponseVerificationError('response-too-large'), logger)
-            }
-            chunks.push(result.value)
-          }
-        } finally {
-          reader.releaseLock()
-        }
-        bytes = new Uint8Array(length)
-        let offset = 0
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset)
-          offset += chunk.length
-        }
-      } else bytes = new Uint8Array(await response.arrayBuffer())
-      let proof: VerifiedResponse | undefined
-      try {
-        proof = await verifyResponse(
-          request,
-          { status: response.status, headers: response.headers, body: bytes },
-          roots,
-          undefined,
-          storedMinimumNotBefore
-        )
-      } catch (error) {
-        failure(error, logger)
-      }
-      // Observe mode also records values, but only from a response that verified fully.
-      if (proof) recordMinimumNotBefore(proof, logger)
-      logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
-      // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
-      return { json: JSON.parse(new TextDecoder().decode(bytes)), proof }
+      // A request is signed only after the chunk loaded, so this does not fail.
+      return (await loadExchange()).readSignedResponse(response, request, { mode, roots, failure }, logger)
     },
     admit(
       config: FlagsConfiguration,
@@ -277,42 +233,35 @@ export function createResponseSigningController(
     ): void {
       signal?.throwIfAborted()
       if (proof) {
-        if (proof.expiresAt <= Date.now() / 1000 || proof.verifiedAt > Date.now() / 1000) {
+        if (outsideValidity(proof)) {
           failure(new ResponseVerificationError('expired-proof'), logger, 'admission')
           return
         }
         logger.event('signing.admitted', () => ({ mode, expiresAt: proof.expiresAt, verifiedAt: proof.verifiedAt }))
-        verified.set(config, { ...proof, acceptedAt: proof.verifiedAt, context: signingContextKey(context) })
+        verified.set(config, { ...proof, context: signingContextKey(context) })
       }
     },
     /** Unix seconds at which the verified proof of this configuration expires, when it has one. */
     expiresAt(config: FlagsConfiguration | undefined): number | undefined {
       return config ? verified.get(config)?.expiresAt : undefined
     },
+    /** The proof expired, or the clock moved back more than the tolerance, for the requested context. */
     isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       const proof = config && verified.get(config)
-      return !!proof && proof.expiresAt <= Date.now() / 1000 && proof.context === signingContextKey(context)
+      return !!proof && outsideValidity(proof) && proof.context === signingContextKey(context)
     },
     /** Verified now, or (unless expireVerifiedFlags) verified once with an expired proof: the flags stay usable. */
     isUsable(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false
       const proof = verified.get(config)
       return (
-        !!proof &&
-        proof.acceptedAt <= Date.now() / 1000 &&
-        (!expireVerifiedFlags || proof.expiresAt > Date.now() / 1000) &&
-        proof.context === signingContextKey(context)
+        !!proof && (!expireVerifiedFlags || !outsideValidity(proof)) && proof.context === signingContextKey(context)
       )
     },
     isVerified(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false
       const proof = verified.get(config)
-      return (
-        !!proof &&
-        proof.acceptedAt <= Date.now() / 1000 &&
-        proof.expiresAt > Date.now() / 1000 &&
-        proof.context === signingContextKey(context)
-      )
+      return !!proof && !outsideValidity(proof) && proof.context === signingContextKey(context)
     },
   }
 }

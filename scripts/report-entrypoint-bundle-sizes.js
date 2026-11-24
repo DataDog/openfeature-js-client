@@ -62,6 +62,8 @@ const trackingHookEntrypoints = [
 ]
 
 const protobufMarkers = ['datadog.ffe.flagging.ufc.v1', 'google.protobuf']
+// The response signing verifier loads as a dynamic chunk. No entrypoint may load it eagerly.
+const signingVerifierMarkers = ['datadog.feature-flags.precomputed-assignments.v1', 'asn1js']
 
 function main() {
   if (!fs.existsSync(distDirectory)) {
@@ -92,6 +94,14 @@ function main() {
   if (prohibitedProtobufMarkers.length > 0) {
     const labels = prohibitedProtobufMarkers.map((measurement) => measurement.label).join(', ')
     throw new Error(`Default/precomputed entrypoints include protobuf markers: ${labels}`)
+  }
+
+  const eagerSigningVerifier = [...measurements, ...trackingHookMeasurements].filter(
+    (measurement) => measurement.hasSigningVerifierMarker
+  )
+  if (eagerSigningVerifier.length > 0) {
+    const labels = eagerSigningVerifier.map((measurement) => measurement.label).join(', ')
+    throw new Error(`Entrypoints load the response signing verifier eagerly: ${labels}`)
   }
 
   const missingProtobufMarkers = measurements.filter(
@@ -126,6 +136,9 @@ function measureEntrypoint(entrypoint) {
     gzipBytes: assetMeasurements.reduce((sum, asset) => sum + asset.gzipBytes, 0),
     hasProtobufMarker: assetMeasurements.some((asset) =>
       protobufMarkers.some((marker) => asset.content.includes(marker))
+    ),
+    hasSigningVerifierMarker: assetMeasurements.some((asset) =>
+      signingVerifierMarkers.some((marker) => asset.content.includes(marker))
     ),
   }
 }

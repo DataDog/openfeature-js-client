@@ -7,8 +7,8 @@ import {
 } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { configurationDebugFields, type DebugLogger, NO_DEBUG } from '../debug'
-import { signingContextKey } from '../transport/responseSigning/controller'
-import { hex, sha256, utf8 } from '../transport/responseSigning/verification'
+import { signingContextKey } from '../transport/responseSigning/context'
+import { hex, sha256, utf8 } from '../transport/responseSigning/protocol'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
