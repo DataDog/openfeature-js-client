@@ -169,6 +169,7 @@
       "now": 1793062800,
       "expected_accept": false,
       "rejection_reason": "unsupported-constraint",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": null
     },
     {
@@ -253,6 +254,7 @@
       "now": 1793062800,
       "expected_accept": false,
       "rejection_reason": "key-identifier",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": null
     },
     {
@@ -337,6 +339,7 @@
       "now": 1793062800,
       "expected_accept": false,
       "rejection_reason": "key-identifier",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": null
     },
     {
@@ -421,6 +424,7 @@
       "now": 1793062800,
       "expected_accept": false,
       "rejection_reason": "key-identifier",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": null
     },
     {

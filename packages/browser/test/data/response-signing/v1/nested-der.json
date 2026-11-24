@@ -178,6 +178,7 @@
       "now": 1793332800,
       "expected_accept": false,
       "rejection_reason": "certificate-encoding",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": "ZGF0YWRvZy5mZWF0dXJlLWZsYWdzLnByZWNvbXB1dGVkLWFzc2lnbm1lbnRzLnYxAAAAAARQT1NUAAAABWh0dHBzAAAAEmZsYWdzLmV4YW1wbGUudGVzdAAAABcvcHJlY29tcHV0ZS9hc3NpZ25tZW50cwAAAB8/ZGRfZW52PXByb2R1Y3Rpb24mbWFya2VyPWElMkZiAAAAENXj+olHL8aED5HfidX541m7RTYkNmgw7InPBvfo1awKbp0Kv9q6SfxCHygN4pcnh/6Ng8TcBPzzrxF/TDOL/e9gFxG7FxwZhrfj79251AdPAQAAABBhcHBsaWNhdGlvbi9qc29uAQAAAA1zeW50aGV0aWMtYXBwAAEAAAAEdHJ1ZQEAAAATcmVzcG9uc2Utc2lnbmluZy12MQAAyAAAAABq5BZAAAAAAGrkF2wAAAAAAAAAbBjoo2BVrsFBvsb7/kndkWuEJugJckBE6x8yNdHqNEVJqX/nOunXsXGYnk2YSDLEz6ZWIjUDbybKgeQbAempXEcBm862GOdtRn8g2hkwK7sOX6nJOCtuIaReUl0WxIc9MX4=",
       "credential": {
         "version": 1,

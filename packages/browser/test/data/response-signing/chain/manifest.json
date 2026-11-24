@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "now": 1795089600,
   "files": {
     "backup-root.json": {
       "sha256": "74c0a997f8f9e584649b13566a9ea374682a94616b574c477601efb02f716bb2",
@@ -9,7 +10,8 @@
     "codesigning-leaf.json": {
       "sha256": "48640bd5c307499b3870ea4c6a8f6f73814fb682a14b9fa20002670148c3a731",
       "anchor": "root-a.pem",
-      "expected": "reject: leaf EKU"
+      "expected": "reject: leaf EKU",
+      "rejection_reason": "leaf-eku"
     },
     "generate-root-eku.sh": {
       "sha256": "40c031f18ec5920d199399a1fd49f777928c0b425e0f5742ffffc606d85df0d4",
@@ -18,7 +20,8 @@
     "missing-upper-intermediate.json": {
       "sha256": "f3e6f0ecbff95be1e082a4d906273d5cb4752858a0f59a4584a700508fffedef",
       "anchor": "root-a.pem",
-      "expected": "reject: no pinned root issued the chain"
+      "expected": "reject: no pinned root issued the chain",
+      "rejection_reason": "chain-root"
     },
     "one-intermediate.json": {
       "sha256": "baff904ac6685e3587b7d43f03798f8e290b53b10d221718426e57c19683eaaa",
@@ -28,7 +31,8 @@
     "other-product.json": {
       "sha256": "82d5ee3a9914b5ab9dc997081cae04847b75cf9982c47c864d22d110957fd7d3",
       "anchor": "root-a.pem",
-      "expected": "reject: leaf EKU"
+      "expected": "reject: leaf EKU",
+      "rejection_reason": "leaf-eku"
     },
     "root-a.pem": {
       "sha256": "41f43a93868314fbd44b254ba5fb53c2bc06dbb2723660fb53da63df25f7c586",
@@ -55,7 +59,8 @@
     "root-eku-codesigning.pem": {
       "sha256": "94e904ed3040292dd195a724947958d2a19ba9377bedb713f1847a574aef43fd",
       "credential": "root-eku-chain.json",
-      "expected": "reject: root EKU"
+      "expected": "reject: root EKU",
+      "rejection_reason": "root-eku"
     },
     "root-eku-ffe.pem": {
       "sha256": "5f64629a52a61118fd412e285f338298509159adb33a44d05ca7c71cab899cff",
@@ -70,7 +75,8 @@
     "root-pathlen-0.pem": {
       "sha256": "850704dd77f67f2b827b47ca7b4ed6bc1f78cdca4ae0e00898f4334e93816dbf",
       "credential": "root-eku-chain.json",
-      "expected": "reject: root path length"
+      "expected": "reject: root path length",
+      "rejection_reason": "root-path-length"
     },
     "rotated-lower-intermediate.json": {
       "sha256": "f00fb383c2b3e4865e0d4594e0dff51941c27fe9558f3410f2a7b8d74913017b",
@@ -89,7 +95,8 @@
     "unrelated-root.json": {
       "sha256": "c6c324470ae148c36fff2003e9053720b08a942863df92bfcae4a1122553c0bf",
       "anchor": "root-a.pem",
-      "expected": "reject: no pinned root issued the chain"
+      "expected": "reject: no pinned root issued the chain",
+      "rejection_reason": "chain-root"
     }
   }
 }

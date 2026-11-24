@@ -5,7 +5,7 @@
  * public test roots. The private keys are test-only. The transcript builder below is written separately
  * from the SDK and does not call it.
  */
-import { createHash, createPrivateKey, type KeyObject, sign, X509Certificate } from 'node:crypto'
+import { createHash, createPrivateKey, type KeyObject, sign } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -57,18 +57,8 @@ function pemToBase64(pem: string): string {
 export const ROOT_A = pemToBase64(readFileSync(join(directory, 'root-a.pem'), 'utf8'))
 export const ROOT_B = pemToBase64(readFileSync(join(directory, 'root-b.pem'), 'utf8'))
 
-/**
- * A `now` inside every fixture leaf's validity: one hour after the latest leaf notBefore.
- * Leaves are valid for 72 hours, so this stays valid when the fixtures are refreshed together.
- */
-export const FIXTURE_NOW = (() => {
-  const latest = Math.max(
-    ...CREDENTIAL_NAMES.map((name) =>
-      Date.parse(new X509Certificate(Buffer.from(loadCredential(name).leafBase64, 'base64')).validFrom)
-    )
-  )
-  return Math.floor(latest / 1000) + 3600
-})()
+/** The fixed test time from `manifest.json`, inside the validity of every fixture leaf. */
+export const FIXTURE_NOW: number = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')).now
 
 const OPTIONAL_HEADERS = [
   'content-type',

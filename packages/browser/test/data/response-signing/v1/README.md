@@ -3,20 +3,20 @@
 These files are byte-for-byte copies of `response-signing/v1` from
 [DataDog/ffe-system-test-data](https://github.com/DataDog/ffe-system-test-data).
 
-- Source commit: `7497e366bc4614cbf0e2293f32070381fdb77f1d`. Only `corpus.json` and `manifest.json` changed since `8dfd544b1a2e8e3a06ca78a31568003a15c7ecae`: they add the `valid-empty-query` and `valid-high-s-signature` cases.
+- Source commit: `fe24ed2c4872bf109b0c71ffb2229152d76b8963` (DataDog/ffe-system-test-data#80, merged). Every rejected case has an `sdk_reason`: the shared reason code.
 - Do not edit or reformat these files. Change them upstream, then copy the new commit here.
 - Update the commit and the hashes below in the same change.
 - `verification.spec.ts` pins the `manifest.json` SHA-256 and checks every suite against the manifest.
 
 | File                              | SHA-256                                                            |
 | --------------------------------- | ------------------------------------------------------------------ |
-| `manifest.json`                   | `26298a88577779c60c3f23ef5631c359cf3a70f44e31dad292dc837c30f0c92d` |
-| `corpus.json`                     | `173ea5b0d12e78ae0139b36ec98335528bb59b26862988f7ae6105081de3c1c0` |
-| `isolated-certificate-rules.json` | `f65d7bc55bcffa95844a23006eb6678939c38b6e47bd58970243970f7ff3b326` |
-| `nested-der.json`                 | `dafdd19b167ad4acb3d140c86d21511129bd3855660d2f6c93459b12e8e3a6a3` |
-| `subject-der.json`                | `2857daab41adf5a811150d5bbc3d504c9065a00650d579f07e04f583b3d27ae6` |
-| `near-expiry.json`                | `0b1c16e83e9da2eda56b85fde9922150a408b47b3f86bed18e1708b8a5e88ecd` |
-| `extension-profile.json`          | `252fb5b06fad65f56d0fe2f333731c2a4e3994d2377fdfe8b368d489d9f3a8dc` |
+| `manifest.json`                   | `eba3f9a9053d0d7bd89f432f882585873dd8c39b68b73b604841ac1dc27b329c` |
+| `corpus.json`                     | `ab180a3df50b4046cc97b695c1062ae0dc156975dd512987c087335765191972` |
+| `isolated-certificate-rules.json` | `9d2273e5b9bf940b5dd6a4d9e376853cceafe8a3c4347e761d3e2058a78b0274` |
+| `nested-der.json`                 | `978f7494ff59ba49a8f7cdaa2edbed2c8d81b03d0f44a86bafc71c823a9dd540` |
+| `subject-der.json`                | `6dd2616fb9b61794a2bd1511797400902b8403d0887b3845fc096d0a34fb22e6` |
+| `near-expiry.json`                | `bfda185688dafb718f7b0b1c98878a87cd09d64317ec5eb47cf090bd4590e3b1` |
+| `extension-profile.json`          | `0e5d04e6f23810021cf74f2ca84b3dcf036453c2620cfe8171ae7795c160a4ba` |
 
 To refresh from a new commit `<sha>`:
 

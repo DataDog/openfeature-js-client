@@ -574,8 +574,8 @@ test('an empty query is encoded as "?", the same as the edge, iOS and Android', 
 /**
  * Shared ffe-system-test-data response-signing v1 fixtures, copied byte for byte into
  * `test/data/response-signing/v1` (source commit in its README.md). Verifiers run `cases` only; `signing_cases` are for signers.
- * A case `anchor_der_base64` overrides the file anchor. `rejection_reason` is a rule code, not a native
- * error message, so rejected cases assert only the rejection.
+ * A case `anchor_der_base64` overrides the file anchor. `rejection_reason` is a rule code. A rejected case asserts
+ * its `sdk_reason`, the shared reason code that iOS, Android and the browser report.
  */
 describe('shared v1 fixtures', () => {
   interface SharedCase {
@@ -583,6 +583,7 @@ describe('shared v1 fixtures', () => {
     now: number
     expected_accept: boolean
     rejection_reason?: string
+    sdk_reason?: string
     anchor_der_base64?: string
     transcript_base64?: string
     request: { url: string; method: string; headers: [string, string][]; body_base64: string }
@@ -610,7 +611,7 @@ describe('shared v1 fixtures', () => {
   test('the pinned manifest is unchanged and lists every suite', () => {
     // Byte changes to the shared fixtures require a deliberate pin update and review.
     expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
-      '26298a88577779c60c3f23ef5631c359cf3a70f44e31dad292dc837c30f0c92d'
+      'eba3f9a9053d0d7bd89f432f882585873dd8c39b68b73b604841ac1dc27b329c'
     )
     expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })
@@ -636,7 +637,8 @@ describe('shared v1 fixtures', () => {
       const anchor = vector.anchor_der_base64 ?? suite.anchor_der_base64
       const result = verifyResponse(request, response, [anchor], vector.now)
       if (!vector.expected_accept) {
-        await expect(result).rejects.toThrow()
+        expect(vector.sdk_reason).toEqual(expect.any(String))
+        await expect(result).rejects.toMatchObject({ name: 'ResponseVerificationError', reason: vector.sdk_reason })
         return
       }
       const issued = Number(response.headers.get('x-datadog-feature-flags-issued-at'))

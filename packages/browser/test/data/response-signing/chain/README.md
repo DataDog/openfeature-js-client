@@ -7,8 +7,11 @@ Before this folder existed, the iOS, Android and browser SDKs each kept a copy o
 files. The copies were byte-identical. SDKs now take them from this folder at a pinned
 commit, together with `../v1/`.
 
-`manifest.json` records the SHA-256 of each file and the expected result.
+`manifest.json` records the SHA-256 of each file and the expected result. Each
+rejected entry also has a `rejection_reason` rule code, the same codes as `../v1/`.
 `ci/validate-response-signing.py` checks the hashes and the credential shape.
+`ci/verify-response-signing-vectors.py` checks each expected result at the fixed
+time `now` in `manifest.json` (2026-11-19T12:00:00Z).
 
 ## Credentials
 
@@ -29,7 +32,8 @@ and `intermediates_der_base64`. Index 0 issued the leaf. Pin `root-a.pem` or
 | `unrelated-root.json` | a chain under a root that is not pinned | `root-a.pem` | reject (no pinned root issued the chain) |
 
 The leaves are valid for 72 hours from issuance. Tests must use a fixed time inside
-that period, so the files do not need regeneration when the leaves expire.
+that period, so the files do not need regeneration when the leaves expire. Use the
+`now` in `manifest.json`.
 
 ## Root rule variants
 

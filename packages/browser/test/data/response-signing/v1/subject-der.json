@@ -169,6 +169,7 @@
       "now": 1793062800,
       "expected_accept": false,
       "rejection_reason": "certificate-encoding",
+      "sdk_reason": "invalid-certificate",
       "transcript_base64": null
     }
   ],

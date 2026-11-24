@@ -421,6 +421,7 @@
       "now": 1793318101,
       "expected_accept": false,
       "rejection_reason": "certificate-time",
+      "sdk_reason": "expired-proof",
       "transcript_base64": null
     },
     {
@@ -505,6 +506,7 @@
       "now": 1793318400,
       "expected_accept": false,
       "rejection_reason": "response-time",
+      "sdk_reason": "expired-proof",
       "transcript_base64": null
     }
   ],
