@@ -31,6 +31,16 @@ const client = OpenFeature.getClient()
 const flagValue = await client.getBooleanValue('my-flag', false)
 ```
 
+## Context updates
+
+`OpenFeature.setContext()` compares the context after RUM user enrichment and the normalized assignment
+token (`dd_assignment_token`). Equivalent updates share a pending assignment download. Once the provider
+is ready, an equivalent update reuses the current assignments without downloading again.
+
+A change to the effective context or assignment token downloads new assignments. An equivalent update
+also retries after an error or a stale cache fallback. Contexts that use custom JSON serialization skip
+deduplication. The browser provider has no dedicated forced-refresh method for unchanged inputs.
+
 ## Configuration
 
 ```javascript

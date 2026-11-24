@@ -4,6 +4,12 @@
 >
 > See [Gitmoji](https://gitmoji.dev/) for a guide on the emojis used.
 
+## Unreleased
+
+**Usage Notes:**
+
+- Behavior change: the browser provider shares pending assignment downloads and reuses ready assignments when `OpenFeature.setContext()` receives the same effective context and normalized assignment token. The effective context includes RUM user enrichment. A change to either input or an update after an error or stale fallback still triggers a download ([#492](https://github.com/DataDog/openfeature-js-client/pull/492)) [BROWSER]
+
 ---
 
 ## @datadog/openfeature-node-server@2.9.0

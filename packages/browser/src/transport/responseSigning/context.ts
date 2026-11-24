@@ -9,8 +9,42 @@ function dateTime(value: object): number | undefined {
   }
 }
 
+const dateSerializationMethods = ['toJSON', 'toISOString', 'valueOf', 'toString', Symbol.toPrimitive] as const
+
+function findPropertyDescriptor(value: object, key: PropertyKey): PropertyDescriptor | undefined {
+  for (let prototype: object | null = value; prototype !== null; prototype = Object.getPrototypeOf(prototype)) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, key)
+    if (descriptor) return descriptor
+  }
+}
+
+function hasDefaultDateSerialization(value: object): boolean {
+  // The native methods can come from another window.
+  return dateSerializationMethods.every((name) => {
+    const method: unknown = findPropertyDescriptor(value, name)?.value
+    return (
+      typeof method === 'function' &&
+      Function.prototype.toString.call(method) === Function.prototype.toString.call(Date.prototype[name])
+    )
+  })
+}
+
+function hasUnsupportedObjectSerialization(value: object): boolean {
+  const toJSON = findPropertyDescriptor(value, 'toJSON')
+  return (
+    toJSON?.get !== undefined ||
+    typeof toJSON?.value === 'function' ||
+    // A custom type tag can hide a boxed value or run a getter during the check.
+    findPropertyDescriptor(value, Symbol.toStringTag) !== undefined ||
+    /^\[object (Boolean|Number|String|BigInt|Symbol)\]$/.test(Object.prototype.toString.call(value))
+  )
+}
+
 /** Copy supported context values without converting dates to strings or sharing mutable values. */
-export function cloneSigningContext(context: EvaluationContext): EvaluationContext {
+export function cloneSigningContext(
+  context: EvaluationContext,
+  preserveRequestSerialization = false
+): EvaluationContext {
   function cloneObject(value: Record<string, EvaluationContextValue>): Record<string, EvaluationContextValue> {
     const copy: Record<string, EvaluationContextValue> = {}
     for (const key of Object.keys(value)) {
@@ -25,8 +59,16 @@ export function cloneSigningContext(context: EvaluationContext): EvaluationConte
     return copy
   }
   function clone(value: EvaluationContextValue): EvaluationContextValue {
+    // JSON drops functions and symbols, but the context key can confuse them with null.
+    if (preserveRequestSerialization && (typeof value === 'function' || typeof value === 'symbol'))
+      throw new TypeError('Context has values without a request encoding')
     if (value === null || typeof value !== 'object') return value
     const time = dateTime(value)
+    if (preserveRequestSerialization) {
+      const unsupported =
+        time === undefined ? hasUnsupportedObjectSerialization(value) : !hasDefaultDateSerialization(value)
+      if (unsupported) throw new TypeError('Context has custom request serialization')
+    }
     if (time !== undefined) return new Date(time)
     if (Array.isArray(value)) return value.map(clone)
     return cloneObject(value as Record<string, EvaluationContextValue>)
@@ -37,6 +79,8 @@ export function cloneSigningContext(context: EvaluationContext): EvaluationConte
 /** A full context identity with distinct encodings for dates, arrays and objects. */
 export function signingContextKey(context: EvaluationContext): string {
   function canonical(value: EvaluationContextValue): unknown {
+    if (value === undefined) return ['undefined']
+    if (typeof value === 'number' && !Number.isFinite(value)) return ['number', String(value)]
     if (value === null || typeof value !== 'object') return value
     const time = dateTime(value)
     if (time !== undefined) return ['date', Number.isNaN(time) ? null : time]

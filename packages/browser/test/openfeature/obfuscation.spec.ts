@@ -113,7 +113,7 @@ describe('browser flag-key obfuscation', () => {
     await provider.initialize(context)
     for (const publicSalt of ['f'.repeat(32), '', salt]) {
       fetchMock.mockResolvedValue(fetchResponse(response(publicSalt)))
-      await provider.onContextChange(context, context)
+      await provider.onContextChange(context, { ...context, publicSalt })
       expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
     }
     await provider.onClose()
@@ -138,7 +138,7 @@ describe('browser flag-key obfuscation', () => {
     Object.assign(attributes, { futureField: { enabled: true } })
     Object.assign(assignment, { futureAssignmentField: 123 })
     fetchMock.mockResolvedValue(fetchResponse(payload))
-    await provider.onContextChange(context, context)
+    await provider.onContextChange(context, { ...context, country: 'CA' })
 
     expect(provider.status).toBe(ProviderStatus.READY)
     expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
@@ -156,7 +156,7 @@ describe('browser flag-key obfuscation', () => {
     const invalid = response()
     invalid.data.attributes.obfuscation!.scheme = 'future-encoding'
     fetchMock.mockResolvedValue(fetchResponse(invalid))
-    await provider.onContextChange(context, context)
+    await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
     await expect(provider.onContextChange(context, { targetingKey: 'different-athlete' })).rejects.toThrow(
@@ -182,7 +182,7 @@ describe('browser flag-key obfuscation', () => {
     const invalid = response('')
     Object.assign(invalid.data.attributes, { [field]: null })
     fetchMock.mockResolvedValue(fetchResponse(invalid))
-    await provider.onContextChange(context, context)
+    await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(provider.resolveBooleanEvaluation(key, false, context, logger).value).toBe(true)
     await provider.onClose()
@@ -266,12 +266,16 @@ describe('browser flag-key obfuscation', () => {
       await OpenFeature.setProviderAndWait(provider, context)
       if (tracking) client.addHooks(...tracking.hooks)
     }
+    let requestRevision = 0
     const refresh = async () => {
       if (provider instanceof DatadogCoreProvider) {
         const configuration = await fetchPrecomputedConfiguration({ ...options, context })
         provider.setConfiguration(configurationFromString(configurationToString(configuration)))
       } else {
-        await provider.onContextChange(context, context)
+        await provider.onContextChange(context, {
+          ...context,
+          dd_assignment_token: `refresh.token.${++requestRevision}`,
+        })
       }
     }
     const exposureEvents = () =>
@@ -401,7 +405,7 @@ describe('browser flag-key obfuscation', () => {
       await provider.initialize(context)
       expect(clear).not.toHaveBeenCalled()
       payload = response(publicSalt, false, '2026-09-30T00:01:00Z')
-      await provider.onContextChange(context, context)
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
       expect(clear).toHaveBeenCalledTimes(1)
       expect(provider.status).toBe(ProviderStatus.READY)
       expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
@@ -432,7 +436,7 @@ describe('browser flag-key obfuscation', () => {
     })
     let refreshed = false
     payload = response(publicSalt, false, '2026-09-30T00:01:00Z')
-    const refresh = provider.onContextChange(context, context).then(() => {
+    const refresh = provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' }).then(() => {
       refreshed = true
     })
     try {
@@ -462,7 +466,7 @@ describe('browser flag-key obfuscation', () => {
       try {
         await provider.initialize(context)
         fetchMock.mockResolvedValue(fetchResponse(response(publicSalt, false, '2026-09-30T00:01:00Z')))
-        await provider.onContextChange(context, context)
+        await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
         expect(provider.status).toBe(ProviderStatus.READY)
         expect(provider.resolveBooleanEvaluation(key, true, context, logger).value).toBe(false)
         // The exposure cache records even when exposure logging is off, so a

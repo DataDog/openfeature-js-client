@@ -453,7 +453,7 @@ describe('browser debug-mode scenarios', () => {
     const value = provider()
     await value.initialize(context)
     fetch.mockRejectedValue(new TypeError('offline'))
-    await value.onContextChange(context, context)
+    await value.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(value.status).toBe(ProviderStatus.STALE)
     expect(events('cache.fallback').slice(-1)[0].details).toMatchObject({ source: 'memory', requestedContext: context })
     await expect(value.onContextChange(context, { targetingKey: 'another-user' })).rejects.toThrow('offline')
@@ -478,6 +478,39 @@ describe('browser debug-mode scenarios', () => {
     })
     expect(events('configuration.decoded').slice(-1)[0].details.flagErrors.broken).toBeTruthy()
     expect(value.resolveStringEvaluation('string-flag', 'default', context, logger).value).toBe('red')
+  })
+
+  it('records equal updates that join a pending request or reuse a ready configuration', async () => {
+    const value = provider()
+    await Promise.all([value.initialize(context), value.onContextChange(context, { ...context })])
+    await value.onContextChange(context, { ...context })
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(events('context.coalesced').map((record) => [record.contextRevision, record.details.action])).toEqual([
+      [2, 'join_pending_update'],
+      [3, 'reuse_ready_configuration'],
+    ])
+  })
+
+  it('keeps the selected update when a coalescing log synchronously starts another update', async () => {
+    const value = provider()
+    await value.initialize(context)
+    const download = deferred<Response>()
+    fetch.mockReturnValueOnce(download.promise)
+    let newerUpdate: Promise<void> | undefined
+    log.mockImplementation((line) => {
+      if (String(line).includes('"event":"context.coalesced"')) {
+        newerUpdate = value.onContextChange(context, { ...context, plan: 'enterprise' })
+      }
+    })
+
+    const equivalentUpdate = value.onContextChange(context, { ...context })
+    download.resolve(response())
+    await Promise.all([equivalentUpdate, newerUpdate])
+
+    expect(newerUpdate).toBeDefined()
+    expect(equivalentUpdate).not.toBe(newerUpdate)
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 
   it('reports rejected numeric sources and excludes them from the accepted count', async () => {

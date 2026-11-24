@@ -873,9 +873,9 @@ describe('Exposures End-to-End', () => {
       expect(firstValue).toBe('red')
       triggerBatch()
 
-      // Fetch new configuration (simulating a config update)
-      // This would typically happen automatically via polling, but we trigger it manually
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      // Rotate the credential while keeping the exposure context the same.
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
 
       // Evaluate same flag with second variation
       const secondValue = client.getStringValue('string-flag', 'default')
@@ -958,7 +958,8 @@ describe('Exposures End-to-End', () => {
       expect(getExposuresCalls()).toHaveLength(1)
 
       // Fetch the same assignment with a changed configuration timestamp.
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
 
       // Receiving configuration does not itself emit an exposure.
       expect(getExposuresCalls()).toHaveLength(1)
@@ -1091,8 +1092,10 @@ describe('Exposures End-to-End', () => {
       // Verify first exposure was logged
       expect(getExposuresCalls()).toHaveLength(1)
 
-      // Fetch new configuration with same createdAt (cache should NOT be cleared)
-      await provider.onContextChange({}, { targetingKey: 'test-user-123', customAttribute: 'test-value' })
+      // Fetch new configuration with the same createdAt and targeting attributes.
+      const context = OpenFeature.getContext()
+      await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
+      expect(configFetchCount).toBe(2)
 
       // Evaluate same flag - should not log again because cache was not cleared
       client.getStringValue('string-flag', 'default')

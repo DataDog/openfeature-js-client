@@ -107,7 +107,7 @@ describe('minimal request diagnostics', () => {
     await provider.onClose()
   })
 
-  it('counts equal-context fetches, never reads RUM, and leaves unowned requests unchanged', async () => {
+  it('counts only actual fetches, never reads RUM, and leaves unowned requests unchanged', async () => {
     const getInternalContext = jest.fn(() => {
       throw new Error('not available')
     })
@@ -118,6 +118,8 @@ describe('minimal request diagnostics', () => {
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: transport })
     await provider.initialize(context)
     await provider.onContextChange(context, context)
+    expect(transport).toHaveBeenCalledTimes(1)
+    await provider.onContextChange(context, { ...context, targetingKey: 'next-user' })
     expect(JSON.parse(transport.mock.calls[1][1].body).diagnostics.fetch).toMatchObject({
       sequence: 2,
       trigger: 'context_change',

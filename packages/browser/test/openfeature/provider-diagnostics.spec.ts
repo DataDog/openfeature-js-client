@@ -123,8 +123,9 @@ describe('provider diagnostics', () => {
     for (let run = 1; run <= 2; run++) {
       fetch.mockImplementationOnce(success).mockImplementation(failure)
       await provider.initialize()
-      await provider.onContextChange({}, {})
-      await provider.onContextChange({}, {})
+      const nextContext = { targetingKey: 'next-user' }
+      await expect(provider.onContextChange({}, nextContext)).rejects.toThrow()
+      await expect(provider.onContextChange(nextContext, nextContext)).rejects.toThrow()
       expect(await eventTypes(provider)).toEqual(Array(run).fill(['ready', 'provider_error']).flat())
     }
   })
@@ -181,8 +182,9 @@ describe('provider diagnostics', () => {
   it('reports fetch failure with stale fallback, without claiming fresh readiness', async () => {
     const fetch = jest.fn().mockImplementationOnce(success).mockImplementation(failure)
     const provider = new DatadogProvider({ ...options, flagConfigurationFetch: fetch })
-    await provider.initialize()
-    await provider.onContextChange({}, {})
+    const context = { targetingKey: 'user' }
+    await provider.initialize(context)
+    await provider.onContextChange(context, { ...context, dd_assignment_token: 'refresh.token' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(await eventTypes(provider)).toEqual(['ready', 'provider_error'])
   })
@@ -226,7 +228,7 @@ describe('provider diagnostics', () => {
     expect(mockSend.mock.calls.flatMap(([request]) => diagnosticRecords(request.data))).toHaveLength(1)
 
     // A later genuine failure must still report, even when the current configuration is usable.
-    await provider.onContextChange({}, { targetingKey: 'current' })
+    await provider.onContextChange({}, { targetingKey: 'current', dd_assignment_token: 'refresh.token' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     expect(await eventTypes(provider)).toEqual(['ready', 'provider_error'])
   })
@@ -279,7 +281,7 @@ describe('provider diagnostics', () => {
       .flatMap(([request]) => diagnosticRecords(request.data))
       .filter((record) => record.payload.event_type === 'provider_error').length
     mockSend.mockClear()
-    await provider.onContextChange({}, { targetingKey: 'current' })
+    await provider.onContextChange({}, { targetingKey: 'current', dd_assignment_token: 'refresh.token' })
     expect(provider.status).toBe(ProviderStatus.STALE)
     const nextErrors = (await eventTypes(provider)).filter((type) => type === 'provider_error').length
     expect({ prematureErrors, nextErrors }).toEqual({ prematureErrors: 0, nextErrors: 1 })
