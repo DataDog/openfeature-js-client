@@ -10,7 +10,7 @@
 
 **Features:**
 
-- Use `@datadog/flagging-core@3.6.0`, which resolves `targetingKey` in JSON targeting rules. The context targeting key is available to rule matching as both `id` and `targetingKey`. An explicit `id` context attribute still has precedence ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [NODE-SERVER]
+- Use `@datadog/flagging-core@3.6.0`, which resolves/keeps `targetingKey` in the evaluation context. An explicit `id` context attribute is available to targeting rules as `id`. If no explicit `id` is set, the context targeting key is aliased as `id`. ([#484](https://github.com/DataDog/openfeature-js-client/pull/484)) [NODE-SERVER]
 
 **Usage Notes:**
 
