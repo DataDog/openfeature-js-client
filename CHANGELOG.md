@@ -10,7 +10,7 @@
 
 **Features:**
 
-- Add the experimental `experimentalResponseSigning` option (`ResponseSigningConfiguration`, `ResponseSigningMode`, `DatadogProvider.responseSigningVersion`). It verifies signed precomputed assignment responses. It works only on the staging site (`datad0g.com`), and it can change or be removed in a minor release. The default mode, `off`, adds no signing headers and does not load the verifier. The `observe` and `required` modes load the verifier as a separate chunk ([#485](https://github.com/DataDog/openfeature-js-client/pull/485)) [BROWSER]
+- Add the experimental `experimentalResponseSigning` option (`ResponseSigningConfiguration`, `ResponseSigningMode`, `DatadogProvider.responseSigningVersion`). It verifies signed precomputed assignment responses. It works only on the staging site (`datad0g.com`), and it can change or be removed in a minor release. The default mode, `off`, adds no signing headers and does not load the verifier. The `observe` and `required` modes load the verifier as a separate chunk. CDN users must serve the `chunks/` directory next to `datadog-openfeature-browser.js`. The `trustedRootCertificates` option sets explicit trusted roots, and the `expireVerifiedFlags` option (required mode) returns defaults after the last verified proof expires. `fetchPrecomputedConfiguration` also accepts `experimentalResponseSigning` ([#485](https://github.com/DataDog/openfeature-js-client/pull/485)) [BROWSER]
 
 ## @datadog/openfeature-node-server@2.9.0
 

@@ -188,8 +188,11 @@ When no usable verified configuration remains, evaluation details return the def
 reason `ERROR`, error code `GENERAL`, and the verification failure message.
 In `required` mode, one verification failure emits one `PROVIDER_ERROR` event. The OpenFeature SDK emits it when
 `initialize` or `onContextChange` rejects. The event has the failure message but no `errorCode`, because the SDK
-copies only the message. Proof expiry outside these calls emits a provider event with error code `GENERAL`.
+copies only the message. With `expireVerifiedFlags: true`, proof expiry outside these calls emits `PROVIDER_ERROR`
+with error code `GENERAL`. By default, it moves the provider to `STALE` and emits `PROVIDER_STALE`.
 Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
+On the staging site, observe mode logs one warning for each reason code, in the format
+`Flag response signing failed (<code>): <what failed>. <fix hint>. Flags are not verified.`
 There is no separate verification callback.
 
 On the staging site, the resolved assignment endpoint selects the bundled
@@ -216,9 +219,13 @@ Signed requests require HTTPS and reject redirects. A custom fetch implementatio
 must preserve the generated URL, body and headers and the exact returned bytes.
 Proxies must support the signing request headers and expose the proof headers in
 CORS, including `x-datadog-feature-flags-signing-chain`. The `response-signing-v1`
-capability and signature version `1` are added only when signing is enabled. Public v1 is the first release format; earlier POC v1/v2
-and draft v3 formats are not supported compatibility targets. This protocol number
+capability and signature version `1` are added only when signing is enabled. This protocol number
 is independent of X.509 v3 certificate encoding.
+
+The signed transcript does not include every request header. `DD-Assignment-Token` and `dd-service` are not in the
+transcript, so a response proof does not show which values of these headers the edge received.
+The browser provider has no default initialization timeout. In `required` mode, initialization waits for a
+verified response, so a slow edge delays the provider for as long as the request takes.
 
 Verification requires an accurate device clock and uses the browser's `Date.now()`.
 Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
@@ -232,8 +239,20 @@ sites other than staging do not load it. With the CDN bundle, serve the `chunks/
 `datadog-openfeature-browser.js`, and let the page load scripts from that location. When the page runs the bundle
 without a script URL, for example as an inline script, the SDK loads the chunk relative to the page. If the chunk does not load,
 `observe` sends the request without signing, and `required` sends no assignment request and fails with
-`Flag response signing failed (verifier-unavailable): ...`. The SDK tries to load the chunk
-again on the next fetch.
+`Flag response signing failed (verifier-unavailable): ...`. A request waits at most 5 seconds for the chunk.
+After that time the SDK handles the chunk as not loaded. A chunk that loads later serves the next fetch.
+The SDK tries to load a failed chunk again on the next fetch.
+
+CDN users of the chunked bundle:
+
+- The main file has a fixed name, and the chunk file names contain a content hash. A main file cached at a mutable
+  URL can request chunks that a newer upload replaced. Serve each release from an immutable versioned directory
+  that holds both `datadog-openfeature-browser.js` and its `chunks/` directory. Alternatively, keep old chunks at
+  the shared path for as long as cached main files can reference them. A version in a query string or in the file
+  name alone is not sufficient.
+- The chunk loads without Subresource Integrity. An `integrity` attribute on the main script does not cover the
+  verifier code.
+- A Content Security Policy without `strict-dynamic` must allow scripts from the chunk location.
 
 Required mode uses only verified memory for the same provider and full evaluation
 context. It does not read bootstrap or persistent configurations and never retries
@@ -266,15 +285,14 @@ After a fully verified response, the SDK stores the highest value for each trust
 leaf in that response, or lower than the stored value. Then it rejects a leaf that starts before the stored
 value, with `Response signing: revoked-certificate`. The floor applies to the leaf only and is never compared with
 intermediates, so a new leaf under older intermediates verifies. Required mode fails closed; observe mode reports
-the reason and accepts the response as unverified. This value holds no flag data, and it is the only data that
-required mode persists. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
+the reason and accepts the response as unverified. This value holds no flag data. It is the only signing data
+that required mode persists, and required mode stores no flag values. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
 read it.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
 headers, mode, selection and nested context. Upgrading into observe causes a
 one-time cache cold start. Context snapshots preserve Date values, including nested
-dates. Signing context keys distinguish dates from strings and objects. The updated
-key encoding also causes a one-time cold start for existing observe-mode caches. An unsigned observation cannot overwrite the separately
+dates. Signing context keys distinguish dates from strings and objects. An unsigned observation cannot overwrite the separately
 retained verified memory fallback. If WebCrypto is unavailable, observe retains
 ordinary network and in-memory availability but cannot use its scoped persistent
 cache. Required mode fails locally.
