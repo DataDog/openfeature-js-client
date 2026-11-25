@@ -246,13 +246,14 @@ Verification requires an accurate device clock and uses the browser's `Date.now(
 The verifier does not use a time earlier than two floors:
 
 - The build floor: a fixed time in each SDK release, set at or before the release date.
-- The high-water mark: the highest `issued-at` of a fully verified response for each trust anchor. The SDK stores
-  it in `localStorage` (in memory only when storage is not available). One response can move it at most 30 seconds
-  past the device clock.
+- The high-water mark, for each trust anchor. Each fully verified response can raise it to its `issued-at` or to
+  the device clock plus 30 seconds, whichever is earlier. The SDK stores it in `localStorage` (in memory only when
+  storage is not available).
 
-So the verifier uses `max(Date.now(), build floor, high-water mark)` as the current time for the proof and for each
-certificate. A device clock that is set back cannot make an older proof, or a leaf that expired before the release,
-valid again. These failures use `expired-proof`.
+So the verifier uses `max(Date.now() / 1000, build floor, high-water mark)`, in Unix seconds, as the current time for
+the proof and for each certificate. A device clock that is set back cannot make a proof valid again when the proof
+expired before the high-water mark. It also cannot make a leaf valid again when the leaf expired before the
+release. These failures use `expired-proof`.
 Proofs issued more than 30 seconds ahead of that time fail verification with `expired-proof`.
 Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
 In a page, the provider also measures the time since verification with `performance.now()`. A proof expires when
