@@ -1398,6 +1398,20 @@ describe('backward clock step', () => {
     expect(subject.status).toBe(expired)
   })
 
+  test('a step back inside the tolerance does not extend a proof verified near its deadline', async () => {
+    // Issued at T - 290 and verified at T: the proof has 10 s left at verification.
+    global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now - 290))
+    const subject = provider('required', strict())
+    await subject.initialize(context)
+    expect(evaluation(subject)).toBe(true)
+    // The clock steps back 20 s, inside the tolerance. Then 10 s pass on the monotonic clock.
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now - 20) * 1000)
+    jest.spyOn(performance, 'now').mockReturnValue(performance.now() + 10_000)
+    expect(evaluation(subject)).toBe(false)
+    await flush()
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+  })
+
   test.each(modes)(
     '%s: after the wall clock reaches expires-at, a step back does not make the proof current again',
     async (_name, extra, expired) => {
@@ -2115,4 +2129,76 @@ test('required: an install-time usability rejection emits one OpenFeature ERROR 
     OpenFeature.getClient(domain).removeHandler(ProviderEvents.Error, errors)
     await OpenFeature.clearProviders()
   }
+})
+
+describe('proof expiry around installation and context changes', () => {
+  test('default mode installs a proof that expired during reconciliation as STALE', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required')
+    const stale = jest.fn()
+    subject.events.addHandler(ProviderEvents.Stale, stale)
+    const reconcile = subject as unknown as { maybeClearExposureCache(): Promise<void> }
+    jest.spyOn(reconcile, 'maybeClearExposureCache').mockImplementation(async () => {
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    })
+    await subject.initialize(context)
+    expect(subject.status).toBe(ProviderStatus.STALE)
+    expect(evaluation(subject)).toBe(true)
+    await flush()
+    expect(stale).toHaveBeenCalledTimes(1)
+    // The admitted proof is kept as the verified memory: a failed refresh falls back to it.
+    global.fetch = jest.fn().mockRejectedValue(new Error('offline'))
+    await subject.onContextChange(context, context)
+    expect(subject.status).toBe(ProviderStatus.STALE)
+    expect(evaluation(subject)).toBe(true)
+  })
+  test('strict mode still rejects a proof that expired during reconciliation', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', strict())
+    const reconcile = subject as unknown as { maybeClearExposureCache(): Promise<void> }
+    jest.spyOn(reconcile, 'maybeClearExposureCache').mockImplementation(async () => {
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+    })
+    await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('expired-proof'))
+    expect(evaluation(subject)).toBe(false)
+  })
+  test('strict: a proof that expires while the provider is in ERROR is not served again on a retry', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', strict())
+    await subject.initialize(context)
+    expect(evaluation(subject)).toBe(true)
+    // The switch to another context fails: the provider is in ERROR and keeps the configuration of the first context.
+    global.fetch = jest.fn().mockRejectedValue(new Error('offline'))
+    const other = { ...context, targetingKey: 'another-subject' }
+    await expect(subject.onContextChange(context, other)).rejects.toThrow()
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+    // The first proof expires in ERROR. A retry of the first context cannot serve its flags.
+    jest.spyOn(Date, 'now').mockReturnValue((vector.now + 301) * 1000)
+    await expect(subject.onContextChange(other, context)).rejects.toThrow()
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+    expect(evaluation(subject)).toBe(false)
+  })
+  test('a superseded signed fetch does not overwrite the state of the latest context change', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required')
+    await subject.initialize(context)
+    let releaseFirst!: () => void
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve))
+    // The first change gets a signed false value, but only after the second change completes with true.
+    global.fetch = jest
+      .fn()
+      .mockImplementationOnce(async (url, init) => {
+        const response = await signed(url, init, false)
+        await firstHeld
+        return response
+      })
+      .mockImplementationOnce((url, init) => signed(url, init, true))
+    const first = subject.onContextChange(context, { ...context, targetingKey: 'first' })
+    const latest = { ...context, targetingKey: 'latest' }
+    await subject.onContextChange(context, latest)
+    releaseFirst()
+    await first.catch(() => undefined)
+    expect(subject.status).toBe(ProviderStatus.READY)
+    expect(subject.resolveBooleanEvaluation('critical', false, latest, logger).value).toBe(true)
+  })
 })

@@ -402,20 +402,27 @@ export class DatadogProvider extends DatadogProviderBase {
             // The OpenFeature SDK emits the ERROR event for the rejected initialize or onContextChange call.
             throw error
           }
-          const recoveredFromExpiry = this.proofExpirySignaled
-          this.proofExpirySignaled = false
+          // Default required mode admits a proof that expired after verification, for example during cache
+          // reconciliation. Install it as STALE in its own expiry episode, and keep it as the verified memory.
+          const signing = this.configuration?.responseSigning
+          const expiredOnInstall = signing?.mode === 'required' && signing.isExpired(config, evaluationContext)
+          const recoveredFromExpiry = this.proofExpirySignaled && !expiredOnInstall
+          this.proofExpirySignaled = expiredOnInstall
+          if (expiredOnInstall) {
+            this.proofExpiryPreviousState = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+            debug.event('signing.expired', () => ({ stage: 'installation', action: 'serve_verified_flags_stale' }))
+          }
           this.configurationRevision++
           this.configurationSource = source
           this.flagsConfiguration = config
           this.scheduleProofExpiry()
-          if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
-            this.verifiedConfiguration = config
+          if (signing?.isVerified(config, evaluationContext) || expiredOnInstall) this.verifiedConfiguration = config
           this.assignmentSubjectIsolationRequired = false
           // Same-subject fallback can have older attributes. Keep its original
           // context for evaluation and telemetry; do not relabel or re-cache it.
           this.evaluationContext = fromCache ? (config.precomputed?.context ?? evaluationContext) : evaluationContext
           const previousState = this.status
-          this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.status = fromCache || expiredOnInstall ? ProviderStatus.STALE : ProviderStatus.READY
           debug.event('configuration.installed', () => ({
             ...configurationDebugFields(config),
             source,

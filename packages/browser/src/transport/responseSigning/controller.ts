@@ -164,8 +164,8 @@ export function createResponseSigningController(
   const verified = new WeakMap<FlagsConfiguration, Proof & { context: string }>()
   /**
    * A proof is current from its verification time until expires-at. Expiry uses
-   * max(device clock, effective verification time, issued-at + monotonic time since verification), so a wall-clock
-   * step back cannot extend the proof. When a check sees the deadline, the proof stays expired, even if the clock
+   * max(device clock, max(effective verification time, issued-at) + monotonic time since verification), so a
+   * wall-clock step back, also one inside the tolerance, cannot extend the proof. When a check sees the deadline, the proof stays expired, even if the clock
    * moves back. A backward step of at most CLOCK_TOLERANCE_SECONDS keeps the proof current. A larger step before the
    * deadline is handled as expiry, and the proof is current again when the clock returns into the window.
    */
@@ -173,7 +173,7 @@ export function createResponseSigningController(
     if (proof.deadlinePassed) return true
     const now = Date.now() / 1000
     const elapsed = Math.max(0, (monotonicNow() - proof.verifiedMonotonicMs) / 1000)
-    if (proof.expiresAt <= Math.max(now, proof.effectiveVerifiedAt, proof.issuedAt + elapsed)) {
+    if (proof.expiresAt <= Math.max(now, Math.max(proof.effectiveVerifiedAt, proof.issuedAt) + elapsed)) {
       proof.deadlinePassed = true
       return true
     }

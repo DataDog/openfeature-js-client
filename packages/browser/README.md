@@ -257,7 +257,8 @@ release. These failures use `expired-proof`.
 Proofs issued more than 30 seconds ahead of that time fail verification with `expired-proof`.
 Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
 In a page, the provider also measures the time since verification with `performance.now()`. A proof expires when
-`issued-at` plus that time reaches `expires-at`, even if the wall clock moves back.
+the later of the verification time and `issued-at`, plus that time, reaches `expires-at`, even if the wall clock moves
+back.
 Verified flags stay current after the clock moves back by at most 30 seconds. After a larger backward step, the
 provider handles the proof as expired (see below). When the clock returns into the proof's validity window before
 the deadline, the provider returns to its state before the expiry and emits the matching event. After the provider
