@@ -475,15 +475,19 @@ function signedRequestHeaders(headers: Headers): string[] {
 }
 /** A request has a flag selection when its JSON body has a non-null flag_selection, or its query selects flags. */
 function hasFlagSelection(request: SigningRequest, url: URL): boolean {
-  if (url.searchParams.has('selected_flag_tags') || url.searchParams.has('selected_flag_key_patterns')) return true
+  // As the shared fixtures: a selection query parameter counts only with a non-empty value.
+  if (['selected_flag_tags', 'selected_flag_key_patterns'].some((name) => url.searchParams.getAll(name).some(Boolean)))
+    return true
   let body: { flag_selection?: unknown; data?: { attributes?: { flag_selection?: unknown } } } | null
   try {
     body = JSON.parse(new TextDecoder().decode(request.body))
   } catch {
     return false
   }
-  // The SDK sends JSON:API (data.attributes); the shared fixtures put the field at the top level.
-  return (body?.flag_selection ?? body?.data?.attributes?.flag_selection ?? null) !== null
+  // The shared fixtures put the field at the top level of a JSON object. The SDK sends JSON:API, so
+  // data.attributes.flag_selection also counts: the SDK then requires the verified dd-flag-selection-ignored entry.
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
+  return (body.flag_selection ?? null) !== null || (body.data?.attributes?.flag_selection ?? null) !== null
 }
 function signedResponseHeaders(request: SigningRequest, url: URL, headers: Headers): string[] {
   const value = headers.get(SIGNED_RESPONSE_HEADERS_HEADER)

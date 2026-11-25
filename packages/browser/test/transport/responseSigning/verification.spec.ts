@@ -929,18 +929,34 @@ describe('clock floor: build floor and high-water mark', () => {
   const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
   let storage: Map<string, string>
   let blocked = false
+  /** Keys that another tab wrote, but that this tab does not see yet. */
+  let hidden: Set<string>
+  const visibleKeys = () => {
+    if (blocked) throw new Error('blocked')
+    return [...storage.keys()].filter((key) => !hidden.has(key))
+  }
   const localStorage = {
     getItem: (key: string) => {
       if (blocked) throw new Error('blocked')
-      return storage.get(key) ?? null
+      return hidden.has(key) ? null : (storage.get(key) ?? null)
     },
     setItem: (key: string, value: string) => {
       if (blocked) throw new Error('blocked')
       storage.set(key, value)
     },
+    removeItem: (key: string) => {
+      if (blocked) throw new Error('blocked')
+      storage.delete(key)
+    },
+    key: (index: number) => visibleKeys()[index] ?? null,
+    get length() {
+      return visibleKeys().length
+    },
   }
+  const markKey = (value: number) => `dd-ffe-response-signing-high-water-mark-v1:${anchorKey}:${value}`
   beforeEach(() => {
     storage = new Map()
+    hidden = new Set()
     blocked = false
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: localStorage })
     forgetMinimumNotBeforeInMemory()
@@ -991,7 +1007,7 @@ describe('clock floor: build floor and high-water mark', () => {
   })
   test('the mark survives a page reload', async () => {
     await read(controller(), FIXTURE_NOW + HOUR)
-    expect(storage.get(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}`)).toBe(String(FIXTURE_NOW + HOUR))
+    expect([...storage.keys()]).toEqual([markKey(FIXTURE_NOW + HOUR)])
     forgetMinimumNotBeforeInMemory()
     await expect(read(controller(), FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
   })
@@ -1003,9 +1019,60 @@ describe('clock floor: build floor and high-water mark', () => {
     expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + HOUR)
     await expect(read(signing, FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
   })
+  test('a higher mark replaces the lower keys of this anchor', async () => {
+    const signing = controller()
+    await read(signing, FIXTURE_NOW)
+    await read(signing, FIXTURE_NOW + HOUR)
+    expect([...storage.keys()]).toEqual([markKey(FIXTURE_NOW + HOUR)])
+  })
+  test('a write from an older view of storage never lowers the mark of another tab', async () => {
+    // Another tab stored a higher mark. This tab does not see it yet, and stores its own lower mark.
+    storage.set(markKey(FIXTURE_NOW + 2 * HOUR), '1')
+    hidden.add(markKey(FIXTURE_NOW + 2 * HOUR))
+    await read(controller(), FIXTURE_NOW + HOUR)
+    hidden.clear()
+    expect(storage.has(markKey(FIXTURE_NOW + 2 * HOUR))).toBe(true)
+    forgetMinimumNotBeforeInMemory()
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + 2 * HOUR)
+    // The other tab's lower view also leaves the higher key in place.
+    await expect(read(controller(), FIXTURE_NOW + HOUR)).rejects.toThrow('(expired-proof)')
+    expect(storage.has(markKey(FIXTURE_NOW + 2 * HOUR))).toBe(true)
+  })
   test('a stored mark that is not a safe non-negative integer is ignored', async () => {
-    storage.set(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}`, '-1')
+    storage.set(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}:-1`, '1')
+    storage.set(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}:1e3`, '1')
     expect(storedHighWaterMark(anchorKey)).toBe(0)
     expect((await read(controller(), FIXTURE_NOW)).proof).toBeDefined()
+  })
+})
+
+describe('flag selection detection for the response header list', () => {
+  const credential = loadCredential('two-intermediates')
+  const base = 'https://assignments.example.test/precompute-assignments?dd_env=fixture-env'
+  async function verifyWithoutSelectionHeader(url: string, body: string) {
+    const request = { ...signingRequest(url), body: new Uint8Array(Buffer.from(body)) }
+    const response = signedResponse(request, credential, FIXTURE_NOW, undefined, undefined, 'content-type')
+    return verifyResponse(request, response, [ROOT_A], FIXTURE_NOW)
+  }
+  const plain = '{"data":{"type":"precompute-assignments-request"}}'
+  test.each([
+    ['an empty selected_flag_tags value', `${base}&selected_flag_tags=`, plain],
+    ['a selected_flag_key_patterns name with no value', `${base}&selected_flag_key_patterns`, plain],
+    ['a null top-level flag_selection', base, '{"flag_selection":null}'],
+    ['a null JSON:API flag_selection', base, '{"data":{"attributes":{"flag_selection":null}}}'],
+    ['a JSON array body', base, '[{"flag_selection":{}}]'],
+    ['a body that is not JSON', base, 'not json'],
+  ])('%s is not a selection: the list does not need dd-flag-selection-ignored', async (_name, url, body) => {
+    await expect(verifyWithoutSelectionHeader(url, body)).resolves.toHaveProperty('verifiedResponseHeaders', {
+      'content-type': 'application/json',
+    })
+  })
+  test.each([
+    ['a selected_flag_tags value', `${base}&selected_flag_tags=beta`, plain],
+    ['a selected_flag_key_patterns value', `${base}&selected_flag_key_patterns=a*`, plain],
+    ['a top-level flag_selection, as in the shared fixtures', base, '{"flag_selection":{"tags":["beta"]}}'],
+    ['a JSON:API flag_selection, as the SDK sends it', base, '{"data":{"attributes":{"flag_selection":{}}}}'],
+  ])('%s is a selection: the list must name dd-flag-selection-ignored', async (_name, url, body) => {
+    await expect(verifyWithoutSelectionHeader(url, body)).rejects.toThrow('(invalid-proof)')
   })
 })

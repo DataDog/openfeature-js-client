@@ -45,12 +45,45 @@ export function raiseMinimumNotBefore(anchorKey: string, value: number): boolean
   return raise(STORAGE_PREFIX + anchorKey, value)
 }
 
-export function storedHighWaterMark(anchorKey: string): number {
-  return stored(HIGH_WATER_MARK_PREFIX + anchorKey)
+/**
+ * Each value has its own key, `<prefix><anchor>:<value>`, and a key never changes. Another tab can write at the same
+ * time from an older view of storage, so a single key could go back to a lower value. With one key for each value, a
+ * writer removes only keys with a lower value, and the highest key always stays. A reader takes the highest key.
+ */
+function highWaterMarkKeys(anchorKey: string): Array<[key: string, value: number]> {
+  const prefix = `${HIGH_WATER_MARK_PREFIX}${anchorKey}:`
+  const found: Array<[string, number]> = []
+  try {
+    const storage = globalThis.localStorage
+    for (let index = 0; index < (storage?.length ?? 0); index++) {
+      const key = storage?.key(index)
+      const raw = key?.startsWith(prefix) ? key.slice(prefix.length) : undefined
+      if (raw && /^(0|[1-9][0-9]{0,15})$/.test(raw) && Number.isSafeInteger(Number(raw)))
+        found.push([key!, Number(raw)])
+    }
+  } catch {
+    // Storage can be blocked or unavailable; memory still applies.
+  }
+  return found
 }
 
+export function storedHighWaterMark(anchorKey: string): number {
+  const values = highWaterMarkKeys(anchorKey).map(([, value]) => value)
+  return Math.max(memory.get(HIGH_WATER_MARK_PREFIX + anchorKey) ?? 0, ...values)
+}
+
+/** Store a value only when it is higher than the stored value. Returns whether it was stored. */
 export function raiseHighWaterMark(anchorKey: string, value: number): boolean {
-  return raise(HIGH_WATER_MARK_PREFIX + anchorKey, value)
+  if (!Number.isSafeInteger(value) || value < 0 || value <= storedHighWaterMark(anchorKey)) return false
+  memory.set(HIGH_WATER_MARK_PREFIX + anchorKey, value)
+  try {
+    const storage = globalThis.localStorage
+    storage?.setItem(`${HIGH_WATER_MARK_PREFIX}${anchorKey}:${value}`, '1')
+    for (const [key, stored] of highWaterMarkKeys(anchorKey)) if (stored < value) storage?.removeItem(key)
+  } catch {
+    // Keep the in-memory value when storage rejects the write.
+  }
+  return true
 }
 
 /** @internal Test hook: forget the in-memory values, as a page reload does. */

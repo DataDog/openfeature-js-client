@@ -154,7 +154,8 @@ export function signedResponse(
   signer: { privateKey: KeyObject; leafBase64: string; intermediatesBase64: string[] },
   now = FIXTURE_NOW,
   body: Uint8Array = new Uint8Array(Buffer.from('{"data":{"attributes":{"flags":{}}}}')),
-  minimumNotBefore?: number
+  minimumNotBefore?: number,
+  responseHeaderList = 'content-type,dd-flag-selection-ignored'
 ) {
   const leaf = Buffer.from(signer.leafBase64, 'base64')
   const intermediates = signer.intermediatesBase64.map((value) => Buffer.from(value, 'base64'))
@@ -162,7 +163,7 @@ export function signedResponse(
     expiresAt = now + 300
   const headers = new Headers({
     'content-type': 'application/json',
-    'x-datadog-feature-flags-signed-response-headers': 'content-type,dd-flag-selection-ignored',
+    'x-datadog-feature-flags-signed-response-headers': responseHeaderList,
     'x-datadog-feature-flags-signature-version': '1',
     'x-datadog-feature-flags-signing-certificate': signer.leafBase64,
     'x-datadog-feature-flags-signing-chain': signer.intermediatesBase64.join(','),
