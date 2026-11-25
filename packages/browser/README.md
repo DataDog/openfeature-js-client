@@ -315,8 +315,8 @@ After a fully verified response, the SDK stores the highest value for each trust
 leaf in that response, or lower than the stored value. Then it rejects a leaf that starts before the stored
 value, with `Response signing: revoked-certificate`. The floor applies to the leaf only and is never compared with
 intermediates, so a new leaf under older intermediates verifies. Required mode fails closed; observe mode reports
-the reason and accepts the response as unverified. This value holds no flag data. It is the only signing data
-that required mode persists, and required mode stores no flag values. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
+the reason and accepts the response as unverified. This value holds no flag data. With the high-water mark (see the clock section), it is the only
+signing data that required mode persists, and required mode stores no flag values. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
 read it.
 Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
 its persistent namespace binds the complete token, endpoint, environment, app ID,
