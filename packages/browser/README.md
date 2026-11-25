@@ -174,7 +174,7 @@ iOS, Android and the browser use the same reason codes:
 | ---------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | `unsupported-request`  | The SDK cannot sign this request shape                                         | Use the default flags endpoint and request options                                                 |
 | `unavailable-crypto`   | The platform crypto API is not available                                       | Use a secure (HTTPS) context                                                                       |
-| `missing-anchor`       | No trusted root is configured for this site                                    | Response signing supports only the staging site in this release                                    |
+| `missing-anchor`       | No trusted root is configured for this site                                    | Use the default staging endpoint without flaggingProxy, and leave trustedRootCertificates unset    |
 | `missing-proof`        | The response has no signature headers                                          | A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled |
 | `invalid-proof`        | The signature headers are present but not valid                                | A proxy or CDN changed the response headers                                                        |
 | `response-too-large`   | The body is larger than the signed size limit                                  | Contact Datadog support                                                                            |

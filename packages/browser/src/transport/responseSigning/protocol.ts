@@ -74,7 +74,7 @@ const FAILURES: Record<Exclude<VerificationFailure, 'revoked-certificate'>, [str
   'unavailable-crypto': ['The platform crypto API is not available', 'Use a secure (HTTPS) context'],
   'missing-anchor': [
     'No trusted root is configured for this site',
-    'Response signing supports only the staging site in this release',
+    'Use the default staging endpoint without flaggingProxy, and leave trustedRootCertificates unset',
   ],
   'missing-proof': [
     'The response has no signature headers',
