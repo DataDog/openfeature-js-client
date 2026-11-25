@@ -215,16 +215,30 @@ The leaf must carry the Feature Flags assignment-signing extended key usage
 Every certificate, including the root, must satisfy `notBefore <= now < notAfter`,
 and each certificate validity must lie inside the validity of its issuer. The
 SDK verifies the chain, exact request and response bytes, nonce, effective client
-token and semantic headers, and the original proof lifetime (at most five minutes).
+token, the signed request and response header lists, and the original proof lifetime (at most five minutes).
 Signed requests require HTTPS and reject redirects. A custom fetch implementation
 must preserve the generated URL, body and headers and the exact returned bytes.
 Proxies must support the signing request headers and expose the proof headers in
-CORS, including `x-datadog-feature-flags-signing-chain`. The `response-signing-v1`
+CORS, including `x-datadog-feature-flags-signing-chain` and `x-datadog-feature-flags-signed-response-headers`. The `response-signing-v1`
 capability and signature version `1` are added only when signing is enabled. This protocol number
 is independent of X.509 v3 certificate encoding.
 
-The signed transcript does not include every request header. `DD-Assignment-Token` and `dd-service` are not in the
-transcript, so a response proof does not show which values of these headers the edge received.
+Signed header lists:
+
+- The request header `x-datadog-feature-flags-signed-headers` names the request headers that the SDK bound. The
+  names are lowercase, sorted, unique and joined by `,` with no spaces. The SDK lists each of `content-type`,
+  `dd-application-id`, `x-dd-feature-flags-capabilities`, `x-rkyv` and `x-use-cache` that the request has. The
+  transcript binds each listed name and its value. The client token and `authorization` keep their hashed slots.
+- The response proof header `x-datadog-feature-flags-signed-response-headers` names the response headers that the
+  edge bound, in the same syntax. It must name `content-type`. When the request has a `flagSelection`, it must also
+  name `dd-flag-selection-ignored`, which can be absent. Otherwise verification fails with `invalid-proof`.
+- The SDK acts only on the verified values of listed response headers. On a signed request, the provider reports
+  `DD-Flag-Selection-Ignored` only from a verified response. When observe-mode verification fails, the provider
+  does not report it.
+- A proxy that changes, adds or removes a listed header breaks verification.
+
+The signed transcript does not include every request header. `DD-Assignment-Token` and `dd-service` are not
+listed, so a response proof does not show which values of these headers the edge received.
 The browser provider has no default initialization timeout. In `required` mode, initialization waits for a
 verified response, so a slow edge delays the provider for as long as the request takes.
 
@@ -280,7 +294,7 @@ each evaluation. Both change the state and send the event once, from `READY` or 
 already in progress keeps its reconciliation status until that update completes.
 
 Minimum leaf not-before revocation (**draft wire**, pending the edge): a response can carry
-`x-datadog-feature-flags-minimum-leaf-not-before`, unix seconds, which is bound at the end of the v1 transcript.
+`x-datadog-feature-flags-minimum-leaf-not-before`, unix seconds, which is bound at the end of the v1 transcript, after the response header list.
 After a fully verified response, the SDK stores the highest value for each trust anchor in `localStorage`
 (in memory only when storage is not available). It ignores a value that is greater than the `notBefore` of the
 leaf in that response, or lower than the stored value. Then it rejects a leaf that starts before the stored
