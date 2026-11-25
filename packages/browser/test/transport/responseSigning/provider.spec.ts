@@ -2,6 +2,7 @@ import { createHash, sign, webcrypto } from 'node:crypto'
 import { ReadableStream } from 'node:stream/web'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { display } from '@datadog/browser-core'
+import { evaluatePrecomputedConfiguration, parsePrecomputedConfigurationResponse } from '@datadog/flagging-core'
 import { ErrorCode, OpenFeature, ProviderEvents, ProviderStatus, StandardResolutionReasons } from '@openfeature/web-sdk'
 import { IndexedDBFlagsCache } from '../../../src/cache/indexeddb-flags-cache'
 import type { FlaggingInitConfiguration } from '../../../src/domain/configuration'
@@ -130,6 +131,7 @@ function response(body: string, headers: Headers = new Headers(), status = 200):
     redirected: false,
     body: null,
     arrayBuffer: async () => buffer.buffer,
+    text: async () => body,
     json: async () => JSON.parse(body),
   } as Response
 }
@@ -140,7 +142,8 @@ async function signed(
   url: RequestInfo | URL,
   init: RequestInit = {},
   value = true,
-  issuedAt = vector.now
+  issuedAt = vector.now,
+  rawBody = JSON.stringify(payload(value))
 ): Promise<Response> {
   const headers = new Headers({
     'content-type': 'application/json',
@@ -153,7 +156,7 @@ async function signed(
   })
   headers.set('x-datadog-feature-flags-issued-at', String(issuedAt))
   headers.set('x-datadog-feature-flags-expires-at', String(issuedAt + 300))
-  const body = new TextEncoder().encode(JSON.stringify(payload(value)))
+  const body = new TextEncoder().encode(rawBody)
   const request = {
     url: String(url),
     method: 'POST',
@@ -1040,6 +1043,32 @@ test('unverified observe refresh cannot replace the separate verified memory fal
   await subject.onContextChange(context, context)
   expect(evaluation(subject)).toBe(true)
 })
+
+test.each(['9007199254740993', '1e-999', '1e999'])(
+  'retains numeric token %s when observe mode continues without a signing request',
+  async (token) => {
+    const signing = createResponseSigningController({ mode: 'observe', trustedRootCertificates: roots }, STAGING)!
+    const request = await signing.prepare(
+      'https://example.test/assign',
+      { 'dd-client-token': 'a', 'DD-Client-Token': 'b' },
+      '{}'
+    )
+    expect(request).toBeUndefined()
+    const raw = JSON.stringify(payload()).replace(
+      '"variationType":"boolean","variationValue":true',
+      `"variationType":"number","variationValue":${token}`
+    )
+    const read = await signing.read(response(raw), request)
+    expect(read.proof).toBeUndefined()
+    const parsed = parsePrecomputedConfigurationResponse(read.json)
+    if ('error' in parsed) throw new Error(parsed.error)
+    expect(evaluatePrecomputedConfiguration({ precomputed: parsed }, 'number', 'critical', -99.5, {})).toMatchObject({
+      value: -99.5,
+      reason: 'ERROR',
+      errorCode: 'TYPE_MISMATCH',
+    })
+  }
+)
 test('public v1 persistence is isolated from prototype signing cache namespaces', async () => {
   const signing = createResponseSigningController({ mode: 'observe', trustedRootCertificates: roots }, STAGING)!
   const namespace = await signing.cacheNamespace()
@@ -1387,6 +1416,27 @@ describe('required response stream reads', () => {
   function streamed(body: ReadableStream<Uint8Array>, headers = new Headers()): Response {
     return { ...response('', headers), body } as unknown as Response
   }
+
+  test.each(['9007199254740993', '1e-999', '1e999'])(
+    'retains numeric token %s after successful verification',
+    async (token) => {
+      const { signing, request } = await setup()
+      const raw = JSON.stringify(payload()).replace(
+        '"variationType":"boolean","variationValue":true',
+        `"variationType":"number","variationValue":${token}`
+      )
+      const result = await signed(request.url, { headers: request.headers, body: '{}' }, true, vector.now, raw)
+      const read = await signing.read(result, request)
+      expect(read.proof).toMatchObject({ expiresAt: vector.now + 300 })
+      const parsed = parsePrecomputedConfigurationResponse(read.json)
+      if ('error' in parsed) throw new Error(parsed.error)
+      expect(evaluatePrecomputedConfiguration({ precomputed: parsed }, 'number', 'critical', -99.5, {})).toMatchObject({
+        value: -99.5,
+        reason: 'ERROR',
+        errorCode: 'TYPE_MISMATCH',
+      })
+    }
+  )
 
   test.each([false, true])('rejects overflow and handles cancellation (rejects: %s)', async (rejectCancel) => {
     const { signing, request } = await setup()

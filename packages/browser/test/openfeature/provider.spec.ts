@@ -260,7 +260,7 @@ describe('DatadogProvider', () => {
             return null
           }),
         },
-        json: async () => precomputedResponse,
+        text: async () => JSON.stringify(await precomputedResponse),
       }))
 
       global.fetch = fetchMock
@@ -410,7 +410,7 @@ describe('DatadogProvider', () => {
       headers: {
         get: (name: string) => (name === 'content-type' ? 'application/vnd.api+json' : null),
       },
-      json: async () => body,
+      text: async () => JSON.stringify(await body),
     })
 
     /** Installs a fetch mock where each call creates a deferred promise accessible via `calls[n]`. */
@@ -563,7 +563,7 @@ describe('DatadogProvider', () => {
       const originalFetch = global.fetch
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => precomputedResponse,
+        text: async () => JSON.stringify(await precomputedResponse),
       })
       const testProvider = new DatadogProvider({
         clientToken: 'xxx',
@@ -603,7 +603,7 @@ describe('DatadogProvider', () => {
         headers: {
           get: jest.fn(),
         },
-        json: async () => precomputedResponse,
+        text: async () => JSON.stringify(await precomputedResponse),
       })
       global.fetch = globalFetch
       mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
@@ -688,7 +688,7 @@ describe('DatadogProvider', () => {
           headers: new Headers({
             'content-type': 'application/vnd.api+json',
           }),
-          json: async () => precomputedResponse,
+          text: async () => JSON.stringify(await precomputedResponse),
         }))
         const testProvider = new DatadogProvider(options)
         await OpenFeature.setProviderAndWait(testProvider)
@@ -713,7 +713,7 @@ describe('DatadogProvider', () => {
           headers: new Headers({
             'content-type': 'application/vnd.api+json',
           }),
-          json: async () => precomputedResponse,
+          text: async () => JSON.stringify(await precomputedResponse),
         }))
 
         const testProvider = new DatadogProvider(options)
@@ -746,7 +746,7 @@ describe('DatadogProvider', () => {
           headers: new Headers({
             'content-type': 'application/vnd.api+json',
           }),
-          json: async () => precomputedResponse,
+          text: async () => JSON.stringify(await precomputedResponse),
         }))
 
         const testProvider = new DatadogProvider(options)

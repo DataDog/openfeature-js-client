@@ -74,7 +74,7 @@ describe.each(fixtures)('precomputed corpus: $name', (fixture) => {
       flagEvaluationTrackingInterval: 1000,
       flagConfigurationFetch: jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => fixture.response,
+        text: async () => JSON.stringify(await fixture.response),
       }),
     })
     const context = {

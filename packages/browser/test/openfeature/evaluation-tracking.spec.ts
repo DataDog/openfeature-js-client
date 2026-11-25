@@ -56,7 +56,9 @@ describe.each(['core', 'online'] as const)('%s provider evaluation tracking', (k
     } else {
       const provider = new DatadogProvider({
         ...options,
-        flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+        flagConfigurationFetch: jest
+          .fn()
+          .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
       })
       await OpenFeature.setProviderAndWait(domain, provider, { country: 'US' })
     }

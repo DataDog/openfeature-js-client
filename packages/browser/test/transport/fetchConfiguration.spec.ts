@@ -37,7 +37,7 @@ describe('createFlagsConfigurationFetcher', () => {
           return null
         }),
       },
-      json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+      text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
     })
     global.fetch = mockFetch
   })
@@ -400,7 +400,7 @@ describe('createFlagsConfigurationFetcher', () => {
             return null
           }),
         },
-        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
       })
 
       const config = { ...baseConfig, flaggingProxy: 'https://proxy.example.com' }
@@ -424,7 +424,7 @@ describe('createFlagsConfigurationFetcher', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         headers: new Headers(),
-        json: jest.fn().mockResolvedValue(response),
+        text: jest.fn().mockResolvedValue(JSON.stringify(response)),
       })
 
       const result = await fetchPrecomputedConfiguration({
@@ -439,17 +439,19 @@ describe('createFlagsConfigurationFetcher', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         headers: new Headers(),
-        json: jest.fn().mockResolvedValue({
-          data: {
-            attributes: {
-              createdAt: '2026-08-19T00:00:00.000Z',
-              flags: {
-                valid: validFlag,
-                malformed: {},
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            data: {
+              attributes: {
+                createdAt: '2026-08-19T00:00:00.000Z',
+                flags: {
+                  valid: validFlag,
+                  malformed: {},
+                },
               },
             },
-          },
-        }),
+          })
+        ),
       })
 
       const result = await fetchPrecomputedConfiguration({
@@ -467,7 +469,7 @@ describe('createFlagsConfigurationFetcher', () => {
         return {
           ok: true,
           headers: new Headers(),
-          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+          text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
         }
       })
 
@@ -764,7 +766,7 @@ describe('createFlagsConfigurationFetcher', () => {
         mockFetch.mockResolvedValue({
           ok: true,
           headers: new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' }),
-          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+          text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
         })
         const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })
 
@@ -788,7 +790,7 @@ describe('createFlagsConfigurationFetcher', () => {
             ok: true,
             status: 200,
             headers: new Headers(ignoredHeaders),
-            json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+            text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
           })
         const fetcher = createFlagsConfigurationFetcher({
           ...baseConfig,
@@ -810,7 +812,7 @@ describe('createFlagsConfigurationFetcher', () => {
         mockFetch.mockResolvedValue({
           ok: true,
           headers,
-          json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+          text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
         })
 
         await createFlagsConfigurationFetcher(baseConfig)(mockContext)
@@ -825,7 +827,11 @@ describe('createFlagsConfigurationFetcher', () => {
       it('reports a reflected ignored header as unknown when the context carries an assignment token', async () => {
         const token = 'private.jwt.signature'
         const headers = new Headers({ 'DD-Flag-Selection-Ignored': `DD-Assignment-Token=${token}` })
-        mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
+        mockFetch.mockResolvedValue({
+          ok: true,
+          headers,
+          text: async () => JSON.stringify(await validPrecomputedResponse),
+        })
 
         await fetchPrecomputedConfiguration({
           ...baseFetchOptions,
@@ -886,7 +892,11 @@ describe('createFlagsConfigurationFetcher', () => {
       it.each([true, false])('reports an ignored selection only when one was sent: %s', async (selected) => {
         const headers = new Headers({ 'DD-Flag-Selection-Ignored': 'invalid_tag' })
         const getHeader = jest.spyOn(headers, 'get')
-        mockFetch.mockResolvedValue({ ok: true, headers, json: async () => validPrecomputedResponse })
+        mockFetch.mockResolvedValue({
+          ok: true,
+          headers,
+          text: async () => JSON.stringify(await validPrecomputedResponse),
+        })
         const result = await fetchPrecomputedConfiguration({
           ...baseFetchOptions,
           context: mockContext,
@@ -1078,7 +1088,12 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const fetchWithSelection = (headers: unknown) => {
-        mockFetch.mockResolvedValue({ ok: true, status: 200, headers, json: async () => validPrecomputedResponse })
+        mockFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers,
+          text: async () => JSON.stringify(await validPrecomputedResponse),
+        })
         return createFlagsConfigurationFetcher({ ...baseConfig, flagSelection: { tags: ['beta'] } })(mockContext)
       }
 
@@ -1229,7 +1244,12 @@ describe('createFlagsConfigurationFetcher', () => {
         })
 
         it('does not report when the standalone fetch returns a parse error', async () => {
-          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => ({}) })
+          mockFetch.mockResolvedValue({
+            ok: true,
+            status: 200,
+            headers: ignoredHeaders(),
+            text: async () => JSON.stringify({}),
+          })
 
           const result = await fetchPrecomputedConfiguration({
             ...baseFetchOptions,
@@ -1270,7 +1290,12 @@ describe('createFlagsConfigurationFetcher', () => {
           ],
           ['a subject that did not opt out receives an acknowledgement', mockContext, acknowledgedResponse],
         ])('does not report when %s', async (_description, context, body) => {
-          mockFetch.mockResolvedValue({ ok: true, status: 200, headers: ignoredHeaders(), json: async () => body })
+          mockFetch.mockResolvedValue({
+            ok: true,
+            status: 200,
+            headers: ignoredHeaders(),
+            text: async () => JSON.stringify(await body),
+          })
           const fetcher = createFlagsConfigurationFetcher({
             ...baseConfig,
             ...immediateOptOut,
@@ -1349,7 +1374,7 @@ describe('createFlagsConfigurationFetcher', () => {
       const customFetch = jest.fn().mockResolvedValue({
         ok: true,
         headers: { get: jest.fn((name: string) => (name === 'content-type' ? 'application/json' : null)) },
-        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
       })
       const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagConfigurationFetch: customFetch })
 
@@ -1369,7 +1394,7 @@ describe('createFlagsConfigurationFetcher', () => {
       const customFetch = jest.fn().mockResolvedValue({
         ok: true,
         headers: { get: jest.fn((name: string) => (name === 'content-type' ? 'application/json' : null)) },
-        json: jest.fn().mockResolvedValue(validPrecomputedResponse),
+        text: jest.fn().mockResolvedValue(JSON.stringify(validPrecomputedResponse)),
       })
       const fetcher = createFlagsConfigurationFetcher({ ...baseConfig, flagConfigurationFetch: customFetch })
 

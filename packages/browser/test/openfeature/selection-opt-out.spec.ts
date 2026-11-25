@@ -18,24 +18,25 @@ const options: FlaggingInitConfiguration = {
 }
 const response = (ack?: boolean) => ({
   ok: true,
-  json: async () => ({
-    data: {
-      attributes: {
-        createdAt: '2026-10-22T00:00:00Z',
-        ...(ack === undefined ? {} : { evaluation_options: { experimentation_opt_out: ack } }),
-        flags: {
-          boolean: {
-            allocationKey: 'ordinary',
-            variationKey: 'on',
-            variationType: 'boolean',
-            variationValue: true,
-            reason: 'TARGETING_MATCH',
-            doLog: false,
+  text: async () =>
+    JSON.stringify({
+      data: {
+        attributes: {
+          createdAt: '2026-10-22T00:00:00Z',
+          ...(ack === undefined ? {} : { evaluation_options: { experimentation_opt_out: ack } }),
+          flags: {
+            boolean: {
+              allocationKey: 'ordinary',
+              variationKey: 'on',
+              variationType: 'boolean',
+              variationValue: true,
+              reason: 'TARGETING_MATCH',
+              doLog: false,
+            },
           },
         },
       },
-    },
-  }),
+    }),
 })
 
 describe('flag selection with experimentation opt-out', () => {

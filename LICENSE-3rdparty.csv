@@ -1,4 +1,5 @@
 "component","origin","license","copyright"
+"lossless-json","https://github.com/josdejong/lossless-json","['MIT']","['Copyright (c) 2016-2026 Jos de Jong']"
 "@gar/promise-retry","@gar/promise-retry","['MIT']","['Tim Koschützki (tim@debuggable.com)', 'Felix Geisendörfer (felix@debuggable.com)', 'IndigoUnited']"
 "@jridgewell/remapping","@jridgewell/remapping","['MIT']","['Justin Ridgewell <justin@ridgewell.name>']"
 "@asamuzakjp/generational-cache","@asamuzakjp/generational-cache","['MIT']","['asamuzaK (Kazz)']"

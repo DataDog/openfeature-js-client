@@ -204,7 +204,9 @@ describe('tracking resource lifecycle', () => {
     const provider = new DatadogProvider({
       ...options,
       enableRumFeatureFlagTracking: false,
-      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+      flagConfigurationFetch: jest
+        .fn()
+        .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
     })
     expect(jest.getTimerCount()).toBe(0)
     await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'online-user' })
@@ -226,11 +228,11 @@ describe('tracking resource lifecycle', () => {
         let completeFetch!: () => void
         const configurationFetch = jest
           .fn()
-          .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+          .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
           .mockImplementation(
             (_url: string, request?: RequestInit) =>
               new Promise((resolve, reject) => {
-                completeFetch = () => resolve({ ok: true, json: async () => precomputedResponse })
+                completeFetch = () => resolve({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
                 if (outcome === 'rejects on abort') {
                   request?.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true })
                 }

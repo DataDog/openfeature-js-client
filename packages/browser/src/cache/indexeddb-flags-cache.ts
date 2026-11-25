@@ -11,6 +11,8 @@ import { signingContextKey } from '../transport/responseSigning/context'
 import { hex, sha256, utf8 } from '../transport/responseSigning/protocol'
 import { openDB, STORE_NAME } from './indexeddb-store'
 
+type CacheVersion = 'v2' | 'v3' | 'v4'
+
 function buildConfigKey(clientToken: string, context: EvaluationContext): string {
   const tokenSuffix = buildStorageKeySuffix(clientToken)
   // Sort keys so {a:1, b:2} and {b:2, a:1} produce the same hash
@@ -54,52 +56,50 @@ export class IndexedDBFlagsCache {
         }))
         return undefined
       }
-      const configKey = signingNamespace
-        ? await this.scopedKey(signingNamespace, context, optedOut, 'v3')
-        : `${policyPrefix(optedOut, 'v3')}-${legacyKey}${this.selectionSuffix}`
-      const previousConfigKey = signingNamespace
-        ? await this.scopedKey(signingNamespace, context, optedOut, 'v2')
-        : `${policyPrefix(optedOut, 'v2')}-${legacyKey}${this.selectionSuffix}`
+      const configKeys: string[] = []
+      for (const version of ['v4', 'v3', 'v2'] as const) {
+        configKeys.push(
+          signingNamespace
+            ? await this.scopedKey(signingNamespace, context, optedOut, version)
+            : `${policyPrefix(optedOut, version)}-${legacyKey}${this.selectionSuffix}`
+        )
+      }
       const db = await openDB()
       try {
         const config = await new Promise<FlagsConfiguration | undefined>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, 'readonly')
           const store = tx.objectStore(STORE_NAME)
-          const request = store.get(configKey)
-          request.onsuccess = () => {
-            if (request.result !== undefined) {
-              resolve(request.result as FlagsConfiguration)
+          const readNext = (index: number) => {
+            if (index < configKeys.length) {
+              const request = store.get(configKeys[index])
+              request.onerror = () => reject(request.error)
+              request.onsuccess = () => {
+                if (request.result !== undefined) resolve(request.result as FlagsConfiguration)
+                else readNext(index + 1)
+              }
               return
             }
-            const previous = store.get(previousConfigKey)
-            previous.onerror = () => reject(previous.error)
-            previous.onsuccess = () => {
-              if (previous.result !== undefined) {
-                resolve(previous.result as FlagsConfiguration)
-                return
-              }
-              if (this.signingNamespace || optedOut || this.selectionSuffix) {
-                resolve(undefined)
-                return
-              }
-              // Read older plaintext entries on upgrade. Never expose encoded
-              // snapshots written by a prerelease SDK through the legacy key.
-              const legacy = store.get(legacyKey)
-              legacy.onerror = () => reject(legacy.error)
-              legacy.onsuccess = () => {
-                const config = legacy.result as FlagsConfiguration | undefined
-                const attributes = config?.precomputed?.response?.data?.attributes
-                resolve(
-                  attributes &&
-                    (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
-                    attributes.obfuscation === undefined
-                    ? config
-                    : undefined
-                )
-              }
+            if (this.signingNamespace || optedOut || this.selectionSuffix) {
+              resolve(undefined)
+              return
+            }
+            // Read older plaintext entries on upgrade. Never expose encoded
+            // snapshots written by a prerelease SDK through the legacy key.
+            const legacy = store.get(legacyKey)
+            legacy.onerror = () => reject(legacy.error)
+            legacy.onsuccess = () => {
+              const config = legacy.result as FlagsConfiguration | undefined
+              const attributes = config?.precomputed?.response?.data?.attributes
+              resolve(
+                attributes &&
+                  (attributes.obfuscated === undefined || attributes.obfuscated === false) &&
+                  attributes.obfuscation === undefined
+                  ? config
+                  : undefined
+              )
             }
           }
-          request.onerror = () => reject(request.error)
+          readNext(0)
         })
         debug.event('cache.read_completed', () => ({
           cache: 'assignments',
@@ -149,14 +149,14 @@ export class IndexedDBFlagsCache {
         void this.signingNamespace()
           .then(async (namespace) => {
             if (!namespace) debug.event('cache.write_skipped', () => ({ reason: 'signing_namespace_unavailable' }))
-            else this.persist(config, await this.scopedKey(namespace, context, optedOut, 'v3'), signal, debug)
+            else this.persist(config, await this.scopedKey(namespace, context, optedOut, 'v4'), signal, debug)
           })
           .catch(fail)
         return
       }
       // New wire shapes use a new namespace so an older SDK cannot consume a
       // snapshot it does not understand after an application rollback.
-      const key = `${policyPrefix(optedOut, 'v3')}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
+      const key = `${policyPrefix(optedOut, 'v4')}-${buildConfigKey(this.clientToken, context)}${this.selectionSuffix}`
       this.persist(config, key, signal, debug)
     } catch (error) {
       fail(error)
@@ -167,7 +167,7 @@ export class IndexedDBFlagsCache {
     namespace: string,
     context: EvaluationContext,
     optedOut: ExperimentationOptOutPolicy,
-    version: 'v2' | 'v3'
+    version: CacheVersion
   ): Promise<string> {
     return `${namespace}-${policyPrefix(optedOut, version)}-${hex(await sha256(utf8(signingContextKey(context))))}${this.selectionSuffix}`
   }
@@ -215,7 +215,7 @@ export class IndexedDBFlagsCache {
   }
 }
 
-function policyPrefix(policy: ExperimentationOptOutPolicy, version: 'v2' | 'v3'): string {
+function policyPrefix(policy: ExperimentationOptOutPolicy, version: CacheVersion): string {
   if (version === 'v2') return policy ? experimentationOptOutCacheKey(policy) : version
   return policy ? `${version}-${experimentationOptOutCacheKey(policy)}` : version
 }

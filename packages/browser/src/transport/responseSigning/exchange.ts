@@ -1,3 +1,4 @@
+import { parsePrecomputedConfigurationJson } from '@datadog/flagging-core'
 import type { DebugLogger } from '../../debug'
 import { raiseMinimumNotBefore, storedMinimumNotBefore } from './minimumNotBefore'
 import {
@@ -125,5 +126,5 @@ export async function readSignedResponse(
   if (proof) recordMinimumNotBefore(proof, mode, logger)
   logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
   // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
-  return { json: JSON.parse(new TextDecoder().decode(bytes)), proof }
+  return { json: parsePrecomputedConfigurationJson(new TextDecoder().decode(bytes)), proof }
 }

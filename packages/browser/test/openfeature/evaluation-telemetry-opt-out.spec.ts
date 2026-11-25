@@ -69,7 +69,9 @@ describe('evaluation telemetry opt-out', () => {
         const provider = new DatadogProvider({
           ...options,
           enableEvaluationTelemetryOptOutParameter: activated,
-          flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+          flagConfigurationFetch: jest
+            .fn()
+            .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
         })
         await OpenFeature.setProviderAndWait(domain, provider, context)
       } else {
@@ -260,7 +262,9 @@ describe('evaluation telemetry opt-out', () => {
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: activated,
-      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+      flagConfigurationFetch: jest
+        .fn()
+        .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
     })
     await OpenFeature.setProviderAndWait(domain, new MultiProvider([{ provider }]), {
       targetingKey: 'user',
@@ -318,7 +322,9 @@ describe('evaluation telemetry opt-out', () => {
       getUser: () => ({ id: 'user', [attribute]: optedOut }),
       addFeatureFlagEvaluation: rum,
     }
-    const fetchAssignments = jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse })
+    const fetchAssignments = jest
+      .fn()
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: true,
@@ -352,14 +358,14 @@ describe('evaluation telemetry opt-out', () => {
     const pending = createDeferred<{
       ok: boolean
       statusText?: string
-      json: () => Promise<typeof precomputedResponse>
+      text: () => Promise<string>
     }>()
     const fetchAssignments = jest
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+      .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
       .mockReturnValueOnce(pending.promise)
       .mockResolvedValueOnce({ ok: false, statusText: 'offline', json: async () => precomputedResponse })
-      .mockResolvedValue({ ok: true, json: async () => precomputedResponse })
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: true,
@@ -373,7 +379,7 @@ describe('evaluation telemetry opt-out', () => {
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
     expect(fetchAssignments).toHaveBeenCalledTimes(3)
     expect(provider.status).toBe(ProviderStatus.RECONCILING)
-    pending.resolve({ ok: false, statusText: 'offline', json: async () => precomputedResponse })
+    pending.resolve({ ok: false, statusText: 'offline', text: async () => JSON.stringify(precomputedResponse) })
     await Promise.all([refresh, optOut])
     expect(provider.status).toBe(ProviderStatus.ERROR)
     // The online provider preserves its previous assignment after transport failure.
@@ -397,16 +403,16 @@ describe('evaluation telemetry opt-out', () => {
     const pending = createDeferred<{
       ok: boolean
       statusText?: string
-      json: () => Promise<typeof precomputedResponse>
+      text: () => Promise<string>
     }>()
     const responseB = JSON.parse(JSON.stringify(precomputedResponse)) as typeof precomputedResponse
     responseB.data.attributes.flags['boolean-flag'].variationValue = false
     responseB.data.attributes.flags['boolean-flag'].variationKey = 'B-variant'
     const fetchAssignments = jest
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+      .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
       .mockReturnValueOnce(pending.promise)
-      .mockResolvedValue({ ok: true, json: async () => responseB })
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await responseB) })
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: activated,
@@ -425,7 +431,7 @@ describe('evaluation telemetry opt-out', () => {
     expect(rum).toHaveBeenCalledTimes(suppressed ? 0 : 1)
     expect(events('exposures')).toHaveLength(1)
 
-    pending.resolve({ ok: false, statusText: 'offline', json: async () => responseB })
+    pending.resolve({ ok: false, statusText: 'offline', text: async () => JSON.stringify(responseB) })
     await update
     expect(provider.status).toBe(ProviderStatus.ERROR)
     expect(client.getBooleanDetails('boolean-flag', false)).toMatchObject({ value: true, variant: 'variation-124' })
@@ -449,14 +455,14 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   it('honors A explicit opt-in while B is pending', async () => {
-    const pendingA = createDeferred<{ ok: boolean; json: () => Promise<typeof precomputedResponse> }>()
-    const pendingB = createDeferred<{ ok: boolean; json: () => Promise<typeof precomputedResponse> }>()
+    const pendingA = createDeferred<{ ok: boolean; text: () => Promise<string> }>()
+    const pendingB = createDeferred<{ ok: boolean; text: () => Promise<string> }>()
     const provider = new DatadogProvider({
       ...options,
       enableEvaluationTelemetryOptOutParameter: true,
       flagConfigurationFetch: jest
         .fn()
-        .mockResolvedValueOnce({ ok: true, json: async () => precomputedResponse })
+        .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
         .mockReturnValueOnce(pendingA.promise)
         .mockReturnValueOnce(pendingB.promise),
     })
@@ -468,13 +474,13 @@ describe('evaluation telemetry opt-out', () => {
     expect(evaluationCount()).toBe(1)
     expect(rum).toHaveBeenCalledTimes(1)
     expect(events('exposures')).toHaveLength(1)
-    pendingA.resolve({ ok: true, json: async () => precomputedResponse })
-    pendingB.resolve({ ok: true, json: async () => precomputedResponse })
+    pendingA.resolve({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
+    pendingB.resolve({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
     await Promise.all([refreshA, refreshB])
   })
 
   it('keeps policy independent from a late initial response and another provider', async () => {
-    const pending = createDeferred<{ ok: true; json: () => Promise<typeof precomputedResponse> }>()
+    const pending = createDeferred<{ ok: true; text: () => Promise<string> }>()
     const fetchAssignments = jest.fn().mockReturnValue(pending.promise)
     const provider = new DatadogProvider({
       ...options,
@@ -487,7 +493,7 @@ describe('evaluation telemetry opt-out', () => {
     const update = OpenFeature.setContext(domain, { ...context, [attribute]: true })
     const client = OpenFeature.getClient(domain)
     expect(client.getBooleanDetails('boolean-flag', false).errorCode).toBe('PROVIDER_NOT_READY')
-    pending.resolve({ ok: true, json: async () => precomputedResponse })
+    pending.resolve({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
     await Promise.all([ready, update])
     expect(client.getBooleanValue('boolean-flag', false)).toBe(true)
     expect(fetchAssignments).toHaveBeenCalledTimes(2)
@@ -496,7 +502,9 @@ describe('evaluation telemetry opt-out', () => {
 
     const other = new DatadogProvider({
       ...options,
-      flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+      flagConfigurationFetch: jest
+        .fn()
+        .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
     })
     await OpenFeature.setProviderAndWait('other-opt-out-provider', other, { targetingKey: 'other', [attribute]: true })
     expect(OpenFeature.getClient('other-opt-out-provider').getBooleanValue('boolean-flag', false)).toBe(true)
@@ -510,7 +518,9 @@ describe('evaluation telemetry opt-out', () => {
       new DatadogProvider({
         ...options,
         enableEvaluationTelemetryOptOutParameter: true,
-        flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+        flagConfigurationFetch: jest
+          .fn()
+          .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
       })
     )
     await OpenFeature.setProviderAndWait(domain, provider, { targetingKey: 'user', [attribute]: true })
@@ -522,7 +532,9 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   it.each([false, true])('counts emissions with activation=%s and boolean true', async (activated) => {
-    const fetchAssignments = jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse })
+    const fetchAssignments = jest
+      .fn()
+      .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) })
     const configuration = {
       ...options,
       enableEvaluationTelemetryOptOutParameter: activated,

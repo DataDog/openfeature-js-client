@@ -27,6 +27,8 @@ export type PrecomputedConfiguration = {
   etag?: string
   /** Parsing errors for malformed flags, retained by flag key. */
   flagErrors?: Record<string, string>
+  /** Rejected JSON number tokens by flag key. Their variationValue is only a placeholder, not an evaluable value. */
+  invalidNumericSources?: Record<string, string>
 }
 
 /** @internal */

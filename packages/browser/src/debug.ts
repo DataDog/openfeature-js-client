@@ -370,6 +370,7 @@ export function configurationDebugFields(configuration?: FlagsConfiguration): Re
     flagKeys: precomputed && Object.keys(precomputed.response.data.attributes.flags),
     flagCount: precomputed && Object.keys(precomputed.response.data.attributes.flags).length,
     flagErrors: precomputed?.flagErrors,
+    invalidNumericSources: precomputed?.invalidNumericSources,
   }
 }
 

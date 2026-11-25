@@ -1,5 +1,5 @@
 import { display } from '@datadog/browser-core'
-import type { FlagsConfiguration } from '@datadog/flagging-core'
+import { type FlagsConfiguration, parsePrecomputedConfigurationJson } from '@datadog/flagging-core'
 import type { EvaluationContext } from '@openfeature/web-sdk'
 import { type DebugLogger, NO_DEBUG } from '../../debug'
 import { buildConfigurationUrl, type ConfigurationEndpointOptions } from '../configurationEndpoint'
@@ -220,7 +220,7 @@ export function createResponseSigningController(
         }))
         throw new Error('Flag configuration redirects are not supported with response signing')
       }
-      if (!request) return { json: await response.json() }
+      if (!request) return { json: parsePrecomputedConfigurationJson(await response.text()) }
       // A request is signed only after the chunk loaded, so this does not fail.
       return (await loadExchange()).readSignedResponse(response, request, { mode, roots, failure }, logger)
     },

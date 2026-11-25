@@ -87,7 +87,9 @@ describe('IndexedDB exposure cache isolation', () => {
             ...options,
             enableFlagEvaluationTracking: false,
             enableRumFeatureFlagTracking: false,
-            flagConfigurationFetch: jest.fn().mockResolvedValue({ ok: true, json: async () => precomputedResponse }),
+            flagConfigurationFetch: jest
+              .fn()
+              .mockResolvedValue({ ok: true, text: async () => JSON.stringify(await precomputedResponse) }),
           })
         }
         await OpenFeature.setProviderAndWait('cache-scope', provider, { targetingKey: 'user', country: 'US' })

@@ -1,4 +1,5 @@
 import type { FlagsConfiguration } from './configuration'
+import { parsePrecomputedConfigurationJson, stringifyPrecomputedConfigurationJson } from './precomputed-json'
 import {
   type ConfigurationWireContents,
   decodeSafely,
@@ -32,7 +33,9 @@ export function precomputedConfigurationFromWire(serialized: ConfigurationWireCo
   }
 
   const { precomputed } = serialized
-  const parsed = decodeSafely(() => parsePrecomputedConfigurationResponse(JSON.parse(precomputed.response)))
+  const parsed = decodeSafely(() =>
+    parsePrecomputedConfigurationResponse(parsePrecomputedConfigurationJson(precomputed.response))
+  )
   if (!parsed) return { precomputedError: 'Precomputed configuration response is not valid JSON' }
   if ('error' in parsed) return { precomputedError: parsed.error }
 
@@ -48,12 +51,12 @@ export function precomputedConfigurationToWire(configuration: FlagsConfiguration
   const wire: ConfigurationWireContents = { version: 1 }
   if (!configuration.precomputed) return wire
 
-  const { context, response, fetchedAt, etag } = configuration.precomputed
+  const { context, response, fetchedAt, etag, invalidNumericSources } = configuration.precomputed
   // Older readers reject version 2 instead of treating hashed keys as plaintext.
   if (response.data.attributes.obfuscated === true) wire.version = 2
   wire.precomputed = {
     context,
-    response: JSON.stringify(response),
+    response: stringifyPrecomputedConfigurationJson(response, invalidNumericSources),
     fetchedAt,
     etag,
   }

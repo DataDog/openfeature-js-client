@@ -10,11 +10,11 @@ const path = require('path')
 const zlib = require('zlib')
 
 const MAIN_FILE = 'datadog-openfeature-browser.js'
-// zlib level 9 size of the main file on main at c62a17a, before response signing.
-const BASE_GZIP_BYTES = 47176
+// zlib level 9 size of the main file on main at 76a6583, before response signing.
+const BASE_GZIP_BYTES = 49979
 // Response signing adds its option checks, state checks and the chunk loader to the main file. The verifier is a
 // dynamic chunk while signing is experimental. Raise this budget only in a reviewed change.
-const GZIP_BUDGET_BYTES = 52000
+const GZIP_BUDGET_BYTES = 54800
 const VERIFIER_MARKERS = ['datadog.feature-flags.precomputed-assignments.v1', 'asn1js']
 
 function gzipSize(content) {

@@ -40,38 +40,39 @@ describe('exposure cache verdict', () => {
   function precomputedResponse(flagOverrides: FlagOverrides = {}, createdAt = '2026-10-26T00:00:00Z') {
     return {
       ok: true,
-      json: async () => ({
-        data: {
-          attributes: {
-            createdAt,
-            flags: {
-              'holdout-flag': {
-                allocationKey: 'holdout-allocation',
-                variationKey: 'control',
-                variationType: 'BOOLEAN',
-                variationValue: false,
-                reason: 'TARGETING_MATCH',
-                doLog: true,
-                serialId: 1001,
-                features: [
-                  { key: 'holdout.key', value: '06ad', destinations: ['HOOK'] },
-                  { key: 'holdout.assignment_group', value: 'status_quo', destinations: ['HOOK'] },
-                  { key: 'exposure.only', value: 'exposed', destinations: ['EXPOSURE'] },
-                ],
-                ...flagOverrides,
-              },
-              'silent-flag': {
-                allocationKey: 'silent-allocation',
-                variationKey: 'on',
-                variationType: 'BOOLEAN',
-                variationValue: true,
-                reason: 'TARGETING_MATCH',
-                doLog: false,
+      text: async () =>
+        JSON.stringify({
+          data: {
+            attributes: {
+              createdAt,
+              flags: {
+                'holdout-flag': {
+                  allocationKey: 'holdout-allocation',
+                  variationKey: 'control',
+                  variationType: 'BOOLEAN',
+                  variationValue: false,
+                  reason: 'TARGETING_MATCH',
+                  doLog: true,
+                  serialId: 1001,
+                  features: [
+                    { key: 'holdout.key', value: '06ad', destinations: ['HOOK'] },
+                    { key: 'holdout.assignment_group', value: 'status_quo', destinations: ['HOOK'] },
+                    { key: 'exposure.only', value: 'exposed', destinations: ['EXPOSURE'] },
+                  ],
+                  ...flagOverrides,
+                },
+                'silent-flag': {
+                  allocationKey: 'silent-allocation',
+                  variationKey: 'on',
+                  variationType: 'BOOLEAN',
+                  variationValue: true,
+                  reason: 'TARGETING_MATCH',
+                  doLog: false,
+                },
               },
             },
           },
-        },
-      }),
+        }),
     }
   }
 
@@ -83,7 +84,7 @@ describe('exposure cache verdict', () => {
       if (url.toString().includes('precompute-assignments')) {
         return Promise.resolve(response)
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(await Promise.resolve({})) })
     })
     const provider = new DatadogProvider(options)
     await OpenFeature.setContext(context)
