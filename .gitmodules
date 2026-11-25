@@ -4,3 +4,6 @@
 [submodule "packages/core/test/ffe-flag-selection-data"]
 	path = packages/core/test/ffe-flag-selection-data
 	url = https://github.com/DataDog/ffe-system-test-data.git
+[submodule "packages/browser/test/ffe-response-signing-data"]
+	path = packages/browser/test/ffe-response-signing-data
+	url = https://github.com/DataDog/ffe-system-test-data.git

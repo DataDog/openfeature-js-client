@@ -8,18 +8,18 @@ certificate encoding is unchanged.
 Signature version `1` carries the intermediate certificates in
 `x-datadog-feature-flags-signing-chain`, and the transcript ends with
 `SHA256(leaf) || u8(n) || SHA256(intermediate[0]) || ... || SHA256(intermediate[n-1])`.
-`../../data/response-signing/chain/` holds test credentials issued by a local test CA (credential JSON `version` 1)
+`../../ffe-response-signing-data/response-signing/chain/` holds test credentials issued by a local test CA (credential JSON `version` 1)
 and the public test roots `root-a.pem` and `root-b.pem`. The private keys are test-only.
 Leaves are valid for 72 hours, so the tests inject `now` (`FIXTURE_NOW` in `chainFixtures.ts`).
 `verification.spec.ts` covers the chain fixture table, the transcript, and synthetic chains
 that change one certificate-profile rule at a time.
 
-`../../data/response-signing/chain/staging-us1-dc-intermediate.pem` is the public us1.staging DC intermediate.
+`../../ffe-response-signing-data/response-signing/chain/staging-us1-dc-intermediate.pem` is the public us1.staging DC intermediate.
 A test checks that it links to the bundled staging root under the client profile.
 
-All six shared v1 suites are byte-for-byte copies in `../../data/response-signing/v1`.
-They do not use a git submodule. That folder's `README.md` records the source
-`ffe-system-test-data` commit and the SHA-256 of each file, and shows how to refresh them.
+The chain fixtures and all six shared v1 suites come from the `ffe-response-signing-data` git submodule
+(`ffe-system-test-data`, `response-signing/`). `verification.spec.ts` checks the SHA-256 of `v1/manifest.json`. To refresh, move the submodule to a new
+commit and update the manifest hash in `verification.spec.ts` in the same change.
 
 Run `yarn workspace @datadog/openfeature-browser test --runInBand test/transport/responseSigning/verification.spec.ts`.
 The verifier runs all 116 shared response cases: 96 core, four isolated-certificate,

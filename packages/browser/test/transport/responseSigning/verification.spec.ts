@@ -2,10 +2,11 @@
 /**
  * Response signing v1 with a certificate chain: leaf -> 1 to 3 intermediates -> pinned root.
  *
- * The chain tests use the test-CA-issued credentials in `test/data/response-signing/chain` and synthetic chains
+ * The chain tests use the test-CA-issued credentials in `response-signing/chain` of the ffe-response-signing-data
+ * submodule, and synthetic chains
  * that change one certificate-profile rule at a time.
  *
- * The shared ffe-system-test-data v1 fixtures run from the copies in `test/data/response-signing/v1`.
+ * The shared ffe-system-test-data v1 fixtures run from `response-signing/v1` of the same submodule.
  */
 import { createHash, generateKeyPairSync, type KeyObject, sign, webcrypto, X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -490,7 +491,7 @@ describe('bundled trust anchor', () => {
   })
   test('the real us1.staging DC intermediate links to the bundled root under the client profile', async () => {
     const pem = readFileSync(
-      join(__dirname, '../../data/response-signing/chain/staging-us1-dc-intermediate.pem'),
+      join(__dirname, '../../ffe-response-signing-data/response-signing/chain/staging-us1-dc-intermediate.pem'),
       'utf8'
     )
     const dcDer = new Uint8Array(Buffer.from(pem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s+/g, ''), 'base64'))
@@ -572,8 +573,8 @@ test('an empty query is encoded as "?", the same as the edge, iOS and Android', 
 })
 
 /**
- * Shared ffe-system-test-data response-signing v1 fixtures, copied byte for byte into
- * `test/data/response-signing/v1` (source commit in its README.md). Verifiers run `cases` only; `signing_cases` are for signers.
+ * Shared ffe-system-test-data response-signing v1 fixtures, from the pinned ffe-response-signing-data submodule
+ * (`response-signing/v1`). Verifiers run `cases` only; `signing_cases` are for signers.
  * A case `anchor_der_base64` overrides the file anchor. `rejection_reason` is a rule code. A rejected case asserts
  * its `sdk_reason`, the shared reason code that iOS, Android and the browser report.
  */
@@ -589,7 +590,7 @@ describe('shared v1 fixtures', () => {
     request: { url: string; method: string; headers: [string, string][]; body_base64: string }
     response: { status: number; headers: [string, string][]; body_base64: string }
   }
-  const fixtureDirectory = join(__dirname, '../../data/response-signing/v1')
+  const fixtureDirectory = join(__dirname, '../../ffe-response-signing-data/response-signing/v1')
   const manifestRaw = readFileSync(join(fixtureDirectory, 'manifest.json'))
   const manifest = JSON.parse(manifestRaw.toString()) as {
     files: Record<string, { sha256: string; response_cases: number; accepted: number }>
