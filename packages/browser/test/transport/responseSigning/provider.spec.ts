@@ -2162,6 +2162,45 @@ describe('proof expiry around installation and context changes', () => {
     await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('expired-proof'))
     expect(evaluation(subject)).toBe(false)
   })
+  type Signing = { read: (...args: unknown[]) => Promise<unknown>; isUsable: (...args: unknown[]) => boolean }
+  const signingOf = (subject: DatadogProvider) =>
+    (subject as unknown as { configuration: { responseSigning: Signing } }).configuration.responseSigning
+  test.each([
+    ['default', {}],
+    ['expireVerifiedFlags', strict()],
+  ] as const)('%s: a proof that expires before admission is rejected with expired-proof', async (_name, extra) => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', extra)
+    const signing = signingOf(subject)
+    const read = signing.read.bind(signing)
+    jest.spyOn(signing, 'read').mockImplementation(async (...args: unknown[]) => {
+      const result = await read(...args)
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+      return result
+    })
+    await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('expired-proof'))
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+    expect(evaluation(subject)).toBe(false)
+  })
+  test('strict: one expiry read decides the result, so an expired proof is never installed as STALE', async () => {
+    global.fetch = jest.fn(signed)
+    const subject = provider('required', strict())
+    const stale = jest.fn()
+    const ready = jest.fn()
+    subject.events.addHandler(ProviderEvents.Stale, stale)
+    subject.events.addHandler(ProviderEvents.Ready, ready)
+    const reconcile = subject as unknown as { maybeClearExposureCache(): Promise<void> }
+    jest.spyOn(reconcile, 'maybeClearExposureCache').mockImplementation(async () => {
+      // The deadline passes, and a second read of usability would still say current.
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+      jest.spyOn(signingOf(subject), 'isUsable').mockReturnValue(true)
+    })
+    await expect(subject.initialize(context)).rejects.toThrow(signingFailureMessage('expired-proof'))
+    expect(subject.status).toBe(ProviderStatus.ERROR)
+    await flush()
+    expect(stale).not.toHaveBeenCalled()
+    expect(ready).not.toHaveBeenCalled()
+  })
   test('strict: a proof that expires while the provider is in ERROR is not served again on a retry', async () => {
     global.fetch = jest.fn(signed)
     const subject = provider('required', strict())

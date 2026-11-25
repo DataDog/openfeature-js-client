@@ -382,9 +382,15 @@ export class DatadogProvider extends DatadogProviderBase {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          // One expiry read decides the result. Strict policy rejects an expired proof. Default policy installs it as
+          // STALE, in its own expiry episode, and keeps it as the verified memory. A proof can expire after
+          // verification, for example during cache reconciliation.
+          const signing = this.configuration?.responseSigning
+          const required = signing?.mode === 'required'
+          const expiredOnInstall = required && signing.isExpired(config, evaluationContext)
           if (
-            this.configuration?.responseSigning?.mode === 'required' &&
-            !this.configuration.responseSigning.isUsable(config, evaluationContext)
+            required &&
+            ((expiredOnInstall && signing.expireVerifiedFlags) || !signing.isUsable(config, evaluationContext))
           ) {
             debug.event('configuration.rejected', () => ({
               reason: 'expired-proof',
@@ -402,10 +408,6 @@ export class DatadogProvider extends DatadogProviderBase {
             // The OpenFeature SDK emits the ERROR event for the rejected initialize or onContextChange call.
             throw error
           }
-          // Default required mode admits a proof that expired after verification, for example during cache
-          // reconciliation. Install it as STALE in its own expiry episode, and keep it as the verified memory.
-          const signing = this.configuration?.responseSigning
-          const expiredOnInstall = signing?.mode === 'required' && signing.isExpired(config, evaluationContext)
           const recoveredFromExpiry = this.proofExpirySignaled && !expiredOnInstall
           this.proofExpirySignaled = expiredOnInstall
           if (expiredOnInstall) {
@@ -416,7 +418,8 @@ export class DatadogProvider extends DatadogProviderBase {
           this.configurationSource = source
           this.flagsConfiguration = config
           this.scheduleProofExpiry()
-          if (signing?.isVerified(config, evaluationContext) || expiredOnInstall) this.verifiedConfiguration = config
+          // Required mode installs only a usable proof for this context, so the configuration is verified.
+          if (required || signing?.isVerified(config, evaluationContext)) this.verifiedConfiguration = config
           this.assignmentSubjectIsolationRequired = false
           // Same-subject fallback can have older attributes. Keep its original
           // context for evaluation and telemetry; do not relabel or re-cache it.
