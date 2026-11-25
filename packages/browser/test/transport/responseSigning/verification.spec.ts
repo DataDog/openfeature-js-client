@@ -642,7 +642,7 @@ describe('shared v1 fixtures', () => {
   test('the pinned manifest is unchanged and lists every suite', () => {
     // Byte changes to the shared fixtures require a deliberate pin update and review.
     expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
-      '1494b241eef0df2e141b64c0ddc5f606dca669d60152ba4a665ee5f86f6d4536'
+      'b172482f5f7dc0bf60d3400538517141ac00d28b136fc65cd56dba9bd39efe1c'
     )
     expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })
@@ -1056,11 +1056,12 @@ describe('flag selection detection for the response header list', () => {
   }
   const plain = '{"data":{"type":"precompute-assignments-request"}}'
   test.each([
-    ['an empty selected_flag_tags value', `${base}&selected_flag_tags=`, plain],
-    ['a selected_flag_key_patterns name with no value', `${base}&selected_flag_key_patterns`, plain],
-    ['a null top-level flag_selection', base, '{"flag_selection":null}'],
+    ['a selected_flag_tags query value', `${base}&selected_flag_tags=beta`, plain],
+    ['a selected_flag_key_patterns query value', `${base}&selected_flag_key_patterns=a*`, plain],
+    ['a top-level flag_selection', base, '{"flag_selection":{"tags":["beta"]}}'],
     ['a null JSON:API flag_selection', base, '{"data":{"attributes":{"flag_selection":null}}}'],
-    ['a JSON array body', base, '[{"flag_selection":{}}]'],
+    ['a JSON:API flag_selection under an array', base, '{"data":[{"attributes":{"flag_selection":{}}}]}'],
+    ['a JSON array body', base, '[{"data":{"attributes":{"flag_selection":{}}}}]'],
     ['a body that is not JSON', base, 'not json'],
   ])('%s is not a selection: the list does not need dd-flag-selection-ignored', async (_name, url, body) => {
     await expect(verifyWithoutSelectionHeader(url, body)).resolves.toHaveProperty('verifiedResponseHeaders', {
@@ -1068,10 +1069,12 @@ describe('flag selection detection for the response header list', () => {
     })
   })
   test.each([
-    ['a selected_flag_tags value', `${base}&selected_flag_tags=beta`, plain],
-    ['a selected_flag_key_patterns value', `${base}&selected_flag_key_patterns=a*`, plain],
-    ['a top-level flag_selection, as in the shared fixtures', base, '{"flag_selection":{"tags":["beta"]}}'],
-    ['a JSON:API flag_selection, as the SDK sends it', base, '{"data":{"attributes":{"flag_selection":{}}}}'],
+    [
+      'a JSON:API flag_selection, as the SDK and the edge use it',
+      base,
+      '{"data":{"attributes":{"flag_selection":{}}}}',
+    ],
+    ['a JSON:API flag_selection with tags', base, '{"data":{"attributes":{"flag_selection":{"tags":["beta"]}}}}'],
   ])('%s is a selection: the list must name dd-flag-selection-ignored', async (_name, url, body) => {
     await expect(verifyWithoutSelectionHeader(url, body)).rejects.toThrow('(invalid-proof)')
   })

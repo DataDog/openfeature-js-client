@@ -474,28 +474,32 @@ function signedRequestHeaders(headers: Headers): string[] {
   return headerList(value, 'unsupported-request')
 }
 /** A request has a flag selection when its JSON body has a non-null flag_selection, or its query selects flags. */
-function hasFlagSelection(request: SigningRequest, url: URL): boolean {
-  // As the shared fixtures: a selection query parameter counts only with a non-empty value.
-  if (['selected_flag_tags', 'selected_flag_key_patterns'].some((name) => url.searchParams.getAll(name).some(Boolean)))
-    return true
-  let body: { flag_selection?: unknown; data?: { attributes?: { flag_selection?: unknown } } } | null
+/** As the edge and the shared fixtures: only the JSON:API field data.attributes.flag_selection, when not null. */
+function hasFlagSelection(request: SigningRequest): boolean {
+  let body: unknown
   try {
     body = JSON.parse(new TextDecoder().decode(request.body))
   } catch {
     return false
   }
-  // The shared fixtures put the field at the top level of a JSON object. The SDK sends JSON:API, so
-  // data.attributes.flag_selection also counts: the SDK then requires the verified dd-flag-selection-ignored entry.
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
-  return (body.flag_selection ?? null) !== null || (body.data?.attributes?.flag_selection ?? null) !== null
+  for (const key of ['data', 'attributes'])
+    body =
+      typeof body === 'object' && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)[key]
+        : undefined
+  const selection =
+    typeof body === 'object' && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>).flag_selection
+      : undefined
+  return selection !== undefined && selection !== null
 }
-function signedResponseHeaders(request: SigningRequest, url: URL, headers: Headers): string[] {
+function signedResponseHeaders(request: SigningRequest, headers: Headers): string[] {
   const value = headers.get(SIGNED_RESPONSE_HEADERS_HEADER)
   requireCondition(value, 'missing-proof')
   const names = headerList(value, 'invalid-proof')
   requireCondition(
     names.includes('content-type') &&
-      (names.includes('dd-flag-selection-ignored') || !hasFlagSelection(request, url)) &&
+      (names.includes('dd-flag-selection-ignored') || !hasFlagSelection(request)) &&
       !names.some((name) => PROOF_HEADERS.includes(name)) &&
       SINGLE_VALUE_RESPONSE_HEADERS.every((name) => !names.includes(name) || !headers.get(name)?.includes(','))
   )
@@ -573,7 +577,7 @@ export async function buildSigningTranscript(
     new Uint8Array([intermediates.length])
   )
   for (const intermediate of intermediates) parts.push(await sha256(intermediate))
-  parts.push(...listTranscript(signedResponseHeaders(request, url, response.headers), response.headers))
+  parts.push(...listTranscript(signedResponseHeaders(request, response.headers), response.headers))
   // DRAFT: an optional signed tail. Without the header, the v1 transcript is unchanged.
   if (minimumNotBefore !== undefined) parts.push(new Uint8Array([1]), unsignedInteger(minimumNotBefore, 8))
   return concat(parts)
@@ -600,7 +604,7 @@ export async function verifyResponse(
   requireCondition(/^[0-9a-f]{64}$/.test(certificateId) && certificateId === hex(await sha256(leafDer)))
   const issuedAt = seconds(proof(response.headers, 'issued-at')),
     expiresAt = seconds(proof(response.headers, 'expires-at'))
-  const responseHeaderNames = signedResponseHeaders(request, url, response.headers)
+  const responseHeaderNames = signedResponseHeaders(request, response.headers)
   // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
   const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
   const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
