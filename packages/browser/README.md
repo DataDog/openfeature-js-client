@@ -259,8 +259,9 @@ In a page, the provider also measures the time since verification with `performa
 `issued-at` plus that time reaches `expires-at`, even if the wall clock moves back.
 Verified flags stay current after the clock moves back by at most 30 seconds. After a larger backward step, the
 provider handles the proof as expired (see below). When the clock returns into the proof's validity window before
-the proof expires on the monotonic clock, the provider returns to its state before the expiry and emits the
-matching event. After the proof expires on the monotonic clock, a clock change does not make it current again.
+the deadline, the provider returns to its state before the expiry and emits the matching event. After the provider
+sees the deadline, on the wall clock or on the monotonic clock, a clock change does not make that proof current
+again. Only a new verified response does.
 
 The `observe` and `required` modes load the verifier as a separate script chunk. The default mode, `off`, and
 sites other than staging do not load it. With the CDN bundle, serve the `chunks/` directory next to

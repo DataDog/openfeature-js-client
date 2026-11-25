@@ -157,20 +157,27 @@ export function createResponseSigningController(
   type Proof = Pick<
     VerifiedResponse,
     'expiresAt' | 'verifiedAt' | 'effectiveVerifiedAt' | 'issuedAt' | 'verifiedMonotonicMs'
-  >
+  > & {
+    /** Set when a check sees the time at or past expires-at. It is never cleared. */
+    deadlinePassed?: boolean
+  }
   const verified = new WeakMap<FlagsConfiguration, Proof & { context: string }>()
   /**
    * A proof is current from its verification time until expires-at. Expiry uses
    * max(device clock, effective verification time, issued-at + monotonic time since verification), so a wall-clock
-   * step back cannot extend the proof. A backward step of at most CLOCK_TOLERANCE_SECONDS keeps the proof current.
-   * A larger step is handled as expiry, and the proof is current again only when the clock returns into the window
-   * before the monotonic time reaches expires-at.
+   * step back cannot extend the proof. When a check sees the deadline, the proof stays expired, even if the clock
+   * moves back. A backward step of at most CLOCK_TOLERANCE_SECONDS keeps the proof current. A larger step before the
+   * deadline is handled as expiry, and the proof is current again when the clock returns into the window.
    */
   function outsideValidity(proof: Proof): boolean {
+    if (proof.deadlinePassed) return true
     const now = Date.now() / 1000
     const elapsed = Math.max(0, (monotonicNow() - proof.verifiedMonotonicMs) / 1000)
-    const effectiveNow = Math.max(now, proof.effectiveVerifiedAt, proof.issuedAt + elapsed)
-    return proof.expiresAt <= effectiveNow || proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
+    if (proof.expiresAt <= Math.max(now, proof.effectiveVerifiedAt, proof.issuedAt + elapsed)) {
+      proof.deadlinePassed = true
+      return true
+    }
+    return proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
   }
   // Evaluations pass the provider's own context snapshot, so its key is computed once and not on every read.
   const contextKeys = new WeakMap<EvaluationContext, string>()
@@ -277,12 +284,13 @@ export function createResponseSigningController(
     ): void {
       signal?.throwIfAborted()
       if (proof) {
-        if (outsideValidity(proof)) {
+        const entry = { ...proof, context: signingContextKey(context) }
+        if (outsideValidity(entry)) {
           failure(new ResponseVerificationError('expired-proof'), logger, 'admission')
           return
         }
         logger.event('signing.admitted', () => ({ mode, expiresAt: proof.expiresAt, verifiedAt: proof.verifiedAt }))
-        verified.set(config, { ...proof, context: signingContextKey(context) })
+        verified.set(config, entry)
       }
     },
     /** Unix seconds at which the verified proof of this configuration expires, when it has one. */

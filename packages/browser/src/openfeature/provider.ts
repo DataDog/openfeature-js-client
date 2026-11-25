@@ -696,7 +696,8 @@ export class DatadogProvider extends DatadogProviderBase {
 
   /**
    * After a backward clock step larger than the tolerance, the proof is current again when the clock returns into its
-   * window. Restore the state from before the expiry, and schedule the timer at expires-at again.
+   * window before the deadline. Restore the state from before the expiry, and schedule the timer at expires-at again.
+   * After the controller sees the deadline, the proof does not become current again.
    */
   private recoverFromProofExpiry(): void {
     const signing = this.configuration?.responseSigning

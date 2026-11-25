@@ -1399,6 +1399,25 @@ describe('backward clock step', () => {
   })
 
   test.each(modes)(
+    '%s: after the wall clock reaches expires-at, a step back does not make the proof current again',
+    async (_name, extra, expired) => {
+      const { subject, events } = await verifiedProvider(extra)
+      // The monotonic clock stays before the deadline; only the wall clock reaches it.
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+      evaluation(subject)
+      await flush()
+      expect(subject.status).toBe(expired)
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 10) * 1000)
+      expect(subject.resolveBooleanEvaluation('critical', false, {}, logger).value).toBe(
+        expired === ProviderStatus.STALE
+      )
+      await flush()
+      expect(subject.status).toBe(expired)
+      expect(events.ready).not.toHaveBeenCalled()
+    }
+  )
+
+  test.each(modes)(
     '%s: a wall-clock step back during the session does not extend the proof',
     async (_name, extra, expired) => {
       const { subject, events } = await verifiedProvider(extra)
