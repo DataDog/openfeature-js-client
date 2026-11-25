@@ -186,6 +186,9 @@ iOS, Android and the browser use the same reason codes:
 `revoked-certificate` (draft) keeps the message `Response signing: revoked-certificate`.
 When no usable verified configuration remains, evaluation details return the default value,
 reason `ERROR`, error code `GENERAL`, and the verification failure message.
+In `required` mode, one verification failure emits one `PROVIDER_ERROR` event. The OpenFeature SDK emits it when
+`initialize` or `onContextChange` rejects. The event has the failure message but no `errorCode`, because the SDK
+copies only the message. Proof expiry outside these calls emits a provider event with error code `GENERAL`.
 Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
 There is no separate verification callback.
 

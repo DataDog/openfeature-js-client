@@ -84,12 +84,18 @@ test('required mode fails closed with verifier-unavailable when the verifier chu
   )
 })
 
-test('a required provider reports verifier-unavailable in evaluations and in the error event', async () => {
+test('a required provider emits one ERROR event and reports verifier-unavailable in evaluations', async () => {
   jest.spyOn(display, 'error').mockImplementation(() => undefined)
   const { controller, provider } = isolatedController({ failChunk: true })
+  // The OpenFeature SDK from the same module registry as the provider.
+  const { OpenFeature }: typeof import('@openfeature/web-sdk') = require('@openfeature/web-sdk')
   const previousFetch = global.fetch
   const fetch = jest.fn()
   global.fetch = fetch
+  const domain = 'verifier-unavailable'
+  const errors = jest.fn()
+  const providerErrors = jest.fn()
+  OpenFeature.getClient(domain).addHandler(ProviderEvents.Error, errors)
   try {
     const subject = new provider.DatadogProvider({
       ...STAGING,
@@ -99,9 +105,8 @@ test('a required provider reports verifier-unavailable in evaluations and in the
       enableRumFeatureFlagTracking: false,
       experimentalResponseSigning: { mode: 'required', trustedRootCertificates: [ROOT_A] },
     })
-    const errors = jest.fn()
-    subject.events.addHandler(ProviderEvents.Error, errors)
-    await expect(subject.initialize({ targetingKey: 'user-123' })).rejects.toThrow(
+    subject.events.addHandler(ProviderEvents.Error, providerErrors)
+    await expect(OpenFeature.setProviderAndWait(domain, subject, { targetingKey: 'user-123' })).rejects.toThrow(
       controller.VERIFIER_UNAVAILABLE_MESSAGE
     )
     await settle()
@@ -109,17 +114,20 @@ test('a required provider reports verifier-unavailable in evaluations and in the
     expect(
       fetch.mock.calls.filter(([url]) => !new globalThis.URL(String(url)).pathname.startsWith('/api/v2/'))
     ).toEqual([])
-    expect(errors).toHaveBeenCalledWith(
-      expect.objectContaining({ errorCode: ErrorCode.GENERAL, message: controller.VERIFIER_UNAVAILABLE_MESSAGE })
-    )
+    // The OpenFeature SDK emits the only ERROR event. @openfeature/core copies only the message, not errorCode.
+    expect(providerErrors).not.toHaveBeenCalled()
+    expect(errors).toHaveBeenCalledTimes(1)
+    expect(errors.mock.calls[0][0]).toMatchObject({ message: controller.VERIFIER_UNAVAILABLE_MESSAGE })
+    expect(errors.mock.calls[0][0].errorCode).toBeUndefined()
     expect(subject.resolveBooleanEvaluation('critical', false, { targetingKey: 'user-123' }, logger)).toMatchObject({
       value: false,
       reason: 'ERROR',
       errorCode: ErrorCode.GENERAL,
       errorMessage: controller.VERIFIER_UNAVAILABLE_MESSAGE,
     })
-    await subject.onClose()
   } finally {
+    OpenFeature.getClient(domain).removeHandler(ProviderEvents.Error, errors)
+    await OpenFeature.clearProviders()
     global.fetch = previousFetch
   }
 })

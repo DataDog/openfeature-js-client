@@ -401,7 +401,7 @@ export class DatadogProvider extends DatadogProviderBase {
             this.status = ProviderStatus.ERROR
             const error = new ResponseVerificationError('expired-proof')
             this.verificationError = error
-            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            // The OpenFeature SDK emits the ERROR event for the rejected initialize or onContextChange call.
             throw error
           }
           const recoveredFromExpiry = this.proofExpirySignaled
@@ -473,7 +473,11 @@ export class DatadogProvider extends DatadogProviderBase {
               error,
             }))
             this.status = ProviderStatus.ERROR
-            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            // For a signing failure, the OpenFeature SDK emits the only ERROR event, for the rejected initialize or
+            // onContextChange call. That event has no errorCode: @openfeature/core copies only the message.
+            // Evaluations still return errorCode GENERAL and the signing failure message.
+            if (!(error instanceof ResponseVerificationError))
+              this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
         }

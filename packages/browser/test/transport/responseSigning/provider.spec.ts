@@ -1629,12 +1629,8 @@ test.each(['missing-proof', 'invalid-signature', 'response-too-large'] as const)
       message: signingFailureMessage(reason),
     })
     await flush()
-    expect(errors).toHaveBeenCalledWith(
-      expect.objectContaining({
-        errorCode: ErrorCode.GENERAL,
-        message: signingFailureMessage(reason),
-      })
-    )
+    // The OpenFeature SDK emits the only ERROR event for the rejected call. See the OpenFeature client test below.
+    expect(errors).not.toHaveBeenCalled()
     expect(subject.resolveBooleanEvaluation('critical', false, {}, logger)).toMatchObject({
       value: false,
       reason: StandardResolutionReasons.ERROR,
@@ -1650,6 +1646,73 @@ test.each(['missing-proof', 'invalid-signature', 'response-too-large'] as const)
   }
 )
 
+/**
+ * One signing failure emits one ERROR event. The OpenFeature SDK emits it for the rejected initialize or
+ * onContextChange call, and @openfeature/core copies only the message, so the event has no errorCode.
+ * Evaluations return errorCode GENERAL and the signing failure message.
+ */
+describe.each(['missing-proof', 'invalid-signature', 'response-too-large'] as const)(
+  'required %s: one OpenFeature ERROR event per failure',
+  (reason) => {
+    const failing = async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (reason === 'missing-proof') return unsigned()
+      if (reason === 'response-too-large') return response(' '.repeat(MAX_SIGNED_RESPONSE + 1))
+      const valid = await signed(String(url), init!)
+      return response(JSON.stringify(payload(false)), valid.headers)
+    }
+    async function expectOneErrorEvent(errors: jest.Mock, prefix: string) {
+      await flush()
+      expect(errors).toHaveBeenCalledTimes(1)
+      expect(errors.mock.calls[0][0]).toMatchObject({ message: `${prefix}${signingFailureMessage(reason)}` })
+      expect(errors.mock.calls[0][0].errorCode).toBeUndefined()
+    }
+    function expectSigningEvaluationError(domain: string) {
+      expect(OpenFeature.getClient(domain).getBooleanDetails('critical', false)).toMatchObject({
+        value: false,
+        reason: StandardResolutionReasons.ERROR,
+        errorCode: ErrorCode.GENERAL,
+        errorMessage: signingFailureMessage(reason),
+      })
+    }
+
+    test('at initialization', async () => {
+      const domain = `response-signing-init-${reason}`
+      const errors = jest.fn()
+      OpenFeature.getClient(domain).addHandler(ProviderEvents.Error, errors)
+      try {
+        global.fetch = jest.fn(failing)
+        await expect(OpenFeature.setProviderAndWait(domain, provider('required'), context)).rejects.toThrow(
+          signingFailureMessage(reason)
+        )
+        await expectOneErrorEvent(errors, '')
+        expect(OpenFeature.getClient(domain).providerStatus).toBe(ProviderStatus.ERROR)
+        expectSigningEvaluationError(domain)
+      } finally {
+        OpenFeature.getClient(domain).removeHandler(ProviderEvents.Error, errors)
+        await OpenFeature.clearProviders()
+      }
+    })
+
+    test('after a context change', async () => {
+      const domain = `response-signing-change-${reason}`
+      global.fetch = jest.fn(signed)
+      await OpenFeature.setProviderAndWait(domain, provider('required'), context)
+      const errors = jest.fn()
+      OpenFeature.getClient(domain).addHandler(ProviderEvents.Error, errors)
+      try {
+        global.fetch = jest.fn(failing)
+        await OpenFeature.setContext(domain, { ...context, refreshed: true })
+        await expectOneErrorEvent(errors, "Error running datadog's context change handler: ")
+        expect(OpenFeature.getClient(domain).providerStatus).toBe(ProviderStatus.ERROR)
+        expectSigningEvaluationError(domain)
+      } finally {
+        OpenFeature.getClient(domain).removeHandler(ProviderEvents.Error, errors)
+        await OpenFeature.clearProviders()
+      }
+    })
+  }
+)
+
 test('OpenFeature clients receive verification failure details after a context change', async () => {
   const domain = 'response-signing-failure'
   global.fetch = jest.fn(signed)
@@ -1662,12 +1725,8 @@ test('OpenFeature clients receive verification failure details after a context c
     global.fetch = jest.fn().mockResolvedValue(unsigned())
     await OpenFeature.setContext(domain, { targetingKey: 'new-user' }).catch(() => undefined)
     await flush()
-    expect(errors).toHaveBeenCalledWith(
-      expect.objectContaining({
-        errorCode: ErrorCode.GENERAL,
-        message: signingFailureMessage('missing-proof'),
-      })
-    )
+    expect(errors).toHaveBeenCalledTimes(1)
+    expect(errors.mock.calls[0][0].message).toContain(signingFailureMessage('missing-proof'))
     expect(client.getBooleanDetails('critical', false)).toMatchObject({
       value: false,
       reason: StandardResolutionReasons.ERROR,
@@ -1730,12 +1789,8 @@ describe('response signing with assignment authorization', () => {
     await expect(subject.initialize({ ...context, dd_assignment_token: 'assignment.jwt.signature' })).rejects.toThrow(
       signingFailureMessage('missing-proof')
     )
-    expect(events).toHaveBeenCalledWith(
-      expect.objectContaining({
-        errorCode: ErrorCode.GENERAL,
-        message: signingFailureMessage('missing-proof'),
-      })
-    )
+    // The rejection carries the canonical message. The OpenFeature SDK emits the ERROR event for it.
+    expect(events).not.toHaveBeenCalled()
   })
 
   test('signed transport parsing errors do not expose echoed assignment credentials', async () => {
