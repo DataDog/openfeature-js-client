@@ -169,18 +169,19 @@ Required-mode verification failures use OpenFeature error code `GENERAL`.
 `Flag response signing failed (missing-proof): The response has no signature headers. A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled.`
 iOS, Android and the browser use the same reason codes:
 
-| Code                  | What failed                                                                    | Fix hint                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `unsupported-request` | The SDK cannot sign this request shape                                         | Use the default flags endpoint and request options                                                 |
-| `unavailable-crypto`  | The platform crypto API is not available                                       | Use a secure (HTTPS) context                                                                       |
-| `missing-anchor`      | No trusted root is configured for this site                                    | Response signing supports only the staging site in this release                                    |
-| `missing-proof`       | The response has no signature headers                                          | A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled |
-| `invalid-proof`       | The signature headers are present but not valid                                | A proxy or CDN changed the response headers                                                        |
-| `response-too-large`  | The body is larger than the signed size limit                                  | Contact Datadog support                                                                            |
-| `invalid-certificate` | The certificate chain does not chain to the pinned root, or a chain rule fails | The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support     |
-| `invalid-signature`   | The signature does not match the request and response                          | The response changed in transit                                                                    |
-| `expired-proof`       | The proof is expired or not yet valid                                          | Check the device clock                                                                             |
-| `unsupported-site`    | Signing is not available on this Datadog site                                  | Response signing supports only the staging site in this release. Production is not supported yet   |
+| Code                   | What failed                                                                    | Fix hint                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `unsupported-request`  | The SDK cannot sign this request shape                                         | Use the default flags endpoint and request options                                                 |
+| `unavailable-crypto`   | The platform crypto API is not available                                       | Use a secure (HTTPS) context                                                                       |
+| `missing-anchor`       | No trusted root is configured for this site                                    | Response signing supports only the staging site in this release                                    |
+| `missing-proof`        | The response has no signature headers                                          | A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled |
+| `invalid-proof`        | The signature headers are present but not valid                                | A proxy or CDN changed the response headers                                                        |
+| `response-too-large`   | The body is larger than the signed size limit                                  | Contact Datadog support                                                                            |
+| `invalid-certificate`  | The certificate chain does not chain to the pinned root, or a chain rule fails | The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support     |
+| `invalid-signature`    | The signature does not match the request and response                          | The response changed in transit                                                                    |
+| `expired-proof`        | The proof is expired or not yet valid                                          | Check the device clock                                                                             |
+| `unsupported-site`     | Signing is not available on this Datadog site                                  | Response signing supports only the staging site in this release. Production is not supported yet   |
+| `verifier-unavailable` | The response signing verifier did not load (browser only)                      | Check that the page can load the SDK chunk files                                                   |
 
 `revoked-certificate` (draft) keeps the message `Response signing: revoked-certificate`.
 When no usable verified configuration remains, evaluation details return the default value,
@@ -228,7 +229,7 @@ sites other than staging do not load it. With the CDN bundle, serve the `chunks/
 `datadog-openfeature-browser.js`, and let the page load scripts from that location. When the page runs the bundle
 without a script URL, for example as an inline script, the SDK loads the chunk relative to the page. If the chunk does not load,
 `observe` sends the request without signing, and `required` sends no assignment request and fails with
-`Flag response signing failed: the response signing verifier did not load. ...`. The SDK tries to load the chunk
+`Flag response signing failed (verifier-unavailable): ...`. The SDK tries to load the chunk
 again on the next fetch.
 
 Required mode uses only verified memory for the same provider and full evaluation

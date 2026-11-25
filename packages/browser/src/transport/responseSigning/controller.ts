@@ -19,8 +19,7 @@ import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoo
 type Exchange = typeof import('./exchange')
 
 /** Required mode fails closed with this message when the verifier chunk does not load. */
-export const VERIFIER_UNAVAILABLE_MESSAGE =
-  'Flag response signing failed: the response signing verifier did not load. Check that the page can load the SDK chunk files.'
+export const VERIFIER_UNAVAILABLE_MESSAGE = signingFailureMessage('verifier-unavailable')
 
 export { signingContextKey } from './context'
 
@@ -190,11 +189,11 @@ export function createResponseSigningController(
         logger.event('signing.failed', () => ({
           mode,
           stage: 'verifier_load',
-          reason: 'verifier_unavailable',
+          reason: 'verifier-unavailable',
           action: mode === 'required' ? 'reject_request' : 'send_unsigned_request',
         }))
         // Observe sends the request without signing; required sends no assignment request.
-        if (mode === 'required') throw new Error(VERIFIER_UNAVAILABLE_MESSAGE)
+        if (mode === 'required') throw new ResponseVerificationError('verifier-unavailable')
         return undefined
       }
       try {

@@ -37,6 +37,7 @@ export type VerificationFailure =
   | 'invalid-signature'
   | 'expired-proof'
   | 'unsupported-site'
+  | 'verifier-unavailable'
   | 'revoked-certificate'
 
 export interface SigningRequest {
@@ -90,6 +91,11 @@ const FAILURES: Record<Exclude<VerificationFailure, 'revoked-certificate'>, [str
   'unsupported-site': [
     'Signing is not available on this Datadog site',
     'Response signing supports only the staging site in this release. Production is not supported yet',
+  ],
+  // Browser only: the verifier loads as a separate chunk.
+  'verifier-unavailable': [
+    'The response signing verifier did not load',
+    'Check that the page can load the SDK chunk files',
   ],
 }
 /** `Flag response signing failed (<code>): <what failed>. <fix hint>.` */

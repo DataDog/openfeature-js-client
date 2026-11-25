@@ -1,10 +1,13 @@
 import { webcrypto } from 'node:crypto'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { display } from '@datadog/browser-core'
+import { ErrorCode, ProviderEvents } from '@openfeature/web-sdk'
 import { ROOT_A } from './chainFixtures'
 
 // The verifier and its ASN.1 libraries load as a dynamic chunk only when signing is on and the site is staging.
 type Controller = typeof import('../../../src/transport/responseSigning/controller')
+type Protocol = typeof import('../../../src/transport/responseSigning/protocol')
+type Provider = typeof import('../../../src/openfeature/provider')
 
 const STAGING = { site: 'datad0g.com', clientToken: 'pub0123456789abcdef0123456789abcdef' }
 const HEADERS = { 'dd-client-token': STAGING.clientToken }
@@ -22,7 +25,12 @@ afterEach(() => {
 })
 
 /** Loads the controller in a fresh module registry and counts the loads of the exchange chunk. */
-function isolatedController(options: { failChunk?: boolean } = {}): { controller: Controller; loads: () => number } {
+function isolatedController(options: { failChunk?: boolean } = {}): {
+  controller: Controller
+  protocol: Protocol
+  provider: Provider
+  loads: () => number
+} {
   let loads = 0
   jest.resetModules()
   // The dynamic import runs later, so the mock stays in the registry until afterEach.
@@ -32,9 +40,12 @@ function isolatedController(options: { failChunk?: boolean } = {}): { controller
     return jest.requireActual(EXCHANGE)
   })
   const controller: Controller = require('../../../src/transport/responseSigning/controller')
-  return { controller, loads: () => loads }
+  const protocol: Protocol = require('../../../src/transport/responseSigning/protocol')
+  const provider: Provider = require('../../../src/openfeature/provider')
+  return { controller, protocol, provider, loads: () => loads }
 }
 
+const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 test.each([
@@ -59,13 +70,58 @@ test.each(['observe', 'required'] as const)('mode %s on staging loads the verifi
   expect(loads()).toBe(1)
 })
 
-test('required mode fails closed and sends no request when the verifier chunk does not load', async () => {
-  const { controller } = isolatedController({ failChunk: true })
+test('required mode fails closed with verifier-unavailable when the verifier chunk does not load', async () => {
+  const { controller, protocol } = isolatedController({ failChunk: true })
   const signing = controller.createResponseSigningController(
     { mode: 'required', trustedRootCertificates: [ROOT_A] },
     STAGING
   )!
-  await expect(signing.prepare(URL, HEADERS, '{}')).rejects.toThrow(controller.VERIFIER_UNAVAILABLE_MESSAGE)
+  const error = await signing.prepare(URL, HEADERS, '{}').catch((thrown: unknown) => thrown)
+  expect(error).toBeInstanceOf(protocol.ResponseVerificationError)
+  expect(error).toMatchObject({ reason: 'verifier-unavailable', message: controller.VERIFIER_UNAVAILABLE_MESSAGE })
+  expect(controller.VERIFIER_UNAVAILABLE_MESSAGE).toBe(
+    'Flag response signing failed (verifier-unavailable): The response signing verifier did not load. Check that the page can load the SDK chunk files.'
+  )
+})
+
+test('a required provider reports verifier-unavailable in evaluations and in the error event', async () => {
+  jest.spyOn(display, 'error').mockImplementation(() => undefined)
+  const { controller, provider } = isolatedController({ failChunk: true })
+  const previousFetch = global.fetch
+  const fetch = jest.fn()
+  global.fetch = fetch
+  try {
+    const subject = new provider.DatadogProvider({
+      ...STAGING,
+      env: 'production',
+      applicationId: 'app-a',
+      enableFlagEvaluationTracking: false,
+      enableRumFeatureFlagTracking: false,
+      experimentalResponseSigning: { mode: 'required', trustedRootCertificates: [ROOT_A] },
+    })
+    const errors = jest.fn()
+    subject.events.addHandler(ProviderEvents.Error, errors)
+    await expect(subject.initialize({ targetingKey: 'user-123' })).rejects.toThrow(
+      controller.VERIFIER_UNAVAILABLE_MESSAGE
+    )
+    await settle()
+    // No assignment request leaves the client. Telemetry uses the /api/v2/ intake routes.
+    expect(
+      fetch.mock.calls.filter(([url]) => !new globalThis.URL(String(url)).pathname.startsWith('/api/v2/'))
+    ).toEqual([])
+    expect(errors).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: ErrorCode.GENERAL, message: controller.VERIFIER_UNAVAILABLE_MESSAGE })
+    )
+    expect(subject.resolveBooleanEvaluation('critical', false, { targetingKey: 'user-123' }, logger)).toMatchObject({
+      value: false,
+      reason: 'ERROR',
+      errorCode: ErrorCode.GENERAL,
+      errorMessage: controller.VERIFIER_UNAVAILABLE_MESSAGE,
+    })
+    await subject.onClose()
+  } finally {
+    global.fetch = previousFetch
+  }
 })
 
 test('observe mode sends the request without signing when the verifier chunk does not load', async () => {
