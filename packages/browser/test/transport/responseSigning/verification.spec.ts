@@ -1079,3 +1079,28 @@ describe('flag selection detection for the response header list', () => {
     await expect(verifyWithoutSelectionHeader(url, body)).rejects.toThrow('(invalid-proof)')
   })
 })
+
+describe('leaf validity span', () => {
+  // forge() sets notBefore to FIXTURE_NOW - 3600 and notAfter to FIXTURE_NOW + lifetime.
+  const root = forge(templates.root, 'self', [caBasic(2)], [], 40 * 24 * 3600)
+  const upper = forge(templates.upper, root, [caBasic(1)], [], 30 * 24 * 3600)
+  const lower = forge(templates.lower, upper, [caBasic(0)], [], 20 * 24 * 3600)
+  async function verifyLeafSpan(span: number) {
+    const leaf = forge(templates.leaf, lower, [eku(FFE_EKU)], [], span - 3_600, FIXTURE_NOW - 3_600)
+    const request = signingRequest()
+    const signer = { privateKey: leaf.privateKey, leafBase64: b64(leaf), intermediatesBase64: [b64(lower), b64(upper)] }
+    return verifyResponse(request, signedResponse(request, signer), [b64(root)], FIXTURE_NOW)
+  }
+  test('a leaf valid for exactly 120 h + 5 min is accepted', async () => {
+    await expect(verifyLeafSpan(432_300)).resolves.toHaveProperty('leafNotBefore', FIXTURE_NOW - 3_600)
+  })
+  test('a leaf valid for 1 s longer is rejected with invalid-certificate', async () => {
+    await expect(verifyLeafSpan(432_301)).rejects.toThrow('(invalid-certificate)')
+  })
+  test('the span check applies to the leaf only: intermediates live longer', () => {
+    for (const node of [upper, lower]) {
+      const { validFrom, validTo } = new X509Certificate(Buffer.from(node.der))
+      expect((Date.parse(validTo) - Date.parse(validFrom)) / 1000).toBeGreaterThan(432_300)
+    }
+  })
+})

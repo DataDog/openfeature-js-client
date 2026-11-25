@@ -43,6 +43,8 @@ const TRANSCRIPT_DOMAIN = 'datadog.feature-flags.precomputed-assignments.v1\0'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
 const MAX_INTERMEDIATES = 3
+/** The longest leaf validity, notAfter - notBefore, in seconds: 120 h + 5 min. */
+const MAX_LEAF_LIFETIME_SECONDS = 432_300
 /**
  * FFE assignment-signing extended key usage (DER 06 0a 2b 06 01 04 01 86 8d 1f 01 01).
  * PLACEHOLDER: 1.3.6.1.4.1.99999 is not a Datadog-owned arc. Datadog must assign the
@@ -613,6 +615,8 @@ export async function verifyResponse(
   const floorNow = Math.max(now, floors.build)
   requireCondition(expiresAt > floorNow && expiresAt > issuedAt && expiresAt - issuedAt <= 300, 'expired-proof')
   const leaf = parseCertificate(leafDer, 'leaf')
+  // As the edge and the issuance policy: a leaf lives at most 120 h, plus 5 min of backdating. Leaf only.
+  requireCondition(leaf.notAfter - leaf.notBefore <= MAX_LEAF_LIFETIME_SECONDS, 'invalid-certificate')
   const intermediates = intermediateDers.map((der, index) => parseCertificate(der, 'intermediate', index))
   // Path: leaf -> intermediate[0] -> ... -> intermediate[n-1] -> pinned root. Every link is checked.
   await verifyChild(leaf, intermediates[0])
