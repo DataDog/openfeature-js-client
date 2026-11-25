@@ -32,6 +32,24 @@ export const MINIMUM_LEAF_NOT_BEFORE_HEADER = 'x-datadog-feature-flags-minimum-l
  * after a backward clock step of at most this size. A larger step is handled as proof expiry.
  */
 export const CLOCK_TOLERANCE_SECONDS = 30
+/**
+ * The lowest time, in Unix seconds, that the verifier accepts as the current time. The release process sets it to the
+ * release date or shortly before it, never later. An older device clock cannot make a leaf that expired before the
+ * release valid again.
+ */
+export const BUILD_FLOOR = 1795564800
+
+/** The floors of the verifier clock. The checks use max(now, build, highWaterMark(anchorKey)). */
+export interface ClockFloors {
+  build: number
+  highWaterMark(anchorKey: string): number
+}
+export const NO_CLOCK_FLOORS: ClockFloors = { build: 0, highWaterMark: () => 0 }
+
+/** Milliseconds from a monotonic clock. A wall-clock change does not change it. 0 when it is not available. */
+export function monotonicNow(): number {
+  return globalThis.performance?.now() ?? 0
+}
 export const MAX_SIGNED_REQUEST = 1024 * 1024
 export const MAX_SIGNED_RESPONSE = 2 * 1024 * 1024
 
@@ -61,7 +79,13 @@ export interface SigningResponse {
   body: Uint8Array
 }
 export interface VerifiedResponse {
+  /** The device clock at verification, unix seconds. */
   verifiedAt: number
+  /** max(device clock, build floor, high-water mark) at verification: the time that the checks used. */
+  effectiveVerifiedAt: number
+  /** performance.now() at verification, so that a wall-clock step cannot extend the proof. */
+  verifiedMonotonicMs: number
+  issuedAt: number
   expiresAt: number
   /** SHA-256 hex of the DER of the trust anchor that the chain ended at. */
   anchorKey: string

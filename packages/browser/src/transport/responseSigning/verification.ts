@@ -11,11 +11,14 @@ import {
   BOUND_REQUEST_HEADERS,
   buffer,
   CLOCK_TOLERANCE_SECONDS,
+  type ClockFloors,
   cryptoProvider,
   hex,
   MAX_SIGNED_REQUEST,
   MAX_SIGNED_RESPONSE,
   MINIMUM_LEAF_NOT_BEFORE_HEADER,
+  monotonicNow,
+  NO_CLOCK_FLOORS,
   ResponseVerificationError,
   requireCondition,
   SIGNED_HEADERS_HEADER,
@@ -578,7 +581,9 @@ export async function verifyResponse(
   trustedRoots: readonly string[],
   now = Date.now() / 1000,
   /** Stored minimum not-before for a trust anchor (SHA-256 hex of its DER); 0 when none. */
-  storedMinimumNotBefore: (anchorKey: string) => number = () => 0
+  storedMinimumNotBefore: (anchorKey: string) => number = () => 0,
+  /** The clock floors. The checks use max(now, build floor, high-water mark of the anchor). Default: none. */
+  floors: ClockFloors = NO_CLOCK_FLOORS
 ): Promise<VerifiedResponse> {
   cryptoProvider()
   const url = validateSigningRequest(request)
@@ -595,10 +600,10 @@ export async function verifyResponse(
   // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
   const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
   const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
-  requireCondition(
-    issuedAt <= now + CLOCK_TOLERANCE_SECONDS && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
-    'expired-proof'
-  )
+  // The anchor and its high-water mark are not known yet. A mark only moves the time forward, so a proof that is
+  // expired at the build floor stays expired. The issued-at bound waits for the mark.
+  const floorNow = Math.max(now, floors.build)
+  requireCondition(expiresAt > floorNow && expiresAt > issuedAt && expiresAt - issuedAt <= 300, 'expired-proof')
   const leaf = parseCertificate(leafDer, 'leaf')
   const intermediates = intermediateDers.map((der, index) => parseCertificate(der, 'intermediate', index))
   // Path: leaf -> intermediate[0] -> ... -> intermediate[n-1] -> pinned root. Every link is checked.
@@ -608,7 +613,8 @@ export async function verifyResponse(
   }
   const last = intermediates[intermediates.length - 1]
   let anchor: ParsedCertificate | undefined
-  let anchorDer: Uint8Array | undefined
+  let anchorKey = ''
+  let effectiveNow = floorNow
   for (const root of trustedRoots) {
     try {
       const candidateDer = decodeBase64(root, MAX_CERTIFICATE)
@@ -618,29 +624,33 @@ export async function verifyResponse(
         'invalid-certificate'
       )
       await verifyChild(last, candidate)
+      const candidateKey = hex(await sha256(candidateDer))
+      const candidateNow = Math.max(floorNow, floors.highWaterMark(candidateKey))
       if (
-        now >= candidate.notBefore &&
-        now < candidate.notAfter &&
+        candidateNow >= candidate.notBefore &&
+        candidateNow < candidate.notAfter &&
         issuedAt >= candidate.notBefore &&
         expiresAt <= candidate.notAfter
       ) {
         anchor = candidate
-        anchorDer = candidateDer
+        anchorKey = candidateKey
+        effectiveNow = candidateNow
         break
       }
     } catch {
       /* Try only explicitly configured anchors; never learn roots from the response. */
     }
   }
-  requireCondition(anchor && anchorDer, 'invalid-certificate')
-  const anchorKey = hex(await sha256(anchorDer))
+  requireCondition(anchor, 'invalid-certificate')
+  // A clock set back below the last verified issued-at cannot make an older proof current again.
+  requireCondition(issuedAt <= effectiveNow + CLOCK_TOLERANCE_SECONDS && expiresAt > effectiveNow, 'expired-proof')
   const floor = storedMinimumNotBefore(anchorKey)
   // Leaf only: intermediates live for years, so comparing them would block every later leaf.
   requireCondition(leaf.notBefore >= floor, 'revoked-certificate')
   for (const certificate of [leaf, ...intermediates]) {
     requireCondition(
-      now >= certificate.notBefore &&
-        now < certificate.notAfter &&
+      effectiveNow >= certificate.notBefore &&
+        effectiveNow < certificate.notAfter &&
         issuedAt >= certificate.notBefore &&
         expiresAt <= certificate.notAfter,
       'expired-proof'
@@ -661,8 +671,11 @@ export async function verifyResponse(
   const verifiedResponseHeaders: Record<string, string | null> = {}
   for (const name of responseHeaderNames) verifiedResponseHeaders[name] = response.headers.get(name)
   return {
+    issuedAt,
     expiresAt,
     verifiedAt: now,
+    effectiveVerifiedAt: effectiveNow,
+    verifiedMonotonicMs: monotonicNow(),
     anchorKey,
     leafNotBefore: leaf.notBefore,
     minimumNotBefore,

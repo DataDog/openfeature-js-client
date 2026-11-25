@@ -16,6 +16,9 @@ import {
   signingContextKey,
   UNSUPPORTED_SITE_MESSAGE,
 } from '../../../src/transport/responseSigning/controller'
+import { setBuildFloorForTests } from '../../../src/transport/responseSigning/exchange'
+import { forgetHighWaterMarks } from '../../../src/transport/responseSigning/minimumNotBefore'
+import { BUILD_FLOOR } from '../../../src/transport/responseSigning/protocol'
 import { isSigningSite } from '../../../src/transport/responseSigning/trustRoots'
 import {
   buildSigningTranscript,
@@ -26,6 +29,11 @@ import {
   signingFailureMessage,
 } from '../../../src/transport/responseSigning/verification'
 import { FIXTURE_NOW, loadCredential, ROOT_A } from './chainFixtures'
+
+// The fixture times are before the build floor, so these tests turn it off. Each test starts with no high-water mark.
+beforeAll(() => setBuildFloorForTests(0))
+afterAll(() => setBuildFloorForTests(BUILD_FLOOR))
+beforeEach(() => forgetHighWaterMarks())
 
 // Test-CA-issued credential: root A -> upper intermediate -> lower intermediate -> leaf.
 const credential = loadCredential('two-intermediates')
@@ -792,8 +800,10 @@ test('default expiry is logged as a stale policy', async () => {
   ).toBe('stale_after_verified_proof_expiry')
 })
 describe('expiry timer at expires-at', () => {
-  // Date stays under the jest.spyOn mock; only the timers are fake.
-  beforeEach(() => jest.useFakeTimers({ doNotFake: ['Date', 'nextTick', 'queueMicrotask', 'setImmediate'] }))
+  // Date stays under the jest.spyOn mock and the monotonic clock stays real; only the timers are fake.
+  beforeEach(() =>
+    jest.useFakeTimers({ doNotFake: ['Date', 'performance', 'nextTick', 'queueMicrotask', 'setImmediate'] })
+  )
   afterEach(() => jest.useRealTimers())
   const settle = () => jest.advanceTimersByTimeAsync(100)
   test.each([
@@ -1387,6 +1397,25 @@ describe('backward clock step', () => {
     await flush()
     expect(subject.status).toBe(expired)
   })
+
+  test.each(modes)(
+    '%s: a wall-clock step back during the session does not extend the proof',
+    async (_name, extra, expired) => {
+      const { subject, events } = await verifiedProvider(extra)
+      const start = performance.now()
+      // The wall clock stays at the verification time, but 300 s pass on the monotonic clock.
+      jest.spyOn(performance, 'now').mockReturnValue(start + 300_000)
+      evaluation(subject)
+      await flush()
+      expect(subject.status).toBe(expired)
+      // After an observed expiry, the clock returns into the proof window: the proof stays expired.
+      jest.spyOn(Date, 'now').mockReturnValue((vector.now + 10) * 1000)
+      evaluation(subject)
+      await flush()
+      expect(subject.status).toBe(expired)
+      expect(events.ready).not.toHaveBeenCalled()
+    }
+  )
 })
 
 /** Counts the records in every IndexedDB database and object store. */
@@ -1429,6 +1458,8 @@ test('required accepts a response issued 30 s in the future and rejects 31 s', a
   await accepted.initialize(context)
   expect(accepted.status).toBe(ProviderStatus.READY)
   expect(evaluation(accepted)).toBe(true)
+  // The accepted response moved the high-water mark to now + 30. Remove it, to check the bound against the clock.
+  forgetHighWaterMarks()
   global.fetch = jest.fn((url, init) => signed(url, init, true, vector.now + 31))
   const rejected = provider('required')
   await expect(rejected.initialize(context)).rejects.toMatchObject({ reason: 'expired-proof' })

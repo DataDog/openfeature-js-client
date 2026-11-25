@@ -1,8 +1,15 @@
 import { parsePrecomputedConfigurationJson } from '@datadog/flagging-core'
 import type { DebugLogger } from '../../debug'
-import { raiseMinimumNotBefore, storedMinimumNotBefore } from './minimumNotBefore'
+import {
+  raiseHighWaterMark,
+  raiseMinimumNotBefore,
+  storedHighWaterMark,
+  storedMinimumNotBefore,
+} from './minimumNotBefore'
 import {
   BOUND_REQUEST_HEADERS,
+  BUILD_FLOOR,
+  CLOCK_TOLERANCE_SECONDS,
   cryptoProvider,
   hex,
   MAX_SIGNED_RESPONSE,
@@ -26,6 +33,13 @@ export interface ExchangeOptions {
   roots: readonly string[]
   /** Logs the failure. Throws in required mode and returns in observe mode. */
   failure(error: unknown, logger: DebugLogger, stage?: string): undefined
+}
+
+let buildFloor = BUILD_FLOOR
+
+/** @internal Test hook: the shared fixtures use times before the build floor. */
+export function setBuildFloorForTests(value: number): void {
+  buildFloor = value
 }
 
 const SEMANTIC_HEADERS = new Set(['dd-client-token', 'authorization', ...BOUND_REQUEST_HEADERS])
@@ -107,19 +121,25 @@ export async function readSignedResponse(
     }
   } else bytes = new Uint8Array(await response.arrayBuffer())
   let proof: VerifiedResponse | undefined
+  const now = Date.now() / 1000
   try {
     proof = await verifyResponse(
       request,
       { status: response.status, headers: response.headers, body: bytes },
       roots,
-      undefined,
-      storedMinimumNotBefore
+      now,
+      storedMinimumNotBefore,
+      { build: buildFloor, highWaterMark: storedHighWaterMark }
     )
   } catch (error) {
     failure(error, logger)
   }
   // Observe mode also records values, but only from a response that verified fully.
-  if (proof) recordMinimumNotBefore(proof, mode, logger)
+  if (proof) {
+    recordMinimumNotBefore(proof, mode, logger)
+    // Bounded by the device clock: a leaked signing key can move the mark at most 30 s past it.
+    raiseHighWaterMark(proof.anchorKey, Math.floor(Math.min(proof.issuedAt, now + CLOCK_TOLERANCE_SECONDS)))
+  }
   // Fixed metadata only: verified response header values can echo credentials, so they stay out of debug logs.
   logger.event('signing.verified', () => ({
     mode,

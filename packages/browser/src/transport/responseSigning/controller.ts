@@ -7,6 +7,7 @@ import { signingContextKey } from './context'
 import {
   CLOCK_TOLERANCE_SECONDS,
   hex,
+  monotonicNow,
   ResponseVerificationError,
   type SigningRequest,
   sha256,
@@ -153,15 +154,23 @@ export function createResponseSigningController(
     return undefined
   }
   const expireVerifiedFlags = mode === 'required' && options?.expireVerifiedFlags === true
-  const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; verifiedAt: number; context: string }>()
+  type Proof = Pick<
+    VerifiedResponse,
+    'expiresAt' | 'verifiedAt' | 'effectiveVerifiedAt' | 'issuedAt' | 'verifiedMonotonicMs'
+  >
+  const verified = new WeakMap<FlagsConfiguration, Proof & { context: string }>()
   /**
-   * A proof is current from its verification time until expires-at. A backward clock step of at most
-   * CLOCK_TOLERANCE_SECONDS keeps it current. A larger step is handled as expiry, and the proof is current again when
-   * the clock returns into the window.
+   * A proof is current from its verification time until expires-at. Expiry uses
+   * max(device clock, effective verification time, issued-at + monotonic time since verification), so a wall-clock
+   * step back cannot extend the proof. A backward step of at most CLOCK_TOLERANCE_SECONDS keeps the proof current.
+   * A larger step is handled as expiry, and the proof is current again only when the clock returns into the window
+   * before the monotonic time reaches expires-at.
    */
-  function outsideValidity(proof: { expiresAt: number; verifiedAt: number }): boolean {
+  function outsideValidity(proof: Proof): boolean {
     const now = Date.now() / 1000
-    return proof.expiresAt <= now || proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
+    const elapsed = Math.max(0, (monotonicNow() - proof.verifiedMonotonicMs) / 1000)
+    const effectiveNow = Math.max(now, proof.effectiveVerifiedAt, proof.issuedAt + elapsed)
+    return proof.expiresAt <= effectiveNow || proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
   }
   // Evaluations pass the provider's own context snapshot, so its key is computed once and not on every read.
   const contextKeys = new WeakMap<EvaluationContext, string>()

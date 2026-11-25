@@ -2,7 +2,15 @@ import { webcrypto } from 'node:crypto'
 import { TextDecoder, TextEncoder } from 'node:util'
 import { display } from '@datadog/browser-core'
 import { ErrorCode, ProviderEvents } from '@openfeature/web-sdk'
+import { setBuildFloorForTests } from '../../../src/transport/responseSigning/exchange'
+import { forgetHighWaterMarks } from '../../../src/transport/responseSigning/minimumNotBefore'
+import { BUILD_FLOOR } from '../../../src/transport/responseSigning/protocol'
 import { ROOT_A } from './chainFixtures'
+
+// The fixture times are before the build floor, so these tests turn it off. Each test starts with no high-water mark.
+beforeAll(() => setBuildFloorForTests(0))
+afterAll(() => setBuildFloorForTests(BUILD_FLOOR))
+beforeEach(() => forgetHighWaterMarks())
 
 // The verifier and its ASN.1 libraries load as a dynamic chunk only when signing is on and the site is staging.
 type Controller = typeof import('../../../src/transport/responseSigning/controller')

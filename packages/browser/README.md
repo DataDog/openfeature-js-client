@@ -243,11 +243,24 @@ The browser provider has no default initialization timeout. In `required` mode, 
 verified response, so a slow edge delays the provider for as long as the request takes.
 
 Verification requires an accurate device clock and uses the browser's `Date.now()`.
-Proofs issued more than 30 seconds ahead of that clock fail verification with `expired-proof`.
+The verifier does not use a time earlier than two floors:
+
+- The build floor: a fixed time in each SDK release, set at or before the release date.
+- The high-water mark: the highest `issued-at` of a fully verified response for each trust anchor. The SDK stores
+  it in `localStorage` (in memory only when storage is not available). One response can move it at most 30 seconds
+  past the device clock.
+
+So the verifier uses `max(Date.now(), build floor, high-water mark)` as the current time for the proof and for each
+certificate. A device clock that is set back cannot make an older proof, or a leaf that expired before the release,
+valid again. These failures use `expired-proof`.
+Proofs issued more than 30 seconds ahead of that time fail verification with `expired-proof`.
 Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+In a page, the provider also measures the time since verification with `performance.now()`. A proof expires when
+`issued-at` plus that time reaches `expires-at`, even if the wall clock moves back.
 Verified flags stay current after the clock moves back by at most 30 seconds. After a larger backward step, the
-provider handles the proof as expired (see below). When the clock returns into the proof's validity window, the
-provider returns to its state before the expiry and emits the matching event.
+provider handles the proof as expired (see below). When the clock returns into the proof's validity window before
+the proof expires on the monotonic clock, the provider returns to its state before the expiry and emits the
+matching event. After the proof expires on the monotonic clock, a clock change does not make it current again.
 
 The `observe` and `required` modes load the verifier as a separate script chunk. The default mode, `off`, and
 sites other than staging do not load it. With the CDN bundle, serve the `chunks/` directory next to

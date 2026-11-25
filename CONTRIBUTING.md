@@ -163,6 +163,8 @@ All packages are published with the `latest` npm tag.
    git checkout -b release/v1.2.3
    ```
 
+   **Update the response-signing build floor** (browser releases): set `BUILD_FLOOR` in `packages/browser/src/transport/responseSigning/protocol.ts` to the release date, or a date shortly before it, in Unix seconds. Never set it later than the release build time. Use the same value as the iOS and Android SDKs.
+
 #### Step 2: Pin Internal Dependencies
 
 2. **Ensure internal dependencies use exact versions:**

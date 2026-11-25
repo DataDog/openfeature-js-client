@@ -1191,8 +1191,16 @@ describe('createFlagsConfigurationFetcher', () => {
 
       const nowSeconds = () => Math.floor(Date.now() / 1000)
       const proofScope = { anchorKey: '0'.repeat(64), leafNotBefore: 0, verifiedResponseHeaders: {} }
-      const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300, ...proofScope })
-      const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300, ...proofScope })
+      const proofAt = (verifiedAt: number, expiresAt: number) => ({
+        verifiedAt,
+        effectiveVerifiedAt: verifiedAt,
+        verifiedMonotonicMs: performance.now(),
+        issuedAt: verifiedAt,
+        expiresAt,
+        ...proofScope,
+      })
+      const validProof = () => proofAt(nowSeconds(), nowSeconds() + 300)
+      const expiredProof = () => proofAt(nowSeconds() - 600, nowSeconds() - 300)
 
       // jsdom lacks WebCrypto, so prepare and most reads are stubbed; admit, the gate under test, runs for real.
       const requiredSigning = () => {

@@ -15,10 +15,14 @@ import { TextDecoder, TextEncoder } from 'node:util'
 import { AsnConvert, OctetString } from '@peculiar/asn1-schema'
 import { BasicConstraints, Certificate, ExtendedKeyUsage, Extension, Extensions, Validity } from '@peculiar/asn1-x509'
 import { createResponseSigningController } from '../../../src/transport/responseSigning/controller'
+import { setBuildFloorForTests } from '../../../src/transport/responseSigning/exchange'
 import {
+  forgetHighWaterMarks,
   forgetMinimumNotBeforeInMemory,
+  storedHighWaterMark,
   storedMinimumNotBefore,
 } from '../../../src/transport/responseSigning/minimumNotBefore'
+import { BUILD_FLOOR } from '../../../src/transport/responseSigning/protocol'
 import stagingRoot from '../../../src/transport/responseSigning/staging-root.json'
 import { bundledRootsForEndpoint } from '../../../src/transport/responseSigning/trustRoots'
 import {
@@ -40,6 +44,11 @@ import {
   signedResponse,
   signingRequest,
 } from './chainFixtures'
+
+// The fixture times are before the build floor, so these tests turn it off. Each test starts with no high-water mark.
+beforeAll(() => setBuildFloorForTests(0))
+afterAll(() => setBuildFloorForTests(BUILD_FLOOR))
+beforeEach(() => forgetHighWaterMarks())
 
 const previousCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto')!
 beforeAll(() => {
@@ -896,5 +905,107 @@ describe('minimum leaf not-before revocation (draft wire)', () => {
       { site: 'datad0g.com' }
     )!
     expect((await read(fixture, loadCredential('two-intermediates'))).proof).toBeDefined()
+  })
+})
+
+describe('clock floor: build floor and high-water mark', () => {
+  const credential = loadCredential('two-intermediates')
+  const anchorKey = createHash('sha256').update(Buffer.from(ROOT_A, 'base64')).digest('hex')
+  const HOUR = 3_600
+  const controller = () =>
+    createResponseSigningController({ mode: 'required', trustedRootCertificates: [ROOT_A] }, { site: 'datad0g.com' })!
+  /** The device clock is at `now`; the edge signs the response at `issuedAt`. */
+  async function read(signing: ReturnType<typeof controller>, now: number, issuedAt = now) {
+    jest.spyOn(Date, 'now').mockReturnValue(now * 1000)
+    const request = (await signing.prepare(
+      'https://preview.ff-cdn.datad0g.com/precompute-assignments?dd_env=staging',
+      { 'content-type': 'application/vnd.api+json', 'dd-client-token': 'fixture-token' },
+      '{"data":{}}'
+    ))!
+    const signed = signedResponse(request, credential, issuedAt)
+    return signing.read(new Response(Buffer.from(signed.body), { status: 200, headers: signed.headers }), request)
+  }
+  // This suite runs in the node environment: install a minimal Storage, as a browser page has.
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  let storage: Map<string, string>
+  let blocked = false
+  const localStorage = {
+    getItem: (key: string) => {
+      if (blocked) throw new Error('blocked')
+      return storage.get(key) ?? null
+    },
+    setItem: (key: string, value: string) => {
+      if (blocked) throw new Error('blocked')
+      storage.set(key, value)
+    },
+  }
+  beforeEach(() => {
+    storage = new Map()
+    blocked = false
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: localStorage })
+    forgetMinimumNotBeforeInMemory()
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+    setBuildFloorForTests(0)
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage)
+    else delete (globalThis as { localStorage?: unknown }).localStorage
+  })
+
+  test('BUILD_FLOOR is not later than the test run time', () => {
+    jest.restoreAllMocks()
+    expect(BUILD_FLOOR).toBeLessThanOrEqual(Date.now() / 1000)
+  })
+  test('a device clock before BUILD_FLOOR cannot make a leaf valid that expired before the release', async () => {
+    const leafNotAfter = Date.parse(new X509Certificate(Buffer.from(credential.leafBase64, 'base64')).validTo) / 1000
+    expect(leafNotAfter).toBeLessThan(BUILD_FLOOR)
+    // Without the floor, the leaf is valid at the fixture time.
+    expect((await read(controller(), FIXTURE_NOW)).proof).toBeDefined()
+    setBuildFloorForTests(BUILD_FLOOR)
+    await expect(read(controller(), FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
+    const request = signingRequest()
+    await expect(
+      verifyResponse(request, signedResponse(request, credential), [ROOT_A], FIXTURE_NOW, undefined, {
+        build: BUILD_FLOOR,
+        highWaterMark: () => 0,
+      })
+    ).rejects.toThrow('(expired-proof)')
+  })
+  test('after a response verifies at T, a proof valid at T - 1 h is rejected', async () => {
+    const signing = controller()
+    expect((await read(signing, FIXTURE_NOW + HOUR)).proof).toMatchObject({ effectiveVerifiedAt: FIXTURE_NOW + HOUR })
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + HOUR)
+    await expect(read(signing, FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
+    // A device clock that is behind real time but above the mark behaves as before.
+    expect((await read(signing, FIXTURE_NOW + HOUR + 60)).proof).toBeDefined()
+  })
+  test('one response moves the mark at most 30 s past the device clock', async () => {
+    const signing = controller()
+    await read(signing, FIXTURE_NOW, FIXTURE_NOW + 30)
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + 30)
+    // Accepted against the mark, but the mark stays bounded by the device clock.
+    expect((await read(signing, FIXTURE_NOW, FIXTURE_NOW + 60)).proof).toBeDefined()
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + 30)
+    await expect(read(signing, FIXTURE_NOW, FIXTURE_NOW + 90)).rejects.toThrow('(expired-proof)')
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + 30)
+  })
+  test('the mark survives a page reload', async () => {
+    await read(controller(), FIXTURE_NOW + HOUR)
+    expect(storage.get(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}`)).toBe(String(FIXTURE_NOW + HOUR))
+    forgetMinimumNotBeforeInMemory()
+    await expect(read(controller(), FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
+  })
+  test('when storage fails, the response is accepted and the in-memory mark applies', async () => {
+    blocked = true
+    const signing = controller()
+    expect((await read(signing, FIXTURE_NOW + HOUR)).proof).toBeDefined()
+    expect(storage.size).toBe(0)
+    expect(storedHighWaterMark(anchorKey)).toBe(FIXTURE_NOW + HOUR)
+    await expect(read(signing, FIXTURE_NOW)).rejects.toThrow('(expired-proof)')
+  })
+  test('a stored mark that is not a safe non-negative integer is ignored', async () => {
+    storage.set(`dd-ffe-response-signing-high-water-mark-v1:${anchorKey}`, '-1')
+    expect(storedHighWaterMark(anchorKey)).toBe(0)
+    expect((await read(controller(), FIXTURE_NOW)).proof).toBeDefined()
   })
 })
