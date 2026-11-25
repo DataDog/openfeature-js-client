@@ -227,7 +227,7 @@ Signed header lists:
 
 - The request header `x-datadog-feature-flags-signed-headers` names the request headers that the SDK bound. The
   names are lowercase, sorted, unique and joined by `,` with no spaces. The SDK lists each of `content-type`,
-  `dd-application-id`, `x-dd-feature-flags-capabilities`, `x-rkyv` and `x-use-cache` that the request has. The
+  `dd-application-id`, `x-dd-feature-flags-capabilities` and `x-rkyv` that the request has. The
   transcript binds each listed name and its value. The client token and `authorization` keep their hashed slots.
 - The response proof header `x-datadog-feature-flags-signed-response-headers` names the response headers that the
   edge bound, in the same syntax. It must name `content-type`. When the request has a `flagSelection`, it must also

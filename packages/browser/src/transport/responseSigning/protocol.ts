@@ -16,14 +16,11 @@ export const SIGNING_CHAIN_HEADER = 'x-datadog-feature-flags-signing-chain'
 export const SIGNED_HEADERS_HEADER = 'x-datadog-feature-flags-signed-headers'
 /** Response proof header: the response header names that the edge bound, in the same syntax. */
 export const SIGNED_RESPONSE_HEADERS_HEADER = 'x-datadog-feature-flags-signed-response-headers'
-/** Request headers that can change a signed response. Each one that the request has must be in the signed list. */
-export const BOUND_REQUEST_HEADERS = [
-  'content-type',
-  'dd-application-id',
-  'x-dd-feature-flags-capabilities',
-  'x-rkyv',
-  'x-use-cache',
-]
+/**
+ * Request headers that can change a signed response. Each one that the request has must be in the signed list.
+ * Staging headers such as x-use-cache are not in this set: a listed one is bound, and an unlisted one is not.
+ */
+export const BOUND_REQUEST_HEADERS = ['content-type', 'dd-application-id', 'x-dd-feature-flags-capabilities', 'x-rkyv']
 /**
  * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: a LEAF that starts before this time is revoked
  * for the response's trust anchor. Intermediates are never compared with it. When present, it is bound at the end of
