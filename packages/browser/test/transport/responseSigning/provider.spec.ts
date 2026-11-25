@@ -2005,6 +2005,26 @@ describe('response signing debug diagnostics', () => {
     }
   )
 
+  test('logs fixed proof metadata and no verified response header value', async () => {
+    const marker = 'verified-header-value-must-not-be-logged'
+    const output = [
+      log,
+      ...(['info', 'warn', 'error', 'debug'] as const).map((method) =>
+        jest.spyOn(console, method).mockImplementation(() => {})
+      ),
+    ]
+    global.fetch = jest.fn((url, init) =>
+      signed(url, init, true, vector.now, undefined, (headers) => headers.set('dd-flag-selection-ignored', marker))
+    )
+    const subject = provider('required', { ...strict(), debugMode: true })
+    await subject.initialize(context)
+    expect(evaluation(subject)).toBe(true)
+    const details = events('signing.verified')[0].details
+    expect(Object.keys(details).sort()).toEqual(['expiresAt', 'mode', 'outcome', 'verifiedAt'])
+    expect(details).toMatchObject({ mode: 'required', outcome: 'verified' })
+    for (const spy of output) expect(JSON.stringify(spy.mock.calls)).not.toContain(marker)
+  })
+
   test('logs verified memory fallback and proof expiry, without cloning the bounded response stream', async () => {
     const clone = jest.fn(() => {
       throw new Error('must not clone')

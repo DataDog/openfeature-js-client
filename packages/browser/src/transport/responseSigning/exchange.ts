@@ -120,7 +120,12 @@ export async function readSignedResponse(
   }
   // Observe mode also records values, but only from a response that verified fully.
   if (proof) recordMinimumNotBefore(proof, mode, logger)
-  logger.event('signing.verified', () => ({ mode, outcome: proof ? 'verified' : 'unverified', proof }))
+  // Fixed metadata only: verified response header values can echo credentials, so they stay out of debug logs.
+  logger.event('signing.verified', () => ({
+    mode,
+    outcome: proof ? 'verified' : 'unverified',
+    ...(proof && { verifiedAt: proof.verifiedAt, expiresAt: proof.expiresAt }),
+  }))
   // Parse failures remain ordinary errors; never treat malformed application JSON as optional crypto failure.
   return { json: parsePrecomputedConfigurationJson(new TextDecoder().decode(bytes)), proof }
 }
