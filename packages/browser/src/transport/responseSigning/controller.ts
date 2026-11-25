@@ -163,6 +163,16 @@ export function createResponseSigningController(
     const now = Date.now() / 1000
     return proof.expiresAt <= now || proof.verifiedAt > now + CLOCK_TOLERANCE_SECONDS
   }
+  // Evaluations pass the provider's own context snapshot, so its key is computed once and not on every read.
+  const contextKeys = new WeakMap<EvaluationContext, string>()
+  function contextKey(context: EvaluationContext): string {
+    let key = contextKeys.get(context)
+    if (key === undefined) {
+      key = signingContextKey(context)
+      contextKeys.set(context, key)
+    }
+    return key
+  }
   const serializedScope = JSON.stringify({ version: 1, mode, roots, scope })
   let namespace: Promise<string | undefined> | undefined
   function failure(error: unknown, logger = debug, stage = 'verification'): undefined {
@@ -273,20 +283,18 @@ export function createResponseSigningController(
     /** The proof expired, or the clock moved back more than the tolerance, for the requested context. */
     isExpired(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       const proof = config && verified.get(config)
-      return !!proof && outsideValidity(proof) && proof.context === signingContextKey(context)
+      return !!proof && outsideValidity(proof) && proof.context === contextKey(context)
     },
     /** Verified now, or (unless expireVerifiedFlags) verified once with an expired proof: the flags stay usable. */
     isUsable(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false
       const proof = verified.get(config)
-      return (
-        !!proof && (!expireVerifiedFlags || !outsideValidity(proof)) && proof.context === signingContextKey(context)
-      )
+      return !!proof && (!expireVerifiedFlags || !outsideValidity(proof)) && proof.context === contextKey(context)
     },
     isVerified(config: FlagsConfiguration | undefined, context: EvaluationContext): boolean {
       if (!config) return false
       const proof = verified.get(config)
-      return !!proof && !outsideValidity(proof) && proof.context === signingContextKey(context)
+      return !!proof && !outsideValidity(proof) && proof.context === contextKey(context)
     },
   }
 }
