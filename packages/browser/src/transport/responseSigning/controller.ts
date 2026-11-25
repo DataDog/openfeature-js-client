@@ -12,6 +12,7 @@ import {
   sha256,
   signingFailureMessage,
   utf8,
+  type VerificationFailure,
   type VerifiedResponse,
 } from './protocol'
 import { bundledRootsForEndpoint, isSigningSite, SIGNING_SITE } from './trustRoots'
@@ -20,6 +21,8 @@ type Exchange = typeof import('./exchange')
 
 /** Required mode fails closed with this message when the verifier chunk does not load. */
 export const VERIFIER_UNAVAILABLE_MESSAGE = signingFailureMessage('verifier-unavailable')
+/** The longest time that a request waits for the verifier chunk. A later load still serves the next request. */
+export const VERIFIER_LOAD_TIMEOUT_MS = 5000
 
 export { signingContextKey } from './context'
 
@@ -126,6 +129,23 @@ export function createResponseSigningController(
     return exchange
   }
   if (!unsupportedSite) loadExchange().catch(() => undefined)
+  /** A stalled chunk must not hold the assignment request. */
+  function loadExchangeWithin(ms: number): Promise<Exchange> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('verifier load timed out')), ms)
+    })
+    return Promise.race([loadExchange(), timeout]).finally(() => clearTimeout(timer))
+  }
+  // Observe mode warns once for each reason code, so that failures are visible without debug mode.
+  const reported = new Set<VerificationFailure>()
+  function reportObserved(reason: VerificationFailure): undefined {
+    if (!reported.has(reason)) {
+      reported.add(reason)
+      display.warn(`${signingFailureMessage(reason)} Flags are not verified.`)
+    }
+    return undefined
+  }
   const expireVerifiedFlags = mode === 'required' && options?.expireVerifiedFlags === true
   const verified = new WeakMap<FlagsConfiguration, { expiresAt: number; verifiedAt: number; context: string }>()
   /**
@@ -149,7 +169,7 @@ export function createResponseSigningController(
     }))
     if (mode === 'required')
       throw error instanceof ResponseVerificationError ? error : new ResponseVerificationError(reason)
-    return undefined
+    return reportObserved(reason)
   }
   return {
     mode,
@@ -184,7 +204,7 @@ export function createResponseSigningController(
       }
       let loaded: Exchange
       try {
-        loaded = await loadExchange()
+        loaded = await loadExchangeWithin(VERIFIER_LOAD_TIMEOUT_MS)
       } catch {
         logger.event('signing.failed', () => ({
           mode,
@@ -194,7 +214,7 @@ export function createResponseSigningController(
         }))
         // Observe sends the request without signing; required sends no assignment request.
         if (mode === 'required') throw new ResponseVerificationError('verifier-unavailable')
-        return undefined
+        return reportObserved('verifier-unavailable')
       }
       try {
         const request = loaded.signedRequest(url, headers, body)

@@ -528,6 +528,7 @@ test.each(['observe', 'required'] as const)(
   }
 )
 test('observe accepts unsigned and tampered ordinary responses without evaluation errors', async () => {
+  const warn = jest.spyOn(display, 'warn').mockImplementation(() => undefined)
   global.fetch = jest.fn().mockResolvedValue(unsigned())
   const subject = provider('observe', {
     experimentalResponseSigning: { mode: 'observe', trustedRootCertificates: roots },
@@ -549,6 +550,11 @@ test('observe accepts unsigned and tampered ordinary responses without evaluatio
   expect(details.reason).toBe(StandardResolutionReasons.TARGETING_MATCH)
   expect(details.errorCode).toBeUndefined()
   expect(details.errorMessage).toBeUndefined()
+  // One warning for each reason code, without debug mode: two unsigned responses, then one tampered response.
+  expect(warn.mock.calls).toEqual([
+    [`${signingFailureMessage('missing-proof')} Flags are not verified.`],
+    [`${signingFailureMessage('invalid-signature')} Flags are not verified.`],
+  ])
 })
 test.each([401, 403, 500])('observe does not turn HTTP %i into a signing success', async (status) => {
   global.fetch = jest.fn().mockResolvedValue(response('{}', new Headers(), status))

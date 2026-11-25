@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 /** Loads the controller in a fresh module registry and counts the loads of the exchange chunk. */
-function isolatedController(options: { failChunk?: boolean } = {}): {
+function isolatedController(options: { failChunk?: boolean; stallChunk?: boolean } = {}): {
   controller: Controller
   protocol: Protocol
   provider: Provider
@@ -37,6 +37,9 @@ function isolatedController(options: { failChunk?: boolean } = {}): {
   jest.doMock(EXCHANGE, () => {
     loads += 1
     if (options.failChunk) throw new Error('ChunkLoadError: Loading chunk failed')
+    // A module that is a thenable which never settles: the dynamic import never resolves, like a stalled chunk request.
+    // biome-ignore lint/suspicious/noThenProperty: the test needs a thenable module to stall the dynamic import.
+    if (options.stallChunk) return { __esModule: true, then: () => undefined }
     return jest.requireActual(EXCHANGE)
   })
   const controller: Controller = require('../../../src/transport/responseSigning/controller')
@@ -134,13 +137,51 @@ test('a required provider emits one ERROR event and reports verifier-unavailable
 
 test('observe mode sends the request without signing when the verifier chunk does not load', async () => {
   const { controller } = isolatedController({ failChunk: true })
+  // The display module from the same module registry as the controller.
+  const core: typeof import('@datadog/browser-core') = require('@datadog/browser-core')
+  const warn = jest.spyOn(core.display, 'warn').mockImplementation(() => undefined)
   const signing = controller.createResponseSigningController(
     { mode: 'observe', trustedRootCertificates: [ROOT_A] },
     STAGING
   )!
   await expect(signing.prepare(URL, HEADERS, '{}')).resolves.toBeUndefined()
+  await expect(signing.prepare(URL, HEADERS, '{}')).resolves.toBeUndefined()
   const response = new Response('{"data":{}}', { status: 200 })
   await expect(signing.read(response, undefined)).resolves.toEqual({ json: { data: {} } })
+  // One warning for each reason code, without debug mode.
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(warn).toHaveBeenCalledWith(`${controller.VERIFIER_UNAVAILABLE_MESSAGE} Flags are not verified.`)
+})
+
+describe('a stalled verifier chunk', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  test.each(['observe', 'required'] as const)(
+    'holds a %s request for at most VERIFIER_LOAD_TIMEOUT_MS',
+    async (mode) => {
+      const { controller } = isolatedController({ stallChunk: true })
+      const core: typeof import('@datadog/browser-core') = require('@datadog/browser-core')
+      jest.spyOn(core.display, 'warn').mockImplementation(() => undefined)
+      const signing = controller.createResponseSigningController({ mode, trustedRootCertificates: [ROOT_A] }, STAGING)!
+      let settled = false
+      const result = signing.prepare(URL, HEADERS, '{}').then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error })
+      )
+      result.finally(() => {
+        settled = true
+      })
+      await jest.advanceTimersByTimeAsync(controller.VERIFIER_LOAD_TIMEOUT_MS - 1)
+      expect(settled).toBe(false)
+      await jest.advanceTimersByTimeAsync(1)
+      expect(settled).toBe(true)
+      // Observe sends the request without signing; required fails closed.
+      if (mode === 'observe') await expect(result).resolves.toEqual({ value: undefined })
+      else await expect(result).resolves.toMatchObject({ error: { reason: 'verifier-unavailable' } })
+      expect(jest.getTimerCount()).toBe(0)
+    }
+  )
 })
 
 test('a failed verifier chunk load is tried again on the next request', async () => {

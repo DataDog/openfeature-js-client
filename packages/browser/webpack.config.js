@@ -12,5 +12,7 @@ module.exports = (_env, argv) => {
   })
   // A fixed public path removes the webpack automatic public path, which throws when the page gives no script URL.
   config.output.publicPath = ''
+  // The verifier wait in the SDK is shorter. This limit stops a stalled chunk request that webpack would hold for 120 s.
+  config.output.chunkLoadTimeout = 10_000
   return config
 }
