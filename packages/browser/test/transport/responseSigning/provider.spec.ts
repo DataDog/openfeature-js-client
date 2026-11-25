@@ -143,10 +143,13 @@ async function signed(
   init: RequestInit = {},
   value = true,
   issuedAt = vector.now,
-  rawBody = JSON.stringify(payload(value))
+  rawBody = JSON.stringify(payload(value)),
+  /** Changes the response headers before the signature, so the edge signs the result. */
+  edge?: (headers: Headers) => void
 ): Promise<Response> {
   const headers = new Headers({
     'content-type': 'application/json',
+    'x-datadog-feature-flags-signed-response-headers': 'content-type,dd-flag-selection-ignored',
     'x-datadog-feature-flags-signature-version': '1',
     'x-datadog-feature-flags-signing-certificate': credential.leafBase64,
     'x-datadog-feature-flags-signing-chain': credential.intermediatesBase64.join(','),
@@ -156,6 +159,7 @@ async function signed(
   })
   headers.set('x-datadog-feature-flags-issued-at', String(issuedAt))
   headers.set('x-datadog-feature-flags-expires-at', String(issuedAt + 300))
+  edge?.(headers)
   const body = new TextEncoder().encode(rawBody)
   const request = {
     url: String(url),
@@ -245,7 +249,7 @@ test.each(['DATAD0G.COM', 'Datad0g.com', 'datad0g.com.', 'evil-datad0g.com', 'da
 )
 test('automatic trust cannot be reused for a different request origin', async () => {
   const signing = createResponseSigningController({ mode: 'required' }, { site: 'datad0g.com' })!
-  const headers = { 'dd-client-token': 'pub0123456789abcdef0123456789abcdef' }
+  const headers = { 'content-type': 'application/json', 'dd-client-token': 'pub0123456789abcdef0123456789abcdef' }
   // Control: the same headers sign a request to the bundled origin.
   await expect(
     signing.prepare('https://preview.ff-cdn.datad0g.com/precompute-assignments', headers, '{}')
@@ -1189,6 +1193,82 @@ test('direct fetch combines flag selection with required response signing', asyn
   expect(assignmentRequests()).toHaveLength(1)
 })
 
+test('the signed request lists each bound header that it sends', async () => {
+  let sent: Headers | undefined
+  global.fetch = jest.fn(async (url, init) => {
+    sent = new Headers(init?.headers)
+    return signed(url, init)
+  })
+  await fetchPrecomputedConfiguration({
+    ...defaultOptions,
+    env: 'production',
+    context,
+    applicationId: 'rum-application',
+    service: 'checkout',
+    experimentalResponseSigning: { mode: 'required', trustedRootCertificates: roots },
+  })
+  expect(sent!.get('x-datadog-feature-flags-signed-headers')).toBe(
+    'content-type,dd-application-id,x-dd-feature-flags-capabilities'
+  )
+  // dd-service is a telemetry header: the SDK sends it, and does not list it.
+  expect(sent!.get('dd-service')).toBe('checkout')
+})
+
+describe('DD-Flag-Selection-Ignored on a signed response', () => {
+  const selected = (mode: 'observe' | 'required') =>
+    fetchPrecomputedConfiguration({
+      ...defaultOptions,
+      env: 'production',
+      context,
+      flagSelection: { tags: ['beta'], keyPatterns: [] },
+      experimentalResponseSigning: { mode, trustedRootCertificates: roots },
+    })
+  const ignoredReports = (error: jest.SpyInstance) =>
+    error.mock.calls.filter(([message]) => String(message).includes('ignored by the server'))
+  let error: jest.SpyInstance
+  beforeEach(() => {
+    error = jest.spyOn(display, 'error').mockImplementation(() => undefined)
+    jest.spyOn(display, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test.each(['observe', 'required'] as const)('%s: the verified value is reported', async (mode) => {
+    global.fetch = jest.fn((url, init) =>
+      signed(url, init, true, vector.now, undefined, (headers) =>
+        headers.set('dd-flag-selection-ignored', 'invalid_tag')
+      )
+    )
+    await expect(selected(mode)).resolves.toHaveProperty('precomputed')
+    expect(ignoredReports(error)).toEqual([[expect.stringContaining('(invalid_tag)')]])
+  })
+  test('observe: a value added after signing fails verification and is not reported', async () => {
+    global.fetch = jest.fn(async (url, init) => {
+      const response = await signed(url, init)
+      response.headers.set('dd-flag-selection-ignored', 'invalid_tag')
+      return response
+    })
+    await expect(selected('observe')).resolves.toHaveProperty('precomputed')
+    expect(ignoredReports(error)).toEqual([])
+  })
+  test('required: a value added after signing fails verification', async () => {
+    global.fetch = jest.fn(async (url, init) => {
+      const response = await signed(url, init)
+      response.headers.set('dd-flag-selection-ignored', 'invalid_tag')
+      return response
+    })
+    await expect(selected('required')).rejects.toThrow('invalid-signature')
+    expect(ignoredReports(error)).toEqual([])
+  })
+  test('a response list without dd-flag-selection-ignored is rejected for a selection', async () => {
+    global.fetch = jest.fn((url, init) =>
+      signed(url, init, true, vector.now, undefined, (headers) =>
+        headers.set('x-datadog-feature-flags-signed-response-headers', 'content-type')
+      )
+    )
+    await expect(selected('required')).rejects.toThrow('invalid-proof')
+  })
+})
+
 test('observe retains network availability without WebCrypto; required fails before fetch', async () => {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined })
   global.fetch = jest.fn().mockResolvedValue(unsigned())
@@ -1428,7 +1508,11 @@ test('invalid ordinary configuration cannot downgrade required mode or admit boo
 describe('required response stream reads', () => {
   async function setup() {
     const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: roots }, STAGING)!
-    const request = (await signing.prepare('https://example.test/assign', { 'dd-client-token': 'test' }, '{}'))!
+    const request = (await signing.prepare(
+      'https://example.test/assign',
+      { 'content-type': 'application/json', 'dd-client-token': 'test' },
+      '{}'
+    ))!
     return { signing, request }
   }
 

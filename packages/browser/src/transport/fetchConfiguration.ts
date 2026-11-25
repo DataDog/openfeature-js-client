@@ -37,7 +37,11 @@ import {
 import { buildConfigurationUrl } from './configurationEndpoint'
 import { debugFetch } from './debugFetch'
 
-import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
+import {
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+  reportIgnoredFlagSelectionValue,
+} from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import { cloneSigningContext } from './responseSigning/context'
 import {
@@ -388,7 +392,12 @@ async function requestPrecomputedConfiguration(
     },
   }
   signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
-  if (flagSelection) reportIgnoredFlagSelection(response)
+  if (flagSelection) {
+    // A signed request reports only the verified value. A signed response that did not verify reports nothing.
+    if (signingRequest)
+      reportIgnoredFlagSelectionValue(signedResponse?.proof?.verifiedResponseHeaders['dd-flag-selection-ignored'])
+    else reportIgnoredFlagSelection(response)
+  }
   return configuration
 }
 

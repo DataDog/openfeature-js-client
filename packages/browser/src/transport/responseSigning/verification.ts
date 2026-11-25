@@ -8,6 +8,7 @@ import {
   SubjectKeyIdentifier,
 } from '@peculiar/asn1-x509'
 import {
+  BOUND_REQUEST_HEADERS,
   buffer,
   CLOCK_TOLERANCE_SECONDS,
   cryptoProvider,
@@ -17,6 +18,8 @@ import {
   MINIMUM_LEAF_NOT_BEFORE_HEADER,
   ResponseVerificationError,
   requireCondition,
+  SIGNED_HEADERS_HEADER,
+  SIGNED_RESPONSE_HEADERS_HEADER,
   SIGNING_CAPABILITY,
   SIGNING_CHAIN_HEADER,
   SIGNING_NONCE_HEADER,
@@ -26,6 +29,7 @@ import {
   type SigningResponse,
   sha256,
   utf8,
+  type VerificationFailure,
   type VerifiedResponse,
 } from './protocol'
 
@@ -45,13 +49,23 @@ const FFE_ASSIGNMENT_SIGNING_EKU = '1.3.6.1.4.1.99999.1.1'
 const ANY_EXTENDED_KEY_USAGE = '2.5.29.37.0'
 const ECDSA_SHA256 = '1.2.840.10045.4.3.2'
 const P256_PARAMETERS = new Uint8Array([6, 8, 42, 134, 72, 206, 61, 3, 1, 7])
-const OPTIONAL_HEADERS = [
-  'content-type',
-  'dd-application-id',
-  'x-rkyv',
-  'x-use-cache',
-  'x-dd-feature-flags-capabilities',
-]
+const CAPABILITIES_HEADER = 'x-dd-feature-flags-capabilities'
+/** Lowercase HTTP token characters, at most 64 bytes. */
+const LIST_NAME = /^[0-9a-z!#$%&'*+.^_`|~-]{1,64}$/
+const MAX_LISTED_NAMES = 32
+/** The 8 proof headers, which a response list must not name. */
+const PROOF_HEADERS = [
+  'signature-version',
+  'signing-certificate',
+  'signing-chain',
+  'certificate-id',
+  'issued-at',
+  'expires-at',
+  'signature',
+  'signed-response-headers',
+].map((name) => PREFIX + name)
+/** Response headers with one value. A repeated field arrives joined by ', ', so a comma means more than one line. */
+const SINGLE_VALUE_RESPONSE_HEADERS = ['content-type', 'dd-flag-selection-ignored']
 
 function equal(a: ArrayBuffer | Uint8Array, b: ArrayBuffer | Uint8Array): boolean {
   const aa = new Uint8Array(a),
@@ -416,14 +430,23 @@ export function validateSigningRequest(request: SigningRequest): URL {
     'unsupported-request'
   )
   const token = request.headers.get('dd-client-token')
-  requireCondition(token && !token.includes(','), 'unsupported-request')
-  // Capabilities are a comma-delimited protocol list. Other semantic headers must be single-valued.
-  for (const name of ['content-type', 'dd-application-id', 'x-rkyv', 'x-use-cache', 'authorization']) {
-    requireCondition(!request.headers.get(name)?.includes(','), 'unsupported-request')
+  requireCondition(token && !request.headers.get('authorization')?.includes(','), 'unsupported-request')
+  const listed = signedRequestHeaders(request.headers)
+  requireCondition(
+    listed.includes('content-type') &&
+      listed.includes(CAPABILITIES_HEADER) &&
+      !listed.some((name) => name === 'dd-client-token' || name === 'authorization' || name.startsWith(PREFIX)) &&
+      BOUND_REQUEST_HEADERS.every((name) => listed.includes(name) || request.headers.get(name) === null),
+    'unsupported-request'
+  )
+  for (const name of [...listed, 'dd-client-token']) {
+    const value = request.headers.get(name)
+    // Each listed header is present. Capabilities are a comma-delimited list; other values have one line.
+    requireCondition(value !== null && (name === CAPABILITIES_HEADER || !value.includes(',')), 'unsupported-request')
   }
   const capabilities =
     request.headers
-      .get('x-dd-feature-flags-capabilities')
+      .get(CAPABILITIES_HEADER)
       ?.split(',')
       .map((value) => value.trim()) || []
   requireCondition(
@@ -431,6 +454,54 @@ export function validateSigningRequest(request: SigningRequest): URL {
     'unsupported-request'
   )
   return url
+}
+/** A signed header list: 1 to 32 lowercase token names, unique, in ascending byte order, joined by ',' with no spaces. */
+function headerList(value: string, reason: VerificationFailure): string[] {
+  const names = value.split(',')
+  requireCondition(
+    names.length <= MAX_LISTED_NAMES &&
+      names.every((name, index) => LIST_NAME.test(name) && (index === 0 || names[index - 1] < name)),
+    reason
+  )
+  return names
+}
+function signedRequestHeaders(headers: Headers): string[] {
+  const value = headers.get(SIGNED_HEADERS_HEADER)
+  requireCondition(value !== null, 'unsupported-request')
+  return headerList(value, 'unsupported-request')
+}
+/** A request has a flag selection when its JSON body has a non-null flag_selection, or its query selects flags. */
+function hasFlagSelection(request: SigningRequest, url: URL): boolean {
+  if (url.searchParams.has('selected_flag_tags') || url.searchParams.has('selected_flag_key_patterns')) return true
+  let body: { flag_selection?: unknown; data?: { attributes?: { flag_selection?: unknown } } } | null
+  try {
+    body = JSON.parse(new TextDecoder().decode(request.body))
+  } catch {
+    return false
+  }
+  // The SDK sends JSON:API (data.attributes); the shared fixtures put the field at the top level.
+  return (body?.flag_selection ?? body?.data?.attributes?.flag_selection ?? null) !== null
+}
+function signedResponseHeaders(request: SigningRequest, url: URL, headers: Headers): string[] {
+  const value = headers.get(SIGNED_RESPONSE_HEADERS_HEADER)
+  requireCondition(value, 'missing-proof')
+  const names = headerList(value, 'invalid-proof')
+  requireCondition(
+    names.includes('content-type') &&
+      (names.includes('dd-flag-selection-ignored') || !hasFlagSelection(request, url)) &&
+      !names.some((name) => PROOF_HEADERS.includes(name)) &&
+      SINGLE_VALUE_RESPONSE_HEADERS.every((name) => !names.includes(name) || !headers.get(name)?.includes(','))
+  )
+  return names
+}
+/** `u8(count)`, then for each name in list order: `lp(name) u8(1) lp(value)`, or `lp(name) u8(0) lp("")` when absent. */
+function listTranscript(names: readonly string[], headers: Headers): Uint8Array[] {
+  const parts: Uint8Array[] = [new Uint8Array([names.length])]
+  for (const name of names) {
+    const value = headers.get(name)
+    parts.push(lp(name), new Uint8Array([value === null ? 0 : 1]), lp(value ?? ''))
+  }
+  return parts
 }
 function unsignedInteger(value: number, width: number): Uint8Array {
   requireCondition(Number.isSafeInteger(value) && value >= 0 && (width !== 2 || value <= 65535))
@@ -480,11 +551,7 @@ export async function buildSigningTranscript(
     await sha256(request.body),
     await sha256(utf8(request.headers.get('dd-client-token')!)),
   ]
-  for (const name of OPTIONAL_HEADERS) {
-    const value = request.headers.get(name)
-    parts.push(new Uint8Array([value === null ? 0 : 1]))
-    if (value !== null) parts.push(lp(value))
-  }
+  parts.push(...listTranscript(signedRequestHeaders(request.headers), request.headers))
   const auth = request.headers.get('authorization')
   parts.push(new Uint8Array([auth === null ? 0 : 1]))
   if (auth !== null) parts.push(await sha256(utf8(auth)))
@@ -499,6 +566,7 @@ export async function buildSigningTranscript(
     new Uint8Array([intermediates.length])
   )
   for (const intermediate of intermediates) parts.push(await sha256(intermediate))
+  parts.push(...listTranscript(signedResponseHeaders(request, url, response.headers), response.headers))
   // DRAFT: an optional signed tail. Without the header, the v1 transcript is unchanged.
   if (minimumNotBefore !== undefined) parts.push(new Uint8Array([1]), unsignedInteger(minimumNotBefore, 8))
   return concat(parts)
@@ -513,7 +581,7 @@ export async function verifyResponse(
   storedMinimumNotBefore: (anchorKey: string) => number = () => 0
 ): Promise<VerifiedResponse> {
   cryptoProvider()
-  validateSigningRequest(request)
+  const url = validateSigningRequest(request)
   requireCondition(trustedRoots.length > 0, 'missing-anchor')
   requireCondition(response.body.length <= MAX_SIGNED_RESPONSE, 'response-too-large')
   requireCondition(response.status === 200 && proof(response.headers, 'signature-version') === SIGNING_VERSION)
@@ -523,6 +591,7 @@ export async function verifyResponse(
   requireCondition(/^[0-9a-f]{64}$/.test(certificateId) && certificateId === hex(await sha256(leafDer)))
   const issuedAt = seconds(proof(response.headers, 'issued-at')),
     expiresAt = seconds(proof(response.headers, 'expires-at'))
+  const responseHeaderNames = signedResponseHeaders(request, url, response.headers)
   // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
   const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
   const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
@@ -588,5 +657,15 @@ export async function verifyResponse(
     minimumNotBefore
   )
   requireCondition(await verifySignature(await importPublicKey(leaf), signature, transcript), 'invalid-signature')
-  return { expiresAt, verifiedAt: now, anchorKey, leafNotBefore: leaf.notBefore, minimumNotBefore }
+  // Act only on these values: an unlisted response header is not verified.
+  const verifiedResponseHeaders: Record<string, string | null> = {}
+  for (const name of responseHeaderNames) verifiedResponseHeaders[name] = response.headers.get(name)
+  return {
+    expiresAt,
+    verifiedAt: now,
+    anchorKey,
+    leafNotBefore: leaf.notBefore,
+    minimumNotBefore,
+    verifiedResponseHeaders,
+  }
 }

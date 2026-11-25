@@ -109,11 +109,30 @@ describe('wire format and transcript', () => {
     expect(Buffer.from(transcript.subarray(0, 49)).toString()).toBe(
       'datadog.feature-flags.precomputed-assignments.v1\0'
     )
-    // Tail: SHA256(leaf) || u8(n) || SHA256(int[0]) || SHA256(int[1]).
-    const tail = Buffer.from(transcript.subarray(transcript.length - 32 * 3 - 1))
+    // Tail: SHA256(leaf) || u8(n) || SHA256(int[0]) || SHA256(int[1]), then the response list:
+    // u8(2) || lp("content-type") u8(1) lp("application/json") || lp("dd-flag-selection-ignored") u8(0) lp("").
+    const lp = (value: string) => Buffer.concat([Buffer.from([0, 0, 0, value.length]), Buffer.from(value)])
+    const responseList = Buffer.concat([
+      Buffer.from([2]),
+      lp('content-type'),
+      Buffer.from([1]),
+      lp('application/json'),
+      lp('dd-flag-selection-ignored'),
+      Buffer.from([0]),
+      lp(''),
+    ])
+    const tail = Buffer.from(transcript.subarray(transcript.length - 32 * 3 - 1 - responseList.length))
     const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest()
     expect(
-      tail.equals(Buffer.concat([digest(leaf), Buffer.from([2]), digest(intermediates[0]), digest(intermediates[1])]))
+      tail.equals(
+        Buffer.concat([
+          digest(leaf),
+          Buffer.from([2]),
+          digest(intermediates[0]),
+          digest(intermediates[1]),
+          responseList,
+        ])
+      )
     ).toBe(true)
   })
   test('the intermediate order is bound by the transcript and the path', async () => {
@@ -538,7 +557,8 @@ test('the independent transcript helper is self-consistent with the response hel
     credential.intermediatesBase64.map((value) => Buffer.from(value, 'base64'))
   )
   expect(again.equals(response.transcript)).toBe(true)
-  expect(again[again.length - 33]).toBe(1)
+  // The chain count (1) is followed by one intermediate digest and the 72-byte response list.
+  expect(again[again.length - 72 - 33]).toBe(1)
 })
 
 test('an empty query is encoded as "?", the same as the edge, iOS and Android', async () => {
@@ -587,6 +607,7 @@ describe('shared v1 fixtures', () => {
     sdk_reason?: string
     anchor_der_base64?: string
     transcript_base64?: string
+    verified_response_headers?: Record<string, string | null>
     request: { url: string; method: string; headers: [string, string][]; body_base64: string }
     response: { status: number; headers: [string, string][]; body_base64: string }
   }
@@ -612,7 +633,7 @@ describe('shared v1 fixtures', () => {
   test('the pinned manifest is unchanged and lists every suite', () => {
     // Byte changes to the shared fixtures require a deliberate pin update and review.
     expect(createHash('sha256').update(manifestRaw).digest('hex')).toBe(
-      'eba3f9a9053d0d7bd89f432f882585873dd8c39b68b73b604841ac1dc27b329c'
+      'be13f2459caca4cd8f5b418beed70d5ef629f4c96e2592fd007d7f75106976cc'
     )
     expect(Object.keys(manifest.files).sort()).toEqual([...FILES].sort())
   })
@@ -644,7 +665,12 @@ describe('shared v1 fixtures', () => {
       }
       const issued = Number(response.headers.get('x-datadog-feature-flags-issued-at'))
       const expires = Number(response.headers.get('x-datadog-feature-flags-expires-at'))
-      await expect(result).resolves.toMatchObject({ expiresAt: expires, verifiedAt: vector.now })
+      const verified = await result
+      expect(verified).toMatchObject({ expiresAt: expires, verifiedAt: vector.now })
+      // The SDK acts only on these values, in list order, with null for an absent listed header.
+      expect(Object.entries(verified.verifiedResponseHeaders)).toEqual(
+        Object.entries(vector.verified_response_headers!)
+      )
       const transcript = await buildSigningTranscript(
         request,
         response,
@@ -721,7 +747,11 @@ describe('minimum leaf not-before revocation (draft wire)', () => {
     change?: (headers: Headers) => void,
     logger = capture().logger
   ) {
-    const request = (await signing.prepare(url, { 'dd-client-token': 'fixture-token' }, '{"data":{}}'))!
+    const request = (await signing.prepare(
+      url,
+      { 'content-type': 'application/json', 'dd-client-token': 'fixture-token' },
+      '{"data":{}}'
+    ))!
     const signed = signedResponse(request, credential, FIXTURE_NOW, undefined, minimumNotBefore)
     change?.(signed.headers)
     return signing.read(

@@ -60,13 +60,6 @@ export const ROOT_B = pemToBase64(readFileSync(join(directory, 'root-b.pem'), 'u
 /** The fixed test time from `manifest.json`, inside the validity of every fixture leaf. */
 export const FIXTURE_NOW: number = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')).now
 
-const OPTIONAL_HEADERS = [
-  'content-type',
-  'dd-application-id',
-  'x-rkyv',
-  'x-use-cache',
-  'x-dd-feature-flags-capabilities',
-]
 const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest()
 const u = (value: number, width: number) => {
   const bytes = Buffer.alloc(width)
@@ -78,16 +71,28 @@ const lp = (value: Uint8Array | string) => {
   return Buffer.concat([u(bytes.length, 4), bytes])
 }
 
+/** `u8(count)`, then for each listed name: `lp(name) u8(1) lp(value)`, or `lp(name) u8(0) lp("")` when absent. */
+function nameValues(listHeader: string, headers: Headers): Buffer {
+  const names = headers.get(listHeader)!.split(',')
+  return Buffer.concat([
+    Buffer.from([names.length]),
+    ...names.map((name) => {
+      const value = headers.get(name)
+      return Buffer.concat([lp(name), Buffer.from([value === null ? 0 : 1]), lp(value ?? '')])
+    }),
+  ])
+}
+
 /** Lowercase host, IPv6 in brackets, and the port only when it is not 443. */
 function authority(url: URL): string {
   const port = url.port === '' || url.port === '443' ? '' : `:${url.port}`
   return `${url.hostname.toLowerCase()}${port}`
 }
 
-/** Independent v1 transcript with the certificate-chain tail. */
+/** Independent v1 transcript with the certificate-chain tail and the signed request and response header lists. */
 export function expectedTranscript(
   request: { url: string; method: string; headers: Headers; body: Uint8Array },
-  response: { status: number; body: Uint8Array },
+  response: { status: number; headers: Headers; body: Uint8Array },
   issuedAt: number,
   expiresAt: number,
   leaf: Uint8Array,
@@ -107,11 +112,7 @@ export function expectedTranscript(
     sha(request.body),
     sha(request.headers.get('dd-client-token')!),
   ]
-  for (const name of OPTIONAL_HEADERS) {
-    const value = request.headers.get(name)
-    parts.push(Buffer.from([value === null ? 0 : 1]))
-    if (value !== null) parts.push(lp(value))
-  }
+  parts.push(nameValues('x-datadog-feature-flags-signed-headers', request.headers))
   const auth = request.headers.get('authorization')
   parts.push(Buffer.from([auth === null ? 0 : 1]))
   if (auth !== null) parts.push(sha(auth))
@@ -123,7 +124,8 @@ export function expectedTranscript(
     sha(response.body),
     sha(leaf),
     Buffer.from([intermediates.length]),
-    ...intermediates.map(sha)
+    ...intermediates.map(sha),
+    nameValues('x-datadog-feature-flags-signed-response-headers', response.headers)
   )
   // DRAFT minimum not-before tail: u8(1) || u64be(value), only when the header is present.
   if (minimumNotBefore !== undefined) parts.push(Buffer.from([1]), u(minimumNotBefore, 8))
@@ -140,6 +142,7 @@ export function signingRequest(url = 'https://assignments.example.test/precomput
       'x-dd-feature-flags-capabilities': 'response-signing-v1',
       'x-datadog-feature-flags-signature-version': '1',
       'x-datadog-feature-flags-request-nonce': '00112233445566778899aabbccddeeff',
+      'x-datadog-feature-flags-signed-headers': 'content-type,x-dd-feature-flags-capabilities',
     }),
     body: new Uint8Array(Buffer.from('{"data":{"type":"precompute-assignments-request"}}')),
   }
@@ -157,26 +160,27 @@ export function signedResponse(
   const intermediates = signer.intermediatesBase64.map((value) => Buffer.from(value, 'base64'))
   const issuedAt = now,
     expiresAt = now + 300
-  const transcript = expectedTranscript(
-    request,
-    { status: 200, body },
-    issuedAt,
-    expiresAt,
-    leaf,
-    intermediates,
-    minimumNotBefore
-  )
   const headers = new Headers({
     'content-type': 'application/json',
+    'x-datadog-feature-flags-signed-response-headers': 'content-type,dd-flag-selection-ignored',
     'x-datadog-feature-flags-signature-version': '1',
     'x-datadog-feature-flags-signing-certificate': signer.leafBase64,
     'x-datadog-feature-flags-signing-chain': signer.intermediatesBase64.join(','),
     'x-datadog-feature-flags-certificate-id': sha(leaf).toString('hex'),
     'x-datadog-feature-flags-issued-at': String(issuedAt),
     'x-datadog-feature-flags-expires-at': String(expiresAt),
-    'x-datadog-feature-flags-signature': sign('sha256', transcript, signer.privateKey).toString('base64'),
   })
   if (minimumNotBefore !== undefined)
     headers.set('x-datadog-feature-flags-minimum-leaf-not-before', String(minimumNotBefore))
+  const transcript = expectedTranscript(
+    request,
+    { status: 200, headers, body },
+    issuedAt,
+    expiresAt,
+    leaf,
+    intermediates,
+    minimumNotBefore
+  )
+  headers.set('x-datadog-feature-flags-signature', sign('sha256', transcript, signer.privateKey).toString('base64'))
   return { status: 200, headers, body, transcript, issuedAt, expiresAt }
 }

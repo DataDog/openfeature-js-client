@@ -12,6 +12,18 @@ export const SIGNING_CAPABILITY = 'response-signing-v1'
 export const SIGNING_VERSION = '1'
 /** Intermediate certificates: 1 to 3 standard base64 DER entries joined by ',', index 0 issued the leaf. */
 export const SIGNING_CHAIN_HEADER = 'x-datadog-feature-flags-signing-chain'
+/** Request: the bound request header names, sorted and joined by ',' with no spaces. */
+export const SIGNED_HEADERS_HEADER = 'x-datadog-feature-flags-signed-headers'
+/** Response proof header: the response header names that the edge bound, in the same syntax. */
+export const SIGNED_RESPONSE_HEADERS_HEADER = 'x-datadog-feature-flags-signed-response-headers'
+/** Request headers that can change a signed response. Each one that the request has must be in the signed list. */
+export const BOUND_REQUEST_HEADERS = [
+  'content-type',
+  'dd-application-id',
+  'x-dd-feature-flags-capabilities',
+  'x-rkyv',
+  'x-use-cache',
+]
 /**
  * DRAFT wire, pending the edge and the shared fixtures. Unix seconds: a LEAF that starts before this time is revoked
  * for the response's trust anchor. Intermediates are never compared with it. When present, it is bound at the end of
@@ -60,6 +72,8 @@ export interface VerifiedResponse {
   leafNotBefore: number
   /** DRAFT: the signed minimum leaf not-before value, when the response has one. */
   minimumNotBefore?: number
+  /** The listed response headers and their verified values, in list order. null when a listed header is absent. */
+  verifiedResponseHeaders: Record<string, string | null>
 }
 
 /**

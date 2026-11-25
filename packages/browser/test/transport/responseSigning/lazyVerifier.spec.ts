@@ -10,7 +10,7 @@ type Protocol = typeof import('../../../src/transport/responseSigning/protocol')
 type Provider = typeof import('../../../src/openfeature/provider')
 
 const STAGING = { site: 'datad0g.com', clientToken: 'pub0123456789abcdef0123456789abcdef' }
-const HEADERS = { 'dd-client-token': STAGING.clientToken }
+const HEADERS = { 'content-type': 'application/json', 'dd-client-token': STAGING.clientToken }
 const URL = 'https://preview.ff-cdn.datad0g.com/precompute-assignments'
 
 beforeAll(() => {

@@ -2,10 +2,12 @@ import { parsePrecomputedConfigurationJson } from '@datadog/flagging-core'
 import type { DebugLogger } from '../../debug'
 import { raiseMinimumNotBefore, storedMinimumNotBefore } from './minimumNotBefore'
 import {
+  BOUND_REQUEST_HEADERS,
   cryptoProvider,
   hex,
   MAX_SIGNED_RESPONSE,
   ResponseVerificationError,
+  SIGNED_HEADERS_HEADER,
   SIGNING_CAPABILITY,
   SIGNING_NONCE_HEADER,
   SIGNING_VERSION_HEADER,
@@ -26,15 +28,7 @@ export interface ExchangeOptions {
   failure(error: unknown, logger: DebugLogger, stage?: string): undefined
 }
 
-const SEMANTIC_HEADERS = new Set([
-  'dd-client-token',
-  'authorization',
-  'content-type',
-  'dd-application-id',
-  'x-rkyv',
-  'x-use-cache',
-  'x-dd-feature-flags-capabilities',
-])
+const SEMANTIC_HEADERS = new Set(['dd-client-token', 'authorization', ...BOUND_REQUEST_HEADERS])
 
 export function signedRequest(url: string, headers: Record<string, string>, body: string): SigningRequest {
   const normalized = new Headers(headers)
@@ -56,6 +50,8 @@ export function signedRequest(url: string, headers: Record<string, string>, body
       .filter(Boolean) || []
   if (!capabilities.includes(SIGNING_CAPABILITY)) capabilities.push(SIGNING_CAPABILITY)
   normalized.set('x-dd-feature-flags-capabilities', capabilities.sort().join(','))
+  // List each bound header that the request has. The constant is sorted, so the list is in ascending order.
+  normalized.set(SIGNED_HEADERS_HEADER, BOUND_REQUEST_HEADERS.filter((name) => normalized.has(name)).join(','))
   const request = { url, method: 'POST', headers: normalized, body: utf8(body) }
   validateSigningRequest(request)
   return request

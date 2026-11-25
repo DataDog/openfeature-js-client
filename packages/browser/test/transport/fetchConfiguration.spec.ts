@@ -1190,7 +1190,7 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const nowSeconds = () => Math.floor(Date.now() / 1000)
-      const proofScope = { anchorKey: '0'.repeat(64), leafNotBefore: 0 }
+      const proofScope = { anchorKey: '0'.repeat(64), leafNotBefore: 0, verifiedResponseHeaders: {} }
       const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300, ...proofScope })
       const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300, ...proofScope })
 
@@ -1208,7 +1208,9 @@ describe('createFlagsConfigurationFetcher', () => {
 
       it('reports once when an opted-out subject receives an acknowledged, signed configuration', async () => {
         const signing = requiredSigning()
-        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof: validProof() })
+        // The SDK reports the verified value from the proof, not the raw header.
+        const proof = { ...validProof(), verifiedResponseHeaders: { 'dd-flag-selection-ignored': 'invalid_tag' } }
+        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof })
         mockFetch.mockResolvedValue({ ok: true, status: 200, redirected: false, headers: ignoredHeaders() })
         const fetcher = createFlagsConfigurationFetcher(
           { ...baseConfig, ...immediateOptOut, flagSelection: { tags: ['beta'] } },
