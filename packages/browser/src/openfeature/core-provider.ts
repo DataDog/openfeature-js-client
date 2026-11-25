@@ -58,7 +58,8 @@ export interface DatadogCoreProviderConfiguration
    * Exposure cache shared with a tracking controller
    * (`createDatadogExposureLoggingHook().exposureCache`). Enables the exposure
    * deduplication verdict in flag metadata, used by the public `ExposureHook`.
-   * Without it, evaluations carry no exposure verdict.
+   * Without it, evaluations carry no exposure verdict. Ignored when
+   * `recordExposures` is false.
    */
   exposureCache?: AssignmentCache
 }
@@ -108,7 +109,7 @@ export class DatadogCoreProvider extends DatadogProviderBase {
         finally: (context, details) =>
           evaluationDebug(context.context, this.debug).event('evaluation.returned', () => ({ context, details })),
       })
-    const recordExposures = options.recordExposures ?? true
+    const recordExposures = options.recordExposures !== false
     // Without exposures, the shared cache is neither read nor written.
     this.exposureCache = recordExposures ? options.exposureCache : undefined
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)

@@ -39,13 +39,13 @@ export function createProviderTracking({
 }): ProviderTracking {
   const trackingHooks: DatadogTrackingHook[] = []
   // `trackEvaluations` is applied by the telemetry policy, which also covers shared hooks.
-  const recordExposures = options.recordExposures ?? true
+  const recordExposures = options.recordExposures !== false
   debug.event('tracking.configured', () => ({
-    exposure: options.trackExposures ?? options.enableExposureLogging ?? enabledByDefault,
+    exposure: recordExposures && (options.trackExposures ?? options.enableExposureLogging ?? enabledByDefault),
     evaluation: options.enableFlagEvaluationTracking ?? enabledByDefault,
     rum: options.enableRumFeatureFlagTracking ?? enabledByDefault,
     recordExposures,
-    trackEvaluations: options.trackEvaluations ?? true,
+    trackEvaluations: options.trackEvaluations !== false,
     validConfiguration: !!configuration,
     flagConfigurationCustomFetchAppliesToTracking: false,
   }))

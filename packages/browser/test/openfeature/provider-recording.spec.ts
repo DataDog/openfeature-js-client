@@ -9,6 +9,7 @@ import {
   createDatadogRumTrackingHook,
   DatadogCoreProvider,
   type DatadogCoreProviderConfiguration,
+  DatadogDevtools,
   DatadogProvider,
   type ExposureEvaluation,
   ExposureHook,
@@ -37,12 +38,13 @@ describe('per-provider recording options', () => {
 
   const requests = (endpoint: string) => fetchMock.mock.calls.filter(([url]) => url.toString().includes(endpoint))
   const exposureRequests = () => requests('exposures')
-  // The same intake also receives SDK lifecycle diagnostics, which are not evaluation telemetry.
-  const evaluationRequests = () =>
+  const evaluationIntakeEvents = () =>
     requests('flagevaluation')
       .flatMap(([, init]) => String(init.body).trim().split('\n'))
       .map((line) => JSON.parse(line))
-      .filter((event) => event.type !== 'sdk_diagnostic')
+  // The same intake also receives SDK lifecycle diagnostics, which are not evaluation telemetry.
+  const evaluationRequests = () => evaluationIntakeEvents().filter((event) => event.type !== 'sdk_diagnostic')
+  const diagnosticRequests = () => evaluationIntakeEvents().filter((event) => event.type === 'sdk_diagnostic')
   const flush = async () => {
     jest.advanceTimersByTime(31_000)
     for (let i = 0; i < 10; i++) await Promise.resolve()
@@ -130,16 +132,14 @@ describe('per-provider recording options', () => {
 
       expectAssignedValue(details)
       expect(evaluationRequests()).toHaveLength(0)
+      expect(diagnosticRequests().length).toBeGreaterThan(0)
       expect(rumEvaluation).not.toHaveBeenCalled()
       expect(exposureRequests()).toHaveLength(1)
       expect(evaluations[0].shouldSend()).toBe(true)
     })
 
     it('records nothing when both are false', async () => {
-      const details = await evaluate(
-        'peeking',
-        createProvider({ recordExposures: false, trackEvaluations: false })
-      )
+      const details = await evaluate('peeking', createProvider({ recordExposures: false, trackEvaluations: false }))
 
       expectAssignedValue(details)
       expect(exposureRequests()).toHaveLength(0)
@@ -180,6 +180,35 @@ describe('per-provider recording options', () => {
       expect(exposureRequests()).toHaveLength(0)
       expect(evaluationRequests()).toHaveLength(0)
       expect(rumEvaluation).not.toHaveBeenCalled()
+      // Explicit `recordExposures: true` keeps record-only exposures.
+      expect(cacheSet).toHaveBeenCalled()
+      expect(evaluations[0].isExposure()).toBe(true)
+      expect(evaluations[0].shouldSend()).toBe(true)
+    })
+
+    it('records nothing for an error evaluation when both are false', async () => {
+      await OpenFeature.setProviderAndWait(
+        'peek-error',
+        createProvider({ recordExposures: false, trackEvaluations: false }),
+        context
+      )
+      const details = OpenFeature.getClient('peek-error').getStringDetails('missing-flag', 'default')
+      await flush()
+
+      expect(details).toMatchObject({ value: 'default', reason: 'ERROR' })
+      expect(exposureRequests()).toHaveLength(0)
+      expect(evaluationRequests()).toHaveLength(0)
+      expect(rumEvaluation).not.toHaveBeenCalled()
+      expect(cacheHas).not.toHaveBeenCalled()
+      expect(evaluations[0].isExposure()).toBe(false)
+    })
+
+    it('treats only false as off for untyped options', async () => {
+      await evaluate('untyped', createProvider({ recordExposures: 0, trackEvaluations: 0 } as never))
+
+      expect(exposureRequests()).toHaveLength(1)
+      expect(evaluationRequests()).toHaveLength(1)
+      expect(evaluations[0].shouldSend()).toBe(true)
     })
 
     it('leaves the exposure to a later evaluation through a default provider', async () => {
@@ -194,27 +223,38 @@ describe('per-provider recording options', () => {
   })
 
   describe('DatadogCoreProvider with shared tracking hooks', () => {
+    let shutdownTracking: (() => Promise<void>) | undefined
+
+    afterEach(async () => {
+      await shutdownTracking?.()
+      shutdownTracking = undefined
+    })
+
     async function setup() {
       const exposureLogging = createDatadogExposureLoggingHook(tracking)
       await exposureLogging.initialize()
       const evaluationLogging = createDatadogEvaluationLoggingHook(tracking)
       await evaluationLogging.initialize()
-      OpenFeature.addHooks(...exposureLogging.hooks, ...evaluationLogging.hooks, ...createDatadogRumTrackingHook().hooks)
+      OpenFeature.addHooks(
+        ...exposureLogging.hooks,
+        ...evaluationLogging.hooks,
+        ...createDatadogRumTrackingHook().hooks
+      )
       const createProvider = async (domain: string, options: DatadogCoreProviderConfiguration = {}) => {
         const provider = new DatadogCoreProvider({ exposureCache: exposureLogging.exposureCache, ...options })
         provider.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
         await OpenFeature.setProviderAndWait(domain, provider, context)
         return OpenFeature.getClient(domain)
       }
-      const shutdown = async () => {
+      shutdownTracking = async () => {
         await exposureLogging.shutdown()
         await evaluationLogging.shutdown()
       }
-      return { createProvider, shutdown }
+      return { createProvider, exposureCache: exposureLogging.exposureCache }
     }
 
     it('records through the shared hooks by default', async () => {
-      const { createProvider, shutdown } = await setup()
+      const { createProvider } = await setup()
       const details = (await createProvider('core-default')).getBooleanDetails('test-flag', false)
       await flush()
 
@@ -224,11 +264,10 @@ describe('per-provider recording options', () => {
       expect(evaluationRequests()).toHaveLength(1)
       expect(rumEvaluation).toHaveBeenCalledWith('test-flag', 'on')
       expect(evaluations[0].shouldSend()).toBe(true)
-      await shutdown()
     })
 
     it('does not touch the shared exposure cache when recordExposures is false', async () => {
-      const { createProvider, shutdown } = await setup()
+      const { createProvider } = await setup()
       const details = (await createProvider('core-no-exposures', { recordExposures: false })).getBooleanDetails(
         'test-flag',
         false
@@ -242,25 +281,51 @@ describe('per-provider recording options', () => {
       expect(evaluations[0].isExposure()).toBe(false)
       expect(evaluationRequests()).toHaveLength(1)
       expect(rumEvaluation).toHaveBeenCalledWith('test-flag', 'on')
-      await shutdown()
     })
 
     it('suppresses the shared evaluation hooks when trackEvaluations is false', async () => {
-      const { createProvider, shutdown } = await setup()
-      ;(await createProvider('core-no-evaluations', { trackEvaluations: false })).getBooleanDetails(
-        'test-flag',
-        false
-      )
+      const { createProvider } = await setup()
+      ;(await createProvider('core-no-evaluations', { trackEvaluations: false })).getBooleanDetails('test-flag', false)
       await flush()
 
       expect(evaluationRequests()).toHaveLength(0)
       expect(rumEvaluation).not.toHaveBeenCalled()
       expect(exposureRequests()).toHaveLength(1)
-      await shutdown()
+    })
+
+    it('applies both options through DatadogDevtools', async () => {
+      const { exposureCache } = await setup()
+      const inner = new DatadogCoreProvider({ exposureCache, recordExposures: false, trackEvaluations: false })
+      inner.setConfiguration(configurationFromString(JSON.stringify(rulesWire)))
+      await OpenFeature.setProviderAndWait('devtools-peek', new DatadogDevtools(inner), context)
+
+      expect(OpenFeature.getClient('devtools-peek').getBooleanValue('test-flag', false)).toBe(true)
+      await flush()
+      expect(cacheSet).not.toHaveBeenCalled()
+      expect(exposureRequests()).toHaveLength(0)
+      expect(evaluationRequests()).toHaveLength(0)
+      expect(rumEvaluation).not.toHaveBeenCalled()
+      expect(evaluations[0].isExposure()).toBe(false)
+    })
+
+    it('records nothing before a configuration is set when both are false', async () => {
+      const { exposureCache } = await setup()
+      const provider = new DatadogCoreProvider({ exposureCache, recordExposures: false, trackEvaluations: false })
+      // Initialization rejects without a configuration; evaluate while the provider is not ready.
+      jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      OpenFeature.setProvider('core-not-ready', provider, context)
+      const details = OpenFeature.getClient('core-not-ready').getBooleanDetails('test-flag', false)
+      await flush()
+
+      expect(details).toMatchObject({ value: false, reason: 'ERROR' })
+      expect(cacheHas).not.toHaveBeenCalled()
+      expect(exposureRequests()).toHaveLength(0)
+      expect(evaluationRequests()).toHaveLength(0)
+      expect(rumEvaluation).not.toHaveBeenCalled()
     })
 
     it('leaves the exposure to a later evaluation through a default provider', async () => {
-      const { createProvider, shutdown } = await setup()
+      const { createProvider } = await setup()
       const peek = await createProvider('core-peek', { recordExposures: false, trackEvaluations: false })
       const record = await createProvider('core-record')
 
@@ -276,7 +341,6 @@ describe('per-provider recording options', () => {
       expect(exposureRequests()).toHaveLength(1)
       expect(evaluationRequests()).toHaveLength(1)
       expect(evaluations.map((evaluation) => evaluation.shouldSend())).toEqual([false, true])
-      await shutdown()
     })
   })
 })

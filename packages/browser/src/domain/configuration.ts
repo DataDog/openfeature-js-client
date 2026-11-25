@@ -43,8 +43,8 @@ export interface ProviderRecordingConfiguration {
   /**
    * Whether this provider's evaluations send evaluation telemetry (default: true).
    * With this off, no flag evaluation events are sent and no RUM feature flag
-   * evaluations are added, also through shared tracking hooks. The RUM user still
-   * enriches the evaluation context.
+   * evaluations are added, also through shared tracking hooks. With
+   * `DatadogProvider`, the RUM user still enriches the evaluation context.
    */
   trackEvaluations?: boolean
 }

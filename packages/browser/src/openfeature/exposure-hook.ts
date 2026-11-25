@@ -38,7 +38,8 @@ export interface ExposureEvaluation {
   readonly targetingKey: string | undefined
   /**
    * True when the evaluation succeeded and selected an allocation that logs
-   * exposures, whether or not this subject was already exposed.
+   * exposures, whether or not this subject was already exposed. Always false
+   * through a provider created with `recordExposures: false`.
    */
   isExposure(): boolean
   /**
@@ -156,7 +157,9 @@ function cloneExposureContext(context: EvaluationContext | undefined): Evaluatio
  * its own data store.
  *
  * This hook is optional. The provider puts the same data in the flag metadata,
- * so any OpenFeature hook can read it. This class reads it for you.
+ * so any OpenFeature hook can read it. This class reads it for you, and also
+ * applies the provider's `recordExposures` option, which the flag metadata
+ * does not carry.
  *
  * Register it with `OpenFeature.addHooks(new ExposureHook(callback))` or on a
  * client. The callback runs for every evaluation, including errors and repeats.

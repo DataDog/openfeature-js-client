@@ -21,6 +21,8 @@ const resultPolicies = new WeakMap<object, EvaluationTelemetryPolicy>()
 const resultContexts = new WeakMap<object, EvaluationContext>()
 
 export interface EvaluationTelemetryPolicy {
+  /** False when the provider was created with `trackEvaluations: false`. */
+  readonly tracksEvaluations: boolean
   setContext(context: EvaluationContext): void
   allowsTelemetry(context: EvaluationContext): boolean
 }
@@ -32,10 +34,11 @@ export function createEvaluationTelemetryPolicy(
 ): EvaluationTelemetryPolicy {
   const enabled = configuration.enableEvaluationTelemetryOptOutParameter === true
   // Shared tracking hooks find this policy through the provider metadata.
-  const trackEvaluations = configuration.trackEvaluations ?? true
+  const trackEvaluations = configuration.trackEvaluations !== false
   let currentContextOptedOut = false
   const subjects = new Map<string | undefined, boolean>()
   const policy = {
+    tracksEvaluations: trackEvaluations,
     setContext(context: EvaluationContext) {
       currentContextOptedOut =
         enabled && Object.prototype.propertyIsEnumerable.call(context, attribute) && isOptedOut(context)
@@ -137,7 +140,11 @@ export function withEvaluationTelemetryPolicy<T extends Hook>(
         allowed,
         context: context.context,
         details,
-        reason: allowed ? 'admitted' : 'evaluation_telemetry_opt_out',
+        reason: allowed
+          ? 'admitted'
+          : candidates.some((policy) => !policy.tracksEvaluations)
+            ? 'track_evaluations_disabled'
+            : 'evaluation_telemetry_opt_out',
       }))
       if (allowed) return hook.finally?.(context, details, hints)
     },
