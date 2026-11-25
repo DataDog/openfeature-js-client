@@ -160,7 +160,8 @@ The only bundled root is the public staging root, `CN=Datadog Customer Signing R
 (SHA-256 of the DER `0e469f3cecc9cd51fd64373879636540512d56e99eecd70361c78b98c47ea934`).
 The SDK bundles **no production root**. Never obtain trust anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
 if no trusted root is available, before any network request.
-Observe mode accepts an otherwise valid response when no anchor is available. It also accepts unsigned or invalidly signed responses without calling
+On the staging site, when no trusted root is available for the endpoint, observe mode logs one `missing-anchor` warning, sends ordinary
+requests without signing headers, and does not load the verifier. Observe mode also accepts unsigned or invalidly signed responses without calling
 them verified. Verification error messages contain no token, context, response, or certificate data.
 
 Required-mode verification failures use OpenFeature error code `GENERAL`.

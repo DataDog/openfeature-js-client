@@ -65,6 +65,27 @@ test.each([
   expect(loads()).toBe(0)
 })
 
+test.each([
+  ['an empty trustedRootCertificates', { trustedRootCertificates: [] }, {}],
+  ['a cross-origin flaggingProxy', {}, { flaggingProxy: 'https://flags-proxy.example' }],
+] as const)(
+  'observe mode with %s sends ordinary requests and does not load the verifier chunk',
+  async (_, signing, scope) => {
+    const { controller, loads } = isolatedController()
+    const core: typeof import('@datadog/browser-core') = require('@datadog/browser-core')
+    const warn = jest.spyOn(core.display, 'warn').mockImplementation(() => undefined)
+    expect(controller.createResponseSigningController({ mode: 'observe', ...signing }, { ...STAGING, ...scope })).toBe(
+      undefined
+    )
+    await settle()
+    expect(loads()).toBe(0)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toMatch(
+      /^Flag response signing failed \(missing-anchor\): .* Flags are not verified\.$/
+    )
+  }
+)
+
 test.each(['observe', 'required'] as const)('mode %s on staging loads the verifier chunk once', async (mode) => {
   const { controller, loads } = isolatedController()
   const signing = controller.createResponseSigningController({ mode, trustedRootCertificates: [ROOT_A] }, STAGING)!

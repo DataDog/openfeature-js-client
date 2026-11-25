@@ -118,6 +118,12 @@ export function createResponseSigningController(
     }))
     throw new ResponseVerificationError('missing-anchor')
   }
+  if (mode === 'observe' && !roots.length && !unsupportedSite) {
+    // No root can verify a response: send ordinary requests, without signing headers or the verifier chunk.
+    debug.event('signing.unavailable', () => ({ mode, reason: 'missing-anchor', action: 'send_unsigned_request' }))
+    display.warn(`${signingFailureMessage('missing-anchor')} Flags are not verified.`)
+    return undefined
+  }
   // The verifier loads as a dynamic chunk while signing is experimental. Revisit at GA: an opt-in entry point may be a
   // better fit. Load it now, in parallel with the first request. A failed load is tried again on the next response.
   let exchange: Promise<Exchange> | undefined
