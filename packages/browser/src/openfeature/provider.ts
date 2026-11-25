@@ -181,7 +181,9 @@ export class DatadogProvider extends DatadogProviderBase {
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
 
-    if (hasIndexedDB() && this.configuration?.responseSigning?.mode !== 'required') {
+    // A required-signing request keeps its fail-closed storage rules even when the ordinary configuration is invalid.
+    const requiredSigning = options.experimentalResponseSigning?.mode === 'required'
+    if (hasIndexedDB() && !requiredSigning) {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
         canonicalizeFlagSelection(options.flagSelection).selection,
@@ -190,8 +192,7 @@ export class DatadogProvider extends DatadogProviderBase {
       )
     }
 
-    this.flagsConfiguration =
-      this.configuration?.responseSigning?.mode === 'required' ? undefined : options.initialFlagsConfiguration
+    this.flagsConfiguration = requiredSigning ? undefined : options.initialFlagsConfiguration
     this.configurationSource = this.flagsConfiguration ? 'initial_configuration' : 'none'
     this.status = ProviderStatus.NOT_READY
     this.debug.event('cache.configured', () => ({
@@ -200,10 +201,7 @@ export class DatadogProvider extends DatadogProviderBase {
       initialConfiguration: options.initialFlagsConfiguration,
       initialConfigurationAccepted: !!this.flagsConfiguration,
       signingMode: this.configuration?.responseSigning?.mode ?? 'off',
-      persistence:
-        this.configuration?.responseSigning?.mode === 'required'
-          ? 'stored_assignments_are_not_verified_proofs'
-          : 'context_matched',
+      persistence: requiredSigning ? 'stored_assignments_are_not_verified_proofs' : 'context_matched',
     }))
   }
 

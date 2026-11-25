@@ -425,6 +425,19 @@ describe('staging site gate', () => {
         })
     ).not.toThrow('Required response signing')
   })
+  test('required mode ignores bootstrap data when the ordinary configuration is invalid on a non-staging site', () => {
+    jest.spyOn(display, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(display, 'error').mockImplementation(() => undefined)
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const subject = new DatadogProvider({
+      ...defaultOptions,
+      site: 'datadoghq.com',
+      clientToken: '',
+      experimentalResponseSigning: { mode: 'required' },
+      initialFlagsConfiguration: { precomputed: { response: payload(), context: {}, fetchedAt: 1 as any } } as any,
+    })
+    expect(evaluation(subject)).toBe(false)
+  })
   test.each(entries.flatMap((entry) => (['observe', 'required'] as const).map((mode) => [entry, mode] as const)))(
     '%s on the staging site in %s mode never sends X-stream',
     async (entry, mode) => {
