@@ -162,7 +162,7 @@ export class DatadogProvider extends DatadogProviderBase {
     this.configuration = validateAndBuildFlaggingConfiguration(options, this.debug)
     const getTrackingContext = () => this.effectiveTrackingContext()
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options, getTrackingContext)
-    registerDatadogProvider(this.metadata)
+    registerDatadogProvider(this.metadata, options.recordExposures !== false)
 
     this.isRumIntegrationEnabled = options.enableRumFeatureFlagTracking ?? true
     this.tracking = createProviderTracking({

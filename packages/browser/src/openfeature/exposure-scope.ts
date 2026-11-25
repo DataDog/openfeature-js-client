@@ -1,11 +1,12 @@
 import type { HookContext, ProviderMetadata } from '@openfeature/web-sdk'
 
-const datadogProviders = new WeakSet<ProviderMetadata>()
+// Whether each registered provider's evaluations are exposures (`recordExposures`).
+const datadogProviders = new WeakMap<ProviderMetadata, boolean>()
 const transparentWrappers = new WeakMap<ProviderMetadata, ProviderMetadata>()
 let warnedUnsupported = false
 
-export function registerDatadogProvider(metadata: ProviderMetadata): void {
-  datadogProviders.add(metadata)
+export function registerDatadogProvider(metadata: ProviderMetadata, recordExposures = true): void {
+  datadogProviders.set(metadata, recordExposures)
 }
 
 /** A wrapper whose evaluations are the inner provider's, such as DatadogDevtools. */
@@ -20,13 +21,7 @@ export function registerTransparentProvider(wrapper: ProviderMetadata, inner: Pr
  * outer application hooks can reject the result.
  */
 export function supportsExposureAdmission(hookContext: Pick<HookContext, 'providerMetadata'> | undefined): boolean {
-  let metadata: ProviderMetadata | undefined = hookContext?.providerMetadata
-  const visited = new Set<ProviderMetadata>()
-  while (metadata && !visited.has(metadata)) {
-    if (datadogProviders.has(metadata)) return true
-    visited.add(metadata)
-    metadata = transparentWrappers.get(metadata)
-  }
+  if (registeredRecordExposures(hookContext) !== undefined) return true
   if (!warnedUnsupported) {
     warnedUnsupported = true
     console.warn(
@@ -34,4 +29,26 @@ export function supportsExposureAdmission(hookContext: Pick<HookContext, 'provid
     )
   }
   return false
+}
+
+/**
+ * False when the Datadog provider that evaluated was created with
+ * `recordExposures: false`: its evaluations are not exposures for any hook.
+ */
+export function recordsExposures(hookContext: Pick<HookContext, 'providerMetadata'> | undefined): boolean {
+  return registeredRecordExposures(hookContext) !== false
+}
+
+function registeredRecordExposures(
+  hookContext: Pick<HookContext, 'providerMetadata'> | undefined
+): boolean | undefined {
+  let metadata: ProviderMetadata | undefined = hookContext?.providerMetadata
+  const visited = new Set<ProviderMetadata>()
+  while (metadata && !visited.has(metadata)) {
+    const recordExposures = datadogProviders.get(metadata)
+    if (recordExposures !== undefined) return recordExposures
+    visited.add(metadata)
+    metadata = transparentWrappers.get(metadata)
+  }
+  return undefined
 }

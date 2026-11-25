@@ -13,7 +13,7 @@ import type {
   HookContext,
 } from '@openfeature/web-sdk'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
-import { supportsExposureAdmission } from './exposure-scope'
+import { recordsExposures, supportsExposureAdmission } from './exposure-scope'
 import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 
 const METADATA_ALLOCATION_KEY = '__dd_allocation_key'
@@ -38,7 +38,8 @@ export interface ExposureEvaluation {
   readonly targetingKey: string | undefined
   /**
    * True when the evaluation succeeded and selected an allocation that logs
-   * exposures, whether or not this subject was already exposed.
+   * exposures, whether or not this subject was already exposed. Always false
+   * through a provider created with `recordExposures: false`.
    */
   isExposure(): boolean
   /**
@@ -61,10 +62,17 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
   readonly flagKey: string
   readonly details: EvaluationDetails<FlagValue>
   private readonly evaluationContext: EvaluationContext | undefined
+  private readonly recordsExposures: boolean
 
-  constructor(hookContext: HookContext, details: EvaluationDetails<FlagValue>, trackingContext?: EvaluationContext) {
+  constructor(
+    hookContext: HookContext,
+    details: EvaluationDetails<FlagValue>,
+    trackingContext: EvaluationContext | undefined,
+    recordsExposures: boolean
+  ) {
     this.flagKey = hookContext?.flagKey ?? details.flagKey
     this.details = details
+    this.recordsExposures = recordsExposures
     // The caller resolves the provider-bound context once for the whole graph.
     // A wrapper may expose an unreadable context; the exposure decision below never reads it.
     try {
@@ -94,6 +102,7 @@ class ExposureEvaluationImpl implements ExposureEvaluation {
 
   isExposure(): boolean {
     return (
+      this.recordsExposures &&
       this.details.errorCode === undefined &&
       this.details.reason !== 'ERROR' &&
       this.details.variant != null &&
@@ -148,7 +157,9 @@ function cloneExposureContext(context: EvaluationContext | undefined): Evaluatio
  * its own data store.
  *
  * This hook is optional. The provider puts the same data in the flag metadata,
- * so any OpenFeature hook can read it. This class reads it for you.
+ * so any OpenFeature hook can read it. This class reads it for you, and also
+ * applies the provider's `recordExposures` option, which the flag metadata
+ * does not carry.
  *
  * Register it with `OpenFeature.addHooks(new ExposureHook(callback))` or on a
  * client. The callback runs for every evaluation, including errors and repeats.
@@ -200,6 +211,7 @@ export class ExposureHook implements Hook {
       this.logCallbackFailure(error)
       return
     }
+    const providerRecordsExposures = recordsExposures(hookContext)
     let trackingContext: EvaluationContext | undefined
     try {
       trackingContext = getEvaluationTrackingContext(evaluationDetails, () => hookContext.context)
@@ -215,7 +227,8 @@ export class ExposureHook implements Hook {
           new ExposureEvaluationImpl(
             evaluation === evaluationDetails ? hookContext : ({ flagKey: evaluation.flagKey } as HookContext),
             evaluation as EvaluationDetails<FlagValue>,
-            trackingContext
+            trackingContext,
+            providerRecordsExposures
           )
         )
       } catch (error) {

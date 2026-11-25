@@ -353,7 +353,7 @@ OpenFeature.addHooks(
 ```
 
 - `isExposure()` is true when the evaluation succeeded and selected an allocation that logs exposures, repeats
-  included.
+  included. It is false for every evaluation through a provider created with `recordExposures: false`.
 - `isCacheHit()` is true when this subject was already exposed to the same flag, allocation, variant and serial ID.
 - `shouldSend()` is true for a new or changed exposure: exactly what the SDK sends to Datadog.
 - `getFeatures()` returns the read-only `HOOK` features of the selected split, such as `holdout.key` and
@@ -369,6 +369,57 @@ hit, so `shouldSend()` stays false and Datadog does not log the exposure again.
 Set `trackExposures: false` to stop sending exposure events to Datadog only. The hook still receives every
 evaluation, `shouldSend()` keeps its results, and the cache keeps recording. `enableExposureLogging` is deprecated
 and superseded by `trackExposures`; when both are set, `trackExposures` wins.
+
+#### Evaluate without recording (peeking)
+
+To evaluate a flag now, for example to choose content, and record the exposure later, create a second provider
+with `recordExposures: false` and `trackEvaluations: false`, and register it under its own domain. Both options
+default to `true` and apply only to that provider, on `DatadogProvider` and `DatadogCoreProvider`:
+
+- `recordExposures: false`: the provider's evaluations are not exposures. Nothing is sent to the exposure intake,
+  the exposure cache is neither read nor written, and `ExposureHook` reports `isExposure()`, `isCacheHit()` and
+  `shouldSend()` as false. This is stronger than `trackExposures: false`, which still records exposures without
+  sending them.
+- `trackEvaluations: false`: no flag evaluation events are sent and no RUM feature flag evaluations are added. With
+  `DatadogProvider`, the RUM user still enriches the evaluation context. `DatadogCoreProvider` never reads the RUM
+  user.
+
+Both also apply to shared hooks from `createDatadogExposureLoggingHook`, `createDatadogEvaluationLoggingHook` and
+`createDatadogRumTrackingHook`. They can only turn recording off: they do not re-enable tracking that other options
+turn off. Flag values and assignments are unchanged, and a later evaluation of the same flag through a provider with
+the defaults records the exposure as new.
+
+These options are not aliases of the existing tracking options. `trackEvaluations` is not a successor of
+`enableFlagEvaluationTracking` the way `trackExposures` is of `enableExposureLogging`:
+
+| Option                                | Exposure intake | Exposure cache and `ExposureHook`         | Flag evaluation events          | RUM feature flag evaluations    | RUM user in the context (`DatadogProvider`) |
+| ------------------------------------- | --------------- | ----------------------------------------- | ------------------------------- | ------------------------------- | ------------------------------------------- |
+| `trackExposures: false`               | Off             | Still recorded                            | Unchanged                       | Unchanged                       | Unchanged                                   |
+| `recordExposures: false`              | Off             | Not read or written; `isExposure()` false | Unchanged                       | Unchanged                       | Unchanged                                   |
+| `enableFlagEvaluationTracking: false` | Unchanged       | Unchanged                                 | Off for the provider's own hook | Unchanged                       | Unchanged                                   |
+| `enableRumFeatureFlagTracking: false` | Unchanged       | Unchanged                                 | Unchanged                       | Off for the provider's own hook | Off                                         |
+| `trackEvaluations: false`             | Unchanged       | Unchanged                                 | Off, also through shared hooks  | Off, also through shared hooks  | Unchanged                                   |
+
+```javascript
+const options = { clientToken: 'client-token', applicationId: 'application-id', site: 'datadoghq.com' }
+await OpenFeature.setProviderAndWait(new DatadogProvider(options), context)
+// No context of its own: the peek domain follows the global context.
+await OpenFeature.setProviderAndWait(
+  'peek',
+  new DatadogProvider({ ...options, recordExposures: false, trackEvaluations: false })
+)
+
+const variant = OpenFeature.getClient('peek').getStringValue('checkout-layout', 'control') // nothing recorded
+// Later, when the subject sees the content:
+OpenFeature.getClient().getStringValue('checkout-layout', 'control') // records the exposure
+```
+
+Register the peek domain without a context of its own. `OpenFeature.setContext()` does not update a domain that
+was given its own context, so after a login the peek client would keep evaluating for the previous subject.
+
+Each `DatadogProvider` fetches its assignments separately, so a peek provider doubles the assignment requests. Around a
+configuration publish, the two providers can hold different assignments, and the peeked variant can differ from the
+one recorded later.
 
 Exposures require a Datadog provider registered directly with OpenFeature, or wrapped in `DatadogDevtools`.
 Composed providers such as OpenFeature's `MultiProvider` are not supported: their child hooks finish before the
@@ -761,6 +812,8 @@ await tracking.shutdown()
 The exposure controller accepts the same `trackExposures` option as `DatadogProvider` (default `true`; the deprecated
 `enableExposureLogging` alias behaves identically). With `trackExposures: false` it runs record-only: nothing is
 sent to Datadog, but the shared cache keeps recording so `ExposureHook` verdicts stay correct.
+`recordExposures` is a provider option, not a controller option: pass it to `DatadogCoreProvider`. The controller
+ignores it.
 
 `tracking.initialize()` loads the exposure deduplication cache and starts the included hooks' transports, timers, and subscriptions. Exposure and evaluation hooks do not collect events until initialization completes; creating their controllers does not start those resources. Initialization is a no-op for hooks without a lifecycle, such as RUM tracking.
 

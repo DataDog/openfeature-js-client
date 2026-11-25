@@ -25,6 +25,31 @@ export interface EvaluationTelemetryOptOutConfiguration {
 }
 
 /**
+ * Per-provider recording options. They only narrow what the other tracking options
+ * and shared tracking hooks enable. With both off, a provider evaluates flags
+ * without recording anything, and another provider can record the exposure later.
+ */
+export interface ProviderRecordingConfiguration {
+  /**
+   * Whether this provider's evaluations are exposures (default: true). With this
+   * off, nothing is sent to the exposure intake, the exposure cache is neither read
+   * nor written, and `ExposureHook` reports `isExposure()` false, also through
+   * shared hooks from `createDatadogExposureLoggingHook`. A later evaluation of the
+   * same flag through another provider still records its exposure.
+   * Unlike `trackExposures: false`, which still records exposures without sending them.
+   */
+  recordExposures?: boolean
+
+  /**
+   * Whether this provider's evaluations send evaluation telemetry (default: true).
+   * With this off, no flag evaluation events are sent and no RUM feature flag
+   * evaluations are added, also through shared tracking hooks. With
+   * `DatadogProvider`, the RUM user still enriches the evaluation context.
+   */
+  trackEvaluations?: boolean
+}
+
+/**
  * Init Configuration for the Flagging SDK.
  */
 export interface FlaggingTrackingInitConfiguration extends InitConfiguration, DebugConfiguration {
@@ -87,6 +112,7 @@ export interface FlaggingTrackingInitConfiguration extends InitConfiguration, De
 export interface FlaggingInitConfiguration
   extends
     FlaggingTrackingInitConfiguration,
+    ProviderRecordingConfiguration,
     EvaluationTelemetryOptOutConfiguration,
     ExperimentationOptOutConfiguration {
   /**

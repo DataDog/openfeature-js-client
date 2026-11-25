@@ -30,7 +30,7 @@ import {
   registerDebugLogger,
 } from '../debug'
 import { extractAssignmentToken } from '../domain/assignment-token'
-import type { EvaluationTelemetryOptOutConfiguration } from '../domain/configuration'
+import type { EvaluationTelemetryOptOutConfiguration, ProviderRecordingConfiguration } from '../domain/configuration'
 import { withCoreConfigurationId } from './core-provider-metadata'
 import { toProviderErrorEvent } from './error-event'
 import {
@@ -49,12 +49,17 @@ import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import { DatadogProviderBase } from './provider-base'
 
 export interface DatadogCoreProviderConfiguration
-  extends EvaluationTelemetryOptOutConfiguration, ExperimentationOptOutConfiguration, DebugConfiguration {
+  extends
+    ProviderRecordingConfiguration,
+    EvaluationTelemetryOptOutConfiguration,
+    ExperimentationOptOutConfiguration,
+    DebugConfiguration {
   /**
    * Exposure cache shared with a tracking controller
    * (`createDatadogExposureLoggingHook().exposureCache`). Enables the exposure
    * deduplication verdict in flag metadata, used by the public `ExposureHook`.
-   * Without it, evaluations carry no exposure verdict.
+   * Without it, evaluations carry no exposure verdict. Ignored when
+   * `recordExposures` is false.
    */
   exposureCache?: AssignmentCache
 }
@@ -104,9 +109,11 @@ export class DatadogCoreProvider extends DatadogProviderBase {
         finally: (context, details) =>
           evaluationDebug(context.context, this.debug).event('evaluation.returned', () => ({ context, details })),
       })
-    this.exposureCache = options.exposureCache
+    const recordExposures = options.recordExposures !== false
+    // Without exposures, the shared cache is neither read nor written.
+    this.exposureCache = recordExposures ? options.exposureCache : undefined
     this.telemetryPolicy = createEvaluationTelemetryPolicy(this.metadata, options)
-    registerDatadogProvider(this.metadata)
+    registerDatadogProvider(this.metadata, recordExposures)
   }
 
   getConfiguration(): FlagsConfiguration | undefined {

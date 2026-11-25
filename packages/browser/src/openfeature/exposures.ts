@@ -29,7 +29,7 @@ import {
 import { startExposuresBatch } from '../transport/startExposuresBatch'
 import { getCoreConfigurationId } from './core-provider-metadata'
 import { getEvaluationTrackingContext } from './evaluation-telemetry-policy'
-import { supportsExposureAdmission } from './exposure-scope'
+import { recordsExposures, supportsExposureAdmission } from './exposure-scope'
 import { getPrecomputedDependencyEvaluations } from './precomputed-dependencies'
 import type { DatadogTrackingHook, ManagedTrackingHook } from './tracking'
 import { createTrackingHookController, runTrackingLifecycleOperation } from './tracking'
@@ -94,6 +94,14 @@ export function createExposureLoggingHook(
           details,
           outcome: 'skipped',
           reason: 'unrecognized_provider',
+        }))
+        return
+      }
+      if (!recordsExposures(hookContext)) {
+        evaluationLog.event('exposure.decision', () => ({
+          details,
+          outcome: 'skipped',
+          reason: 'provider_records_no_exposures',
         }))
         return
       }

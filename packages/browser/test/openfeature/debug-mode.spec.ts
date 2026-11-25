@@ -645,8 +645,30 @@ describe('browser debug-mode scenarios', () => {
     await OpenFeature.setProviderAndWait('debug-opt-out', value, { ...context, dd_evaluation_telemetry_opt_out: true })
     OpenFeature.getClient('debug-opt-out').getStringValue('string-flag', 'default')
     expect(events('tracking.policy').some((record) => record.details.allowed === false)).toBe(true)
+    expect(events('tracking.policy').slice(-1)[0].details.reason).toBe('evaluation_telemetry_opt_out')
     expect(events('evaluation.aggregated')).toHaveLength(0)
     expect(events('exposure.decision').slice(-1)[0].details.outcome).toBe('record_only')
+  })
+
+  it('explains per-provider recording options', async () => {
+    const value = provider({
+      recordExposures: false,
+      trackEvaluations: false,
+      trackExposures: true,
+      enableFlagEvaluationTracking: true,
+      enableRumFeatureFlagTracking: true,
+    })
+    await OpenFeature.setProviderAndWait('debug-peek', value, context)
+    OpenFeature.getClient('debug-peek').getStringValue('string-flag', 'default')
+    expect(events('tracking.configured').slice(-1)[0].details).toMatchObject({
+      exposure: false,
+      recordExposures: false,
+      trackEvaluations: false,
+    })
+    expect(events('tracking.policy').slice(-1)[0].details).toMatchObject({
+      allowed: false,
+      reason: 'track_evaluations_disabled',
+    })
   })
 
   it('keeps fresh assignments usable when IndexedDB fails', async () => {
