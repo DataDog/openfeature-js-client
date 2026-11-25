@@ -1190,21 +1190,35 @@ describe('createFlagsConfigurationFetcher', () => {
       })
 
       const nowSeconds = () => Math.floor(Date.now() / 1000)
-      const validProof = () => ({ verifiedAt: nowSeconds(), expiresAt: nowSeconds() + 300 })
-      const expiredProof = () => ({ verifiedAt: nowSeconds() - 600, expiresAt: nowSeconds() - 300 })
+      const proofScope = { anchorKey: '0'.repeat(64), leafNotBefore: 0, verifiedResponseHeaders: {} }
+      const proofAt = (verifiedAt: number, expiresAt: number) => ({
+        verifiedAt,
+        effectiveVerifiedAt: verifiedAt,
+        verifiedMonotonicMs: performance.now(),
+        issuedAt: verifiedAt,
+        expiresAt,
+        ...proofScope,
+      })
+      const validProof = () => proofAt(nowSeconds(), nowSeconds() + 300)
+      const expiredProof = () => proofAt(nowSeconds() - 600, nowSeconds() - 300)
 
       // jsdom lacks WebCrypto, so prepare and most reads are stubbed; admit, the gate under test, runs for real.
       const requiredSigning = () => {
-        const signing = createResponseSigningController({ mode: 'required', trustedRootCertificates: ['test-root'] })!
+        const signing = createResponseSigningController(
+          { mode: 'required', trustedRootCertificates: ['test-root'] },
+          { site: 'datad0g.com' }
+        )!
         jest
           .spyOn(signing, 'prepare')
-          .mockReturnValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
+          .mockResolvedValue({ url: '', method: 'POST', headers: new Headers(), body: new Uint8Array() })
         return signing
       }
 
       it('reports once when an opted-out subject receives an acknowledged, signed configuration', async () => {
         const signing = requiredSigning()
-        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof: validProof() })
+        // The SDK reports the verified value from the proof, not the raw header.
+        const proof = { ...validProof(), verifiedResponseHeaders: { 'dd-flag-selection-ignored': 'invalid_tag' } }
+        jest.spyOn(signing, 'read').mockResolvedValue({ json: acknowledgedResponse, proof })
         mockFetch.mockResolvedValue({ ok: true, status: 200, redirected: false, headers: ignoredHeaders() })
         const fetcher = createFlagsConfigurationFetcher(
           { ...baseConfig, ...immediateOptOut, flagSelection: { tags: ['beta'] } },

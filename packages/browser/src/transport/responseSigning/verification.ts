@@ -1,4 +1,3 @@
-import { GeneralError } from '@openfeature/web-sdk'
 import { AsnConvert } from '@peculiar/asn1-schema'
 import {
   AuthorityKeyIdentifier,
@@ -8,79 +7,71 @@ import {
   KeyUsage,
   SubjectKeyIdentifier,
 } from '@peculiar/asn1-x509'
+import {
+  BOUND_REQUEST_HEADERS,
+  buffer,
+  CLOCK_TOLERANCE_SECONDS,
+  type ClockFloors,
+  cryptoProvider,
+  hex,
+  MAX_SIGNED_REQUEST,
+  MAX_SIGNED_RESPONSE,
+  MINIMUM_LEAF_NOT_BEFORE_HEADER,
+  monotonicNow,
+  NO_CLOCK_FLOORS,
+  ResponseVerificationError,
+  requireCondition,
+  SIGNED_HEADERS_HEADER,
+  SIGNED_RESPONSE_HEADERS_HEADER,
+  SIGNING_CAPABILITY,
+  SIGNING_CHAIN_HEADER,
+  SIGNING_NONCE_HEADER,
+  SIGNING_VERSION,
+  SIGNING_VERSION_HEADER,
+  type SigningRequest,
+  type SigningResponse,
+  sha256,
+  utf8,
+  type VerificationFailure,
+  type VerifiedResponse,
+} from './protocol'
 
-export const SIGNING_VERSION_HEADER = 'x-datadog-feature-flags-signature-version'
-export const SIGNING_NONCE_HEADER = 'x-datadog-feature-flags-request-nonce'
-export const SIGNING_CAPABILITY = 'response-signing-v1'
+// The certificate verifier. The provider loads this module as a dynamic chunk, so it is not in the default bundle.
+export * from './protocol'
+
+const TRANSCRIPT_DOMAIN = 'datadog.feature-flags.precomputed-assignments.v1\0'
 const PREFIX = 'x-datadog-feature-flags-'
 const MAX_CERTIFICATE = 4096
-export const MAX_SIGNED_REQUEST = 1024 * 1024
-export const MAX_SIGNED_RESPONSE = 2 * 1024 * 1024
-const CODE_SIGNING = '1.3.6.1.5.5.7.3.3'
+const MAX_INTERMEDIATES = 3
+/** The longest leaf validity, notAfter - notBefore, in seconds: 120 h + 5 min. */
+const MAX_LEAF_LIFETIME_SECONDS = 432_300
+/**
+ * FFE assignment-signing extended key usage (DER 06 0a 2b 06 01 04 01 86 8d 1f 01 01).
+ * PLACEHOLDER: 1.3.6.1.4.1.99999 is not a Datadog-owned arc. Datadog must assign the
+ * production OID before merge. Keep this the only definition of the OID in the SDK.
+ */
+const FFE_ASSIGNMENT_SIGNING_EKU = '1.3.6.1.4.1.99999.1.1'
+const ANY_EXTENDED_KEY_USAGE = '2.5.29.37.0'
 const ECDSA_SHA256 = '1.2.840.10045.4.3.2'
 const P256_PARAMETERS = new Uint8Array([6, 8, 42, 134, 72, 206, 61, 3, 1, 7])
-const OPTIONAL_HEADERS = [
-  'content-type',
-  'dd-application-id',
-  'x-rkyv',
-  'x-use-cache',
-  'x-dd-feature-flags-capabilities',
-]
+const CAPABILITIES_HEADER = 'x-dd-feature-flags-capabilities'
+/** Lowercase HTTP token characters, at most 64 bytes. */
+const LIST_NAME = /^[0-9a-z!#$%&'*+.^_`|~-]{1,64}$/
+const MAX_LISTED_NAMES = 32
+/** The 8 proof headers, which a response list must not name. */
+const PROOF_HEADERS = [
+  'signature-version',
+  'signing-certificate',
+  'signing-chain',
+  'certificate-id',
+  'issued-at',
+  'expires-at',
+  'signature',
+  'signed-response-headers',
+].map((name) => PREFIX + name)
+/** Response headers with one value. A repeated field arrives joined by ', ', so a comma means more than one line. */
+const SINGLE_VALUE_RESPONSE_HEADERS = ['content-type', 'dd-flag-selection-ignored']
 
-export type VerificationFailure =
-  | 'unsupported-request'
-  | 'unavailable-crypto'
-  | 'missing-anchor'
-  | 'missing-proof'
-  | 'invalid-proof'
-  | 'response-too-large'
-  | 'invalid-certificate'
-  | 'invalid-signature'
-  | 'expired-proof'
-
-export interface SigningRequest {
-  url: string
-  method: string
-  headers: Headers
-  body: Uint8Array
-}
-export interface SigningResponse {
-  status: number
-  headers: Headers
-  body: Uint8Array
-}
-export interface VerifiedResponse {
-  verifiedAt: number
-  expiresAt: number
-}
-
-// Errors contain only fixed diagnostic codes, never request or certificate contents.
-export class ResponseVerificationError extends GeneralError {
-  constructor(readonly reason: VerificationFailure) {
-    super(`Response signing: ${reason}`)
-    Object.setPrototypeOf(this, new.target.prototype)
-    this.name = 'ResponseVerificationError'
-  }
-}
-function requireCondition(condition: unknown, reason: VerificationFailure = 'invalid-proof'): asserts condition {
-  if (!condition) throw new ResponseVerificationError(reason)
-}
-export function cryptoProvider(): Crypto {
-  requireCondition(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues, 'unavailable-crypto')
-  return globalThis.crypto
-}
-export function utf8(value: string): Uint8Array {
-  return new TextEncoder().encode(value)
-}
-function buffer(bytes: Uint8Array): ArrayBuffer {
-  return new Uint8Array(bytes).buffer
-}
-export async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await cryptoProvider().subtle.digest('SHA-256', buffer(bytes)))
-}
-export function hex(bytes: Uint8Array): string {
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
-}
 function equal(a: ArrayBuffer | Uint8Array, b: ArrayBuffer | Uint8Array): boolean {
   const aa = new Uint8Array(a),
     bb = new Uint8Array(b)
@@ -98,6 +89,15 @@ function proof(headers: Headers, name: string): string {
   requireCondition(value !== null && value.length > 0, 'missing-proof')
   requireCondition(value.length <= 4 * Math.ceil(MAX_CERTIFICATE / 3) && !value.includes(','))
   return value
+}
+/** Intermediates: standard base64 DER joined by ',' without spaces, index 0 issued the leaf. */
+function chain(headers: Headers): Uint8Array[] {
+  const value = headers.get(SIGNING_CHAIN_HEADER)
+  requireCondition(value !== null && value.length > 0, 'missing-proof')
+  requireCondition(value.length <= MAX_INTERMEDIATES * (4 * Math.ceil(MAX_CERTIFICATE / 3) + 1) - 1)
+  const entries = value.split(',')
+  requireCondition(entries.length >= 1 && entries.length <= MAX_INTERMEDIATES)
+  return entries.map((entry) => decodeBase64(entry, MAX_CERTIFICATE))
 }
 function seconds(value: string): number {
   requireCondition(value.length <= 16 && /^(0|[1-9][0-9]*)$/.test(value))
@@ -213,14 +213,36 @@ export function ecdsaSignature(der: Uint8Array): Uint8Array {
   return result
 }
 
-interface ParsedCertificate {
+/**
+ * X.690 11.2.2: a DER named-bit list omits every trailing zero bit. The schema serializer keeps the input
+ * bytes, so check minimality directly: the lowest bit kept is set, or the list is empty.
+ */
+function minimalNamedBits(der: Uint8Array): boolean {
+  if (der.length < 3 || der[0] !== 3 || der[1] !== der.length - 2) return false
+  const unused = der[2]
+  if (der.length === 3) return unused === 0
+  const last = der[der.length - 1]
+  return unused <= 7 && ((last >> unused) & 1) === 1
+}
+
+export interface ParsedCertificate {
   certificate: Certificate
   notBefore: number
   notAfter: number
   ski?: Uint8Array
   aki?: Uint8Array
+  /** Decoded basicConstraints pathLenConstraint, when present. */
+  pathLength?: number
 }
-function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anchor'): ParsedCertificate {
+/**
+ * `index` is the intermediate position: 0 issued the leaf. It is ignored for other roles.
+ * Exported for tests only; it is not part of the package entry points.
+ */
+export function parseCertificate(
+  der: Uint8Array,
+  role: 'leaf' | 'intermediate' | 'anchor',
+  index = 0
+): ParsedCertificate {
   try {
     checkDer(der)
     const certificate = AsnConvert.parse(buffer(der), Certificate, {
@@ -284,13 +306,28 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
     const basic = extensions.get('2.5.29.19'),
       usage = extensions.get('2.5.29.15'),
       eku = extensions.get('2.5.29.37')
+    let pathLength: number | undefined
+    if (role === 'anchor') {
+      // The anchor pathLenConstraint is read for the chain-length check. Present values must be canonical DER.
+      if (basic) pathLength = parseDer(new Uint8Array(basic.extnValue.buffer), BasicConstraints).pathLenConstraint
+      if (usage) {
+        const keyUsageDer = new Uint8Array(usage.extnValue.buffer)
+        parseDer(keyUsageDer, KeyUsage)
+        requireCondition(minimalNamedBits(keyUsageDer), 'invalid-certificate')
+      }
+    }
     if (role !== 'anchor') {
       requireCondition(basic?.critical && usage?.critical, 'invalid-certificate')
-      const constraints = parseDer(new Uint8Array(basic.extnValue.buffer), BasicConstraints)
+      const basicDer = new Uint8Array(basic.extnValue.buffer)
+      // A leaf basicConstraints is exactly the empty SEQUENCE (30 00): cA FALSE is the omitted default.
+      requireCondition(role !== 'leaf' || equal(basicDer, new Uint8Array([48, 0])), 'invalid-certificate')
+      const constraints = parseDer(basicDer, BasicConstraints)
+      pathLength = constraints.pathLenConstraint
+      // Decode pathLenConstraint; never compare fixed bytes. Intermediate i has i CAs below it, so pathLen >= i.
       requireCondition(
         role === 'leaf'
-          ? !constraints.cA && constraints.pathLenConstraint === undefined
-          : constraints.cA && constraints.pathLenConstraint === 0,
+          ? !constraints.cA && pathLength === undefined
+          : constraints.cA && pathLength !== undefined && Number.isSafeInteger(pathLength) && pathLength >= index,
         'invalid-certificate'
       )
       const keyUsageDer = new Uint8Array(usage.extnValue.buffer)
@@ -305,7 +342,20 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
     }
     if (eku) {
       const purposes = parseDer(new Uint8Array(eku.extnValue.buffer), ExtendedKeyUsage)
-      requireCondition(purposes.length === 1 && purposes[0] === CODE_SIGNING, 'invalid-certificate')
+      requireCondition(purposes.length > 0, 'invalid-certificate')
+      if (role === 'leaf') {
+        // The product OID is required; other OIDs are allowed; anyExtendedKeyUsage is forbidden.
+        requireCondition(
+          purposes.includes(FFE_ASSIGNMENT_SIGNING_EKU) && !purposes.includes(ANY_EXTENDED_KEY_USAGE),
+          'invalid-certificate'
+        )
+      } else {
+        // Intermediates and the pinned root: an EKU, if present, must allow FFE assignment signing.
+        requireCondition(
+          purposes.includes(FFE_ASSIGNMENT_SIGNING_EKU) || purposes.includes(ANY_EXTENDED_KEY_USAGE),
+          'invalid-certificate'
+        )
+      }
     }
     const skiExtension = extensions.get('2.5.29.14'),
       akiExtension = extensions.get('2.5.29.35')
@@ -323,7 +373,7 @@ function parseCertificate(der: Uint8Array, role: 'leaf' | 'intermediate' | 'anch
       aki = identifier.keyIdentifier ? new Uint8Array(identifier.keyIdentifier.buffer) : undefined
       requireCondition(aki !== undefined && aki.length > 0, 'invalid-certificate')
     }
-    return { certificate, notBefore, notAfter, ski, aki }
+    return { certificate, notBefore, notAfter, ski, aki, pathLength }
   } catch {
     throw new ResponseVerificationError('invalid-certificate')
   }
@@ -345,7 +395,8 @@ async function verifySignature(key: CryptoKey, signature: Uint8Array, bytes: Uin
     buffer(bytes)
   )
 }
-async function verifyChild(child: ParsedCertificate, parent: ParsedCertificate): Promise<void> {
+/** Exported for tests only; it is not part of the package entry points. */
+export async function verifyChild(child: ParsedCertificate, parent: ParsedCertificate): Promise<void> {
   requireCondition(
     equal(
       AsnConvert.serialize(child.certificate.tbsCertificate.issuer),
@@ -379,19 +430,28 @@ export function validateSigningRequest(request: SigningRequest): URL {
     'unsupported-request'
   )
   requireCondition(
-    request.headers.get(SIGNING_VERSION_HEADER) === '1' &&
+    request.headers.get(SIGNING_VERSION_HEADER) === SIGNING_VERSION &&
       /^[0-9a-f]{32}$/.test(request.headers.get(SIGNING_NONCE_HEADER) || ''),
     'unsupported-request'
   )
   const token = request.headers.get('dd-client-token')
-  requireCondition(token && !token.includes(','), 'unsupported-request')
-  // Capabilities are a comma-delimited protocol list. Other semantic headers must be single-valued.
-  for (const name of ['content-type', 'dd-application-id', 'x-rkyv', 'x-use-cache', 'authorization']) {
-    requireCondition(!request.headers.get(name)?.includes(','), 'unsupported-request')
+  requireCondition(token && !request.headers.get('authorization')?.includes(','), 'unsupported-request')
+  const listed = signedRequestHeaders(request.headers)
+  requireCondition(
+    listed.includes('content-type') &&
+      listed.includes(CAPABILITIES_HEADER) &&
+      !listed.some((name) => name === 'dd-client-token' || name === 'authorization' || name.startsWith(PREFIX)) &&
+      BOUND_REQUEST_HEADERS.every((name) => listed.includes(name) || request.headers.get(name) === null),
+    'unsupported-request'
+  )
+  for (const name of [...listed, 'dd-client-token']) {
+    const value = request.headers.get(name)
+    // Each listed header is present. Capabilities are a comma-delimited list; other values have one line.
+    requireCondition(value !== null && (name === CAPABILITIES_HEADER || !value.includes(',')), 'unsupported-request')
   }
   const capabilities =
     request.headers
-      .get('x-dd-feature-flags-capabilities')
+      .get(CAPABILITIES_HEADER)
       ?.split(',')
       .map((value) => value.trim()) || []
   requireCondition(
@@ -399,6 +459,62 @@ export function validateSigningRequest(request: SigningRequest): URL {
     'unsupported-request'
   )
   return url
+}
+/** A signed header list: 1 to 32 lowercase token names, unique, in ascending byte order, joined by ',' with no spaces. */
+function headerList(value: string, reason: VerificationFailure): string[] {
+  const names = value.split(',')
+  requireCondition(
+    names.length <= MAX_LISTED_NAMES &&
+      names.every((name, index) => LIST_NAME.test(name) && (index === 0 || names[index - 1] < name)),
+    reason
+  )
+  return names
+}
+function signedRequestHeaders(headers: Headers): string[] {
+  const value = headers.get(SIGNED_HEADERS_HEADER)
+  requireCondition(value !== null, 'unsupported-request')
+  return headerList(value, 'unsupported-request')
+}
+/** A request has a flag selection when its JSON body has a non-null flag_selection, or its query selects flags. */
+/** As the edge and the shared fixtures: only the JSON:API field data.attributes.flag_selection, when not null. */
+function hasFlagSelection(request: SigningRequest): boolean {
+  let body: unknown
+  try {
+    body = JSON.parse(new TextDecoder().decode(request.body))
+  } catch {
+    return false
+  }
+  for (const key of ['data', 'attributes'])
+    body =
+      typeof body === 'object' && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)[key]
+        : undefined
+  const selection =
+    typeof body === 'object' && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>).flag_selection
+      : undefined
+  return selection !== undefined && selection !== null
+}
+function signedResponseHeaders(request: SigningRequest, headers: Headers): string[] {
+  const value = headers.get(SIGNED_RESPONSE_HEADERS_HEADER)
+  requireCondition(value, 'missing-proof')
+  const names = headerList(value, 'invalid-proof')
+  requireCondition(
+    names.includes('content-type') &&
+      (names.includes('dd-flag-selection-ignored') || !hasFlagSelection(request)) &&
+      !names.some((name) => PROOF_HEADERS.includes(name)) &&
+      SINGLE_VALUE_RESPONSE_HEADERS.every((name) => !names.includes(name) || !headers.get(name)?.includes(','))
+  )
+  return names
+}
+/** `u8(count)`, then for each name in list order: `lp(name) u8(1) lp(value)`, or `lp(name) u8(0) lp("")` when absent. */
+function listTranscript(names: readonly string[], headers: Headers): Uint8Array[] {
+  const parts: Uint8Array[] = [new Uint8Array([names.length])]
+  for (const name of names) {
+    const value = headers.get(name)
+    parts.push(lp(name), new Uint8Array([value === null ? 0 : 1]), lp(value ?? ''))
+  }
+  return parts
 }
 function unsignedInteger(value: number, width: number): Uint8Array {
   requireCondition(Number.isSafeInteger(value) && value >= 0 && (width !== 2 || value <= 65535))
@@ -429,26 +545,26 @@ export async function buildSigningTranscript(
   issuedAt: number,
   expiresAt: number,
   leaf: Uint8Array,
-  intermediate: Uint8Array
+  intermediates: readonly Uint8Array[],
+  minimumNotBefore?: number
 ): Promise<Uint8Array> {
   const url = validateSigningRequest(request)
+  requireCondition(intermediates.length >= 1 && intermediates.length <= MAX_INTERMEDIATES)
   const nonce = Uint8Array.from(request.headers.get(SIGNING_NONCE_HEADER)!.match(/../g)!, (pair) => parseInt(pair, 16))
   const parts = [
-    utf8('datadog.feature-flags.precomputed-assignments.v1\0'),
+    utf8(TRANSCRIPT_DOMAIN),
     lp(request.method),
     lp('https'),
+    // WHATWG URL host: lowercase, IPv6 in brackets, and no port when it is the scheme default (443).
     lp(url.host.toLowerCase()),
     lp(url.pathname),
-    lp(url.search),
+    // WHATWG search is '' for both "/p" and "/p?". The edge, iOS and Android encode an empty query as "?".
+    lp(url.search || (url.href.replace(/#.*$/, '').endsWith('?') ? '?' : '')),
     lp(nonce),
     await sha256(request.body),
     await sha256(utf8(request.headers.get('dd-client-token')!)),
   ]
-  for (const name of OPTIONAL_HEADERS) {
-    const value = request.headers.get(name)
-    parts.push(new Uint8Array([value === null ? 0 : 1]))
-    if (value !== null) parts.push(lp(value))
-  }
+  parts.push(...listTranscript(signedRequestHeaders(request.headers), request.headers))
   const auth = request.headers.get('authorization')
   parts.push(new Uint8Array([auth === null ? 0 : 1]))
   if (auth !== null) parts.push(await sha256(utf8(auth)))
@@ -459,8 +575,13 @@ export async function buildSigningTranscript(
     unsignedInteger(response.body.length, 8),
     await sha256(response.body),
     await sha256(leaf),
-    await sha256(intermediate)
+    // Chain tail: u8 intermediate count, then the digest of each intermediate in header order.
+    new Uint8Array([intermediates.length])
   )
+  for (const intermediate of intermediates) parts.push(await sha256(intermediate))
+  parts.push(...listTranscript(signedResponseHeaders(request, response.headers), response.headers))
+  // DRAFT: an optional signed tail. Without the header, the v1 transcript is unchanged.
+  if (minimumNotBefore !== undefined) parts.push(new Uint8Array([1]), unsignedInteger(minimumNotBefore, 8))
   return concat(parts)
 }
 
@@ -468,38 +589,64 @@ export async function verifyResponse(
   request: SigningRequest,
   response: SigningResponse,
   trustedRoots: readonly string[],
-  now = Date.now() / 1000
+  now = Date.now() / 1000,
+  /** Stored minimum not-before for a trust anchor (SHA-256 hex of its DER); 0 when none. */
+  storedMinimumNotBefore: (anchorKey: string) => number = () => 0,
+  /** The clock floors. The checks use max(now, build floor, high-water mark of the anchor). Default: none. */
+  floors: ClockFloors = NO_CLOCK_FLOORS
 ): Promise<VerifiedResponse> {
   cryptoProvider()
-  validateSigningRequest(request)
+  const url = validateSigningRequest(request)
   requireCondition(trustedRoots.length > 0, 'missing-anchor')
   requireCondition(response.body.length <= MAX_SIGNED_RESPONSE, 'response-too-large')
-  requireCondition(response.status === 200 && proof(response.headers, 'signature-version') === '1')
+  requireCondition(response.status === 200 && proof(response.headers, 'signature-version') === SIGNING_VERSION)
   const leafDer = decodeBase64(proof(response.headers, 'signing-certificate'), MAX_CERTIFICATE)
-  const intermediateDer = decodeBase64(proof(response.headers, 'signing-intermediate'), MAX_CERTIFICATE)
+  const intermediateDers = chain(response.headers)
   const certificateId = proof(response.headers, 'certificate-id')
   requireCondition(/^[0-9a-f]{64}$/.test(certificateId) && certificateId === hex(await sha256(leafDer)))
   const issuedAt = seconds(proof(response.headers, 'issued-at')),
     expiresAt = seconds(proof(response.headers, 'expires-at'))
-  requireCondition(
-    issuedAt <= now + 30 && expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300,
-    'expired-proof'
-  )
-  const leaf = parseCertificate(leafDer, 'leaf'),
-    intermediate = parseCertificate(intermediateDer, 'intermediate')
-  await verifyChild(leaf, intermediate)
+  const responseHeaderNames = signedResponseHeaders(request, response.headers)
+  // One decimal field line only: duplicated lines arrive joined by ', ' and fail the decimal check.
+  const minimumNotBeforeValue = response.headers.get(MINIMUM_LEAF_NOT_BEFORE_HEADER)
+  const minimumNotBefore = minimumNotBeforeValue === null ? undefined : seconds(minimumNotBeforeValue)
+  // The anchor and its high-water mark are not known yet. A mark only moves the time forward, so a proof that is
+  // expired at the build floor stays expired. The issued-at bound waits for the mark.
+  const floorNow = Math.max(now, floors.build)
+  requireCondition(expiresAt > floorNow && expiresAt > issuedAt && expiresAt - issuedAt <= 300, 'expired-proof')
+  const leaf = parseCertificate(leafDer, 'leaf')
+  // As the edge and the issuance policy: a leaf lives at most 120 h, plus 5 min of backdating. Leaf only.
+  requireCondition(leaf.notAfter - leaf.notBefore <= MAX_LEAF_LIFETIME_SECONDS, 'invalid-certificate')
+  const intermediates = intermediateDers.map((der, index) => parseCertificate(der, 'intermediate', index))
+  // Path: leaf -> intermediate[0] -> ... -> intermediate[n-1] -> pinned root. Every link is checked.
+  await verifyChild(leaf, intermediates[0])
+  for (let index = 0; index + 1 < intermediates.length; index++) {
+    await verifyChild(intermediates[index], intermediates[index + 1])
+  }
+  const last = intermediates[intermediates.length - 1]
   let anchor: ParsedCertificate | undefined
+  let anchorKey = ''
+  let effectiveNow = floorNow
   for (const root of trustedRoots) {
     try {
-      const candidate = parseCertificate(decodeBase64(root, MAX_CERTIFICATE), 'anchor')
-      await verifyChild(intermediate, candidate)
+      const candidateDer = decodeBase64(root, MAX_CERTIFICATE)
+      const candidate = parseCertificate(candidateDer, 'anchor')
+      requireCondition(
+        candidate.pathLength === undefined || candidate.pathLength >= intermediates.length,
+        'invalid-certificate'
+      )
+      await verifyChild(last, candidate)
+      const candidateKey = hex(await sha256(candidateDer))
+      const candidateNow = Math.max(floorNow, floors.highWaterMark(candidateKey))
       if (
-        now >= candidate.notBefore &&
-        now < candidate.notAfter &&
+        candidateNow >= candidate.notBefore &&
+        candidateNow < candidate.notAfter &&
         issuedAt >= candidate.notBefore &&
         expiresAt <= candidate.notAfter
       ) {
         anchor = candidate
+        anchorKey = candidateKey
+        effectiveNow = candidateNow
         break
       }
     } catch {
@@ -507,17 +654,43 @@ export async function verifyResponse(
     }
   }
   requireCondition(anchor, 'invalid-certificate')
-  for (const certificate of [leaf, intermediate]) {
+  // A clock set back below the last verified issued-at cannot make an older proof current again.
+  requireCondition(issuedAt <= effectiveNow + CLOCK_TOLERANCE_SECONDS && expiresAt > effectiveNow, 'expired-proof')
+  const floor = storedMinimumNotBefore(anchorKey)
+  // Leaf only: intermediates live for years, so comparing them would block every later leaf.
+  requireCondition(leaf.notBefore >= floor, 'revoked-certificate')
+  for (const certificate of [leaf, ...intermediates]) {
     requireCondition(
-      now >= certificate.notBefore &&
-        now < certificate.notAfter &&
+      effectiveNow >= certificate.notBefore &&
+        effectiveNow < certificate.notAfter &&
         issuedAt >= certificate.notBefore &&
         expiresAt <= certificate.notAfter,
       'expired-proof'
     )
   }
   const signature = decodeBase64(proof(response.headers, 'signature'), 72)
-  const transcript = await buildSigningTranscript(request, response, issuedAt, expiresAt, leafDer, intermediateDer)
+  const transcript = await buildSigningTranscript(
+    request,
+    response,
+    issuedAt,
+    expiresAt,
+    leafDer,
+    intermediateDers,
+    minimumNotBefore
+  )
   requireCondition(await verifySignature(await importPublicKey(leaf), signature, transcript), 'invalid-signature')
-  return { expiresAt, verifiedAt: now }
+  // Act only on these values: an unlisted response header is not verified.
+  const verifiedResponseHeaders: Record<string, string | null> = {}
+  for (const name of responseHeaderNames) verifiedResponseHeaders[name] = response.headers.get(name)
+  return {
+    issuedAt,
+    expiresAt,
+    verifiedAt: now,
+    effectiveVerifiedAt: effectiveNow,
+    verifiedMonotonicMs: monotonicNow(),
+    anchorKey,
+    leafNotBefore: leaf.notBefore,
+    minimumNotBefore,
+    verifiedResponseHeaders,
+  }
 }

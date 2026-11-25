@@ -120,6 +120,219 @@ backoff is added; responses that request a longer delay are not retried. It does
 network, CORS, and CSP failures as `TypeError`, so the wrapper cannot separate those causes. For timeout only, pass
 `withTimeout(globalThis.fetch, 5_000)` directly as `flagConfigurationFetch`.
 
+### Response signing (experimental)
+
+Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be
+removed in a minor release, based on customer feedback. The option is `experimentalResponseSigning`.
+
+The SDK does not send `X-stream` in any mode. The edge selects the transport. When the edge signs a response,
+it buffers that response itself. A staging edge without this buffering returns no proof:
+`required` then fails closed with reason `missing-proof`, and `observe` accepts the response as unverified.
+
+Response signing is opt-in and defaults to `off`. Use `observe` to attempt verification while accepting ordinary valid
+assignments, or `required` to admit only verified responses. Existing authentication,
+HTTP errors, JSON validation, and experimentation opt-out checks still apply.
+
+Response signing is staging only: it is available only on the Datadog staging site, `site: 'datad0g.com'`.
+Production is not supported yet. This SDK version bundles no production root and no production EKU.
+Production support comes in a later release. On every other site, including the default site:
+
+- `observe` has no effect. The SDK logs one warning, sends the ordinary request without signing headers,
+  and does not verify flags.
+- `required` fails closed. The SDK logs one error at initialization and sends no assignment request.
+  The provider enters its error state. Every fetch fails with the same error,
+  `Flag response signing failed (unsupported-site): ...`, and evaluations return the default value.
+  To load flags on that site, remove `required` or use `observe`.
+
+```typescript
+const provider = new DatadogProvider({
+  clientToken: '<client-token>',
+  site: 'datad0g.com',
+  env: 'staging',
+  experimentalResponseSigning: { mode: 'observe' },
+})
+```
+
+`DatadogProvider.responseSigningVersion === 1` identifies support at runtime.
+`trustedRootCertificates` accepts at most four standard padded base64 DER public
+root certificates fixed at initialization. It is a draft option for dogfood and tests.
+The only bundled root is the public staging root, `CN=Datadog Customer Signing Root CA - staging`
+(SHA-256 of the DER `0e469f3cecc9cd51fd64373879636540512d56e99eecd70361c78b98c47ea934`).
+The SDK bundles **no production root**. Never obtain trust anchors from an assignment response. In required mode, `new DatadogProvider(...)` throws immediately
+if no trusted root is available, before any network request.
+On the staging site, when no trusted root is available for the endpoint, observe mode logs one `missing-anchor` warning, sends ordinary
+requests without signing headers, and does not load the verifier. Observe mode also accepts unsigned or invalidly signed responses without calling
+them verified. Verification error messages contain no token, context, response, or certificate data.
+
+Required-mode verification failures use OpenFeature error code `GENERAL`.
+`PROVIDER_ERROR` events include the failure message, in the format
+`Flag response signing failed (<code>): <what failed>. <fix hint>.` For example:
+`Flag response signing failed (missing-proof): The response has no signature headers. A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled.`
+iOS, Android and the browser use the same reason codes:
+
+| Code                   | What failed                                                                    | Fix hint                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `unsupported-request`  | The SDK cannot sign this request shape                                         | Use the default flags endpoint and request options                                                 |
+| `unavailable-crypto`   | The platform crypto API is not available                                       | Use a secure (HTTPS) context                                                                       |
+| `missing-anchor`       | No trusted root is configured for this site                                    | Use the default staging endpoint without flaggingProxy, and leave trustedRootCertificates unset    |
+| `missing-proof`        | The response has no signature headers                                          | A proxy, CDN or custom endpoint removed the signature headers, or the organization is not enrolled |
+| `invalid-proof`        | The signature headers are present but not valid                                | A proxy or CDN changed the response headers                                                        |
+| `response-too-large`   | The body is larger than the signed size limit                                  | Contact Datadog support                                                                            |
+| `invalid-certificate`  | The certificate chain does not chain to the pinned root, or a chain rule fails | The response did not come from Datadog, or the network intercepts TLS. Contact Datadog support     |
+| `invalid-signature`    | The signature does not match the request and response                          | The response changed in transit                                                                    |
+| `expired-proof`        | The proof is expired or not yet valid                                          | Check the device clock                                                                             |
+| `unsupported-site`     | Signing is not available on this Datadog site                                  | Response signing supports only the staging site in this release. Production is not supported yet   |
+| `verifier-unavailable` | The response signing verifier did not load (browser only)                      | Check that the page can load the SDK chunk files                                                   |
+
+`revoked-certificate` (draft) keeps the message `Response signing: revoked-certificate`.
+When no usable verified configuration remains, evaluation details return the default value,
+reason `ERROR`, error code `GENERAL`, and the verification failure message.
+In `required` mode, one verification failure emits one `PROVIDER_ERROR` event. The OpenFeature SDK emits it when
+`initialize` or `onContextChange` rejects. The event has the failure message but no `errorCode`, because the SDK
+copies only the message. With `expireVerifiedFlags: true`, proof expiry outside these calls emits `PROVIDER_ERROR`
+with error code `GENERAL`. By default, it moves the provider to `STALE` and emits `PROVIDER_STALE`.
+Observe-mode verification failures do not emit provider errors or change successful evaluation reasons.
+On the staging site, observe mode logs one warning for each reason code, in the format
+`Flag response signing failed (<code>): <what failed>. <fix hint>. Flags are not verified.`
+There is no separate verification callback.
+
+On the staging site, the resolved assignment endpoint selects the bundled
+**public staging root** automatically. Signing still defaults to off.
+The current catalog recognizes exactly `https://preview.ff-cdn.datad0g.com`.
+A `flaggingProxy` override takes precedence over `site` for requests and trust, but
+not for the staging gate: a production `site` behind a proxy follows the off-staging rules above.
+Unknown origins, HTTP, nonstandard ports and URLs containing credentials receive
+no bundled root. `trustedRootCertificates` explicitly replaces the catalog roots
+(including when empty), for custom proxies and tests. Additional Datadog aliases
+and production site roots must be provisioned before they enter the catalog.
+
+A response carries its leaf certificate and one to three intermediate certificates
+in `x-datadog-feature-flags-signing-chain`. Rotating the leaf or any intermediate
+under the unchanged trusted root requires no SDK update or prior rotation history.
+The SDK pins only the root. It does not pin or cache a leaf or an intermediate.
+The leaf must carry the Feature Flags assignment-signing extended key usage
+(staging placeholder `1.3.6.1.4.1.99999.1.1`) and must not carry anyExtendedKeyUsage.
+Every certificate, including the root, must satisfy `notBefore <= now < notAfter`,
+and each certificate validity must lie inside the validity of its issuer. The
+SDK verifies the chain, exact request and response bytes, nonce, effective client
+token, the signed request and response header lists, and the original proof lifetime (at most five minutes).
+Signed requests require HTTPS and reject redirects. A custom fetch implementation
+must preserve the generated URL, body and headers and the exact returned bytes.
+Proxies must support the signing request headers and expose the proof headers in
+CORS, including `x-datadog-feature-flags-signing-chain` and `x-datadog-feature-flags-signed-response-headers`. The `response-signing-v1`
+capability and signature version `1` are added only when signing is enabled. This protocol number
+is independent of X.509 v3 certificate encoding.
+
+Signed header lists:
+
+- The request header `x-datadog-feature-flags-signed-headers` names the request headers that the SDK bound. The
+  names are lowercase, sorted, unique and joined by `,` with no spaces. The SDK lists each of `content-type`,
+  `dd-application-id`, `x-dd-feature-flags-capabilities` and `x-rkyv` that the request has. The
+  transcript binds each listed name and its value. The client token and `authorization` keep their hashed slots.
+- The response proof header `x-datadog-feature-flags-signed-response-headers` names the response headers that the
+  edge bound, in the same syntax. It must name `content-type`. When the request has a `flagSelection`, it must also
+  name `dd-flag-selection-ignored`, which can be absent. Otherwise verification fails with `invalid-proof`.
+- The SDK acts only on the verified values of listed response headers. On a signed request, the provider reports
+  `DD-Flag-Selection-Ignored` only from a verified response. When observe-mode verification fails, the provider
+  does not report it.
+- A proxy that changes, adds or removes a listed header breaks verification.
+
+The signed transcript does not include every request header. `DD-Assignment-Token` and `dd-service` are not
+listed, so a response proof does not show which values of these headers the edge received.
+The browser provider has no default initialization timeout. In `required` mode, initialization waits for a
+verified response, so a slow edge delays the provider for as long as the request takes.
+
+Verification requires an accurate device clock and uses the browser's `Date.now()`.
+The verifier does not use a time earlier than two floors:
+
+- The build floor: a fixed time in each SDK release, set at or before the release date.
+- The high-water mark, for each trust anchor. Each fully verified response can raise it to its `issued-at` or to
+  the device clock plus 30 seconds, whichever is earlier. The SDK stores it in `localStorage` (in memory only when
+  storage is not available).
+
+So the verifier uses `max(Date.now() / 1000, build floor, high-water mark)`, in Unix seconds, as the current time for
+the proof and for each certificate. A device clock that is set back cannot make a proof valid again when the proof
+expired before the high-water mark. It also cannot make a leaf valid again when the leaf expired before the
+release. These failures use `expired-proof`.
+Proofs issued more than 30 seconds ahead of that time fail verification with `expired-proof`.
+Proofs at or past their expiry time also fail with `expired-proof`; there is no expiry grace period.
+In a page, the provider also measures the time since verification with `performance.now()`. A proof expires when
+the later of the verification time and `issued-at`, plus that time, reaches `expires-at`, even if the wall clock moves
+back.
+Verified flags stay current after the clock moves back by at most 30 seconds. After a larger backward step, the
+provider handles the proof as expired (see below). When the clock returns into the proof's validity window before
+the deadline, the provider returns to its state before the expiry and emits the matching event. After the provider
+sees the deadline, on the wall clock or on the monotonic clock, a clock change does not make that proof current
+again. Only a new verified response does.
+
+The `observe` and `required` modes load the verifier as a separate script chunk. The default mode, `off`, and
+sites other than staging do not load it. With the CDN bundle, serve the `chunks/` directory next to
+`datadog-openfeature-browser.js`, and let the page load scripts from that location. When the page runs the bundle
+without a script URL, for example as an inline script, the SDK loads the chunk relative to the page. If the chunk does not load,
+`observe` sends the request without signing, and `required` sends no assignment request and fails with
+`Flag response signing failed (verifier-unavailable): ...`. A request waits at most 5 seconds for the chunk.
+After that time the SDK handles the chunk as not loaded. A chunk that loads later serves the next fetch.
+The SDK tries to load a failed chunk again on the next fetch.
+
+CDN users of the chunked bundle:
+
+- The main file has a fixed name, and the chunk file names contain a content hash. A main file cached at a mutable
+  URL can request chunks that a newer upload replaced. Serve each release from an immutable versioned directory
+  that holds both `datadog-openfeature-browser.js` and its `chunks/` directory. Alternatively, keep old chunks at
+  the shared path for as long as cached main files can reference them. A version in a query string or in the file
+  name alone is not sufficient.
+- The chunk loads without Subresource Integrity. An `integrity` attribute on the main script does not cover the
+  verifier code.
+- A Content Security Policy without `strict-dynamic` must allow scripts from the chunk location.
+
+Required mode uses only verified memory for the same provider and full evaluation
+context. It does not read bootstrap or persistent configurations and never retries
+unsigned. It persists no flag data: after a restart, flags are defaults until the first verified response.
+
+At the expiry of the last verified proof, the behavior depends on `expireVerifiedFlags` (required mode only):
+
+- `expireVerifiedFlags: false` (default): the provider keeps serving the verified flags. It changes from `READY`
+  to `STALE` and emits one `PROVIDER_STALE` event per expiry episode. A refresh that fails keeps the verified values.
+  The application decides whether to refetch. In this setting, a network attacker can block refreshes and keep the
+  flags at their last verified values. The attacker cannot forge values. The guarantee is "verified once", not "fresh".
+- `expireVerifiedFlags: true`: the strict guarantee. The first evaluation that detects expiry returns the default
+  with reason `ERROR`, error code `GENERAL`, and the `expired-proof` message. The provider changes from `READY`
+  or `STALE` to recoverable `ERROR` and emits one `PROVIDER_ERROR` event per expiry episode. Defaults stay until a
+  fresh verified response arrives, also while offline.
+
+```typescript
+experimentalResponseSigning: { mode: 'required', expireVerifiedFlags: true }
+```
+
+In both settings, repeated evaluations do not repeat the event, and a fresh verified response restores `READY`
+and emits `PROVIDER_READY`. Expiry does not start a refresh. The provider detects expiry in two ways: a timer at `expires-at`, and a check on
+each evaluation. Both change the state and send the event once, from `READY` or `STALE`. An update
+already in progress keeps its reconciliation status until that update completes.
+
+Minimum leaf not-before revocation (**draft wire**, pending the edge): a response can carry
+`x-datadog-feature-flags-minimum-leaf-not-before`, unix seconds, which is bound at the end of the v1 transcript, after the response header list.
+After a fully verified response, the SDK stores the highest value for each trust anchor in `localStorage`
+(in memory only when storage is not available). It ignores a value that is greater than the `notBefore` of the
+leaf in that response, or lower than the stored value. Then it rejects a leaf that starts before the stored
+value, with `Response signing: revoked-certificate`. The floor applies to the leaf only and is never compared with
+intermediates, so a new leaf under older intermediates verifies. Required mode fails closed; observe mode reports
+the reason and accepts the response as unverified. This value holds no flag data. With the high-water mark (see the clock section), it is the only
+signing data that required mode persists, and required mode stores no flag values. The edge must list the header in `Access-Control-Expose-Headers`, or the browser cannot
+read it.
+Observe mode keeps ordinary bootstrap and persistent fallback as **unverified**;
+its persistent namespace binds the complete token, endpoint, environment, app ID,
+headers, mode, selection and nested context. Upgrading into observe causes a
+one-time cache cold start. Context snapshots preserve Date values, including nested
+dates. Signing context keys distinguish dates from strings and objects. An unsigned observation cannot overwrite the separately
+retained verified memory fallback. If WebCrypto is unavailable, observe retains
+ordinary network and in-memory availability but cannot use its scoped persistent
+cache. Required mode fails locally.
+
+Off mode preserves ordinary transport and caching and performs no signing work.
+Signing covers complete JSON responses in the same assignment request;
+it adds no signing-specific fetch or unsigned compatibility retry. It does not add signed streaming
+or change the existing unsigned streaming protocol.
+
 ### Flag selection
 
 Use `flagSelection` to load only the flags that match a set of tags or key patterns:
@@ -202,10 +415,10 @@ Useful events:
 | `evaluation.completed`, `evaluation.trace`, `evaluation.returned` | Value/default origin, variant metadata, local-rule trace and OpenFeature hook result |
 | `exposure.*`, `tracking.policy`, `rum.*`                          | Eligibility, duplicates, opt-outs and handoff to RUM                                 |
 | `evaluation.aggregated`, `batch.*`, `upload.*`                    | Aggregation, admission, flush, intake acceptance, retry and drop                     |
-| `authorization.*`                                                 | Credential rejection and subject isolation                                           |
+| `signing.*`, `authorization.*`                                    | Verification/admission, proof expiry, credential rejection and subject isolation     |
 | `shutdown.*`                                                      | Close/cancellation and retained state                                                |
 
-Raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
+Signing logs distinguish observe-mode continuation from required rejection and verified-memory fallback. Required signing retains bounded body reading; raw accepted configurations are logged after parsing. A rejected fetch records `httpStatus: null` and a separate synthetic `transportStatus: 0`.
 
 `intake_accepted` means an HTTP success response; it does not prove downstream processing. `browser_queued` means
 `sendBeacon` accepted the send, without server acknowledgement. Browser network/CORS/CSP/content-blocker failures

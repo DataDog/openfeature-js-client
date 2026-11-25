@@ -35,7 +35,12 @@ export function reportDroppedFlagSelection(reason: FlagSelectionError, limit = L
 
 // Call only once the configuration in the response has been accepted.
 export function reportIgnoredFlagSelection(response: Response) {
-  const reason = ignoredFlagSelectionReason(response.headers?.get(FLAG_SELECTION_IGNORED_HEADER))
+  reportIgnoredFlagSelectionValue(response.headers?.get(FLAG_SELECTION_IGNORED_HEADER))
+}
+
+// A signed request passes only the verified value: a raw header on a signed response is not read again.
+export function reportIgnoredFlagSelectionValue(value: string | null | undefined) {
+  const reason = ignoredFlagSelectionReason(value)
   if (!reason) return
   display.error(`flagSelection was ignored by the server (${reason}). Loaded the full flag configuration.`)
   addTelemetryDebug('Flag selection ignored', { reason })

@@ -37,12 +37,20 @@ import {
 import { buildConfigurationUrl } from './configurationEndpoint'
 import { debugFetch } from './debugFetch'
 
-import { reportDroppedFlagSelection, reportIgnoredFlagSelection } from './flagSelection'
+import {
+  reportDroppedFlagSelection,
+  reportIgnoredFlagSelection,
+  reportIgnoredFlagSelectionValue,
+} from './flagSelection'
 import { serializeRequestBody } from './requestDiagnostics'
 import { cloneSigningContext } from './responseSigning/context'
-import type { ResponseSigningController } from './responseSigning/controller'
+import {
+  createResponseSigningController,
+  type ResponseSigningConfiguration,
+  type ResponseSigningController,
+} from './responseSigning/controller'
 
-import { ResponseVerificationError } from './responseSigning/verification'
+import { ResponseVerificationError } from './responseSigning/protocol'
 
 export { buildConfigurationUrl } from './configurationEndpoint'
 
@@ -90,6 +98,11 @@ export interface PrecomputedConfigurationFetchOptions
    * A selection over a limit is not sent, and the full configuration is loaded.
    */
   flagSelection?: FlagSelection
+  /**
+   * Experimental. Response signing is in preview and works only on the Datadog staging site. The API can change or be removed in a minor release, based on customer feedback.
+   * @experimental
+   */
+  experimentalResponseSigning?: ResponseSigningConfiguration
 }
 
 export interface RulesConfigurationFetchOptions extends ConfigurationFetchOptions {
@@ -162,7 +175,21 @@ export async function fetchPrecomputedConfiguration(
   const { selection, error } = canonicalizeFlagSelection(options.flagSelection)
   if (error) reportDroppedFlagSelection(error)
   debug.event('configuration.selection', () => ({ requested: options.flagSelection, effective: selection, error }))
-  return requestPrecomputedConfiguration(options, selection, undefined, debug)
+  const requestOptions: ConfigurationRequestOptions = options
+  return requestPrecomputedConfiguration(
+    options,
+    selection,
+    createResponseSigningController(
+      options.experimentalResponseSigning,
+      {
+        site: requestOptions.site,
+        flaggingProxy: requestOptions.flaggingProxy,
+        env: requestOptions.env,
+      },
+      debug
+    ),
+    debug
+  )
 }
 
 async function requestPrecomputedConfiguration(
@@ -242,7 +269,12 @@ async function requestPrecomputedConfiguration(
     },
     options.signal
   )
-  const signingRequest = signing?.prepare(url.toString(), defaultHeaders, body, debug)
+  // Await only with signing on, so that the default path starts the fetch in the same tick as before.
+  const signingRequest = signing
+    ? await signing.prepare(url.toString(), defaultHeaders, body, debug, options.signal)
+    : undefined
+  // A cancellation while the SDK prepared the request must not reach the configured fetch.
+  if (signing) options.signal?.throwIfAborted()
   const fetchImplementation = options.fetch ?? globalThis.fetch
   debug.event('context.normalized', () => ({
     rawContext: options.context,
@@ -364,7 +396,12 @@ async function requestPrecomputedConfiguration(
     },
   }
   signing?.admit(configuration, options.context, signedResponse?.proof, options.signal, debug)
-  if (flagSelection) reportIgnoredFlagSelection(response)
+  if (flagSelection) {
+    // A signed request reports only the verified value. A signed response that did not verify reports nothing.
+    if (signingRequest)
+      reportIgnoredFlagSelectionValue(signedResponse?.proof?.verifiedResponseHeaders['dd-flag-selection-ignored'])
+    else reportIgnoredFlagSelection(response)
+  }
   return configuration
 }
 
@@ -403,10 +440,19 @@ async function isAssignmentAuthorizationRejection(response: Response): Promise<b
 
 export function createFlagsConfigurationFetcher(
   initConfiguration: FlaggingInitConfiguration,
-  // Internal: response signing has no public option yet. Only tests pass a controller.
-  signing?: ResponseSigningController,
+  // `null` means the caller already resolved signing to off. A default parameter also runs for an explicit
+  // `undefined`, which would build a second controller and repeat its warnings.
+  resolvedSigning?: ResponseSigningController | null,
   debug: DebugLogger = NO_DEBUG
 ) {
+  const signing =
+    resolvedSigning === undefined
+      ? createResponseSigningController(initConfiguration.experimentalResponseSigning, {
+          site: initConfiguration.site,
+          flaggingProxy: initConfiguration.flaggingProxy,
+          env: initConfiguration.env,
+        })
+      : (resolvedSigning ?? undefined)
   if (signing) initConfiguration = { ...initConfiguration, customHeaders: { ...initConfiguration.customHeaders } }
   // Validate the endpoint while building the provider, preserving the existing constructor behavior.
   try {

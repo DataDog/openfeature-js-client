@@ -48,7 +48,7 @@ import {
 } from '../domain/configuration'
 import { createRequestDiagnostics, type FetchTrigger } from '../transport/requestDiagnostics'
 import { cloneSigningContext } from '../transport/responseSigning/context'
-import { ResponseVerificationError } from '../transport/responseSigning/verification'
+import { ResponseVerificationError, signingFailureMessage } from '../transport/responseSigning/protocol'
 import { toProviderErrorEvent } from './error-event'
 import {
   bindEvaluationTelemetryResult,
@@ -91,6 +91,8 @@ function waitWithAbort<T>(signal: AbortSignal, promise: PromiseLike<T> | T): Pro
 // which requires class methods and properties. This is a valid exception to the no-classes rule.
 /* eslint-disable-next-line no-restricted-syntax */
 export class DatadogProvider extends DatadogProviderBase {
+  /** Runtime feature detection for applications adopting the response-signing draft. */
+  static readonly responseSigningVersion = 1
   readonly metadata: ProviderMetadata = {
     name: 'datadog',
   }
@@ -106,6 +108,8 @@ export class DatadogProvider extends DatadogProviderBase {
   private initializationStarted = false
   private verificationError: ResponseVerificationError | undefined
   private proofExpirySignaled = false
+  private proofExpiryPreviousState?: ProviderStatus
+  private proofExpiryTimer: ReturnType<typeof setTimeout> | undefined
 
   // TODO: Migrate this manual context plumbing to a provider `before` hook once
   // @openfeature/web-sdk supports returned EvaluationContext values for web hooks.
@@ -177,7 +181,9 @@ export class DatadogProvider extends DatadogProviderBase {
     this.hooks = this.tracking.hooks
     this.exposureCache = this.tracking.exposureCache
 
-    if (hasIndexedDB() && this.configuration?.responseSigning?.mode !== 'required') {
+    // A required-signing request keeps its fail-closed storage rules even when the ordinary configuration is invalid.
+    const requiredSigning = options.experimentalResponseSigning?.mode === 'required'
+    if (hasIndexedDB() && !requiredSigning) {
       this.flagsCache = new IndexedDBFlagsCache(
         options.clientToken,
         canonicalizeFlagSelection(options.flagSelection).selection,
@@ -186,8 +192,7 @@ export class DatadogProvider extends DatadogProviderBase {
       )
     }
 
-    this.flagsConfiguration =
-      this.configuration?.responseSigning?.mode === 'required' ? undefined : options.initialFlagsConfiguration
+    this.flagsConfiguration = requiredSigning ? undefined : options.initialFlagsConfiguration
     this.configurationSource = this.flagsConfiguration ? 'initial_configuration' : 'none'
     this.status = ProviderStatus.NOT_READY
     this.debug.event('cache.configured', () => ({
@@ -196,10 +201,7 @@ export class DatadogProvider extends DatadogProviderBase {
       initialConfiguration: options.initialFlagsConfiguration,
       initialConfigurationAccepted: !!this.flagsConfiguration,
       signingMode: this.configuration?.responseSigning?.mode ?? 'off',
-      persistence:
-        this.configuration?.responseSigning?.mode === 'required'
-          ? 'stored_assignments_are_not_verified_proofs'
-          : 'context_matched',
+      persistence: requiredSigning ? 'stored_assignments_are_not_verified_proofs' : 'context_matched',
     }))
   }
 
@@ -212,7 +214,11 @@ export class DatadogProvider extends DatadogProviderBase {
     return {
       ...configurationSummaryFields(this.flagsConfiguration),
       expirationPolicy:
-        this.configuration?.responseSigning?.mode === 'required' ? 'verified_proof_expiry' : 'no_sdk_ttl',
+        this.configuration?.responseSigning?.mode !== 'required'
+          ? 'no_sdk_ttl'
+          : this.configuration.responseSigning.expireVerifiedFlags
+            ? 'verified_proof_expiry'
+            : 'stale_after_verified_proof_expiry',
       signingMode: this.configuration?.responseSigning?.mode ?? 'off',
       contextRevision: this.contextRevision,
       configurationRevision: this.configurationRevision,
@@ -251,6 +257,8 @@ export class DatadogProvider extends DatadogProviderBase {
   }
 
   async onClose(): Promise<void> {
+    clearTimeout(this.proofExpiryTimer)
+    this.proofExpiryTimer = undefined
     this.closed = true
     this.debug.event('shutdown.started', () => ({ state: this.status, contextRevision: this.contextRevision }))
     try {
@@ -374,39 +382,50 @@ export class DatadogProvider extends DatadogProviderBase {
           // single microtask (i.e., without any await/promise
           // scheduling).
 
+          // One expiry read decides the result. Strict policy rejects an expired proof. Default policy installs it as
+          // STALE, in its own expiry episode, and keeps it as the verified memory. A proof can expire after
+          // verification, for example during cache reconciliation.
+          const signing = this.configuration?.responseSigning
+          const required = signing?.mode === 'required'
+          const expiredOnInstall = required && signing.isExpired(config, evaluationContext)
           if (
-            this.configuration?.responseSigning?.mode === 'required' &&
-            !this.configuration.responseSigning.isVerified(config, evaluationContext)
+            required &&
+            ((expiredOnInstall && signing.expireVerifiedFlags) || !signing.isUsable(config, evaluationContext))
           ) {
             debug.event('configuration.rejected', () => ({
-              reason: 'expired_proof',
+              reason: 'expired-proof',
               stage: 'installation',
               action: 'retain_previous_configuration',
             }))
             debug.event('provider.state_changed', () => ({
               previousState: this.status,
               state: ProviderStatus.ERROR,
-              reason: 'expired_proof',
+              reason: 'expired-proof',
             }))
             this.status = ProviderStatus.ERROR
             const error = new ResponseVerificationError('expired-proof')
             this.verificationError = error
-            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            // The OpenFeature SDK emits the ERROR event for the rejected initialize or onContextChange call.
             throw error
           }
-          const recoveredFromExpiry = this.proofExpirySignaled
-          this.proofExpirySignaled = false
+          const recoveredFromExpiry = this.proofExpirySignaled && !expiredOnInstall
+          this.proofExpirySignaled = expiredOnInstall
+          if (expiredOnInstall) {
+            this.proofExpiryPreviousState = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+            debug.event('signing.expired', () => ({ stage: 'installation', action: 'serve_verified_flags_stale' }))
+          }
           this.configurationRevision++
           this.configurationSource = source
           this.flagsConfiguration = config
-          if (this.configuration?.responseSigning?.isVerified(config, evaluationContext))
-            this.verifiedConfiguration = config
+          this.scheduleProofExpiry()
+          // Required mode installs only a usable proof for this context, so the configuration is verified.
+          if (required || signing?.isVerified(config, evaluationContext)) this.verifiedConfiguration = config
           this.assignmentSubjectIsolationRequired = false
           // Same-subject fallback can have older attributes. Keep its original
           // context for evaluation and telemetry; do not relabel or re-cache it.
           this.evaluationContext = fromCache ? (config.precomputed?.context ?? evaluationContext) : evaluationContext
           const previousState = this.status
-          this.status = fromCache ? ProviderStatus.STALE : ProviderStatus.READY
+          this.status = fromCache || expiredOnInstall ? ProviderStatus.STALE : ProviderStatus.READY
           debug.event('configuration.installed', () => ({
             ...configurationDebugFields(config),
             source,
@@ -462,7 +481,11 @@ export class DatadogProvider extends DatadogProviderBase {
               error,
             }))
             this.status = ProviderStatus.ERROR
-            this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
+            // For a signing failure, the OpenFeature SDK emits the only ERROR event, for the rejected initialize or
+            // onContextChange call. That event has no errorCode: @openfeature/core copies only the message.
+            // Evaluations still return errorCode GENERAL and the signing failure message.
+            if (!(error instanceof ResponseVerificationError))
+              this.events.emit(ProviderEvents.Error, toProviderErrorEvent(error))
             throw error
           }
         }
@@ -490,13 +513,18 @@ export class DatadogProvider extends DatadogProviderBase {
     let allowSameSubject = this.assignmentSubjectIsolationRequired
     const canUse = (config: FlagsConfiguration | undefined) =>
       this.canUseConfiguration(config, context, allowSameSubject) &&
-      (signing?.mode !== 'required' || signing.isVerified(config, context))
+      (signing?.mode !== 'required' || signing.isUsable(config, context))
     const retainedConfig = this.flagsConfiguration
+    // Required mode keeps "verified once" flags. Observe mode prefers the verified memory only while its proof is
+    // current: after that, the latest fetched configuration wins, also an unsigned one.
+    const verifiedMemoryUsable = () =>
+      signing?.mode === 'required'
+        ? signing.isUsable(this.verifiedConfiguration, context)
+        : !!signing?.isVerified(this.verifiedConfiguration, context)
 
     const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
     // Prefer verified memory, then current config, before persistent cache.
-    const verifiedMemoryEligible =
-      signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+    const verifiedMemoryEligible = verifiedMemoryUsable() && canUse(this.verifiedConfiguration)
     const memoryEligible = !verifiedMemoryEligible && canUse(retainedConfig)
     const cachedConfigPromise = verifiedMemoryEligible
       ? Promise.resolve(this.verifiedConfiguration)
@@ -538,7 +566,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Try to recover with current/cached config
       try {
         const fallback =
-          signing?.isVerified(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+          verifiedMemoryUsable() && canUse(this.verifiedConfiguration)
             ? this.verifiedConfiguration
             : canUse(retainedConfig)
               ? retainedConfig
@@ -621,6 +649,89 @@ export class DatadogProvider extends DatadogProviderBase {
     }
   }
 
+  /** Expiry is detected by a timer at expires-at and by the check on each read; both use this transition. */
+  private scheduleProofExpiry(): void {
+    clearTimeout(this.proofExpiryTimer)
+    this.proofExpiryTimer = undefined
+    const signing = this.configuration?.responseSigning
+    const expiresAt = signing?.mode === 'required' ? signing.expiresAt(this.flagsConfiguration) : undefined
+    if (expiresAt === undefined || this.closed) return
+    const config = this.flagsConfiguration
+    this.proofExpiryTimer = setTimeout(
+      () => {
+        this.proofExpiryTimer = undefined
+        if (this.flagsConfiguration !== config) return
+        // A timer can fire a little early: re-arm only before expires-at. After it, only a read checks again.
+        if (!this.signalProofExpiry() && !this.proofExpirySignaled && Date.now() < expiresAt * 1000)
+          this.scheduleProofExpiry()
+      },
+      // Clamp the delay to the signed 32-bit timer range.
+      Math.min(2 ** 31 - 1, Math.max(0, expiresAt * 1000 - Date.now()))
+    )
+  }
+
+  /**
+   * Returns whether the current verified proof has expired, and changes the state once per expiry episode.
+   * Default: the verified flags stay in use and the provider is STALE. expireVerifiedFlags: ERROR and defaults.
+   * Both apply from READY and from STALE.
+   */
+  private signalProofExpiry(): boolean {
+    const signing = this.configuration?.responseSigning
+    const expired =
+      signing?.mode === 'required' && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
+    if (!expired) {
+      this.recoverFromProofExpiry()
+      return false
+    }
+    if (this.proofExpirySignaled || (this.status !== ProviderStatus.READY && this.status !== ProviderStatus.STALE))
+      return true
+    const strictExpiry = signing.expireVerifiedFlags
+    this.proofExpirySignaled = true
+    const state = strictExpiry ? ProviderStatus.ERROR : ProviderStatus.STALE
+    this.debug.event('signing.expired', () => ({
+      configurationRevision: this.configurationRevision,
+      action: strictExpiry ? 'runtime_default_until_verified_refresh' : 'serve_verified_flags_stale',
+    }))
+    this.debug.event('provider.state_changed', () => ({
+      previousState: this.status,
+      state,
+      reason: 'expired-proof',
+    }))
+    const previous = this.status
+    this.proofExpiryPreviousState = previous
+    this.status = state
+    if (strictExpiry)
+      this.events.emit(
+        ProviderEvents.Error,
+        toProviderErrorEvent(new GeneralError(signingFailureMessage('expired-proof')))
+      )
+    else if (previous !== ProviderStatus.STALE) this.events.emit(ProviderEvents.Stale)
+    return true
+  }
+
+  /**
+   * After a backward clock step larger than the tolerance, the proof is current again when the clock returns into its
+   * window before the deadline. Restore the state from before the expiry, and schedule the timer at expires-at again.
+   * After the controller sees the deadline, the proof does not become current again.
+   */
+  private recoverFromProofExpiry(): void {
+    const signing = this.configuration?.responseSigning
+    const expiryState = signing?.expireVerifiedFlags ? ProviderStatus.ERROR : ProviderStatus.STALE
+    if (
+      !this.proofExpirySignaled ||
+      this.status !== expiryState ||
+      !signing?.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
+    )
+      return
+    const state = this.proofExpiryPreviousState ?? ProviderStatus.READY
+    this.proofExpirySignaled = false
+    this.debug.event('provider.state_changed', () => ({ previousState: this.status, state, reason: 'proof-current' }))
+    this.status = state
+    if (state === ProviderStatus.READY) this.events.emit(ProviderEvents.Ready)
+    else if (expiryState === ProviderStatus.ERROR) this.events.emit(ProviderEvents.Stale)
+    this.scheduleProofExpiry()
+  }
+
   protected resolve<T extends FlagValueType>(
     type: T,
     flagKey: string,
@@ -649,28 +760,13 @@ export class DatadogProvider extends DatadogProviderBase {
     const context = optOutEnabled ? this.requestedEvaluationContext : (this.evaluationContext ?? {})
     const signing = this.configuration?.responseSigning
     const unverified =
-      signing?.mode === 'required' && !signing.isVerified(this.flagsConfiguration, this.requestedEvaluationContext)
-    const expired = unverified && signing.isExpired(this.flagsConfiguration, this.requestedEvaluationContext)
-    const expiryMessage = 'The verified flag configuration proof has expired'
-    if (
-      expired &&
-      !this.proofExpirySignaled &&
-      (this.status === ProviderStatus.READY || this.status === ProviderStatus.STALE)
-    ) {
-      this.proofExpirySignaled = true
-      this.debug.event('signing.expired', () => ({
-        configurationRevision: this.configurationRevision,
-        action: 'runtime_default_until_verified_refresh',
-      }))
-      this.debug.event('provider.state_changed', () => ({
-        previousState: this.status,
-        state: ProviderStatus.ERROR,
-        reason: 'expired_proof',
-      }))
-      this.status = ProviderStatus.ERROR
-      this.events.emit(ProviderEvents.Error, toProviderErrorEvent(new GeneralError(expiryMessage)))
-    }
-    const verificationMessage = expired ? expiryMessage : unverified ? this.verificationError?.message : undefined
+      signing?.mode === 'required' && !signing.isUsable(this.flagsConfiguration, this.requestedEvaluationContext)
+    const strictExpiry = this.signalProofExpiry() && signing?.expireVerifiedFlags
+    const verificationMessage = strictExpiry
+      ? signingFailureMessage('expired-proof')
+      : unverified
+        ? this.verificationError?.message
+        : undefined
     const result: ResolutionDetails<FlagTypeToValue<T>> = verificationMessage
       ? {
           value: defaultValue,

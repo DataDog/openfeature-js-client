@@ -18,7 +18,7 @@ describe('signing diagnostic accessor parity', () => {
             return ++reads <= 2 ? ['test-root'] : []
           },
         },
-        { flaggingProxy: 'https://proxy.test' },
+        { site: 'datad0g.com', flaggingProxy: 'https://proxy.test' },
         createDebugLogger(enabled)
       )
       expect(signing?.mode).toBe(mode)
