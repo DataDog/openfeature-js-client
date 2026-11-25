@@ -42,7 +42,7 @@ test('rejects a main file over the gzip budget', (t) => {
 // A main file that sets the chunk base URL from document.currentScript, or from the page without one.
 const LOADS_CHUNK_NEXT_TO_SCRIPT = `
   var script = document.currentScript
-  var base = script ? script.src.replace(/\\?.*$/, '').replace(/\\/[^/]+$/, '/') : ''
+  var base = script ? script.src.replace(/#.*$/, '').replace(/\\?.*$/, '').replace(/\\/[^/]+$/, '/') : ''
   window.DD_FLAGGING = { Provider: function () {
     var chunk = document.createElement('script')
     chunk.src = base + 'chunks/verifier.js'

@@ -87,6 +87,9 @@ function checkCdnBundleLoad(bundleDirectory) {
   for (const [scriptUrl, base] of [
     [undefined, new URL('chunks/', PAGE_URL).href],
     [SCRIPT_URL, new URL('chunks/', SCRIPT_URL).href],
+    // A query or fragment with a slash does not move the chunk base.
+    ['https://cdn.example/v1/datadog-openfeature-browser.js?v=a/b', 'https://cdn.example/v1/chunks/'],
+    ['https://cdn.example/v1/datadog-openfeature-browser.js#c/d', 'https://cdn.example/v1/chunks/'],
   ]) {
     const page = scriptUrl ? `a page with script URL ${scriptUrl}` : 'a page without a script URL'
     const { error, chunkUrls } = loadCdnBundle(main, scriptUrl)

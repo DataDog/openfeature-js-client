@@ -1940,3 +1940,25 @@ describe('response signing debug diagnostics', () => {
     expect(events('evaluation.completed').slice(-1)[0].details.expirationPolicy).toBe('verified_proof_expiry')
   })
 })
+
+test('required: an install-time usability rejection emits one OpenFeature ERROR event', async () => {
+  const domain = 'response-signing-install-expired'
+  const errors = jest.fn()
+  const providerErrors = jest.fn()
+  global.fetch = jest.fn(signed)
+  const subject = provider('required')
+  await OpenFeature.setProviderAndWait(domain, subject, context)
+  OpenFeature.getClient(domain).addHandler(ProviderEvents.Error, errors)
+  subject.events.addHandler(ProviderEvents.Error, providerErrors)
+  try {
+    jest.spyOn((subject as any).configuration.responseSigning, 'isUsable').mockReturnValue(false)
+    await OpenFeature.setContext(domain, { ...context, refreshed: true })
+    await flush()
+    expect(providerErrors).not.toHaveBeenCalled()
+    expect(errors).toHaveBeenCalledTimes(1)
+    expect(errors.mock.calls[0][0].message).toContain(signingFailureMessage('expired-proof'))
+  } finally {
+    OpenFeature.getClient(domain).removeHandler(ProviderEvents.Error, errors)
+    await OpenFeature.clearProviders()
+  }
+})

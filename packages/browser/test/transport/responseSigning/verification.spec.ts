@@ -762,6 +762,14 @@ describe('minimum leaf not-before revocation (draft wire)', () => {
     expect(intermediateStart + 5_000).toBeLessThan(FLOOR)
     expect(FIXTURE_NOW - 3_600).toBeLessThan(FLOOR)
   })
+  test.each(['garbage', '1e3', '99999999999999999', '9999999999999999', ' 5'])(
+    'a malformed stored value %s is ignored',
+    async (raw) => {
+      storage.set(`dd-ffe-response-signing-minimum-leaf-not-before-v1:${anchorKey}`, raw)
+      expect(storedMinimumNotBefore(anchorKey)).toBe(0)
+      expect((await read(controller('required'), signer(oldLeaf))).proof).toBeDefined()
+    }
+  )
   test('after the floor is stored, an old leaf under the same intermediates is rejected', async () => {
     const signing = controller('required')
     expect((await read(signing, signer(oldLeaf))).proof).toBeDefined()
