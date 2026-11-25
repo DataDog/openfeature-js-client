@@ -270,7 +270,11 @@ async function requestPrecomputedConfiguration(
     options.signal
   )
   // Await only with signing on, so that the default path starts the fetch in the same tick as before.
-  const signingRequest = signing ? await signing.prepare(url.toString(), defaultHeaders, body, debug) : undefined
+  const signingRequest = signing
+    ? await signing.prepare(url.toString(), defaultHeaders, body, debug, options.signal)
+    : undefined
+  // A cancellation while the SDK prepared the request must not reach the configured fetch.
+  if (signing) options.signal?.throwIfAborted()
   const fetchImplementation = options.fetch ?? globalThis.fetch
   debug.event('context.normalized', () => ({
     rawContext: options.context,

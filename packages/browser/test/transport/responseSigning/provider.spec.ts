@@ -1065,6 +1065,40 @@ test('required rejects bootstrap, legacy persistence and verified data after res
   global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
   await expect(provider('required').initialize(context)).rejects.toThrow()
 })
+test('observe: after the verified proof expires, a failed refresh keeps the newer unsigned flags', async () => {
+  global.fetch = jest.fn(signed)
+  const subject = provider('observe')
+  await subject.initialize(context)
+  global.fetch = jest.fn().mockResolvedValue(unsigned(false))
+  await subject.onContextChange(context, context)
+  expect(evaluation(subject)).toBe(false)
+  jest.spyOn(Date, 'now').mockReturnValue((vector.now + 300) * 1000)
+  global.fetch = jest.fn().mockRejectedValue(new Error('network unavailable'))
+  await subject.onContextChange(context, context)
+  expect(evaluation(subject)).toBe(false)
+})
+
+test('a request cancelled while the SDK prepares it never reaches the configured fetch', async () => {
+  let finish!: (value: undefined) => void
+  const paused = new Promise<undefined>((resolve) => {
+    finish = resolve
+  })
+  const fetch = jest.fn().mockResolvedValue(unsigned())
+  const signing = {
+    mode: 'observe',
+    prepare: () => paused,
+    read: async (response: Response) => ({ json: JSON.parse(await response.text()) }),
+    admit: () => undefined,
+  } as unknown as Parameters<typeof createFlagsConfigurationFetcher>[1]
+  const fetcher = createFlagsConfigurationFetcher({ ...defaultOptions, flagConfigurationFetch: fetch }, signing)
+  const abort = new AbortController()
+  const cancelled = fetcher(context, { signal: abort.signal })
+  abort.abort(new DOMException('cancelled', 'AbortError'))
+  finish(undefined)
+  await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  expect(fetch).not.toHaveBeenCalled()
+})
+
 test('unverified observe refresh cannot replace the separate verified memory fallback', async () => {
   global.fetch = jest.fn(signed)
   const subject = provider('observe')
@@ -2233,6 +2267,8 @@ describe('proof expiry around installation and context changes', () => {
       })
       .mockImplementationOnce((url, init) => signed(url, init, true))
     const first = subject.onContextChange(context, { ...context, targetingKey: 'first' })
+    // Start the second change only after the first request reaches fetch: an earlier abort stops it before fetch.
+    while ((global.fetch as jest.Mock).mock.calls.length === 0) await new Promise((resolve) => setTimeout(resolve, 0))
     const latest = { ...context, targetingKey: 'latest' }
     await subject.onContextChange(context, latest)
     releaseFirst()

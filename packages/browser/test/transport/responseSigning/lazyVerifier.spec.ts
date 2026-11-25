@@ -211,6 +211,25 @@ describe('a stalled verifier chunk', () => {
       expect(jest.getTimerCount()).toBe(0)
     }
   )
+  test.each(['observe', 'required'] as const)(
+    'stops a cancelled %s request at once, without the load timeout or a verifier failure',
+    async (mode) => {
+      const { controller } = isolatedController({ stallChunk: true })
+      const core: typeof import('@datadog/browser-core') = require('@datadog/browser-core')
+      const warn = jest.spyOn(core.display, 'warn').mockImplementation(() => undefined)
+      const signing = controller.createResponseSigningController({ mode, trustedRootCertificates: [ROOT_A] }, STAGING)!
+      const abort = new AbortController()
+      const result = signing.prepare(URL, HEADERS, '{}', undefined, abort.signal).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error })
+      )
+      await jest.advanceTimersByTimeAsync(100)
+      abort.abort(new DOMException('cancelled', 'AbortError'))
+      await expect(result).resolves.toMatchObject({ error: { name: 'AbortError' } })
+      expect(warn).not.toHaveBeenCalled()
+      expect(jest.getTimerCount()).toBe(0)
+    }
+  )
 })
 
 test('a failed verifier chunk load is tried again on the next request', async () => {

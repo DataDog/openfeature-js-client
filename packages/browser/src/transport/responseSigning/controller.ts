@@ -136,13 +136,22 @@ export function createResponseSigningController(
     return exchange
   }
   if (!unsupportedSite) loadExchange().catch(() => undefined)
-  /** A stalled chunk must not hold the assignment request. */
-  function loadExchangeWithin(ms: number): Promise<Exchange> {
+  /**
+   * A stalled chunk must not hold the assignment request. A cancelled request stops waiting at once; the shared chunk
+   * load continues for later requests.
+   */
+  function loadExchangeWithin(ms: number, signal?: AbortSignal): Promise<Exchange> {
     let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<never>((_, reject) => {
+    let onAbort: (() => void) | undefined
+    const stop = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error('verifier load timed out')), ms)
+      onAbort = () => reject(signal?.reason)
+      signal?.addEventListener('abort', onAbort, { once: true })
     })
-    return Promise.race([loadExchange(), timeout]).finally(() => clearTimeout(timer))
+    return Promise.race([loadExchange(), stop]).finally(() => {
+      clearTimeout(timer)
+      if (onAbort) signal?.removeEventListener('abort', onAbort)
+    })
   }
   // Observe mode warns once for each reason code, so that failures are visible without debug mode.
   const reported = new Set<VerificationFailure>()
@@ -224,8 +233,10 @@ export function createResponseSigningController(
       url: string,
       headers: Record<string, string>,
       body: string,
-      logger = debug
+      logger = debug,
+      signal?: AbortSignal
     ): Promise<SigningRequest | undefined> {
+      signal?.throwIfAborted()
       try {
         // Thrown before the request is sent, so no assignment request leaves the client.
         if (unsupportedSite) throw new ResponseVerificationError('unsupported-site', UNSUPPORTED_SITE_MESSAGE)
@@ -236,8 +247,10 @@ export function createResponseSigningController(
       }
       let loaded: Exchange
       try {
-        loaded = await loadExchangeWithin(VERIFIER_LOAD_TIMEOUT_MS)
-      } catch {
+        loaded = await loadExchangeWithin(VERIFIER_LOAD_TIMEOUT_MS, signal)
+      } catch (error) {
+        // A cancellation is not a verifier failure: re-throw it, and report nothing.
+        if (signal?.aborted) throw signal.reason ?? error
         logger.event('signing.failed', () => ({
           mode,
           stage: 'verifier_load',

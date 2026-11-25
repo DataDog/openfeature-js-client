@@ -515,11 +515,16 @@ export class DatadogProvider extends DatadogProviderBase {
       this.canUseConfiguration(config, context, allowSameSubject) &&
       (signing?.mode !== 'required' || signing.isUsable(config, context))
     const retainedConfig = this.flagsConfiguration
+    // Required mode keeps "verified once" flags. Observe mode prefers the verified memory only while its proof is
+    // current: after that, the latest fetched configuration wins, also an unsigned one.
+    const verifiedMemoryUsable = () =>
+      signing?.mode === 'required'
+        ? signing.isUsable(this.verifiedConfiguration, context)
+        : !!signing?.isVerified(this.verifiedConfiguration, context)
 
     const memorySource = this.configurationSource === 'initial_configuration' ? 'initial_configuration' : 'memory'
     // Prefer verified memory, then current config, before persistent cache.
-    const verifiedMemoryEligible =
-      signing?.isUsable(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+    const verifiedMemoryEligible = verifiedMemoryUsable() && canUse(this.verifiedConfiguration)
     const memoryEligible = !verifiedMemoryEligible && canUse(retainedConfig)
     const cachedConfigPromise = verifiedMemoryEligible
       ? Promise.resolve(this.verifiedConfiguration)
@@ -561,7 +566,7 @@ export class DatadogProvider extends DatadogProviderBase {
       // Try to recover with current/cached config
       try {
         const fallback =
-          signing?.isUsable(this.verifiedConfiguration, context) && canUse(this.verifiedConfiguration)
+          verifiedMemoryUsable() && canUse(this.verifiedConfiguration)
             ? this.verifiedConfiguration
             : canUse(retainedConfig)
               ? retainedConfig
